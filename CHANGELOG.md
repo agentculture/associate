@@ -5,6 +5,134 @@ All notable changes to this project will be documented in this file.
 Format follows [Keep a Changelog](https://keepachangelog.com/). This project
 adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.8.0] - 2026-09-05
+
+### Added
+
+- **`validate-delivery` skill** vendored from `devague` (cite-don't-import) —
+  leg 7 of the devague chain, the missing step between `assign-to-workforce`
+  and `summarize-delivery`. It runs the confirmed plan's behavioral tests
+  agent-side after the waves merge and files what was found — evidence for what
+  passed, behavioral deltas for what the run added, amended, or removed — as
+  first-class, record-only entries via the `devague` CLI. Tests never run inside
+  the CLI (devague#20), and a failing or partial outcome is never suppressed.
+  Without it, `summarize-delivery` had to make delivery claims with no filed
+  evidence behind them.
+
+### Changed
+
+- **`culture.yaml` now names the lobes ROLE, not a checkpoint** —
+  `model: associate` replaces the inherited `sakamakismile/Qwen3.6-27B-Text-NVFP4-MTP`.
+  That pin was never a decision made for this agent: it is the
+  `culture-agent-template` default carried by ~50 sibling repos in the workspace,
+  and it names the *cortex* checkpoint, not anything this agent runs.
+
+  `associate` is a first-class lobes role — the tenth Colleague-facing lobe,
+  backed by `nvidia/NVIDIA-Nemotron-3.5-Lightning-30B-A3B-NVFP4`, defined in
+  `lobes/roles.py` as `worker` MINUS `repo_action`. The `colleague` backend
+  defaults to the local lobes gateway (`http://localhost:8001/v1`), which
+  resolves the role to whichever box hosts it — today a Jetson AGX Orin 64GB
+  running the `orin-associate` shape, reached over the tailnet via
+  `ASSOCIATE_PEER_ORIGIN` + `ASSOCIATE_PEER_PROXY`. Naming the role rather than
+  the checkpoint means the lane can move boxes or re-checkpoint without touching
+  this repo, which is lobes' stated purpose.
+
+  Verified live 2026-09-05: `model=associate` through the gateway returns
+  completions served by the Lightning checkpoint, and the Orin reports the role
+  `feasible=true ready=true loaded=true`.
+
+  This resolves the model/description inconsistency recorded earlier in this
+  entry's `CLAUDE.md` rewrite — `pyproject.toml`'s "initially backed by NVIDIA
+  Nemotron 3.5 Lightning" was correct all along; `culture.yaml` was the wrong
+  half. `CLAUDE.md` gains a "runtime lane" section with the measured topology
+  and the role's forbidden-responsibility set (`final_decision`,
+  `security_decision`, `code_authoring`, `repo_action`) as the authority on this
+  agent's scope; `README.md` leads with the role framing.
+
+  **Recorded, not worked around — a fleet-side defect this repo must not
+  compensate for:** the Orin advertises the lane on its `/v1/models` under the
+  checkpoint id while the gateway's `ASSOCIATE_SERVED_NAME=associate`.
+  `probe_peer_ready` compares exactly those two strings, so the readiness probe
+  fails: the gateway reports the role `ready=false, loaded=false` and omits it
+  from its own `/v1/models`, even though the data plane proxies it correctly.
+  The lane works when addressed explicitly but is invisible to model discovery.
+  The fix belongs in the deployment env, not in repo code.
+
+- **`AGENTS.colleague.md` rewritten to match the `associate` role's authority
+  bounds** (Qodo PR #2, finding 2). Binding `culture.yaml` to the `associate`
+  role introduced a contradiction the old resident prompt did not have: the
+  role forbids `repo_action` and `code_authoring`, while the prompt directed
+  the resident to use the colleague tool-loop's `write_file`, `edit_file`, and
+  `run_command` — so it could enact repository changes despite the role's
+  hand-back-only definition. The prompt now states the permitted set
+  (read, list, inspect, run already-authorized commands, bulk transform, draft)
+  and the forbidden set (`repo_action`, `code_authoring`, `final_decision`,
+  `security_decision`) explicitly, and says plainly that having a tool is not
+  authorization to use it: drafts belong in the `finish` payload, not in
+  someone's tree. Handing back "here is the change and why I did not apply it"
+  is recorded as a complete answer, not a failure.
+
+- **The `docs/skill-sources.md` re-sync procedure is now fail-safe** (Qodo PR
+  #2, finding 5). The documented loop deleted each vendored skill before
+  confirming its source existed and had no fail-fast, so in the
+  standalone-clone case this file explicitly supports — no `../devague` — it
+  stripped all eight chain skills and copied nothing back. It now runs under
+  `set -euo pipefail`, verifies every source directory before touching the
+  repo, and stages all eight copies into a temp dir, swapping only once every
+  copy has succeeded.
+
+- **`CLAUDE.md` re-initialized from the `/init` seed into a full runtime
+  prompt.** The scaffold's bootstrap placeholder is replaced with the repo's
+  actual conventions: a current-state-vs-target section that says plainly that
+  the harness itself (read / summarize / find verbs) is not built yet; the
+  four load-bearing CLI contract invariants (stdout/stderr split, `CliError`
+  with no leaked traceback, argparse errors routed through the same contract,
+  descriptive verbs that don't hard-fail on a bad target); the four places that
+  must stay in sync when adding a verb (handler, parser registration, explain
+  catalog, `learn` text) and why the rubric gate fails otherwise; build / test /
+  lint / publish commands including single-test and coverage invocations; the
+  skills convention and the `../.worktrees.associate/` worktree rule; and the
+  `steward doctor` invariants.
+
+  Two inconsistencies inherited from the template scaffold are recorded rather
+  than silently "fixed": `pyproject.toml` describes the harness as backed by
+  NVIDIA Nemotron 3.5 Lightning while `culture.yaml` pins the template's default
+  `sakamakismile/Qwen3.6-27B-Text-NVFP4-MTP`, and the `remember` skill's
+  `SKILL.md` frontmatter describes a private home-dir memory default that its
+  own wrapper script overrides to public/in-repo.
+
+  The seed also claimed this repo satisfies `prompt-file-present` via a
+  `CLAUDE.md` + `backend: claude`. It does not: `culture.yaml` declares
+  `backend: colleague`, so `AGENTS.colleague.md` is the resident agent's runtime
+  prompt and `CLAUDE.md` is the prompt for Claude Code sessions working on the
+  repo. `associate doctor` confirms the invariant passes via the former.
+
+- **`README.md` rewritten** on the `devague` README model — reader-facing rather
+  than template-facing. Leads with a "Status: scaffold, not yet a harness"
+  section instead of describing unbuilt functionality, adds a mermaid diagram of
+  the eight-skill devague chain and its three human gates, and tables the CLI
+  verbs, the eleven day-to-day skills, and the optional per-skill tooling. The
+  "Make it your own" template instructions move to `CLAUDE.md`, where the
+  identifier-rename procedure belongs.
+
+- **All eight devague-chain skills re-vendored from `devague` 0.24.1** —
+  `scope`, `think`, `challenge`, `spec-to-plan`, `assign-to-workforce`,
+  `deviate`, `validate-delivery`, `summarize-delivery`. Previously `think`,
+  `spec-to-plan`, and `assign-to-workforce` cited guildmaster's re-broadcast
+  while the rest cited devague directly; the chain is one workflow and syncing
+  it from two upstreams let three legs lag the other five by a re-broadcast
+  cycle. All eight now cite the origin. The one documented adaptation —
+  `assign-to-workforce`'s `agex` → `devex` rename, 2 occurrences — is re-applied
+  after the copy, and the re-sync script in `docs/skill-sources.md` re-applies
+  it automatically.
+
+- **`docs/skill-sources.md` ledger updated** — the eight chain rows rewritten in
+  flow order with per-leg descriptions and a `2026-09-05 (devague 0.24.1)` sync
+  stamp, the four-skill divergence section replaced by an eight-skill one
+  explaining both reasons to cite the origin, and `devague` (>=0.24) added to
+  the tooling prerequisites alongside an `eidetic` (>=0.10.0) entry that records
+  the stale-description drift in `remember`.
+
 ## [0.7.0] - 2026-08-24
 
 ### Added
