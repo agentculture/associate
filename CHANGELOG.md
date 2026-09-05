@@ -58,6 +58,29 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   The lane works when addressed explicitly but is invisible to model discovery.
   The fix belongs in the deployment env, not in repo code.
 
+- **`AGENTS.colleague.md` rewritten to match the `associate` role's authority
+  bounds** (Qodo PR #2, finding 2). Binding `culture.yaml` to the `associate`
+  role introduced a contradiction the old resident prompt did not have: the
+  role forbids `repo_action` and `code_authoring`, while the prompt directed
+  the resident to use the colleague tool-loop's `write_file`, `edit_file`, and
+  `run_command` — so it could enact repository changes despite the role's
+  hand-back-only definition. The prompt now states the permitted set
+  (read, list, inspect, run already-authorized commands, bulk transform, draft)
+  and the forbidden set (`repo_action`, `code_authoring`, `final_decision`,
+  `security_decision`) explicitly, and says plainly that having a tool is not
+  authorization to use it: drafts belong in the `finish` payload, not in
+  someone's tree. Handing back "here is the change and why I did not apply it"
+  is recorded as a complete answer, not a failure.
+
+- **The `docs/skill-sources.md` re-sync procedure is now fail-safe** (Qodo PR
+  #2, finding 5). The documented loop deleted each vendored skill before
+  confirming its source existed and had no fail-fast, so in the
+  standalone-clone case this file explicitly supports — no `../devague` — it
+  stripped all eight chain skills and copied nothing back. It now runs under
+  `set -euo pipefail`, verifies every source directory before touching the
+  repo, and stages all eight copies into a temp dir, swapping only once every
+  copy has succeeded.
+
 - **`CLAUDE.md` re-initialized from the `/init` seed into a full runtime
   prompt.** The scaffold's bootstrap placeholder is replaced with the repo's
   actual conventions: a current-state-vs-target section that says plainly that

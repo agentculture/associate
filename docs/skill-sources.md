@@ -168,15 +168,28 @@ devague's originals still say `agex`. Re-apply it after every re-sync.
 Re-sync path:
 
 ```bash
+set -euo pipefail
 CHAIN="scope think challenge spec-to-plan assign-to-workforce deviate validate-delivery summarize-delivery"
+SRC=../devague/.claude/skills
 
 # Diff against the origin before pulling, to see what actually changed:
-for s in $CHAIN; do diff -ru ../devague/.claude/skills/$s .claude/skills/$s; done
+for s in $CHAIN; do diff -ru "$SRC/$s" ".claude/skills/$s" || true; done
 
-# Pull all eight fresh from devague (remove first so dropped files don't linger):
+# VERIFY EVERY SOURCE BEFORE TOUCHING ANYTHING. In a standalone clone there is
+# no ../devague, and a delete-then-copy loop would strip all eight vendored
+# skills and copy nothing back.
 for s in $CHAIN; do
-  rm -rf .claude/skills/$s
-  cp -R ../devague/.claude/skills/$s .claude/skills/
+  [ -d "$SRC/$s" ] || { echo "missing source: $SRC/$s — aborting, nothing changed" >&2; exit 1; }
+done
+
+# Stage every skill first; swap only once all eight copies have succeeded, so
+# an interrupted or failed copy never leaves the kit half-replaced.
+stage=$(mktemp -d)
+trap 'rm -rf "$stage"' EXIT
+for s in $CHAIN; do cp -R "$SRC/$s" "$stage/$s"; done
+for s in $CHAIN; do
+  rm -rf ".claude/skills/$s"
+  cp -R "$stage/$s" ".claude/skills/$s"
 done
 
 # Re-apply the one adaptation:
