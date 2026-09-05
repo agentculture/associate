@@ -1,4 +1,15 @@
+# `model:` is a lobes ROLE name, not a checkpoint id. The `colleague` backend
+# defaults to the local lobes gateway (http://localhost:8001/v1), which resolves
+# `associate` to whichever box currently hosts that role — today the Jetson AGX
+# Orin 64GB, proxied over the tailnet (ASSOCIATE_PEER_ORIGIN + _PEER_PROXY),
+# serving nvidia/NVIDIA-Nemotron-3.5-Lightning-30B-A3B-NVFP4. Addressing the
+# role rather than the checkpoint is the whole point of the gateway: the lane
+# can move boxes or change checkpoints without touching this file.
+#
+# The lobes `associate` role is `worker` MINUS `repo_action` — it executes,
+# drafts, inspects and calls tools, then hands the result BACK rather than
+# enacting it. That is exactly this agent's remit.
 agents:
 - suffix: associate
   backend: colleague
-  model: sakamakismile/Qwen3.6-27B-Text-NVFP4-MTP
+  model: associate
