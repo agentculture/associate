@@ -1,0 +1,330 @@
+{
+  "slug": "webglass-code-lens-as-tools",
+  "title": "webglass + code-lens as tools",
+  "frame_slug": "webglass-code-lens-as-tools",
+  "schema_version": 5,
+  "status": "exported",
+  "created": "2026-09-05T21:49:40Z",
+  "updated": "2026-09-05T22:32:50Z",
+  "targets": [
+    {
+      "id": "c1",
+      "kind": "announcement",
+      "text": "webglass and code-lens become associate tools",
+      "deferred": false,
+      "deferred_reason": ""
+    },
+    {
+      "id": "h1",
+      "kind": "honesty",
+      "text": "the announcement holds only when both CLIs are reachable from the agent PATH and the repo skills document them \u2014 no hidden env vars, no checkout-relative engine fallback",
+      "deferred": false,
+      "deferred_reason": ""
+    },
+    {
+      "id": "c2",
+      "kind": "requirement",
+      "text": "webglass and code-lens are usable as PATH CLIs for the associate agent: code-lens for find/read repo inspection (profile/classify/grep/recent/connections/graph), webglass for guarded web operations (search/page/action/session)",
+      "deferred": false,
+      "deferred_reason": ""
+    },
+    {
+      "id": "h2",
+      "kind": "honesty",
+      "text": "the PATH CLIs are invoked via bash from any working directory \u2014 the new wrappers never resolve the engine relative to the script location (the verbatim code-lens-cli wrappers failure mode)",
+      "deferred": false,
+      "deferred_reason": ""
+    },
+    {
+      "id": "c3",
+      "kind": "boundary",
+      "text": "repo-map / code-lookup wrapper scripts from code-lens-cli are NOT vendored verbatim: each resolves the engine four levels above the script and runs `uv run --directory <that-root> python -m code_lens` (code-lens-cli/.claude/skills/repo-map/scripts/profile.sh, code-lookup/scripts/*.sh); copied into associate they would target associate's venv where dependencies=[] and no code_lens module exists",
+      "deferred": false,
+      "deferred_reason": ""
+    },
+    {
+      "id": "h3",
+      "kind": "honesty",
+      "text": "a verbatim copy of code-lens-cli repo-map/code-lookup wrappers into associate fails: `uv run --directory <associate-root> python -m code_lens` cannot resolve the code_lens module in associate dependencies=[] venv \u2014 verified in all six wrapper script bodies",
+      "deferred": false,
+      "deferred_reason": ""
+    },
+    {
+      "id": "c4",
+      "kind": "boundary",
+      "text": "colleague's promote skill is NOT vendored: promote.sh drives 'colleague promote', which mints/overwrites a colleague instance's culture.yaml identity (--force overwrites a differing existing culture.yaml per colleague/.claude/skills/promote/SKILL.md), while associate is already a resident Culture agent with its own culture.yaml (backend: colleague)",
+      "deferred": false,
+      "deferred_reason": ""
+    },
+    {
+      "id": "h4",
+      "kind": "honesty",
+      "text": "running colleague promote inside the associate repo would mint/overwrite the resident culture.yaml (associate is already a Culture agent, backend: colleague) \u2014 per promote SKILL.md step 1 and its --force flag",
+      "deferred": false,
+      "deferred_reason": ""
+    },
+    {
+      "id": "c6",
+      "kind": "requirement",
+      "text": "webglass search requires WEBGLASS_BRAVE_API_KEY and loopback/private-network targets are denied by default (webglass-cli README.md 'Status: M0-M2 shipped')",
+      "deferred": false,
+      "deferred_reason": ""
+    },
+    {
+      "id": "h5",
+      "kind": "honesty",
+      "text": "webglass search fails cleanly without WEBGLASS_BRAVE_API_KEY (no traceback) and loopback targets are denied by default (webglass-cli README, Status M0-M2 shipped) \u2014 the skill must document both",
+      "deferred": false,
+      "deferred_reason": ""
+    },
+    {
+      "id": "c8",
+      "kind": "audience",
+      "text": "the associate agent (resident, backend: colleague) and any operator driving it from a bash surface \u2014 it is the find/read and web-fetch work the harness was missing that these tools take on",
+      "deferred": false,
+      "deferred_reason": ""
+    },
+    {
+      "id": "h6",
+      "kind": "honesty",
+      "text": "the audience is the associate resident (culture.yaml backend: colleague) and the operator bash surface \u2014 the skills under .claude/skills load only for backends whose core.skill_loader requires frontmatter type: command, so the audience is never a library consumer of the associate package (dependencies=[])",
+      "deferred": false,
+      "deferred_reason": ""
+    },
+    {
+      "id": "c9",
+      "kind": "before_state",
+      "text": "associate has no find/read or web-fetch capability \u2014 no read verb, no summarize verb, no find verb, no web fetch (CLAUDE.md \"Current state vs. target\"); code-lens 0.10.0 and webglass 0.8.3 are installed on PATH on this machine but the repo documents neither, so a fresh session has no sanctioned way to reach them",
+      "deferred": false,
+      "deferred_reason": ""
+    },
+    {
+      "id": "h7",
+      "kind": "honesty",
+      "text": "the before state is accurate as of today: CLAUDE.md Current-state-vs-target lists no read/summarize/find/web-fetch verbs, and neither CLAUDE.md nor docs/skill-sources.md names code-lens or webglass",
+      "deferred": false,
+      "deferred_reason": ""
+    },
+    {
+      "id": "c10",
+      "kind": "after_state",
+      "text": "code-lens and webglass are first-class associate tools: .claude/skills/ holds code-lookup + repo-map (adapted from code-lens-cli, origin recorded) and a webglass skill (origin associate); CLAUDE.md Tooling prerequisites lists both CLIs with their floors; docs/skill-sources.md carries ledger rows with origin, adaptation notes, and last-synced dates",
+      "deferred": false,
+      "deferred_reason": ""
+    },
+    {
+      "id": "h8",
+      "kind": "honesty",
+      "text": "the after state holds only when all four surfaces exist: the 3 skill dirs (frontmatter type: command, name == directory name), the CLAUDE.md Tooling-prerequisites entry, and the ledger rows \u2014 and steward doctor skills-convention + portability still pass",
+      "deferred": false,
+      "deferred_reason": ""
+    },
+    {
+      "id": "c11",
+      "kind": "success_signal",
+      "text": "from a fresh session in the associate checkout: (1) `code-lens profile .` and `webglass page open <url>` both exit 0 with structured output; (2) all three new skills wrappers exit non-zero with an install hint when their CLI is absent from PATH and exit 0 when present; (3) docs/skill-sources.md contains a row for each of the 3 new skills with origin + last-synced",
+      "deferred": false,
+      "deferred_reason": ""
+    },
+    {
+      "id": "h9",
+      "kind": "honesty",
+      "text": "the success signals are checkable from a fresh session: the exit-code checks (2) run with the CLI present and with it shimmed out of PATH, and (1) uses a public URL or an explicit --policy-profile because webglass denies loopback targets by default",
+      "deferred": false,
+      "deferred_reason": ""
+    },
+    {
+      "id": "c12",
+      "kind": "requirement",
+      "text": "the adapted code-lookup and repo-map copies must add `type: command` to their frontmatter: upstream frontmatter carries only name + description (code-lens-cli/.claude/skills/code-lookup/SKILL.md, repo-map/SKILL.md) and core.skill_loader silently skips any SKILL.md lacking type: (docs/skill-sources.md) \u2014 a present-but-skipped skill is exactly the failure the ledger rules against",
+      "deferred": false,
+      "deferred_reason": ""
+    },
+    {
+      "id": "h10",
+      "kind": "honesty",
+      "text": "after the copies land, every new SKILL.md carries type: command and name equal to the directory name (steward doctor skills-convention), and `uv run associate doctor` still passes skills-present",
+      "deferred": false,
+      "deferred_reason": ""
+    },
+    {
+      "id": "c13",
+      "kind": "boundary",
+      "text": "exported specs and committed .devague frame state stay machine-agnostic \u2014 no absolute home paths: the steward doctor portability invariant scans tracked .md/.yaml/.toml/.json (CLAUDE.md steward-doctor invariants), and scope entries s4/s5 originally carried them (amended this pass)",
+      "deferred": false,
+      "deferred_reason": ""
+    },
+    {
+      "id": "h14",
+      "kind": "honesty",
+      "text": "the re-exported spec and the committed frame state carry zero absolute home paths \u2014 verify by grep -c /home/spark on docs/specs/2026-09-05-webglass-code-lens-as-tools.md and .devague/frames/webglass-code-lens-as-tools.json, both 0 after export",
+      "deferred": false,
+      "deferred_reason": ""
+    },
+    {
+      "id": "c14",
+      "kind": "requirement",
+      "text": "the webglass skill must document that loopback and private-network targets are denied by default and name the explicit --policy-profile override pattern (webglass-cli README.md, Status M0-M2 shipped; docs/ci-recipe.md), so the agent reads a policy denial as policy \u2014 not as a tool failure",
+      "deferred": false,
+      "deferred_reason": ""
+    },
+    {
+      "id": "h13",
+      "kind": "honesty",
+      "text": "the landed webglass SKILL.md names the loopback/private-network default-deny and shows the --policy-profile override pattern with a pointer to webglass-cli docs/ci-recipe.md \u2014 verify by grep on the skill body",
+      "deferred": false,
+      "deferred_reason": ""
+    }
+  ],
+  "tasks": [
+    {
+      "id": "t1",
+      "summary": "Add .claude/skills/code-lookup adapted from code-lens-cli: PATH-based wrapper, type: command frontmatter, install-hint degradation",
+      "origin": "llm",
+      "status": "confirmed",
+      "acceptance_criteria": [
+        ".claude/skills/code-lookup/SKILL.md frontmatter carries `name: code-lookup`, `type: command`, and a description, with `name` equal to the directory name",
+        "each wrapper under .claude/skills/code-lookup/scripts/ invokes `code-lens` from PATH and exits non-zero with an install hint naming `uv tool install code-lens-cli` when `code-lens` is absent, and exits 0 when present",
+        "no wrapper resolves the engine relative to the script location (no `uv run --directory <root> python -m code_lens`)"
+      ],
+      "deps": [],
+      "covers": [
+        "c2",
+        "h2",
+        "c3",
+        "h3",
+        "c12",
+        "h10"
+      ],
+      "instruction": "adapt from ../code-lens-cli/.claude/skills/code-lookup; keep the upstream SKILL.md body; add `type: command` to the frontmatter; replace the relative project-root engine resolution (PROJECT_ROOT four levels up plus `uv run --directory`) with a PATH invocation of the installed `code-lens` binary guarded by a `command -v code-lens` check that degrades with the install hint; scripts must not reach outside the repo"
+    },
+    {
+      "id": "t2",
+      "summary": "Add .claude/skills/repo-map adapted from code-lens-cli: PATH-based wrapper, type: command frontmatter, install-hint degradation",
+      "origin": "llm",
+      "status": "confirmed",
+      "acceptance_criteria": [
+        ".claude/skills/repo-map/SKILL.md frontmatter carries `name: repo-map`, `type: command`, and a description, with `name` equal to the directory name",
+        "each wrapper under .claude/skills/repo-map/scripts/ invokes `code-lens` from PATH and exits non-zero with an install hint naming `uv tool install code-lens-cli` when `code-lens` is absent, and exits 0 when present",
+        "no wrapper resolves the engine relative to the script location (no `uv run --directory <root> python -m code_lens`)"
+      ],
+      "deps": [],
+      "covers": [
+        "c2",
+        "h2",
+        "c3",
+        "h3",
+        "c12",
+        "h10"
+      ],
+      "instruction": "adapt from ../code-lens-cli/.claude/skills/repo-map; keep the upstream SKILL.md body; add `type: command` to the frontmatter; replace the relative project-root engine resolution (PROJECT_ROOT four levels up plus `uv run --directory`) with a PATH invocation of the installed `code-lens` binary guarded by a `command -v code-lens` check that degrades with the install hint; scripts must not reach outside the repo"
+    },
+    {
+      "id": "t3",
+      "summary": "Add .claude/skills/webglass (origin associate): PATH-based wrapper, type: command frontmatter, policy plus key documentation, install-hint degradation",
+      "origin": "llm",
+      "status": "confirmed",
+      "acceptance_criteria": [
+        ".claude/skills/webglass/SKILL.md frontmatter carries `name: webglass`, `type: command`, and a description, with `name` equal to the directory name",
+        "the webglass SKILL.md documents search/page/action/session, names that `webglass search` requires `WEBGLASS_BRAVE_API_KEY` and fails cleanly (no traceback) without it, documents that loopback and private-network targets are denied by default, and shows the explicit `--policy-profile` override pattern with a pointer to webglass-cli docs/ci-recipe.md",
+        "each wrapper under .claude/skills/webglass/scripts/ invokes `webglass` from PATH and exits non-zero with an install hint naming `uv tool install webglass-cli` plus the one-time `playwright install --with-deps chromium` step when `webglass` is absent, and exits 0 when present",
+        "no wrapper resolves the engine relative to the script location; the SKILL.md does not claim a webglass session-store path (that location is an unverified parked unknown)"
+      ],
+      "deps": [],
+      "covers": [
+        "c1",
+        "h1",
+        "c2",
+        "h2",
+        "c6",
+        "h5",
+        "c14",
+        "h13",
+        "c12",
+        "h10"
+      ],
+      "instruction": "locally authored (no upstream copy to cite, origin associate); follow the ask-colleague optional-external-CLI pattern (prefer the installed `webglass` on PATH, degrade with the complete install hint including the one-time chromium step); document the default-deny policy and the `--policy-profile` override so a policy denial reads as policy, not tool failure; do not claim a session-store path; scripts must not reach outside the repo"
+    },
+    {
+      "id": "t4",
+      "summary": "Document code-lens and webglass in CLAUDE.md Tooling prerequisites as optional CLI prerequisites with floors and uv-tool origins",
+      "origin": "llm",
+      "status": "confirmed",
+      "acceptance_criteria": [
+        "the Tooling prerequisites section of CLAUDE.md lists `code-lens` (>=0.10.0, origin code-lens-cli) and `webglass` (>=0.8.3, origin webglass-cli) as optional prerequisites with their floor versions and `uv tool install` names, framed like the existing `colleague` and `eidetic` optional entries",
+        "markdown lint passes on CLAUDE.md and no runtime dependency is added to pyproject.toml (dependencies stays empty)"
+      ],
+      "deps": [],
+      "covers": [
+        "c1",
+        "h1",
+        "c8",
+        "h6",
+        "c10",
+        "h8"
+      ],
+      "instruction": "add code-lens and webglass to the \"Optional, only when the skill is actually invoked\" block of the Tooling prerequisites section in CLAUDE.md, mirroring the existing colleague and eidetic entries (name the CLI, its floor version, the PyPI origin the uv tool receipt names, and that the wrapper degrades with an install hint); do not add a runtime dependency; keep `dependencies = []`"
+    },
+    {
+      "id": "t5",
+      "summary": "Record code-lookup, repo-map, and webglass in the docs/skill-sources.md skill provenance ledger with origin, adaptation note, and last-synced date",
+      "origin": "llm",
+      "status": "confirmed",
+      "acceptance_criteria": [
+        "docs/skill-sources.md carries exactly three new rows: code-lookup (origin code-lens-cli), repo-map (origin code-lens-cli), and webglass (origin associate), each with origin, adaptation note, and last-synced date",
+        "the code-lookup and repo-map rows note the tracked divergence (wrappers prefer the installed CLI on PATH and degrade with an install hint instead of the upstream relative-path engine resolution); no promote row is added; markdown lint passes on docs/skill-sources.md"
+      ],
+      "deps": [],
+      "covers": [
+        "c10",
+        "h8",
+        "c11",
+        "h9"
+      ],
+      "instruction": "add the three ledger rows per the existing ledger table format; for code-lookup and repo-map record origin code-lens-cli plus the divergence note (PATH wrapper, not verbatim) plus today date as last-synced; for webglass record origin associate (no upstream copy) plus today date as last-synced; do not record any promote row (promote is deliberately not vendored)"
+    },
+    {
+      "id": "t6",
+      "summary": "Verify doctor, PATH degradation, non-vendored boundaries, and machine-agnostic artifacts for the three new tools",
+      "origin": "llm",
+      "status": "confirmed",
+      "acceptance_criteria": [
+        "`uv run associate doctor` passes skills-present (the three new skills load) and `steward doctor --scope self` skills-convention and portability pass (every new SKILL.md frontmatter `name` equals its directory; no absolute home paths in tracked .md/.yaml/.toml/.json)",
+        "with each CLI shimmed out of PATH its wrapper exits non-zero with the install hint, and under the real PATH it exits 0; `grep -rl promote .claude/skills/ docs/skill-sources.md` returns nothing and `git diff culture.yaml` is empty (resident identity untouched); the three ledger rows are present in docs/skill-sources.md"
+      ],
+      "deps": [
+        "t1",
+        "t2",
+        "t3",
+        "t4",
+        "t5"
+      ],
+      "covers": [
+        "c1",
+        "h1",
+        "c4",
+        "h4",
+        "c9",
+        "h7",
+        "c10",
+        "h8",
+        "c11",
+        "h9",
+        "c13",
+        "h14"
+      ],
+      "instruction": "run `uv run associate doctor` and `steward doctor --scope self`; test degradation by invoking each wrapper under a PATH lacking its CLI and under the real PATH; confirm promote was not vendored and culture.yaml is untouched; verify the exported spec and frame carry no absolute home paths; this task owns no source files and reads everything"
+    }
+  ],
+  "risks": [
+    {
+      "id": "r1",
+      "text": "webglass session-store location is unverified (frame parked unknown v1): t3 must document the session subcommands generically and must not claim a store path; no plan task may depend on persistent sessions until the store location is observed",
+      "kind": "unknown_nonblocking",
+      "task_id": "t3",
+      "resolved": false,
+      "resolution": ""
+    }
+  ],
+  "obligations": []
+}
