@@ -4,7 +4,7 @@
   "schema_version": 6,
   "status": "exported",
   "created": "2026-09-12T09:17:50Z",
-  "updated": "2026-09-12T15:16:09Z",
+  "updated": "2026-09-12T15:52:03Z",
   "claims": [
     {
       "id": "c1",
@@ -1661,6 +1661,28 @@
       "refs": [
         "t17",
         "c35"
+      ],
+      "origin": "llm",
+      "status": "proposed"
+    },
+    {
+      "id": "l35",
+      "code": "control-absent",
+      "what": "qodo-search fix: search.ts was edited before its tests (no red-then-green run), and the grep/find 'count' field was redefined unilaterally from true total to returned count once early termination made the total unknowable",
+      "skipped_check": "failing test first; a reviewer call on count vs a count_is_partial field",
+      "refs": [
+        "PR #6 review"
+      ],
+      "origin": "llm",
+      "status": "proposed"
+    },
+    {
+      "id": "l36",
+      "code": "control-absent",
+      "what": "qodo-ext fix: the shell's operand confinement duplicates the read tool's confine+denylist sequence (about ten lines) instead of a shared contain.ts helper; kept local to avoid touching another agent's in-flight file \u2014 a deliberate trade, recorded so the third tool does not copy it again",
+      "skipped_check": "a shared helper in lib/contain.ts once the wave settles",
+      "refs": [
+        "PR #6 review"
       ],
       "origin": "llm",
       "status": "proposed"
