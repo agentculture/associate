@@ -233,3 +233,11 @@ skills.local.yaml
 .devague/reviews/
 
 .devague/questions/
+
+# Pi coding agent — project-local package caches (installed by `pi`, not
+# authored here) and its export root. .pi/settings.json, .pi/extensions/ and
+# other authored .pi/ config stay tracked.
+.pi/npm/
+.pi/git/
+node_modules/
+.associate-runs/
