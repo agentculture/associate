@@ -1,0 +1,21 @@
+{
+  "id": "tool-call-reliability",
+  "category": "tool-call reliability",
+  "title": "Four well-formed tool calls in one run, every call recorded and schema-valid",
+  "prompt": "Search this checkout for the word ALPHA, then read src/a.py, src/b.py and src/c.py one at a time, and report which files define it.",
+  "fixture": {
+    "files": {
+      "src/a.py": "ALPHA = 1\n",
+      "src/b.py": "BETA = 2\n",
+      "src/c.py": "ALPHA = 3\n"
+    }
+  },
+  "expect": {
+    "searches": ["ALPHA"],
+    "reads": ["src/a.py", "src/b.py", "src/c.py"],
+    "facts": ["src/a.py", "src/c.py"],
+    "citations": [{"path": "src/a.py", "line": 1}],
+    "min_tool_calls": 4,
+    "outcome": "ok"
+  }
+}

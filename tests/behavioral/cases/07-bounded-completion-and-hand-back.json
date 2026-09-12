@@ -1,0 +1,20 @@
+{
+  "id": "bounded-completion-and-hand-back",
+  "category": "bounded completion and hand-back",
+  "title": "The run finishes inside its budget and hands back both artifacts",
+  "prompt": "Read src/constants.py, then stop and hand back a short summary of what it defines. Do not explore further.",
+  "fixture": {
+    "files": {
+      "src/constants.py": "\"\"\"Known-value constants.\"\"\"\n\nTIMEOUT_SECONDS = 47\nRETRY_LIMIT = 3\n"
+    }
+  },
+  "expect": {
+    "reads": ["src/constants.py"],
+    "facts": ["TIMEOUT_SECONDS", "RETRY_LIMIT"],
+    "citations": [{"path": "src/constants.py", "line": 4}],
+    "max_tool_calls": 4,
+    "max_duration_ms": 300000,
+    "min_tool_calls": 1,
+    "outcome": "ok"
+  }
+}

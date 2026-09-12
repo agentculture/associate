@@ -1,0 +1,22 @@
+{
+  "id": "structured-evidence-extraction",
+  "category": "structured evidence extraction",
+  "title": "Extract one value from the right file among decoys, with evidence references",
+  "prompt": "Report the value of DEFAULT_PORT as defined in src/config.py (not in src/legacy.py), with an evidence reference for the claim. Add one general remark you cannot support with evidence.",
+  "fixture": {
+    "files": {
+      "src/config.py": "\"\"\"Live configuration.\"\"\"\n\nDEFAULT_PORT = 8412\n",
+      "src/legacy.py": "\"\"\"Retired configuration, kept for reference.\"\"\"\n\nDEFAULT_PORT = 9999\n"
+    }
+  },
+  "expect": {
+    "searches": ["DEFAULT_PORT"],
+    "reads": ["src/config.py"],
+    "facts": ["8412"],
+    "absent_from_statements": ["9999"],
+    "citations": [{"path": "src/config.py", "line": 3}],
+    "unreferenced_statements": 1,
+    "min_tool_calls": 2,
+    "outcome": "ok"
+  }
+}

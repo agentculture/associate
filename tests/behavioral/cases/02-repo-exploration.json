@@ -1,0 +1,21 @@
+{
+  "id": "repo-exploration",
+  "category": "repo exploration",
+  "title": "Map a small package and name the function that registers routes",
+  "prompt": "Explore this checkout and name the function that registers routes, the module it lives in, and the routes it registers.",
+  "fixture": {
+    "files": {
+      "src/router.py": "\"\"\"Route table.\"\"\"\n\n\ndef register_routes(app):\n    app.add(\"/health\")\n    app.add(\"/status\")\n",
+      "src/worker.py": "def start_worker(queue):\n    return queue.pop()\n",
+      "tests/test_router.py": "from src.router import register_routes\n"
+    }
+  },
+  "expect": {
+    "searches": ["def "],
+    "reads": ["src/router.py"],
+    "facts": ["register_routes", "/health"],
+    "citations": [{"path": "src/router.py", "line": 4}],
+    "min_tool_calls": 2,
+    "outcome": "ok"
+  }
+}
