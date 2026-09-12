@@ -87,8 +87,16 @@ export class FakePi {
     return [...this.builtinTools.map((name) => ({ name })), ...this.tools.map((t) => ({ name: t.name }))];
   }
 
+  /** Set by setActiveTools(); until then the active set is builtins + registered tools. */
+  activeOverride: string[] | null = null;
+
   getActiveTools(): string[] {
+    if (this.activeOverride) return [...this.activeOverride];
     return [...this.activeBuiltinTools, ...this.toolNames()];
+  }
+
+  setActiveTools(names: string[]): void {
+    this.activeOverride = [...names];
   }
 
   toolNames(): string[] {
@@ -102,6 +110,12 @@ export class FakePi {
   }
 
   /** Run every `tool_call` handler, returning the first block decision. */
+  async fireSessionStart(reason = "startup"): Promise<void> {
+    for (const handler of this.handlers.get("session_start") ?? []) {
+      await handler({ type: "session_start", reason }, {});
+    }
+  }
+
   async fireToolCall(event: Record<string, unknown>): Promise<unknown> {
     for (const handler of this.handlers.get("tool_call") ?? []) {
       const decision = await handler(event);
@@ -114,6 +128,7 @@ export class FakePi {
 /** Load the real `index.ts` against a fake pi and return both. */
 export async function loadExtension(
   env: Record<string, string | undefined> = {},
+  setup?: (pi: FakePi) => void,
 ): Promise<{ pi: FakePi; cleanup: () => void }> {
   const source = readFileSync(join(extensionDir, "index.ts"), "utf8")
     .replaceAll('from "typebox"', `from ${JSON.stringify(join(import.meta.dirname, "stubs", "typebox.ts"))}`)
@@ -131,6 +146,7 @@ export async function loadExtension(
   }
 
   const pi = new FakePi();
+  setup?.(pi);
   try {
     const mod = await import(`${pathToFileURL(copy).href}?t=${Date.now()}-${Math.random()}`);
     await mod.default(pi);

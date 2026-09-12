@@ -187,4 +187,23 @@ export default async function (pi: ExtensionAPI) {
 
   // ------------------------------------------------------------- tool modules
   await loadToolModules(pi, ctx);
+
+  // ------------------------------------------------- writers off, by contract
+  // Deviation d7 (measured 2026-09-12): `defaultTools: []` lives in the
+  // project's .pi/settings.json and does not travel with a globally installed
+  // package — run in an unrelated directory, pi still offered edit and write.
+  // The restriction has to be the extension's own, so every writer is removed
+  // from the active set here. Declared non-writers (the argv shell) survive.
+  // setActiveTools is an action method and pi refuses those while extensions
+  // are still loading, so it runs on session_start (fired right after load)
+  // and again on before_agent_start in case a later hook re-enabled a writer.
+  const dropWriters = () => {
+    const active = pi.getActiveTools();
+    const withoutWriters = active.filter((name) => !ctx.contain.isWriter(name));
+    if (withoutWriters.length !== active.length) {
+      pi.setActiveTools(withoutWriters);
+    }
+  };
+  pi.on("session_start", async () => dropWriters());
+  pi.on("before_agent_start", async () => dropWriters());
 }

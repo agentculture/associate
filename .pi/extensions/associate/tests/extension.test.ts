@@ -215,3 +215,18 @@ test("every module under tools/ is discovered and must export register()", async
     rmSync(dir, { recursive: true, force: true });
   }
 });
+
+test("writers are deactivated at load even when the host offered them (deviation d7)", async () => {
+  const { pi, cleanup } = await loadExtension({}, (fake) => {
+    fake.activeBuiltinTools = ["read", "bash", "edit", "write", "grep"];
+  });
+  assert.ok(pi.getActiveTools().includes("edit"), "precondition: the host offered edit before session_start");
+  await pi.fireSessionStart();
+  const active = pi.getActiveTools();
+  assert.ok(!active.includes("edit"), `edit still active: ${active.join(", ")}`);
+  assert.ok(!active.includes("write"), `write still active: ${active.join(", ")}`);
+  assert.ok(active.includes("associate_ready") && active.includes("finish"));
+  // the argv shell overrides `bash` and declares itself a non-writer, so it stays
+  assert.ok(active.includes("bash"));
+  cleanup();
+});
