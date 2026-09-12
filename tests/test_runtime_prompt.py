@@ -115,6 +115,13 @@ def test_agents_md_states_the_handback_and_the_out_of_bound_answer():
     assert "cannot" in lowered or "can't" in lowered
 
 
+def test_agents_md_says_the_final_message_restates_the_summary():
+    """Deviation d9: the mesh relays chat text, so finish alone delivers nothing."""
+    text = _agents_md().lower()
+    assert "final message" in text
+    assert "no tool call is allowed after" in text
+
+
 def test_agents_md_stays_short():
     """Pi's discipline (c50): a tiny always-on surface, skills on demand."""
     assert len(_agents_md()) <= 6000

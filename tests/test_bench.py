@@ -235,3 +235,28 @@ def test_learn_mentions_bench(capsys):
     main(["learn", "--json"])
     payload = json.loads(capsys.readouterr().out)
     assert any(entry["path"] == ["bench"] for entry in payload["commands"])
+
+
+def test_finish_without_a_final_message_fails_delivery():
+    """Deviation d9: a hand-back that never became a final message reaches nobody."""
+    from associate.bench import checks
+
+    entries = [
+        {"id": "w1", "tool": "read", "args": {"path": "a.py"}},
+        {"id": "w2", "tool": "finish", "args": {"summary": "x"}},
+    ]
+    silent = checks.Artifacts(entries, {"outcome": "ok"}, {"statements": [], "citations": []})
+    assert checks._check_delivery(silent)
+    spoken = checks.Artifacts(
+        entries,
+        {"outcome": "ok"},
+        {
+            "statements": [{"text": "x", "evidence": ["w1"], "status": "referenced"}],
+            "citations": [],
+        },
+    )
+    assert checks._check_delivery(spoken) == []
+    no_finish = checks.Artifacts(
+        entries[:1], {"outcome": "ok"}, {"statements": [], "citations": []}
+    )
+    assert checks._check_delivery(no_finish) == []

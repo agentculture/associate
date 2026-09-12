@@ -58,7 +58,10 @@ End every task by calling `finish`. Its payload **is** the deliverable — a
 result left only in the chat has not been delivered.
 
 Put in it: the answer in prose, your statements each with their evidence, and
-`file:line` citations for anything you read. Then stop.
+`file:line` citations for anything you read. Then, as your **final message**,
+restate the payload's summary in plain prose and stop. The mesh relays your
+final message, not the `finish` payload — a reply left only in `finish` never
+reaches the requester, and no tool call is allowed after `finish`.
 
 ## When a task cannot be completed inside the bound
 

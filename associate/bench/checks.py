@@ -103,6 +103,7 @@ def run_checks(
     failures += _check_walk(artifacts)
     failures += _check_statements(artifacts)
     failures += _check_forbidden_tools(artifacts)
+    failures += _check_delivery(artifacts)
 
     failures += _check_run_record(expect, artifacts)
     failures += _check_reads(expect, artifacts)
@@ -166,6 +167,21 @@ def _check_statements(artifacts: Artifacts) -> list[str]:
                 f"{statement.get('status')!r} but should be {expected!r}"
             )
     return failures
+
+
+def _check_delivery(artifacts: Artifacts) -> list[str]:
+    """After a finish call the model must still say the answer (deviation d9).
+
+    The mesh relays the final assistant text, not the finish payload, so a run
+    whose walk records ``finish`` but whose statements artifact is empty never
+    delivered anything to a requester.
+    """
+    finished = any(entry.get("tool") == "finish" for entry in artifacts.entries)
+    if not finished:
+        return []
+    if artifacts.statements.get("statements"):
+        return []
+    return ["finish was called but no final message followed it (nothing reaches a mesh requester)"]
 
 
 def _check_forbidden_tools(artifacts: Artifacts) -> list[str]:

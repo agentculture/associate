@@ -81,6 +81,9 @@ export default async function (pi: ExtensionAPI) {
   // when the variable is unset.
   installContinueFrom(pi, ctx);
 
+  // Set by finish (d9): after the hand-back only a text reply is allowed.
+  let finished = false;
+
   // ---------------------------------------------------------------- sentinel
   // One report, two readers (deviation d8): the `associate_ready` tool returns
   // it when a model asks, and the `session_start` hook below writes the very
@@ -172,23 +175,49 @@ export default async function (pi: ExtensionAPI) {
     }),
     async execute(_toolCallId, params) {
       const handback = normalizeHandback(params);
+      const unreferenced = unreferencedCount(handback);
       const details = {
         handback,
-        unreferenced: unreferencedCount(handback),
+        unreferenced,
         export_dir: session.exportDir,
         session_id: session.sessionId,
       };
+      // Deviation d9 (measured 2026-09-12 on the mesh): with `terminate: true`
+      // the loop ended on this call and the model never produced a final
+      // message, so culture's ACP bridge — which relays chat text, not tool
+      // payloads — posted nothing. The hand-back is recorded here; the turn
+      // continues for exactly one text reply, and every further tool call is
+      // blocked below.
+      finished = true;
+      const count = handback.statements.length;
       return {
-        content: [{ type: "text", text: JSON.stringify(handback) }],
+        content: [
+          // The normalized hand-back stays first, as JSON, for the recorder.
+          { type: "text", text: JSON.stringify(handback) },
+          {
+            type: "text",
+            text:
+              `Hand-back recorded (${count} statement${count === 1 ? "" : "s"}, ` +
+              `${unreferenced} unreferenced). Now reply to the requester with the ` +
+              "summary as your final message, then stop — a hand-back alone does " +
+              "not reach a mesh requester, and no further tool call is allowed.",
+          },
+        ],
         details,
-        // The hand-back is the end of the task; there is nothing to follow up.
-        terminate: true,
       };
     },
   });
 
   // -------------------------------------------------------------- write guard
   pi.on("tool_call", (event) => {
+    if (finished) {
+      return {
+        block: true,
+        reason:
+          "the task was already handed back with finish; reply to the requester " +
+          "with the summary as your final message instead of calling tools",
+      };
+    }
     return evaluateToolCall({
       toolName: event.toolName,
       input: event.input,

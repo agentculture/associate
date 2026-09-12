@@ -121,7 +121,7 @@ test("associate_ready reports no active writer under defaultTools: []", async ()
   }
 });
 
-test("finish returns the hand-back as its payload and terminates", async () => {
+test("finish returns the hand-back as its payload and leaves one text reply (d9)", async () => {
   const s = scratch();
   try {
     await withExtension(s.env, async ({ pi }) => {
@@ -140,8 +140,16 @@ test("finish returns the hand-back as its payload and terminates", async () => {
       assert.equal(handback.statements[1].status, "unreferenced");
       assert.equal(handback.citations[0].check, "unverifiable");
       assert.equal(handback.not_fully_read, false);
-      assert.equal(result.terminate, true);
+      // d9: finish no longer terminates the loop; the model gets one text reply.
+      assert.equal(result.terminate, undefined);
+      assert.match(result.content[1].text, /final message/);
+      assert.match(result.content[1].text, /2 statements, 1 unreferenced/);
+      assert.equal(result.details.handback.summary, "Two routes are registered.");
       assert.equal(result.details.unreferenced, 1);
+      // ...and every tool call after finish is blocked, so only a reply is left.
+      const after = (await pi.fireToolCall({ toolName: "read", input: { path: "server.py" } })) as any;
+      assert.equal(after?.block, true, "tool calls after finish must be blocked");
+      assert.match(String(after?.reason), /handed back/);
     });
   } finally {
     s.dispose();
