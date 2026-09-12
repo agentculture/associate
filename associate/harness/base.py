@@ -23,10 +23,43 @@ import abc
 from pathlib import Path
 from typing import Any, ClassVar
 
-__all__ = ["Harness", "WALK_FILENAME", "STATEMENTS_FILENAME"]
+__all__ = [
+    "Harness",
+    "HarnessError",
+    "ExtensionNotLoadedError",
+    "WALK_FILENAME",
+    "STATEMENTS_FILENAME",
+    "STATEMENTS_MD_FILENAME",
+]
 
 WALK_FILENAME = "walk.jsonl"
 STATEMENTS_FILENAME = "statements.json"
+#: The human-readable half of artifact B, written by the Pi extension.
+STATEMENTS_MD_FILENAME = "statements.md"
+
+
+class HarnessError(RuntimeError):
+    """An adapter could not serve, and says what the operator should do.
+
+    Carries a ``remediation`` so the CLI renders the ``hint:`` line the
+    agent-first error contract requires without re-deriving it. Every failure
+    an adapter *expects* — no runtime on PATH, a refused launch, a timeout — is
+    one of these; anything else is a bug and surfaces as one.
+    """
+
+    def __init__(self, message: str, remediation: str = "") -> None:
+        super().__init__(message)
+        self.remediation = remediation
+
+
+class ExtensionNotLoadedError(HarnessError):
+    """The run was refused because the harness's own extension did not load.
+
+    Spec c34/h26: the launcher verifies the extension from the tool list the
+    runtime *reports*, never from a config file being on disk, and refuses to
+    serve when the sentinel is missing — a silently unextended runtime is one
+    with its full built-in write tools.
+    """
 
 
 class Harness(abc.ABC):

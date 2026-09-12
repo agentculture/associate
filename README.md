@@ -106,7 +106,8 @@ uv run teken cli doctor . --strict    # the agent-first rubric gate CI runs
 | `overview` | Read-only descriptive snapshot of the agent. |
 | `doctor` | Check the agent-identity invariants (prompt-file-present, backend-consistency). |
 | `cli overview` | Describe the CLI surface itself. |
-| `bench --harness <name>` | Run the behavioral suite against one adapter (only `stub` is registered today) and print a per-category pass/fail table. |
+| `run [prompt]` | Run one task on a harness adapter (`pi` by default). Exits `2` **without serving** unless pi reports the `associate_ready` sentinel and no active writer tool. |
+| `bench --harness <name>` | Run the behavioral suite against one adapter (`pi` or `stub`) and print a per-category pass/fail table. |
 
 Every command takes `--json`. **Results go to stdout, errors and diagnostics go
 to stderr — never mixed**, so an agent parsing the output can rely on it. Errors
@@ -177,6 +178,29 @@ The other eleven cover the day-to-day:
 | `agent-config` | Show a Culture agent's full configuration in one read-only view. |
 | `pypi-maintainer` | Switch a package install between PyPI, TestPyPI, and local editable. |
 | `doc-test-alignment` | Verify committed docs still describe what the code does (stub today). |
+
+## Environment
+
+These `ASSOCIATE_*` variables are the whole external interface to the lane's
+endpoint and session plumbing — no committed file names a host, a port, or a
+bearer. All of them are optional; the defaults below are what applies when a
+variable is unset.
+
+| Variable | Default | Purpose |
+|----------|---------|---------|
+| `ASSOCIATE_BASE_URL` | `http://localhost:8001/v1` | OpenAI-compatible base URL the Pi provider and the bench talk to. |
+| `ASSOCIATE_API_KEY` | — | Bearer for that endpoint. With it unset the extension registers no provider and prints one hint; `associate run` then says pi's own default model applies. Never committed, never logged. |
+| `ASSOCIATE_MODEL` | `associate` | The lobes **role** name sent as `model` — never a checkpoint id. |
+| `ASSOCIATE_REASONING_OFF` | `chat_template_kwargs` | Which reasoning-off field is injected on the wire: `chat_template_kwargs`, `reasoning_effort`, `both`, or `off`. |
+| `ASSOCIATE_CONTRACT_DIR` | repo-relative `associate/contract/` | Where the extension and the Python adapter both load `role.json`, `policy.json`, and the schemas from. Set per run by `associate run`. |
+| `ASSOCIATE_SESSION_ID` | generated | Pins the session id that keys the scratch and export directories, so concurrent runs never collide. |
+| `ASSOCIATE_EXPORT_ROOT` | `.associate-runs` beside the checkout | Where the run's session directory (`<root>/<session id>/export`) is created — always outside the examined checkout. |
+| `ASSOCIATE_CONTINUE_FROM` | — | A prior run's export directory, loaded as this session's first context instead of re-walking it. Set by `associate run --continue-from`. |
+| `ASSOCIATE_INJECT_PROMPT` | — | Set to `1` by `associate run`: with pi's ancestor context-file discovery turned off, the extension injects the checkout's own `AGENTS.md` and nothing above it. |
+
+The launcher checks the installed `pi` against the tested pin (**0.84.2**) and
+warns on stderr naming that version — it never refuses on a version number
+alone.
 
 ## Optional tooling
 

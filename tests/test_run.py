@@ -1,0 +1,480 @@
+"""``associate run`` — the fail-closed launcher over ``pi`` (spec c34 / h26).
+
+The launcher's whole job is to refuse to serve unless the ``associate`` Pi
+extension actually loaded, and h26 pins *how* it may know: **from the tool list
+Pi reports**, never from the presence of a config file on disk. Pi 0.84.2 has no
+``--list-tools``, and its ``--mode json`` stream carries no startup tool
+inventory (``docs/json.md``), so the only list Pi reports is the one the
+``associate_ready`` sentinel returns as a tool result. The launcher therefore
+drives one turn whose prompt is "call associate_ready, then finish" and reads
+the report off the ``tool_execution_end`` event.
+
+That makes the check model-dependent, which is why most tests here drive a
+**fake ``pi`` on PATH**: a script that emits a real ``--mode json`` event stream
+and records the argv and environment it was invoked with. It settles the
+launcher's behaviour deterministically with no lane. The real-pi test at the
+bottom is the honest complement — it runs the actual binary against the stdlib
+fake lane and asserts only what that combination can actually produce.
+"""
+
+from __future__ import annotations
+
+import json
+import os
+import stat
+import subprocess
+import time
+from pathlib import Path
+
+import pytest
+
+from associate.cli import main
+from associate.harness import available_harnesses, get_harness
+from associate.harness.base import ExtensionNotLoadedError, HarnessError
+from associate.harness.pi import PiHarness, resolve_export_root, sanitize_session_id
+from tests.conftest import require_pi
+from tests.fake_lane import FakeLaneServer
+
+REPO_ROOT = Path(__file__).resolve().parent.parent
+
+_FAKE_PI = '''#!/usr/bin/env python3
+"""A scripted stand-in for the pi binary: real event stream, no model."""
+import json
+import os
+import sys
+from pathlib import Path
+
+READY = {ready!r}
+WRITERS = {writers!r}
+VERSION = {version!r}
+
+argv = sys.argv[1:]
+if "--version" in argv or "-v" in argv:
+    print(VERSION)
+    raise SystemExit(0)
+
+root = Path(os.environ["ASSOCIATE_EXPORT_ROOT"])
+root.mkdir(parents=True, exist_ok=True)
+(root / "invocation.json").write_text(
+    json.dumps(
+        {{
+            "argv": argv,
+            "cwd": os.getcwd(),
+            "env": {{k: v for k, v in os.environ.items() if k.startswith("ASSOCIATE_")}},
+            "stdin_closed": sys.stdin.read() == "",
+        }}
+    ),
+    encoding="utf-8",
+)
+
+export = root / os.environ["ASSOCIATE_SESSION_ID"] / "export"
+export.mkdir(parents=True, exist_ok=True)
+run_record = {{
+    "run": {{"duration_ms": 1, "tool_calls": 1, "outcome": "ok", "truncated": False}}
+}}
+(export / "walk.jsonl").write_text(json.dumps(run_record) + "\\n", encoding="utf-8")
+(export / "statements.md").write_text("# Statements\\n", encoding="utf-8")
+(export / "statements.json").write_text(
+    json.dumps({{"statements": [], "citations": [], "not_fully_read": False}}) + "\\n",
+    encoding="utf-8",
+)
+
+print(json.dumps({{"type": "session", "version": 3, "id": "fake", "cwd": os.getcwd()}}))
+print(json.dumps({{"type": "agent_start"}}))
+if READY:
+    report = {{
+        "ok": True,
+        "extension_version": "0.1.0",
+        "contract_version": 1,
+        "contract_dir": os.environ.get("ASSOCIATE_CONTRACT_DIR", ""),
+        "contract_source": "env",
+        "tools": ["read", "bash", "edit", "write", "associate_ready", "finish"],
+        "active_tools": ["associate_ready", "finish", "bash"] + WRITERS,
+        "writer_tools_active": WRITERS,
+        "session": {{"id": os.environ["ASSOCIATE_SESSION_ID"], "export_dir": str(export)}},
+    }}
+    print(
+        json.dumps(
+            {{
+                "type": "tool_execution_end",
+                "toolCallId": "call_0",
+                "toolName": "associate_ready",
+                "result": {{
+                    "content": [{{"type": "text", "text": json.dumps(report)}}],
+                    "details": report,
+                }},
+                "isError": False,
+            }}
+        )
+    )
+print(json.dumps({{"type": "agent_end", "messages": []}}))
+'''
+
+
+def _install_fake_pi(
+    directory: Path,
+    *,
+    ready: bool = True,
+    writers: list[str] | None = None,
+    version: str = "0.84.2",
+) -> Path:
+    """Write an executable fake ``pi`` into *directory* and return its path."""
+    directory.mkdir(parents=True, exist_ok=True)
+    script = directory / "pi"
+    script.write_text(
+        _FAKE_PI.format(ready=ready, writers=writers or [], version=version),
+        encoding="utf-8",
+    )
+    script.chmod(script.stat().st_mode | stat.S_IXUSR | stat.S_IXGRP | stat.S_IXOTH)
+    return script
+
+
+@pytest.fixture
+def checkout(tmp_path: Path) -> Path:
+    root = tmp_path / "checkout"
+    (root / "sub").mkdir(parents=True)
+    (root / "README.md").write_text("# fixture\n", encoding="utf-8")
+    return root
+
+
+@pytest.fixture
+def fake_pi(tmp_path: Path, monkeypatch: pytest.MonkeyPatch):
+    """Install a fake ``pi`` first on PATH; returns the installer for re-scripting."""
+
+    bin_dir = tmp_path / "bin"
+
+    def install(**kwargs) -> Path:
+        path = _install_fake_pi(bin_dir, **kwargs)
+        monkeypatch.setenv("PATH", f"{bin_dir}{os.pathsep}{os.environ['PATH']}")
+        return path
+
+    install()
+    return install
+
+
+def _run(args: list[str], checkout: Path, tmp_path: Path) -> int:
+    return main(
+        [
+            "run",
+            "--checkout",
+            str(checkout),
+            "--export-root",
+            str(tmp_path / "runs"),
+            *args,
+        ]
+    )
+
+
+# --------------------------------------------------------------- the registry
+
+
+def test_pi_is_a_registered_adapter():
+    assert "pi" in available_harnesses()
+    assert get_harness("pi") is PiHarness
+
+
+def test_the_pi_adapter_imports_no_pi_package():
+    """Criterion 4 / claim c13: subprocess only, and no runtime dependency."""
+    source = (REPO_ROOT / "associate" / "harness" / "pi.py").read_text(encoding="utf-8")
+    for forbidden in ("import pi\n", "import pi ", "from pi ", "from pi.", "pi_coding_agent"):
+        assert forbidden not in source, f"pi.py must not import a pi package ({forbidden!r})"
+
+
+def test_the_package_declares_no_runtime_dependency():
+    text = (REPO_ROOT / "pyproject.toml").read_text(encoding="utf-8")
+    assert "dependencies = []" in text
+
+
+# ------------------------------------------------------------ unknown harness
+
+
+def test_unknown_harness_exits_1_listing_the_adapters(capsys: pytest.CaptureFixture[str]):
+    code = main(["run", "--harness", "bogus"])
+    assert code == 1
+
+    captured = capsys.readouterr()
+    assert captured.out == ""
+    assert "bogus" in captured.err
+    for name in available_harnesses():
+        assert name in captured.err
+
+
+def test_unknown_harness_in_json_mode_emits_the_error_object(
+    capsys: pytest.CaptureFixture[str],
+):
+    code = main(["run", "--harness", "bogus", "--json"])
+    assert code == 1
+
+    payload = json.loads(capsys.readouterr().err)
+    assert payload["code"] == 1
+    assert "pi" in payload["remediation"]
+
+
+# ---------------------------------------------------------------- fail closed
+
+
+def test_a_run_without_the_sentinel_fails_closed(
+    fake_pi, checkout: Path, tmp_path: Path, capsys: pytest.CaptureFixture[str]
+):
+    """Criterion 1: no sentinel in the reported tool list → exit 2, nothing served."""
+    fake_pi(ready=False)
+
+    code = _run([], checkout, tmp_path)
+    assert code == 2
+
+    captured = capsys.readouterr()
+    assert captured.out == "", "a refused run must serve nothing on stdout"
+    assert "associate_ready" in captured.err
+    assert "extension" in captured.err
+    assert "--approve" in captured.err or "approve" in captured.err
+
+
+def test_an_active_writer_tool_fails_closed(
+    fake_pi, checkout: Path, tmp_path: Path, capsys: pytest.CaptureFixture[str]
+):
+    """r14: the check is on ``writer_tools_active``, never on the full tool list."""
+    fake_pi(ready=True, writers=["write"])
+
+    code = _run([], checkout, tmp_path)
+    assert code == 2
+
+    captured = capsys.readouterr()
+    assert captured.out == ""
+    assert "write" in captured.err
+
+
+def test_the_full_tool_list_containing_writers_is_not_a_failure(
+    fake_pi, checkout: Path, tmp_path: Path, capsys: pytest.CaptureFixture[str]
+):
+    """r14 (measured under pi 0.84.2): ``getAllTools()`` lists edit/write regardless."""
+    fake_pi(ready=True)
+
+    assert _run([], checkout, tmp_path) == 0
+    assert "walk.jsonl" in capsys.readouterr().out
+
+
+# -------------------------------------------------------------------- serving
+
+
+def test_a_ready_run_prints_both_artifact_paths(
+    fake_pi, checkout: Path, tmp_path: Path, capsys: pytest.CaptureFixture[str]
+):
+    """Criterion 1, second half."""
+    code = _run([], checkout, tmp_path)
+    assert code == 0
+
+    captured = capsys.readouterr()
+    assert captured.out.count("\n") >= 2
+    assert "walk.jsonl" in captured.out
+    assert "statements.md" in captured.out
+    for line in captured.out.splitlines():
+        assert "=" in line
+
+
+def test_json_mode_prints_the_result_object(
+    fake_pi, checkout: Path, tmp_path: Path, capsys: pytest.CaptureFixture[str]
+):
+    code = _run(["--json"], checkout, tmp_path)
+    assert code == 0
+
+    payload = json.loads(capsys.readouterr().out)
+    for key in ("walk_path", "statements_path", "statements_md_path", "outcome", "session_id"):
+        assert key in payload
+    assert Path(payload["walk_path"]).is_file()
+    assert Path(payload["statements_md_path"]).is_file()
+    assert payload["outcome"] == "ok"
+
+
+# ------------------------------------------------- what the launcher passes pi
+
+
+def _invocation(tmp_path: Path) -> dict:
+    return json.loads((tmp_path / "runs" / "invocation.json").read_text(encoding="utf-8"))
+
+
+def test_the_launcher_passes_the_flags_the_contract_requires(
+    fake_pi, checkout: Path, tmp_path: Path
+):
+    assert _run(["--session-id", "t12-fixture"], checkout, tmp_path) == 0
+
+    invocation = _invocation(tmp_path)
+    argv = invocation["argv"]
+    for flag in ("-p", "--mode", "json", "--no-session", "--approve", "--no-context-files"):
+        assert flag in argv, f"{flag} missing from {argv}"
+    assert invocation["cwd"] == str(checkout.resolve())
+    # r16: with ancestor context files disabled, AGENTS.md is injected instead.
+    assert invocation["env"]["ASSOCIATE_INJECT_PROMPT"] == "1"
+    assert invocation["env"]["ASSOCIATE_SESSION_ID"] == "t12-fixture"
+    assert invocation["env"]["ASSOCIATE_CONTRACT_DIR"].endswith("contract")
+    assert invocation["env"]["ASSOCIATE_EXPORT_ROOT"] == str(tmp_path / "runs")
+    assert "ASSOCIATE_CONTINUE_FROM" not in invocation["env"]
+    # The recorded gotcha: pi blocks on an inherited stdin, so it gets DEVNULL.
+    assert invocation["stdin_closed"] is True
+
+
+def test_continue_from_reaches_the_extension(fake_pi, checkout: Path, tmp_path: Path):
+    prior = tmp_path / "prior-export"
+    prior.mkdir()
+
+    assert _run(["--continue-from", str(prior)], checkout, tmp_path) == 0
+    assert _invocation(tmp_path)["env"]["ASSOCIATE_CONTINUE_FROM"] == str(prior)
+
+
+def test_no_provider_flags_without_a_key(
+    fake_pi, checkout: Path, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+):
+    monkeypatch.delenv("ASSOCIATE_API_KEY", raising=False)
+
+    assert _run([], checkout, tmp_path) == 0
+    assert "--provider" not in _invocation(tmp_path)["argv"]
+
+
+def test_provider_flags_when_a_key_is_set(
+    fake_pi, checkout: Path, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+):
+    monkeypatch.setenv("ASSOCIATE_API_KEY", "dummy-test-key")  # nosec B105
+    monkeypatch.setenv("ASSOCIATE_MODEL", "associate")
+
+    assert _run([], checkout, tmp_path) == 0
+
+    argv = _invocation(tmp_path)["argv"]
+    assert argv[argv.index("--provider") + 1] == "associate"
+    assert argv[argv.index("--model") + 1] == "associate"
+    assert "dummy-test-key" not in " ".join(argv)
+
+
+def test_a_version_mismatch_warns_but_still_serves(
+    fake_pi, checkout: Path, tmp_path: Path, capsys: pytest.CaptureFixture[str]
+):
+    """c39: the launcher warns naming the tested version; it never refuses on it."""
+    fake_pi(version="0.99.0")
+
+    assert _run([], checkout, tmp_path) == 0
+
+    captured = capsys.readouterr()
+    assert "0.84.2" in captured.err and "0.99.0" in captured.err
+    assert "walk.jsonl" in captured.out
+
+
+def test_a_missing_pi_binary_is_an_environment_error(
+    checkout: Path, tmp_path: Path, monkeypatch: pytest.MonkeyPatch, capsys
+):
+    monkeypatch.setenv("PATH", str(tmp_path / "empty"))
+
+    assert _run([], checkout, tmp_path) == 2
+    assert "pi" in capsys.readouterr().err
+
+
+# ------------------------------------------------------------------- plumbing
+
+
+def test_export_root_defaults_beside_the_checkout(checkout: Path):
+    root = resolve_export_root(checkout)
+    assert root == checkout.parent / ".associate-runs"
+
+
+def test_an_export_root_inside_the_checkout_is_refused(checkout: Path):
+    with pytest.raises(ValueError):
+        resolve_export_root(checkout, str(checkout / "runs"))
+
+
+def test_session_ids_are_safe_path_segments():
+    assert sanitize_session_id("../../etc/passwd") == "etc-passwd"
+    assert sanitize_session_id("sess/01") == "sess-01"
+
+
+def test_the_stub_adapter_still_runs_through_the_verb(
+    checkout: Path, tmp_path: Path, capsys: pytest.CaptureFixture[str]
+):
+    """The verb selects an adapter; it is not hard-wired to pi."""
+    assert _run(["--harness", "stub"], checkout, tmp_path) == 0
+    assert "walk.jsonl" in capsys.readouterr().out
+
+
+def test_extension_not_loaded_is_a_harness_error():
+    err = ExtensionNotLoadedError("nope", remediation="try --approve")
+    assert isinstance(err, HarnessError)
+    assert err.remediation == "try --approve"
+
+
+def test_served_model_id_reads_the_endpoint(
+    fake_lane: FakeLaneServer, monkeypatch: pytest.MonkeyPatch
+):
+    monkeypatch.setenv("ASSOCIATE_BASE_URL", f"{fake_lane.base_url}/v1")
+    assert PiHarness().served_model_id() == "associate"
+
+
+def test_served_model_id_returns_none_when_the_endpoint_is_unreachable(
+    monkeypatch: pytest.MonkeyPatch,
+):
+    monkeypatch.setenv("ASSOCIATE_BASE_URL", "http://127.0.0.1:1/v1")
+    assert PiHarness().served_model_id() is None
+
+
+# ------------------------------------------------------------- the real binary
+
+
+def test_the_real_pi_writes_both_artifacts_against_the_fake_lane(
+    fake_lane: FakeLaneServer, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+):
+    """Criterion 3, honestly.
+
+    The checkout is this repo, because that is where ``.pi/extensions/associate``
+    lives and a project extension is discovered relative to pi's working
+    directory; the export root is still a temp directory outside it, so the run
+    leaves the checkout untouched.
+
+    The fake lane answers plain JSON where pi's ``openai-completions`` path
+    wants SSE (see ``tests/test_provider_wire.py``), so the turn never
+    completes and the sentinel never arrives: the launcher **fails closed**,
+    which is the correct behaviour and is asserted as such. What the run does
+    prove is that the extension loaded and persisted its artifacts without any
+    model turn — ``statements.md`` at construction, ``walk.jsonl`` from the
+    exit hook — which is exactly claim c30's "persistence is the harness's job".
+    """
+    require_pi()
+
+    monkeypatch.setenv("ASSOCIATE_BASE_URL", f"{fake_lane.base_url}/v1")
+    monkeypatch.setenv("ASSOCIATE_API_KEY", "dummy-test-key")  # nosec B105
+    monkeypatch.setenv("ASSOCIATE_MODEL", "associate")
+    monkeypatch.setenv("PI_OFFLINE", "1")
+
+    export_root = tmp_path / "runs"
+    code = main(
+        [
+            "run",
+            "--checkout",
+            str(REPO_ROOT),
+            "--export-root",
+            str(export_root),
+            "--session-id",
+            "t12-real-pi",
+            "--timeout",
+            "90",
+        ]
+    )
+
+    export_dir = export_root / "t12-real-pi" / "export"
+    deadline = time.monotonic() + 10
+    while time.monotonic() < deadline and not (export_dir / "walk.jsonl").is_file():
+        time.sleep(0.2)
+
+    assert (export_dir / "statements.md").is_file(), "the extension must write statements.md"
+    assert (export_dir / "walk.jsonl").is_file(), "the extension must write walk.jsonl"
+    assert code == 2, "with no completed turn there is no sentinel, so the launcher refuses"
+
+
+def test_the_real_pi_help_offers_the_flags_the_launcher_passes():
+    """The launcher's flags are pinned against pi 0.84.2; a rename must fail here."""
+    require_pi()
+
+    result = subprocess.run(  # nosec B603 B607 - fixed argv, no shell
+        ["pi", "--help"],
+        capture_output=True,
+        text=True,
+        stdin=subprocess.DEVNULL,
+        timeout=60,
+        check=False,
+    )
+    for flag in ("--mode", "--no-session", "--approve", "--no-context-files", "--print"):
+        assert flag in result.stdout, f"pi --help no longer documents {flag}"

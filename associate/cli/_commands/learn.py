@@ -28,6 +28,7 @@ Commands
   associate explain <path>...  Markdown docs for any noun/verb path.
   associate overview           Descriptive snapshot of the agent.
   associate doctor             Check the agent-identity invariants.
+  associate run [prompt]       Run one task on a harness adapter, or fail closed.
   associate bench              Run the behavioral suite against a harness adapter.
   associate cli overview       Describe the CLI surface itself.
 
@@ -60,6 +61,13 @@ def _as_json_payload() -> dict[str, object]:
             {"path": ["explain"], "summary": "Markdown docs by path."},
             {"path": ["overview"], "summary": "Descriptive snapshot of the agent."},
             {"path": ["doctor"], "summary": "Check the agent-identity invariants."},
+            {
+                "path": ["run"],
+                "summary": (
+                    "Run one task on a harness adapter; exits 2 without serving when the "
+                    "adapter cannot prove its extension loaded."
+                ),
+            },
             {
                 "path": ["bench"],
                 "summary": "Run the behavioral suite against a harness adapter.",
