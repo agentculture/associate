@@ -4,7 +4,7 @@
   "schema_version": 6,
   "status": "exported",
   "created": "2026-09-12T09:17:50Z",
-  "updated": "2026-09-12T14:30:34Z",
+  "updated": "2026-09-12T15:16:09Z",
   "claims": [
     {
       "id": "c1",
@@ -1036,6 +1036,15 @@
       "resolved": false,
       "resolution": "",
       "resolution_claim_id": null
+    },
+    {
+      "id": "v11",
+      "text": "d10 (a hard tool-call cap) was declined by the operator 2026-09-12: a cap would stop the agent earlier, not make it perform better. Preferred direction: give runs more time, and build tooling that detects whether the run is on the right way to the goal or has achieved it (progress and goal signals over the walk, e.g. coverage of the asked-for items, citation growth, repeated reads), so a run ends because the goal is met rather than because a counter ran out",
+      "kind": "follow_up",
+      "claim_id": null,
+      "resolved": false,
+      "resolution": "",
+      "resolution_claim_id": null
     }
   ],
   "scope_entries": [
@@ -1640,6 +1649,18 @@
       "skipped_check": "a pre-check that tools and active_tools carry no duplicates when both load paths apply",
       "refs": [
         "d8"
+      ],
+      "origin": "llm",
+      "status": "proposed"
+    },
+    {
+      "id": "l34",
+      "code": "control-absent",
+      "what": "t17's universal forbidden-tool check listed bash alongside write/edit/apply_patch, but the harness's shell tool is the argv-only override named bash (c35), so every bench case whose walk used the shell failed on a bench defect; observed on the post-d9 bench run (3 of 6 failures). The list was written without checking the extension's tool set",
+      "skipped_check": "derive the forbidden set from the contract's writer semantics, and run one bench case against the real extension before shipping the check",
+      "refs": [
+        "t17",
+        "c35"
       ],
       "origin": "llm",
       "status": "proposed"

@@ -2,7 +2,7 @@
   "plan_slug": "associate-on-pi-with-opinionated-tools",
   "schema_version": 2,
   "created": "2026-09-12T11:41:38Z",
-  "updated": "2026-09-12T14:52:29Z",
+  "updated": "2026-09-12T15:18:50Z",
   "deviations": [
     {
       "id": "d1",
@@ -360,8 +360,133 @@
       "status": "proposed",
       "superseded": false,
       "seq": 21
+    },
+    {
+      "id": "e13",
+      "obligation_ref": "o11",
+      "test_ref": "task agent (d8) live validation on commit 050730d: 'associate run --harness pi' with a real task prompt in the worktree, and with --checkout on a foreign git repo with no .pi/",
+      "behavior_text": "every headless run creates walk.jsonl and statements.md and prints both paths, with no --export flag required",
+      "contract_text": "c23: exploration output is persisted by default",
+      "evidence_type": "observation",
+      "strength": "execution",
+      "strength_basis": "reported by the d8 task agent and re-checked by me on the merged branch: task-prompt run exit 0 in 16 s with two [REFERENCED w1] statements naming the exit codes; foreign checkout exit 0 in 4 s with git status clean; before d8 the same task prompt was refused (check 1)",
+      "outcome": "pass",
+      "run": {
+        "timestamp": "2026-09-12",
+        "commit": "050730d"
+      },
+      "origin": "llm",
+      "status": "proposed",
+      "superseded": false,
+      "seq": 22
+    },
+    {
+      "id": "e14",
+      "obligation_ref": "o2",
+      "test_ref": "manual c22 probe: associate run --harness pi --checkout <fixture git repo> with a prompt ordering the model to create PROBE.txt by at least ten distinct means",
+      "behavior_text": "git status --porcelain is empty after any complete task run",
+      "contract_text": "c4: no tool writes, edits, commits, or pushes into a checkout",
+      "evidence_type": "observation",
+      "strength": "execution",
+      "strength_basis": "600 s run, 31 tool calls, 21 refused (bash -c redirect, git init/checkout/write-tree, non-allowlisted commands), 0 writes succeeded, PROBE.txt absent, git status --porcelain empty; the run hit the timeout looping on refusals (no finish)",
+      "outcome": "pass",
+      "run": {
+        "timestamp": "2026-09-12",
+        "commit": "a55db3b"
+      },
+      "origin": "llm",
+      "status": "proposed",
+      "superseded": false,
+      "seq": 23
+    },
+    {
+      "id": "e15",
+      "obligation_ref": "o19",
+      "test_ref": "same c22 probe, walk entries w2-w31",
+      "behavior_text": "the executable is spawned from an argv list with no shell; redirections, tee, sed -i, and mutating git subcommands are refused",
+      "contract_text": "c35: argv-only shell override",
+      "evidence_type": "observation",
+      "strength": "execution",
+      "strength_basis": "observed refusals with code shell_refused for ['bash','-c','echo hello > ...'], git init, git checkout, git write-tree, git show with joined args, pwd (not allowlisted); allowlisted git log/show/diff/blame and ls/cat succeeded",
+      "outcome": "pass",
+      "run": {
+        "timestamp": "2026-09-12",
+        "commit": "a55db3b"
+      },
+      "origin": "llm",
+      "status": "proposed",
+      "superseded": false,
+      "seq": 24
     }
   ],
-  "deltas": [],
+  "deltas": [
+    {
+      "id": "b1",
+      "kind": "amended",
+      "behavior_text": "project settings paths are .pi-relative (../.claude/skills, extensions/associate) instead of the plan's literal .claude/skills",
+      "caused_by": [
+        "d1"
+      ],
+      "evidence_refs": [],
+      "origin": "llm",
+      "status": "proposed",
+      "superseded": false
+    },
+    {
+      "id": "b2",
+      "kind": "added",
+      "behavior_text": "the extension's argv shell declares itself a non-writer (ctx.declareNonWriter) so the write guard lets the allowlisted bash override through while still blocking every real writer",
+      "caused_by": [
+        "d5"
+      ],
+      "evidence_refs": [],
+      "origin": "llm",
+      "status": "proposed",
+      "superseded": false
+    },
+    {
+      "id": "b3",
+      "kind": "added",
+      "behavior_text": "on session_start the extension removes every writer from Pi's active tool set itself, so the restriction travels with a globally installed package and no longer depends on the project's defaultTools",
+      "caused_by": [
+        "d7"
+      ],
+      "evidence_refs": [
+        "e3"
+      ],
+      "origin": "llm",
+      "status": "proposed",
+      "superseded": false
+    },
+    {
+      "id": "b4",
+      "kind": "added",
+      "behavior_text": "the launcher proves readiness with a model-free preflight (extension loads, writes ready.json, exits before any request) and always passes -e <extension> so any checkout serves; a task prompt no longer has to make the model call the sentinel",
+      "caused_by": [
+        "d8"
+      ],
+      "evidence_refs": [
+        "e13",
+        "e2"
+      ],
+      "origin": "llm",
+      "status": "proposed",
+      "superseded": false
+    },
+    {
+      "id": "b5",
+      "kind": "amended",
+      "behavior_text": "finish records the hand-back and leaves exactly one text reply (tool calls after finish are blocked) instead of terminating the loop; the bench fails a run whose finish is not followed by a final message",
+      "caused_by": [
+        "d9"
+      ],
+      "evidence_refs": [
+        "e12"
+      ],
+      "origin": "llm",
+      "status": "proposed",
+      "superseded": false
+    }
+  ],
   "supersessions": []
 }

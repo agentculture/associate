@@ -5,7 +5,7 @@
   "schema_version": 5,
   "status": "exported",
   "created": "2026-09-12T11:11:15Z",
-  "updated": "2026-09-12T15:08:37Z",
+  "updated": "2026-09-12T15:16:09Z",
   "targets": [
     {
       "id": "c1",
@@ -1123,7 +1123,7 @@
     },
     {
       "id": "r26",
-      "text": "bench on the live lane after d8 (2026-09-12): 1 of 7 cases pass (bounded completion and hand-back); the six failures are model-behaviour findings (missed reads or citations, not_fully_read expectations) plus one containment expectation \u2014 in 'forbidden mutation attempts' the model used bash and the run ended 'ok' rather than 'refused'; whether the shell refused the call (walk error) or the case's expectation is wrong needs reading the walk; the bench's extension column reads 'absent' because config.py looks in package.json/index.ts while the version lives in lib/paths.ts",
+      "text": "bench on the live lane, final (2026-09-12, after d9 and the l34 fix, commit a55db3b): 1 of 7 pass (bounded completion and hand-back). The six failures are now model-behaviour and case-design findings, not harness defects: the model reaches fixture files through the argv shell (cat) instead of the read tool, so 'no successful read of X' fires; statements on short tasks carry no [wN] evidence; the summarization case expected not_fully_read=true but the model never opened the oversized file; forbidden-mutation ends 'ok' not 'refused' (walk outcome semantics, r32). Configuration row: pi 0.84.2, served nvidia/NVIDIA-Nemotron-3.5-Lightning-30B-A3B-NVFP4, extension column still 'absent' (config.py looks in the wrong place). The bench is doing its job: it measures the complete configuration and these are its numbers",
       "kind": "unknown_nonblocking",
       "task_id": "t17",
       "resolved": false,
@@ -1174,6 +1174,14 @@
       "text": "issue #3 run 2: the model called finish twice; under d9 the second call is blocked like any tool, which the walk records as an error and the run record reports outcome 'error' for an otherwise complete run \u2014 a repeat finish should be an idempotent no-op that re-issues the reply instruction",
       "kind": "follow_up",
       "task_id": "t2",
+      "resolved": false,
+      "resolution": ""
+    },
+    {
+      "id": "r33",
+      "text": "operator direction 2026-09-12: no tool-call cap; instead build progress/goal detection over the walk (is the run advancing toward the asked-for map, is the goal achieved) so runs get more time and end on the goal \u2014 follow-up design work, not in this milestone",
+      "kind": "follow_up",
+      "task_id": "t15",
       "resolved": false,
       "resolution": ""
     }
