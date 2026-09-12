@@ -4,7 +4,7 @@
   "schema_version": 6,
   "status": "exported",
   "created": "2026-09-12T09:17:50Z",
-  "updated": "2026-09-12T11:38:26Z",
+  "updated": "2026-09-12T11:43:00Z",
   "claims": [
     {
       "id": "c1",
@@ -1269,6 +1269,18 @@
       "refs": [
         "challenge pass / cheap probes",
         "c6 c28 v3"
+      ],
+      "origin": "llm",
+      "status": "approved"
+    },
+    {
+      "id": "l2",
+      "code": "assumption-for-measurement",
+      "what": "plan task t1's acceptance criterion pinned a settings path literal without reading Pi's path-resolution rule; the criterion stood in for a check of pi docs/settings.md:268",
+      "skipped_check": "read the 'Paths in .pi/settings.json resolve relative to .pi' rule before writing t1's criterion",
+      "refs": [
+        "t1",
+        "pi docs/settings.md:268"
       ],
       "origin": "llm",
       "status": "approved"

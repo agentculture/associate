@@ -5,7 +5,7 @@
   "schema_version": 5,
   "status": "exported",
   "created": "2026-09-12T11:11:15Z",
-  "updated": "2026-09-12T11:38:26Z",
+  "updated": "2026-09-12T11:43:00Z",
   "targets": [
     {
       "id": "c1",
@@ -538,9 +538,9 @@
       "id": "t1",
       "summary": "Track the Pi project config and package manifest: .pi/settings.json, package.json (pi key), .gitignore entries",
       "origin": "llm",
-      "status": "confirmed",
+      "status": "proposed",
       "acceptance_criteria": [
-        ".pi/settings.json is tracked, contains no '~' or '/home' path, sets defaultTools to [] and skills to .claude/skills",
+        ".pi/settings.json is tracked, contains no '~' or '/home' path, sets defaultTools to [] and, because Pi resolves project settings paths relative to the .pi directory, sets skills to ../.claude/skills and extensions to extensions/associate; both resolve to existing directories from .pi",
         "package.json exists with a pi key naming .pi/extensions/associate and .claude/skills, has no dependencies or scripts, and 'uv run pytest' still passes with dependencies = [] unchanged",
         ".gitignore covers .pi/npm/, .pi/git/, node_modules/, and the export root; git ls-files shows none of them"
       ],
