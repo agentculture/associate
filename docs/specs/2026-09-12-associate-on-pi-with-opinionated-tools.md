@@ -45,6 +45,7 @@
 - the opinionated tool set is fixed and small: bounded read (path plus optional line range, hard byte cap, returns truncation markers), find and grep backed by pi's vendored fd/rg with result caps, ls, a bash tool restricted to an allowlist of read-only commands, code-lens and webglass wrappers delegating to the PATH CLIs per the webglass-code-lens-as-tools spec, and finish/handback that returns drafts and summaries as the result payload; no edit, no write, no unrestricted shell
   - instruction: verify: 'pi --list-tools' (or the extension's registered tool list in the session startup block) shows exactly the named tools and neither edit nor write; a request to run 'rm', 'git commit', or 'git push' through the bash tool is refused with a structured error
   - honesty: the tool list is enumerated in the spec and the shipped extension registers exactly that list — additions require a spec amendment
+  - honesty: the shell tool named in the list is the extension's override, never Pi's built-in bash, and the startup tool list shows exactly one tool by that name
 - precision aids compensate for the model where the lobes role says it is weak: every tool validates its arguments against a JSON schema inside the tool and returns a corrective error the model can retry on (so strict server-side tool calling is not required), long inputs are chunked with explicit continuation cursors rather than truncated silently, and summaries cite file:line or URL provenance so a caller can check them
   - instruction: verify: feed each tool one malformed argument set and confirm the response is a structured error naming the offending field; read a file larger than the byte cap and confirm the response carries a continuation cursor; a summarize run over a fixture returns at least one file:line citation per claimed fact
   - honesty: argument validation lives inside each tool and works regardless of whether the server honors strict tool schemas — so the strict-mode unknown stops blocking design
@@ -69,6 +70,27 @@
 - a summary always ships with what makes it checkable (issue #1): source spans or file:line citations into the walk, and an explicit not-fully-read marker when the read budget cut the input short
   - instruction: verify: summarize a fixture larger than the read budget and assert the output carries the not-fully-read marker and at least one citation; summarize a small fixture and assert the marker is absent
   - honesty: the not-fully-read marker is set by the tool that truncated, never by the model
+- the tool restriction fails closed: Pi's non-interactive modes (-p, --mode json, --mode rpc) load project .pi/settings.json and .pi/extensions only with a saved trust decision, defaultProjectTrust always, or --approve (pi docs/settings.md:16, security.md:29), and pi-acp documents no way to pass Pi flags through — so on an untrusted checkout the harness would silently run with Pi's full built-ins including edit and write. The launcher must verify the associate extension actually loaded (a sentinel tool in the startup tool list) and refuse to serve otherwise
+  - instruction: verify: run pi -p in a fresh clone with no trust.json entry and defaultProjectTrust unset; assert the wrapper exits non-zero naming the missing extension instead of answering; repeat with --approve and assert it serves
+  - honesty: the check is done by the launcher from the tool list Pi reports, not by trusting that the config file exists on disk
+- Pi's built-in bash is an unrestricted write path (any shell command can redirect, tee, sed -i, git commit), so the allowlisted shell in c20 must be a same-named override registered by the extension (pi docs/extensions.md:2053) that takes argv without shell interpretation, matches the executable and subcommand against the allowlist, and rejects redirections, pipes to writers, and mutating git subcommands
+  - instruction: verify: through the shell tool, 'echo x > f', 'tee f', 'sed -i', 'git commit', 'git push', and 'rm' are each refused with a structured error; 'git log', 'git diff', 'rg', 'fd', 'code-lens profile' succeed
+  - honesty: no code path reaches /bin/sh with model-supplied text; the tool spawns the executable directly with an argv list
+- secrets do not ride along in artifacts: the read tool refuses files matched by a denylist (.env, key and token patterns, paths ignored by the checkout's .gitignore), the walk export directory is git-ignored and never inside the checkout being examined, exported walks pass a redaction filter for known secret shapes, and headless runs use --no-session (as issue #3's runs did) so Pi's own session log under ~/.pi/agent/sessions does not persist tool output a second time
+  - instruction: verify: a read of .env is refused; a walk export containing a fixture bearer token is redacted; git status in the examined checkout stays clean after a run; no new file appears under ~/.pi/agent/sessions for a headless run
+  - honesty: redaction is a filter on the harness side applied before the artifact is written, not an instruction to the model
+- toolchain floors are pinned and documented in CLAUDE.md Tooling prerequisites: Node >=22 and pi >=0.80.4 (pi-acp README prerequisites), pi tested at 0.84.2, pi-acp >=0.0.33; pi update is never run by the harness; the extension declares no npm dependencies beyond what Pi itself provides (typebox via pi, pi docs/extensions.md:61-62), and no `node_modules` directory is ever tracked
+  - instruction: verify: CLAUDE.md names the four floors; git ls-files shows no `node_modules`; the extension imports only from @earendil-works/pi-coding-agent and typebox
+  - honesty: a fresh clone with only Node 22 and pi installed loads the extension without an npm install step
+- the mesh cutover is one revertible commit: culture.yaml backend: acp plus `acp_command`, AGENTS.md added, AGENTS.colleague.md retained until the ACP path has answered a channel message on a real server (c15), then removed in a separate commit
+  - instruction: verify: git revert of the cutover commit restores backend: colleague and both doctors pass; AGENTS.colleague.md is absent only after the c15 evidence is recorded
+  - honesty: at no commit on main do the declared backend and the prompt file on disk disagree
+- every run gets its own scratch and export directory keyed by session id (ACP session id from culture's session/new, or a generated id headless), so concurrent mesh tasks against the same checkout never share a scratch dir or interleave walk entries
+  - instruction: verify: two headless runs started in parallel on the same fixture produce two disjoint export dirs, each with a self-consistent walk
+  - honesty: the session id in the export path is the one culture's ACP runner logged for session/new, so an operator can join a mesh transcript to its walk
+- the repo carries a package.json whose pi key declares the extension and skills directories (pi docs/packages.md:124-126), so `pi install git:github.com/agentculture/associate@<tag>` loads the same extension the checkout does; git installs are pinned refs that pi update never moves (packages.md:90), and the release tag matches the pyproject.toml version bumped on every PR
+  - instruction: verify: from a machine with no associate checkout, pi install the repo at the current tag, run pi --list-tools (or the startup block) in an unrelated directory, and assert the associate tools are present and edit/write absent; assert the tag equals pyproject.toml version
+  - honesty: the package.json exists only to declare Pi resources — it adds no build step, no npm dependencies, and does not change the Python package or its zero-dependency rule
 
 ## Honesty conditions
 
@@ -82,6 +104,10 @@
 - the three numbers are measured on the live Orin lane and recorded in the PR body with the command that produced each
 - the 64 min versus 4 min comparison is quoted from issue #4 as measured there, and the spec claims the benefit only after a re-run demonstrates it
 - the four numbers are measured on the live lane against the issue #3 prompt, not on a mocked model
+- the web tool's egress is bounded by webglass's policy profile and by a per-run fetch count cap, and every fetched URL appears in the walk so exfiltration is at least visible after the fact
+- the registered tool list carries no tool that can submit a form or hold a session; the webglass skill remains available to a human operator via bash outside the harness
+- no test reads an endpoint or key from the environment to pass
+- every walk entry maps 1:1 to a Pi event the harness received; the harness adds ids, hashes, and timestamps but never synthesizes an entry
 
 ## Success signals
 
@@ -96,6 +122,9 @@
   - instruction: verify: for each forbidden token in lobes/roles.py `ROLE_FORBIDDEN`\['associate'\], name the tool or hook that makes it impossible; run a full task and assert 'git status --porcelain' is empty afterwards
 - code-lens and webglass stay PATH CLIs invoked through their skills, per the exported frame webglass-code-lens-as-tools (docs/specs/2026-09-05-webglass-code-lens-as-tools.md); Pi tools wrap those CLIs rather than re-implementing repo profiling or guarded web fetch, and dependencies = \[\] in pyproject.toml stays empty
   - instruction: verify: grep the extension for any reimplementation of repo profiling or web fetch (none); the code-lens and webglass tools shell out to the PATH CLIs and degrade with an install hint; pyproject.toml dependencies stays \[\]
+- the web surface registered by default is read-only: webglass search and page open; webglass action and session (clicking, form submission, persistent logins) are not registered as tools unless a later spec adds them, because they can produce outward-facing side effects the lobes role does not sanction
+- CI never needs the lane or Node 22: tests exercise the extension and the Python wrapper against a fake OpenAI-compatible server or recorded fixtures; live-lane checks (the c22 and c27 numbers) run locally and are recorded in PR bodies; .github/workflows/tests.yml today installs Node 20 only for markdownlint
+  - instruction: verify: the tests job passes on a runner with no network route to the lane and no bearer; any test that needs pi is skipped with a reason when pi is absent
 
 ## Non-goals
 
@@ -105,6 +134,8 @@
 
 - the runtime is the installed Pi coding agent (@earendil-works/pi-coding-agent 0.84.2 at ~/.nvm/.../bin/pi), not a Python reimplementation of its loop: Pi already provides custom OpenAI-compatible providers (~/.pi/agent/models.json, api: openai-completions), a project extension API (.pi/extensions/\*.ts: registerTool, `tool_call`/`tool_result` hooks, `before_agent_start`), a defaultTools allowlist, and headless drivers (-p, --mode json, --mode rpc, AgentSession SDK)
 - Nemotron 3.5 Lightning tool calling is usable as served: lobes-cli docs/nemotron-3.5-lightning-30b-a3b-nvfp4.md records a validated structured tool call under --tool-call-parser `qwen3_coder` with --reasoning-parser `nemotron_v3`; the checkpoint has no vision tower, serves 128k on the Orin shape, decodes ~50-54 tok/s flat to 32k depth — so tools should lean on long-context bulk reading and fast turns, and never assume image input
+- prompt injection from files and pages the lane reads is accepted residual risk (pi docs/security.md:37 states Pi cannot prevent it): with no write tools the blast radius is bounded to what the read-only tools can reach, leaving outbound web fetch of an attacker-chosen URL as the one exfiltration channel
+- the walk can be derived from what Pi already emits: --mode json streams tool call and result events, and Pi's session JSONL records toolResult messages with ids and timestamps (pi docs/session-format.md:210); the harness needs only to persist and key them, not to instrument the tools
 
 ## Scope exploration
 
@@ -140,6 +171,17 @@
   - seeds: `c25`, `c26`
 - `s17` — `github agentculture/associate issue #1 (guildmaster build brief) + colleague/colleague/{associate.py,search_tools.py,readpage.py,web.py}`: the brief defines the lane (read/find/summarize/extract/classify/verify; never edit/write/PR), says take Pi's posture but do not vendor Pi, asks to merge colleague's base tools with their containment guards (confine, `_refuse_pattern_escape`, output budgets, web URL check and raw ceiling), inherit `reasoning_effort` off for Nemotron (associate.py:7-9), define reliability as bounded output plus containment plus typed result and make it measurable, and put an engine seam in on day one; it parks where the model runs, intern-cli/lobes-cli boundaries, and colleague-as-caller
   - seeds: `c28`, `c29`, `c30`, `c31`
+- `s18` — `challenge pass / security + containment lens: pi docs/security.md, settings.md (trust, defaultTools), extensions.md:2053 (override), session-format.md`: headless modes skip project extensions without trust (fail-open to full built-ins); built-in bash is an unrestricted write path; sessions persist tool output; prompt injection is documented as unpreventable — seeded c34-c38
+  - seeds: `c34`, `c35`, `c36`, `c37`, `c38`
+- `s19` — `challenge pass / adjacent-systems + lifecycle lens: pi-acp README (prereqs, env, no flag passthrough), pi docs/extensions.md:148-271 (npm deps), .github/workflows/tests.yml (node 20)`: pi-acp cannot pass --approve to pi; extensions may pull `node_modules`; CI runs Node 20 with no lane access — seeded c39-c41 and question q5
+  - seeds: `c39`, `c40`, `c41`
+- `s20` — `challenge pass / concurrency + data-flow lens: cultureagent/clients/acp/agent_runner.py (session/new cwd, request_permission), pi docs/session-format.md`: one ACP process may host several sessions; walk data already exists as Pi events — seeded c42, c43; pi-acp's permission handling unread (parked)
+  - seeds: `c42`, `c43`
+- `s21` — `challenge pass / reversibility + operations lens: culture.yaml, AGENTS.colleague.md, CLAUDE.md backend-consistency invariant`: cutover is a config plus one prompt file; revert is a single git revert as long as both prompt files coexist through the transition — seeded c41
+  - seeds: `c41`
+- `s22` — `challenge pass / cheap probes: pi docs grep (trust, defaultTools, override, deps, reasoning), npm view pi-acp readme, devague lapse codes`: all probes read-only against installed docs and npm metadata; no live-lane probe (no bearer available to this session) — see the filed lapse
+- `s23` — `challenge pass / adjacent-systems lens follow-up: pi docs/packages.md (sources, pinning, package.json pi key, project -l installs)`: a repo is installable as a Pi package from npm, pinned git ref, or local path; project-local package refs auto-install after trust; global installs load before trust — resolves q5 as (c)
+  - seeds: `c44`, `c45`
 
 ## Decisions
 
@@ -148,6 +190,7 @@
 - the associate Python package may drive Pi as a subprocess over its rpc/print JSONL protocol; it does not import the unrelated PyPI 'pi-coding-agent' and adds no runtime dependency
 - Pi is the runtime, approved over issue #1's do-not-vendor note: the harness runs the installed pi binary (pi-acp for the mesh, pi -p / --mode rpc headless) and keeps Pi's discipline of a tiny prompt surface and on-demand skills
 - colleague's base tools are ported case by case, only where a Pi built-in or PATH CLI does not already cover the need; each port records origin colleague in the ledger with a note on drift handling
+- the associate extension is shipped both ways: tracked in the repo and loaded project-locally by path, and installable globally as a Pi package pinned to a release tag (pi install git:github.com/agentculture/associate@vX.Y.Z); the global install is authoritative for the mesh path so tool restriction never depends on project trust
 
 ## Hard questions
 
@@ -159,6 +202,9 @@
 - [unknown_nonblocking] the live lane was not exercised this pass: GET /v1/models on localhost:8001 returned `invalid_api_key` without a bearer, and no probe was sent to model=associate — reachability, reported model id, and live `tool_calls` emission rest on lobes-cli docs and evidence files, not on an observed run today
 - [unknown_nonblocking] the pi models.json entry for the associate lane declares contextLimit 1048576 while pi --list-models reports 128K; whether that is a schema-field mismatch (contextLimit vs contextWindow) or display only is unverified
 - [unknown_nonblocking] relationship to intern-cli (sibling small-model harness at ../intern-cli) and whether colleague calls associate as a delegate seat (colleague/associate.py already models the seat) are two-repo decisions issue #1 parks; not decided here
+- [unknown_nonblocking] how reasoning is switched off on the wire through Pi's openai-completions provider: models.json reasoning:false / thinkingLevelMap only shape what Pi sends (pi docs/models.md:204-291); the served lane emits reasoning by default under --reasoning-parser `nemotron_v3`, so the knob may have to be a `chat_template_kwargs` flag injected via a `before_provider_request` hook, if Nemotron's template honors one — unverified
+- [unknown_nonblocking] culture's ACP runner (cultureagent/clients/acp/`agent_runner.py`) drives initialize, session/new with cwd, session/prompt, and answers session/`request_permission` (line 382); whether pi-acp ever raises `request_permission`, and how it maps Pi tool calls that would prompt, was not read in pi-acp's Limitations section this pass
+- [unknown_nonblocking] outbound exfiltration through attacker-chosen URLs fetched by the web tool is bounded but not eliminated; the residual risk stays until a fetch allowlist or egress policy is decided
 
 ## Resolved vagueness
 
