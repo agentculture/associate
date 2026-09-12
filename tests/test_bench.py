@@ -133,7 +133,8 @@ def test_cli_stub_run_exits_zero_and_names_harness_and_role(capsys, tmp_path):
     rc = main(["bench", "--harness", "stub", "--workdir", str(tmp_path)])
     out = capsys.readouterr().out
     assert rc == 0
-    assert "harness" in out and "model role" in out
+    assert "harness" in out
+    assert "model role" in out
     assert "plumbing-only" in out
     # every row names the harness and the model role
     role = runner.run_suite("stub", workdir=tmp_path).configuration["model_role"]
@@ -422,7 +423,8 @@ def test_a_citation_outside_every_read_range_is_a_failure():
         },
     )
     failures = checks._check_citations({"citations": [{"path": "a.py", "line": 200}]}, artifacts)
-    assert failures and "encountered" in failures[0]
+    assert failures
+    assert "encountered" in failures[0]
 
 
 # ---------------------------------------------------------------------------

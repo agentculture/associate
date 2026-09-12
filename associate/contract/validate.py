@@ -75,41 +75,74 @@ def _resolve(schema: dict[str, Any], root: dict[str, Any]) -> dict[str, Any]:
     return target
 
 
+def _check_type(instance: Any, schema: dict[str, Any], path: str) -> list[str]:
+    """Return the type-mismatch error, if any.
+
+    A non-empty result means every nested check is meaningless (the caller
+    stops there rather than checking a wrongly-typed instance further).
+    """
+    expected = schema.get("type")
+    if expected is None:
+        return []
+    names = [expected] if isinstance(expected, str) else list(expected)
+    if any(_TYPE_CHECKS[name](instance) for name in names):
+        return []
+    return [f"{path}: expected type {'|'.join(names)}"]
+
+
+def _check_enum(instance: Any, schema: dict[str, Any], path: str) -> list[str]:
+    if "enum" in schema and instance not in schema["enum"]:
+        return [f"{path}: {instance!r} is not one of {schema['enum']}"]
+    return []
+
+
+def _check_pattern(instance: Any, schema: dict[str, Any], path: str) -> list[str]:
+    pattern = schema.get("pattern")
+    if pattern is None or not isinstance(instance, str):
+        return []
+    if compile_pattern(pattern).search(instance):
+        return []
+    return [f"{path}: {instance!r} does not match pattern {pattern!r}"]
+
+
+def _check_object(
+    instance: Any, schema: dict[str, Any], root: dict[str, Any], path: str
+) -> list[str]:
+    if not isinstance(instance, dict):
+        return []
+    errors: list[str] = []
+    for key in schema.get("required", []):
+        if key not in instance:
+            errors.append(f"{path}: missing required property {key!r}")
+    for key, subschema in schema.get("properties", {}).items():
+        if key in instance:
+            errors.extend(_check(instance[key], subschema, root, f"{path}.{key}"))
+    return errors
+
+
+def _check_array(
+    instance: Any, schema: dict[str, Any], root: dict[str, Any], path: str
+) -> list[str]:
+    if not isinstance(instance, list) or "items" not in schema:
+        return []
+    errors: list[str] = []
+    for index, item in enumerate(instance):
+        errors.extend(_check(item, schema["items"], root, f"{path}[{index}]"))
+    return errors
+
+
 def _check(instance: Any, schema: dict[str, Any], root: dict[str, Any], path: str) -> list[str]:
     schema = _resolve(schema, root)
+
+    type_errors = _check_type(instance, schema, path)
+    if type_errors:
+        return type_errors
+
     errors: list[str] = []
-
-    expected = schema.get("type")
-    if expected is not None:
-        names = [expected] if isinstance(expected, str) else list(expected)
-        if not any(_TYPE_CHECKS[name](instance) for name in names):
-            errors.append(f"{path}: expected type {'|'.join(names)}")
-            # A wrong type makes every nested check meaningless.
-            return errors
-
-    if "enum" in schema and instance not in schema["enum"]:
-        errors.append(f"{path}: {instance!r} is not one of {schema['enum']}")
-
-    pattern = schema.get("pattern")
-    if (
-        pattern is not None
-        and isinstance(instance, str)
-        and not compile_pattern(pattern).search(instance)
-    ):
-        errors.append(f"{path}: {instance!r} does not match pattern {pattern!r}")
-
-    if isinstance(instance, dict):
-        for key in schema.get("required", []):
-            if key not in instance:
-                errors.append(f"{path}: missing required property {key!r}")
-        for key, subschema in schema.get("properties", {}).items():
-            if key in instance:
-                errors.extend(_check(instance[key], subschema, root, f"{path}.{key}"))
-
-    if isinstance(instance, list) and "items" in schema:
-        for index, item in enumerate(instance):
-            errors.extend(_check(item, schema["items"], root, f"{path}[{index}]"))
-
+    errors.extend(_check_enum(instance, schema, path))
+    errors.extend(_check_pattern(instance, schema, path))
+    errors.extend(_check_object(instance, schema, root, path))
+    errors.extend(_check_array(instance, schema, root, path))
     return errors
 
 

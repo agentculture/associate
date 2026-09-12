@@ -72,7 +72,8 @@ def test_stub_runs_end_to_end_and_writes_valid_artifacts(tmp_path):
     statements_path = Path(result["statements_path"])
     assert walk_path.name == "walk.jsonl"
     assert statements_path.name == "statements.json"
-    assert walk_path.is_file() and statements_path.is_file()
+    assert walk_path.is_file()
+    assert statements_path.is_file()
 
     lines = walk_path.read_text(encoding="utf-8").splitlines()
     entries = [json.loads(line) for line in lines]
@@ -112,8 +113,9 @@ def test_stub_rejects_a_task_that_fails_the_task_schema(tmp_path):
 
 def test_stub_requires_start_before_submit_and_submit_before_collect(tmp_path):
     harness = StubHarness()
+    task = _task(tmp_path)
     with pytest.raises(RuntimeError):
-        harness.submit(_task(tmp_path))
+        harness.submit(task)
     harness.start(
         checkout=tmp_path / "checkout",
         contract_dir=contract.contract_dir(),
