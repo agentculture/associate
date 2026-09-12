@@ -344,28 +344,44 @@ def parse_events(stdout: str) -> list[dict[str, Any]]:
     return events
 
 
+def _is_sentinel_end(event: dict[str, Any]) -> bool:
+    """Whether *event* is the ``tool_execution_end`` of the sentinel tool."""
+    return event.get("type") == "tool_execution_end" and event.get("toolName") == SENTINEL_TOOL
+
+
+def _report_from_text_blocks(blocks: Iterable[Any]) -> dict[str, Any] | None:
+    """The first JSON object carried by a text content block, if any."""
+    for block in blocks:
+        if not isinstance(block, dict) or not isinstance(block.get("text"), str):
+            continue
+        try:
+            parsed = json.loads(block["text"])
+        except json.JSONDecodeError:
+            continue
+        if isinstance(parsed, dict):
+            return parsed
+    return None
+
+
+def _report_from_result(result: Any) -> dict[str, Any] | None:
+    """The sentinel report inside one tool result: ``details`` first, text second."""
+    if not isinstance(result, dict):
+        return None
+    details = result.get("details")
+    if isinstance(details, dict):
+        return details
+    # Fall back to the text content, which carries the same JSON object.
+    return _report_from_text_blocks(result.get("content") or [])
+
+
 def sentinel_report(events: Iterable[dict[str, Any]]) -> dict[str, Any] | None:
     """The ``associate_ready`` report Pi reported, or ``None`` if it never did."""
     for event in events:
-        if event.get("type") != "tool_execution_end":
+        if not _is_sentinel_end(event):
             continue
-        if event.get("toolName") != SENTINEL_TOOL:
-            continue
-        result = event.get("result")
-        if not isinstance(result, dict):
-            continue
-        details = result.get("details")
-        if isinstance(details, dict):
-            return details
-        # Fall back to the text content, which carries the same JSON object.
-        for block in result.get("content") or []:
-            if isinstance(block, dict) and isinstance(block.get("text"), str):
-                try:
-                    parsed = json.loads(block["text"])
-                except json.JSONDecodeError:
-                    continue
-                if isinstance(parsed, dict):
-                    return parsed
+        report = _report_from_result(event.get("result"))
+        if report is not None:
+            return report
     return None
 
 
