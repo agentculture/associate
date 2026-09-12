@@ -1,0 +1,8 @@
+{
+  "name": "associate-pi-config",
+  "private": true,
+  "pi": {
+    "extensions": [".pi/extensions/associate"],
+    "skills": [".claude/skills"]
+  }
+}

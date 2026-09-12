@@ -1,0 +1,5 @@
+{
+  "defaultTools": [],
+  "skills": [".claude/skills"],
+  "extensions": [".pi/extensions/associate"]
+}
