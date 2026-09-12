@@ -4,7 +4,7 @@
   "schema_version": 6,
   "status": "exported",
   "created": "2026-09-12T09:17:50Z",
-  "updated": "2026-09-12T11:11:02Z",
+  "updated": "2026-09-12T11:38:26Z",
   "claims": [
     {
       "id": "c1",
@@ -437,7 +437,7 @@
     {
       "id": "c25",
       "kind": "requirement",
-      "text": "pass the torch (issue #4): a run exports two separable artifacts \u2014 A, the walk: an ordered log of every tool call and its result with stable ids (w1, w2, ...), timestamps, and for reads the returned content or its hash; B, the statements: the model's output where each claim carries evidence references into A, with unreferenced claims flagged unsupported \u2014 and a --continue-from that lets a second agent load A as given context without re-walking",
+      "text": "pass the torch (issue #4): a run exports two separable artifacts \u2014 A, the walk: an ordered log of every tool call and its result with stable ids (w1, w2, ...), timestamps, and for reads the returned content or its hash; B, the statements: the model's output where each claim carries evidence references into A, with claims lacking any reference flagged UNREFERENCED \u2014 and a --continue-from that lets a second agent load A as given context without re-walking. A reference into a recorded read range proves the agent encountered those lines, not that they support the claim",
       "origin": "llm",
       "status": "confirmed",
       "honesty_conditions": [
@@ -451,7 +451,13 @@
       "hard_questions": [],
       "links": [],
       "instruction": "verify: after a run, walk.jsonl entries have monotonically increasing ids and each read entry carries a content hash; statements.json entries carry an evidence list; a statement with an empty evidence list renders with an unsupported marker; `associate run --continue-from <dir>` starts a session whose first context contains the walk contents",
-      "revisions": []
+      "revisions": [
+        {
+          "text": "pass the torch (issue #4): a run exports two separable artifacts \u2014 A, the walk: an ordered log of every tool call and its result with stable ids (w1, w2, ...), timestamps, and for reads the returned content or its hash; B, the statements: the model's output where each claim carries evidence references into A, with unreferenced claims flagged unsupported \u2014 and a --continue-from that lets a second agent load A as given context without re-walking",
+          "kind": "requirement",
+          "reason": "user: citation-into-walk proves encounter, not support"
+        }
+      ]
     },
     {
       "id": "c26",
@@ -475,7 +481,7 @@
     {
       "id": "c27",
       "kind": "success_signal",
-      "text": "on the issue #3 task (map lobes/gateway/server.py and four siblings for a coder): a headless run completes in under 5 min with the map persisted to a file of at least 300 lines, at least 90% of its path:N citations verify against the walk, and 0 runs return a final message without an artifact path",
+      "text": "on the issue #3 task (map lobes/gateway/server.py and four siblings for a coder): a headless run completes in under 5 min with the map persisted to a file; 100% of its path:N citations resolve to lines the walk shows were read (encounter check); on a sample of at least 10 statements, at least 90% are judged factually supported by the cited lines when checked by a reviewer against the source; the map covers every route, gate, thread-start pattern, and byte-identical test the coder needs (coverage against the issue #3 reference list); and a receiving coder given only the walk and statements completes the follow-on change without re-reading files the walk already contains",
       "origin": "llm",
       "status": "confirmed",
       "honesty_conditions": [
@@ -483,13 +489,19 @@
           "id": "h21",
           "text": "the four numbers are measured on the live lane against the issue #3 prompt, not on a mocked model",
           "status": "confirmed",
-          "instruction": ""
+          "instruction": "verify: record for each of three runs the wall time, the encounter-check rate, the reviewer's factual-support tally over a 10-statement sample against the source, the coverage checklist, and the receiving-coder outcome; a 300-line map that fails support or coverage is a fail"
         }
       ],
       "hard_questions": [],
       "links": [],
       "instruction": "verify: re-run issue #3's prompt three times through the harness and record wall time, map line count, citation verification rate, and artifact paths in the PR body",
-      "revisions": []
+      "revisions": [
+        {
+          "text": "on the issue #3 task (map lobes/gateway/server.py and four siblings for a coder): a headless run completes in under 5 min with the map persisted to a file of at least 300 lines, at least 90% of its path:N citations verify against the walk, and 0 runs return a final message without an artifact path",
+          "kind": "success_signal",
+          "reason": "user: measure factual support, coverage, and whether the receiving coder can complete its task, not map length"
+        }
+      ]
     },
     {
       "id": "c28",
@@ -689,7 +701,7 @@
     {
       "id": "c39",
       "kind": "requirement",
-      "text": "toolchain floors are pinned and documented in CLAUDE.md Tooling prerequisites: Node >=22 and pi >=0.80.4 (pi-acp README prerequisites), pi tested at 0.84.2, pi-acp >=0.0.33; pi update is never run by the harness; the extension declares no npm dependencies beyond what Pi itself provides (typebox via pi, pi docs/extensions.md:61-62), and no node_modules directory is ever tracked",
+      "text": "harness versions are pinned exactly and upgraded deliberately (issue #5): pi 0.84.2 and pi-acp 0.0.33 as tested, Node >=22 as pi-acp's floor, recorded in CLAUDE.md Tooling prerequisites and checked by the launcher (a mismatch is a warning naming the tested version); pi update is never run by the harness; the extension declares no npm dependencies beyond what Pi itself provides (typebox via pi, pi docs/extensions.md:61-62), and no node_modules directory is ever tracked",
       "origin": "llm",
       "status": "confirmed",
       "honesty_conditions": [
@@ -703,7 +715,13 @@
       "hard_questions": [],
       "links": [],
       "instruction": "verify: CLAUDE.md names the four floors; git ls-files shows no node_modules; the extension imports only from @earendil-works/pi-coding-agent and typebox",
-      "revisions": []
+      "revisions": [
+        {
+          "text": "toolchain floors are pinned and documented in CLAUDE.md Tooling prerequisites: Node >=22 and pi >=0.80.4 (pi-acp README prerequisites), pi tested at 0.84.2, pi-acp >=0.0.33; pi update is never run by the harness; the extension declares no npm dependencies beyond what Pi itself provides (typebox via pi, pi docs/extensions.md:61-62), and no node_modules directory is ever tracked",
+          "kind": "requirement",
+          "reason": "issue #5 asks for exact pins, not floors"
+        }
+      ]
     },
     {
       "id": "c40",
@@ -817,6 +835,115 @@
           "reason": "markdown lint MD033: backtick the tag placeholder"
         }
       ]
+    },
+    {
+      "id": "c46",
+      "kind": "requirement",
+      "text": "issue #5, narrowed: the portable contract lives in the Python package and is small \u2014 role.json (capabilities and forbidden tokens from lobes), policy.json (the permission boundaries: read denylist, shell allowlist, budgets, caps), and JSON schemas for the task input, the walk, and the statements/handback \u2014 plus the behavioral evaluation cases; the runtime prompt, tool descriptions and schemas, result presentation, context selection, compaction and stopping behavior are Pi-and-model-tailored and live with the Pi extension, not in the contract",
+      "origin": "llm",
+      "status": "confirmed",
+      "honesty_conditions": [
+        {
+          "id": "h38",
+          "text": "changing a contract value (a denylist pattern, a budget, a forbidden token) in the Python package changes the Pi adapter's behavior with no edit to TypeScript",
+          "status": "confirmed",
+          "instruction": "verify: changing a policy.json value or a schema changes the Pi extension's behavior or artifact validation with no TypeScript edit; the runtime prompt is not under associate/contract/"
+        }
+      ],
+      "hard_questions": [],
+      "links": [],
+      "instruction": "verify: associate/contract/ holds role.json (capabilities, forbidden), prompt.md, policy.json, and JSON schemas for walk and statements; the Pi extension reads policy and schemas from those files (or a generated copy) rather than defining them; grep the extension for a hardcoded allowlist or denylist returns nothing",
+      "revisions": [
+        {
+          "text": "issue #5: associate defines the role contract, harness-independent, in the Python package \u2014 capabilities and forbidden actions (the lobes tokens), the runtime prompt text, the output contract (walk and statements schemas), the containment policy data (denylist, shell allowlist, budgets), and the acceptance corpus \u2014 and a harness adapter consumes that contract; nothing harness-specific lives in the contract and nothing contract-level lives only inside an adapter",
+          "kind": "requirement",
+          "reason": "user narrowed the abstraction: portable outcomes, specialized execution"
+        }
+      ]
+    },
+    {
+      "id": "c47",
+      "kind": "requirement",
+      "text": "the harness boundary is small and Pi ships first: 'associate run' launches Pi through its supported RPC/print boundary plus the tracked extension, never a fork; a thin adapter interface in Python (start a session against a checkout with the contract, submit a task, collect walk and statements) exists so Pi is replaceable, but no universal harness framework is built up front \u2014 a second real adapter (Qwen Code is the named candidate) is added only when a concrete comparison is worth running, and another harness must meet the contract's outcomes, not reuse Pi's prompt or tools",
+      "origin": "llm",
+      "status": "confirmed",
+      "honesty_conditions": [
+        {
+          "id": "h39",
+          "text": "a second adapter can be written against base.py alone, proven by a stub adapter used in tests that satisfies the interface without pi installed",
+          "status": "confirmed",
+          "instruction": ""
+        }
+      ],
+      "hard_questions": [],
+      "links": [],
+      "instruction": "verify: associate/harness/ has base.py with the adapter interface and pi.py implementing it; 'associate run --harness bogus' exits 1 listing available adapters; the pi adapter imports no pi package and patches no pi source",
+      "revisions": [
+        {
+          "text": "issue #5: harnesses are adapters selected at run time \u2014 'associate run --harness pi' is the first; the adapter interface is defined in Python (start a session against a checkout with the contract, submit a prompt, stream tool events, return walk and statements) so a colleague adapter and future harnesses plug in without touching the contract or the behavioral suite; the Pi adapter drives pi over its supported RPC/print boundary plus the tracked extension, never a fork",
+          "kind": "requirement",
+          "reason": "q6: colleague is not an adapter target; Qwen Code is the deferred candidate"
+        },
+        {
+          "text": "issue #5: harnesses are adapters selected at run time \u2014 'associate run --harness pi' is the first; the adapter interface is defined in Python (start a session against a checkout with the contract, submit a prompt, stream tool events, return walk and statements) so a future harness (Qwen Code is the named candidate, deferred) plugs in without touching the contract or the behavioral suite; the Pi adapter drives pi over its supported RPC/print boundary plus the tracked extension, never a fork",
+          "kind": "requirement",
+          "reason": "user: make Pi replaceable without building a universal harness framework"
+        }
+      ]
+    },
+    {
+      "id": "c48",
+      "kind": "requirement",
+      "text": "a shared behavioral suite runs the same cases against the complete configuration \u2014 model role and served checkpoint, serving settings where discoverable, pi version, extension version, provider and reasoning settings \u2014 invoked as `associate bench --harness <name>` with a table per configuration recording all of those plus per-category pass/fail and wall time (categories: local read/find, repo exploration, summarization, structured evidence extraction, tool-call reliability, forbidden mutation attempts, bounded completion and hand-back); a stub adapter run verifies plumbing only and is labeled so, never presented as model reliability; results are the evidence filed against the frame's obligations",
+      "origin": "llm",
+      "status": "confirmed",
+      "honesty_conditions": [
+        {
+          "id": "h40",
+          "text": "the corpus is identical across adapters \u2014 no adapter-specific cases \u2014 so two configurations differ only in the adapter and model role columns",
+          "status": "confirmed",
+          "instruction": ""
+        }
+      ],
+      "hard_questions": [],
+      "links": [],
+      "instruction": "verify: tests/behavioral/ holds one corpus case per category; 'associate bench --harness pi' prints the table and exits non-zero on any failure; the same command with the stub adapter runs in CI without pi or the lane",
+      "revisions": [
+        {
+          "text": "issue #5: a harness-independent behavioral suite runs the same corpus against any adapter and reports comparably \u2014 at least local read/find, repo exploration, summarization, structured evidence extraction, tool-call reliability, forbidden mutation attempts, and bounded completion/hand-back \u2014 invoked as 'associate bench --harness <name>' with a table per configuration (harness, model role, pass/fail per category, wall time), and its results are the evidence filed against the frame's obligations",
+          "kind": "requirement",
+          "reason": "markdown lint MD033: backtick the placeholder"
+        },
+        {
+          "text": "issue #5: a harness-independent behavioral suite runs the same corpus against any adapter and reports comparably \u2014 at least local read/find, repo exploration, summarization, structured evidence extraction, tool-call reliability, forbidden mutation attempts, and bounded completion/hand-back \u2014 invoked as `associate bench --harness <name>` with a table per configuration (harness, model role, pass/fail per category, wall time), and its results are the evidence filed against the frame's obligations",
+          "kind": "requirement",
+          "reason": "user: evaluate the complete configuration; a stub cannot demonstrate model reliability"
+        }
+      ]
+    },
+    {
+      "id": "c49",
+      "kind": "decision",
+      "text": "this milestone ships the pi adapter and the stub adapter only; colleague is not an adapter target and instead adopts associate's contract-plus-adapters design on its side; Qwen Code is the named candidate for the next adapter and is deferred",
+      "origin": "user",
+      "status": "confirmed",
+      "honesty_conditions": [],
+      "hard_questions": [],
+      "links": [],
+      "instruction": "",
+      "revisions": []
+    },
+    {
+      "id": "c50",
+      "kind": "decision",
+      "text": "commit to Pi for the implementation: associate is an opinionated Pi extension plus wrapper with a small portable contract around it; the unit optimized is model + harness + tools + context policy together, so what stays Pi-independent is the role and permission boundaries, the task input and handback format, the evidence artifacts and provenance, and the behavioral evaluation cases \u2014 while tool descriptions and schemas, result presentation, prompt construction and context selection, compaction, recovery and stopping behavior, and reasoning and provider settings are tailored to Pi and the model; a second harness is added only after a measured benefit, and harness diversity lives at the Culture nodes boundary (another agent may run another harness), not inside every agent",
+      "origin": "user",
+      "status": "confirmed",
+      "honesty_conditions": [],
+      "hard_questions": [],
+      "links": [],
+      "instruction": "",
+      "revisions": []
     }
   ],
   "open_vagueness": [
@@ -886,6 +1013,24 @@
     {
       "id": "v8",
       "text": "outbound exfiltration through attacker-chosen URLs fetched by the web tool is bounded but not eliminated; the residual risk stays until a fetch allowlist or egress policy is decided",
+      "kind": "unknown_nonblocking",
+      "claim_id": null,
+      "resolved": false,
+      "resolution": "",
+      "resolution_claim_id": null
+    },
+    {
+      "id": "v9",
+      "text": "colleague adopting associate's contract-plus-adapters design is cross-repo work for the colleague repo; the hand-off (an issue on agentculture/colleague citing the exported spec) is a follow-up after this spec commits",
+      "kind": "follow_up",
+      "claim_id": null,
+      "resolved": false,
+      "resolution": "",
+      "resolution_claim_id": null
+    },
+    {
+      "id": "v10",
+      "text": "the factual-support judgement in c27 is a reviewer check against source lines, not an automated score; whether it can be automated honestly (a fixture repo with known facts) is decided in the behavioral suite, not assumed",
       "kind": "unknown_nonblocking",
       "claim_id": null,
       "resolved": false,
@@ -1088,6 +1233,30 @@
       "seeds": [
         "c44",
         "c45"
+      ]
+    },
+    {
+      "id": "s24",
+      "surface": "github agentculture/associate issue #5 (make the agent harness pluggable, opened 2026-09-12 by the operator)",
+      "finding": "reframes the repo as a harness-independent role contract (capabilities, forbidden actions, prompt, output contract, acceptance tests) plus adapters (pi first via its supported RPC boundary, colleague, future) selected at run time, with a comparable behavioral corpus per configuration and exact harness pins; forking a harness is last resort \u2014 seeded c46-c48 and the c39 amend; colleague adapter scope raised as a question",
+      "seeds": [
+        "c46",
+        "c47",
+        "c48",
+        "c39"
+      ]
+    },
+    {
+      "id": "s25",
+      "surface": "operator direction 2026-09-12 (commit to Pi; portable contract boundary table; evaluation correction) + pi.dev docs overview",
+      "finding": "Pi exposes custom tools, providers, context manipulation, compaction, RPC and SDK \u2014 enough room to tailor without a fork; the boundary is portable outcomes versus specialized execution; citations prove encounter not support \u2014 seeded c50 and the c46/c47/c48/c25/c27 amends",
+      "seeds": [
+        "c50",
+        "c46",
+        "c47",
+        "c48",
+        "c25",
+        "c27"
       ]
     }
   ],
