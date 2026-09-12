@@ -25,6 +25,8 @@
  */
 
 import type { ExtensionAPI } from "@earendil-works/pi-coding-agent";
+import { mkdirSync, writeFileSync } from "node:fs";
+import { join } from "node:path";
 import { Type } from "typebox";
 import { evaluateToolCall } from "./lib/guard.ts";
 import { normalizeHandback, unreferencedCount } from "./lib/handback.ts";
@@ -37,6 +39,16 @@ import { installWalkRecorder } from "./lib/walk.ts";
 
 /** Registered by this file rather than by a module under `tools/`. */
 export const CORE_TOOL_NAMES = ["associate_ready", "finish"] as const;
+
+/**
+ * The readiness report written into the export directory at `session_start`.
+ *
+ * Deviation d8: a launcher must not have to hope the model calls
+ * `associate_ready`. The same report the sentinel returns is also put on disk
+ * before the first prompt is ever sent, so a preflight invocation (see
+ * `lib/preflight.ts`) can read it without spending a token.
+ */
+export const READY_REPORT_FILENAME = "ready.json";
 
 export default async function (pi: ExtensionAPI) {
   const ctx = createAssociateContext();
@@ -70,6 +82,38 @@ export default async function (pi: ExtensionAPI) {
   installContinueFrom(pi, ctx);
 
   // ---------------------------------------------------------------- sentinel
+  // One report, two readers (deviation d8): the `associate_ready` tool returns
+  // it when a model asks, and the `session_start` hook below writes the very
+  // same object to `<exportDir>/ready.json` so a launcher never has to ask a
+  // model at all. Built fresh on each call — the active tool set is exactly
+  // what is being reported, and it changes during startup.
+  const buildReport = () => {
+    const active = pi.getActiveTools();
+    return {
+      ok: true,
+      extension_version: ctx.extensionVersion,
+      contract_version: contract.version,
+      contract_dir: contract.dir,
+      contract_source: contract.source,
+      schemas: Object.keys(contract.schemas),
+      session: {
+        id: session.sessionId,
+        id_from_env: session.sessionIdFromEnv,
+        scratch_dir: session.scratchDir,
+        export_dir: session.exportDir,
+        walk_path: walk.walkPath,
+      },
+      // What a launcher checks (spec c34). Measured against pi 0.84.2:
+      // `getAllTools()` lists every *configured* tool, built-ins included,
+      // while `defaultTools: []` narrows the *active* set — the tools the
+      // model is actually offered. So the launcher's check is
+      // `writer_tools_active` being empty, not `tools`.
+      tools: pi.getAllTools().map((tool) => tool.name),
+      active_tools: active,
+      writer_tools_active: active.filter((name) => ctx.contain.isWriter(name)),
+    };
+  };
+
   pi.registerTool({
     name: "associate_ready",
     label: "Associate Ready",
@@ -79,30 +123,7 @@ export default async function (pi: ExtensionAPI) {
     promptSnippet: "Confirm the associate extension loaded and report its contract version",
     parameters: Type.Object({}),
     async execute() {
-      const active = pi.getActiveTools();
-      const report = {
-        ok: true,
-        extension_version: ctx.extensionVersion,
-        contract_version: contract.version,
-        contract_dir: contract.dir,
-        contract_source: contract.source,
-        schemas: Object.keys(contract.schemas),
-        session: {
-          id: session.sessionId,
-          id_from_env: session.sessionIdFromEnv,
-          scratch_dir: session.scratchDir,
-          export_dir: session.exportDir,
-          walk_path: walk.walkPath,
-        },
-        // What a launcher checks (spec c34). Measured against pi 0.84.2:
-        // `getAllTools()` lists every *configured* tool, built-ins included,
-        // while `defaultTools: []` narrows the *active* set — the tools the
-        // model is actually offered. So the launcher's check is
-        // `writer_tools_active` being empty, not `tools`.
-        tools: pi.getAllTools().map((tool) => tool.name),
-        active_tools: active,
-        writer_tools_active: active.filter((name) => ctx.contain.isWriter(name)),
-      };
+      const report = buildReport();
       return {
         content: [{ type: "text", text: JSON.stringify(report) }],
         details: report,
@@ -204,6 +225,27 @@ export default async function (pi: ExtensionAPI) {
       pi.setActiveTools(withoutWriters);
     }
   };
-  pi.on("session_start", async () => dropWriters());
+  // ------------------------------------------------- readiness, on disk (d8)
+  // Written after dropWriters so the report can never name a writer the run
+  // will not actually offer. A failure to write is swallowed on purpose: the
+  // launcher fails closed on the *absence* of the file, which is a louder and
+  // more honest signal than a crashed session at startup.
+  const writeReadyReport = () => {
+    try {
+      mkdirSync(session.exportDir, { recursive: true });
+      writeFileSync(
+        join(session.exportDir, READY_REPORT_FILENAME),
+        `${JSON.stringify(buildReport(), null, 2)}\n`,
+        "utf8",
+      );
+    } catch {
+      // Intentionally silent — see above.
+    }
+  };
+
+  pi.on("session_start", async () => {
+    dropWriters();
+    writeReadyReport();
+  });
   pi.on("before_agent_start", async () => dropWriters());
 }
