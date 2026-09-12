@@ -4,7 +4,7 @@
   "schema_version": 6,
   "status": "exported",
   "created": "2026-09-12T09:17:50Z",
-  "updated": "2026-09-12T11:43:00Z",
+  "updated": "2026-09-12T12:12:08Z",
   "claims": [
     {
       "id": "c1",
@@ -1284,6 +1284,149 @@
       ],
       "origin": "llm",
       "status": "approved"
+    },
+    {
+      "id": "l3",
+      "code": "assumption-for-measurement",
+      "what": "t4: the Node 23 branch of run.sh (type stripping default on) was asserted from documentation, not measured \u2014 only Node 24 is on this box; the new tests.yml job was checked by YAML parse and visual match, not by an Actions run",
+      "skipped_check": "run run.sh under a Node 23 binary; run the workflow (act or a PR run)",
+      "refs": [
+        "t4"
+      ],
+      "origin": "llm",
+      "status": "approved"
+    },
+    {
+      "id": "l4",
+      "code": "assumption-for-measurement",
+      "what": "t16: policy.json values read.max_bytes 1 MiB, shell/web max_output_chars, and max_fetches_per_run 20 have no colleague origin \u2014 invented to fill the instruction's slots; tests assert only that they are positive",
+      "skipped_check": "an operator decision on the three values before any tool enforces them",
+      "refs": [
+        "t16",
+        "policy.json"
+      ],
+      "origin": "llm",
+      "status": "approved"
+    },
+    {
+      "id": "l5",
+      "code": "assumption-for-measurement",
+      "what": "t16: the adapter interface in harness/base.py was derived from the task instruction, not from a real Pi RPC session; pluggability is proven only for a stub that writes its own files",
+      "skipped_check": "map one real pi --mode json event stream into walk entries through the interface",
+      "refs": [
+        "t16",
+        "t12"
+      ],
+      "origin": "llm",
+      "status": "approved"
+    },
+    {
+      "id": "l6",
+      "code": "grader-unverified",
+      "what": "dogfood review of t16 on the associate lane returned a one-line merge verdict (419 bytes, 217 s) with no findings list and no answer to the four probes asked (third-party imports, home paths, validator type bypass, redaction-before-write); the verdict was not treated as a review \u2014 the merge rested on the TDD gate alone. Reproduces issue #3's final-message loss; evidence for c23",
+      "skipped_check": "a persisted findings file from the reviewer (the t9/t12 default export) or a re-run with --mode json",
+      "refs": [
+        "t16",
+        "issue #3",
+        "c23"
+      ],
+      "origin": "llm",
+      "status": "approved"
+    },
+    {
+      "id": "l7",
+      "code": "assumption-for-measurement",
+      "what": "t3: max_bytes is enforced as a character cap derived by binary search for the longest UTF-8-fitting prefix and skipped when max_bytes >= max_output_chars*4; the worst-case reasoning was not measured against a multibyte fixture",
+      "skipped_check": "a test with a multibyte fixture asserting the byte length of the bounded text",
+      "refs": [
+        "t3"
+      ],
+      "origin": "llm",
+      "status": "approved"
+    },
+    {
+      "id": "l8",
+      "code": "control-absent",
+      "what": "t3: colleague's per-session spill cap (truncation.MAX_SESSION_SPILL_BYTES 500 MB) was not ported because policy.json has no key for it and literals are forbidden; the divergence is documented in the module header only",
+      "skipped_check": "a policy.json key for the session spill cap plus a test",
+      "refs": [
+        "t3",
+        "policy.json"
+      ],
+      "origin": "llm",
+      "status": "proposed"
+    },
+    {
+      "id": "l9",
+      "code": "control-absent",
+      "what": "t17: the stub's replay script is synthesised from the same expect block the checks read, so a stub run can pass any expectation expressible in the replay vocabulary; the CI path proves plumbing only and says nothing about whether the checks are hard enough for a real model",
+      "skipped_check": "a pi-run of the same seven cases (t15) and at least one case whose expectation the replay cannot satisfy by construction",
+      "refs": [
+        "t17",
+        "c48"
+      ],
+      "origin": "llm",
+      "status": "proposed"
+    },
+    {
+      "id": "l10",
+      "code": "assumption-for-measurement",
+      "what": "t17: the bench's extension_version column assumes the extension will declare its version in package.json or an index.ts version literal; the t2 extension had not landed when this was written, so the column reads absent and the assumed location is unverified",
+      "skipped_check": "read the version from the location t2 actually chose",
+      "refs": [
+        "t17",
+        "t2"
+      ],
+      "origin": "llm",
+      "status": "proposed"
+    },
+    {
+      "id": "l11",
+      "code": "control-absent",
+      "what": "t2: library modules were written before their tests, then tests added against the intended behaviour; one test caught a real false positive, but the order was not test-first",
+      "skipped_check": "failing test before implementation for each criterion",
+      "refs": [
+        "t2"
+      ],
+      "origin": "llm",
+      "status": "proposed"
+    },
+    {
+      "id": "l12",
+      "code": "assumption-for-measurement",
+      "what": "t2: the export root is one .associate-runs beside the checkout, shared by any checkouts under the same parent; safety rests on session ids being unique, assumed rather than verified against a future ACP id scheme",
+      "skipped_check": "a collision test with two checkouts under one parent and colliding session ids",
+      "refs": [
+        "t2",
+        "c42"
+      ],
+      "origin": "llm",
+      "status": "proposed"
+    },
+    {
+      "id": "l13",
+      "code": "assumption-for-measurement",
+      "what": "t2: the extension was verified only under pi -p --mode json; identical behaviour in --mode rpc and through pi-acp (honesty condition h1) is unverified",
+      "skipped_check": "the same three integration checks through pi --mode rpc and pi-acp",
+      "refs": [
+        "t2",
+        "h1"
+      ],
+      "origin": "llm",
+      "status": "proposed"
+    },
+    {
+      "id": "l14",
+      "code": "instrument-changed-mid-series",
+      "what": "dogfood reviews of t3 and t17 produced no output: the associate lane returned 503 backend_unavailable (Orin peer name resolution then connection refused) during this window, and a 150 s no-tools probe wrote zero bytes; the t1/t4/t16 reviews ran earlier while the lane was up",
+      "skipped_check": "a lane health probe before each review; a fallback lane for reviews",
+      "refs": [
+        "t3",
+        "t17",
+        "v3"
+      ],
+      "origin": "llm",
+      "status": "proposed"
     }
   ],
   "obligations": [

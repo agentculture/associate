@@ -5,7 +5,7 @@
   "schema_version": 5,
   "status": "exported",
   "created": "2026-09-12T11:11:15Z",
-  "updated": "2026-09-12T11:43:00Z",
+  "updated": "2026-09-12T12:12:08Z",
   "targets": [
     {
       "id": "c1",
@@ -881,9 +881,9 @@
       "id": "t16",
       "summary": "Portable contract module: role.json, policy.json, task/walk/statements schemas, a small adapter base, and a plumbing-only stub",
       "origin": "llm",
-      "status": "confirmed",
+      "status": "proposed",
       "acceptance_criteria": [
-        "associate/contract/ holds role.json, prompt.md, policy.json, and the two schemas; a test validates a sample walk.jsonl and statements.json against the schemas",
+        "associate/contract/ holds role.json, policy.json, and schemas/task.schema.json, schemas/walk.schema.json, schemas/statements.schema.json, and no prompt file; a test validates a sample walk.jsonl and statements.json against the schemas",
         "associate/harness/base.py defines the interface and stub.py satisfies it; a test drives the stub end to end without pi installed",
         "role.json forbidden tokens equal lobes ROLE_FORBIDDEN['associate'] exactly (final_decision, security_decision, code_authoring, repo_action)"
       ],
@@ -989,6 +989,54 @@
       "id": "r9",
       "text": "the factual-support tally in t15 is a reviewer judgement against source lines; the bench (t17) may automate it only for fixture cases with known facts \u2014 never claim an automated support score on the issue #3 corpus",
       "kind": "unknown_nonblocking",
+      "task_id": "t15",
+      "resolved": false,
+      "resolution": ""
+    },
+    {
+      "id": "r10",
+      "text": "policy.json carries three invented values (read max_bytes 1 MiB, shell/web max_output_chars, max_fetches_per_run 20) with no measured basis; t2/t5/t7/t8 will enforce them \u2014 the operator should set or accept them before wave 4",
+      "kind": "unknown_nonblocking",
+      "task_id": "t16",
+      "resolved": false,
+      "resolution": ""
+    },
+    {
+      "id": "r11",
+      "text": "t3's continuation cursor offset is the head of the head+tail preview, so the tail is re-delivered on continuation (faithful to colleague's preview shape); t5 read and t10 continue-from must agree on this or choose prefix-only chunks",
+      "kind": "unknown_nonblocking",
+      "task_id": "t5",
+      "resolved": false,
+      "resolution": ""
+    },
+    {
+      "id": "r12",
+      "text": "no TypeScript type-checker runs in this repo; the extension's union types are exercised at runtime only \u2014 t4's runner strips types without checking; consider a tsc --noEmit step later",
+      "kind": "follow_up",
+      "task_id": "t4",
+      "resolved": false,
+      "resolution": ""
+    },
+    {
+      "id": "r13",
+      "text": "the behavioral corpus lives under tests/behavioral/cases so 'associate bench' from a wheel install exits 2 asking for --cases; per c50 the cases are contract-side, so shipping them as package data is a deliberate move for a later task, not a silent patch",
+      "kind": "follow_up",
+      "task_id": "t17",
+      "resolved": false,
+      "resolution": ""
+    },
+    {
+      "id": "r14",
+      "text": "measured under pi 0.84.2 (t2): defaultTools [] narrows pi.getActiveTools() but pi.getAllTools() still lists read, bash, edit, write, grep, find, ls \u2014 the t12 launcher's fail-closed check must assert on the ACTIVE tool set (the sentinel reports active_tools and writer_tools_active), not on the full list",
+      "kind": "unknown_nonblocking",
+      "task_id": "t12",
+      "resolved": false,
+      "resolution": ""
+    },
+    {
+      "id": "r15",
+      "text": "the associate lane was unreachable (503 via the gateway) for part of this run; t11's live reasoning-off check and all of t15 depend on it being back; reviews fell back to the Qwen lane",
+      "kind": "unknown_blocking",
       "task_id": "t15",
       "resolved": false,
       "resolution": ""
