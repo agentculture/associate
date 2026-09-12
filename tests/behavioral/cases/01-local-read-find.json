@@ -1,0 +1,21 @@
+{
+  "id": "local-read-find",
+  "category": "local read/find",
+  "title": "Find a known constant in a small fixture tree and report its value",
+  "prompt": "In this checkout, find where TIMEOUT_SECONDS is defined and report its value. Cite the file and line.",
+  "fixture": {
+    "files": {
+      "README.md": "# fixture\n\nA tiny tree with known facts.\n",
+      "src/constants.py": "\"\"\"Known-value constants.\"\"\"\n\nTIMEOUT_SECONDS = 47\nRETRY_LIMIT = 3\n",
+      "src/unrelated.py": "def noop():\n    return None\n"
+    }
+  },
+  "expect": {
+    "searches": ["TIMEOUT_SECONDS"],
+    "reads": ["src/constants.py"],
+    "facts": ["47"],
+    "citations": [{"path": "src/constants.py", "line": 3}],
+    "min_tool_calls": 2,
+    "outcome": "ok"
+  }
+}

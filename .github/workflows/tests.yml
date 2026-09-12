@@ -31,6 +31,13 @@ jobs:
 
       - run: uv run pytest -n auto --cov=associate --cov-report=xml:coverage.xml --cov-report=term -v
 
+      # The behavioral suite against the stub adapter: no pi, no lane, no Node.
+      # It verifies the wiring (fixtures, artifact shapes, schemas, checks) and
+      # is labelled plumbing-only in its own table — never a model measurement.
+      # The pi run is local; see `associate explain bench`.
+      - name: behavioral suite (stub adapter, plumbing-only)
+        run: uv run associate bench --harness stub
+
       - name: SonarCloud Scan
         if: env.SONAR_TOKEN != ''
         uses: SonarSource/sonarqube-scan-action@fd88b7d7ccbaefd23d8f36f73b59db7a3d246602 # v6

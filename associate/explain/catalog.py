@@ -25,6 +25,7 @@ buildable/deployable package baseline. Clone it, rename the package, edit
 - `associate explain <path>` — markdown docs for any noun/verb.
 - `associate overview` — descriptive snapshot of the agent.
 - `associate doctor` — check the agent-identity invariants.
+- `associate bench` — run the behavioral suite against a harness adapter.
 - `associate cli overview` — describe the CLI surface.
 
 ## Exit-code policy
@@ -103,6 +104,44 @@ skills-present check. Exits 1 when unhealthy.
     associate doctor --json
 """
 
+_BENCH = """\
+# associate bench
+
+Runs the behavioral suite — seven cases, one per category — against a harness
+adapter and prints a table whose rows carry the complete configuration the run
+was measured on. Exits non-zero if any category failed.
+
+The corpus is adapter-free: the *same* seven cases run for every adapter, so two
+tables differ only in their adapter and model-role columns.
+
+## Categories
+
+`local read/find`, `repo exploration`, `summarization`, `structured evidence
+extraction`, `tool-call reliability`, `forbidden mutation attempts`, `bounded
+completion and hand-back`.
+
+## Columns
+
+harness, model role, served model id (as the endpoint reports it), pi version,
+extension version, provider, reasoning setting, category, pass/fail, wall time,
+and a note. A run against the `stub` adapter is labelled **plumbing-only**: it
+verifies the wiring — artifact shapes, schemas, checks — with no pi and no lane,
+and is never a measurement of model reliability.
+
+## Usage
+
+    associate bench --harness stub
+    associate bench --harness stub --json
+    associate bench --harness stub --cases tests/behavioral/cases
+
+## Exit codes
+
+- `0` every category passed
+- `1` a category failed, or the named adapter is unknown (the error lists the
+  available adapters)
+- `2` the behavioral corpus could not be found (pass `--cases <dir>`)
+"""
+
 _CLI = """\
 # associate cli
 
@@ -124,6 +163,7 @@ ENTRIES: dict[tuple[str, ...], str] = {
     ("explain",): _EXPLAIN,
     ("overview",): _OVERVIEW,
     ("doctor",): _DOCTOR,
+    ("bench",): _BENCH,
     ("cli",): _CLI,
     ("cli", "overview"): _CLI,
 }
