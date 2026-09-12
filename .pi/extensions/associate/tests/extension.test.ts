@@ -189,7 +189,9 @@ test("every module under tools/ is discovered and must export register()", async
   // waves add more, so this checks the real one is found rather than
   // asserting the directory stays empty.
   const realModules = discoverToolModules(toolsDir).map((path) => path.split("/").pop());
-  assert.ok(realModules.includes("search.ts"), `expected search.ts among ${realModules.join(", ")}`);
+  for (const m of ["search.ts", "read.ts"]) {
+    assert.ok(realModules.includes(m), `expected ${m} among ${realModules.join(", ")}`);
+  }
 
   const dir = mkdtempSync(join(tmpdir(), "associate-tools-"));
   try {
