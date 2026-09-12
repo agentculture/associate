@@ -441,71 +441,10 @@ class PiHarness(Harness):
 
         base_args = self.pi_arguments()
         env = self.environment(task)
-
-        # -- 1. the preflight (deviation d8) -------------------------------
-        # The old proof asked the *model* to call the sentinel in the same turn
-        # as the task; measured on the live lane, a model given real work went
-        # straight to it and a healthy run was refused. So readiness is proven
-        # by a run that never reaches the model at all: `lib/preflight.ts` ends
-        # the process on `before_agent_start`, after `session_start` has
-        # written `ready.json`, and the gate is that file.
-        index_path = resolve_extension_path(self._base_env)
-        preflight_args = [*base_args, "-e", str(preflight_extension_path(index_path))]
-        # A report left by an earlier run under the same pinned session id must
-        # never stand in for this one's: the gate is evidence *this* pi wrote.
-        self.export_dir.mkdir(parents=True, exist_ok=True)
-        (self.export_dir / READY_REPORT_FILENAME).unlink(missing_ok=True)
-        preflight = self._run_pi(
-            executable,
-            [*preflight_args, READINESS_PROMPT],
-            env,
-            timeout=min(PREFLIGHT_TIMEOUT, self._timeout),
-        )
-
         export_dir = self.export_dir
-        # The preflight is *expected* to exit 0: `lib/preflight.ts` ends it with
-        # `process.exit(0)` on `before_agent_start`. A non-zero code therefore
-        # means pi itself could not get that far — a bad `-e` path, an
-        # unloadable extension, a refused project — which is the same fail-open
-        # c34 exists to close, so it is refused with the same error class.
-        if preflight.returncode != 0:
-            tail = stderr_tail(preflight.stderr)
-            raise ExtensionNotLoadedError(
-                f"the preflight run of pi exited {preflight.returncode}, so the associate "
-                f"extension at {index_path} was never proven to load"
-                + (f" (pi stderr: {tail})" if tail else ""),
-                remediation=(
-                    f"run pi by hand with -e {index_path} to see why it fails, and keep "
-                    "--approve for a checkout whose project files pi must trust"
-                ),
-            )
 
-        report = self._read_ready_report(export_dir)
-        if report is None:
-            tail = stderr_tail(preflight.stderr)
-            if tail:
-                self._warn("associate: pi stderr tail: " + tail)
-            raise ExtensionNotLoadedError(
-                f"the preflight run wrote no {READY_REPORT_FILENAME} in {export_dir}, so the "
-                f"associate extension at {index_path} did not load and the run is refused",
-                remediation=(
-                    f"check that {index_path} loads under the installed pi (it is passed with "
-                    "-e), keep --approve for a checkout whose project files pi must trust, and "
-                    f"set {EXTENSION_PATH_ENV} if the extension lives elsewhere"
-                ),
-            )
-        self._assert_ready(report)
-
-        # -- 2. the task turn, unchanged -----------------------------------
-        prompt = self._prompt or task.get("prompt") or READINESS_PROMPT
-        completed = self._run_pi(executable, [*base_args, prompt], env, timeout=self._timeout)
-
-        # A run that failed must not be handed back as a result. The launcher
-        # used to build the artifact paths from the session id alone, so a pi
-        # that died on the task turn — or one that ran and wrote nothing —
-        # still exited 0 with a result naming files that were absent or, worse,
-        # left over from an earlier run under the same id.
-        self._assert_task_succeeded(completed, export_dir)
+        report = self._run_preflight(executable, base_args, env, export_dir)
+        completed = self._run_task_turn(executable, base_args, env, task, export_dir)
 
         # The task run's own session_start rewrites ready.json; the sentinel
         # event is only a fallback for a pi that somehow wrote no file, and the
@@ -516,7 +455,111 @@ class PiHarness(Harness):
             or report
         )
 
-        self._result = {
+        self._result = self._assemble_result(export_dir, report)
+
+    def _run_preflight(
+        self,
+        executable: str,
+        base_args: list[str],
+        env: dict[str, str],
+        export_dir: Path,
+    ) -> dict[str, Any]:
+        """Deviation d8: prove the extension loaded before the task turn runs.
+
+        The old proof asked the *model* to call the sentinel in the same turn
+        as the task; measured on the live lane, a model given real work went
+        straight to it and a healthy run was refused. So readiness is proven
+        by a run that never reaches the model at all: `lib/preflight.ts` ends
+        the process on `before_agent_start`, after `session_start` has
+        written `ready.json`, and the gate is that file.
+        """
+        index_path = resolve_extension_path(self._base_env)
+        preflight_args = [*base_args, "-e", str(preflight_extension_path(index_path))]
+        # A report left by an earlier run under the same pinned session id must
+        # never stand in for this one's: the gate is evidence *this* pi wrote.
+        export_dir.mkdir(parents=True, exist_ok=True)
+        (export_dir / READY_REPORT_FILENAME).unlink(missing_ok=True)
+        preflight = self._run_pi(
+            executable,
+            [*preflight_args, READINESS_PROMPT],
+            env,
+            timeout=min(PREFLIGHT_TIMEOUT, self._timeout),
+        )
+
+        self._assert_preflight_succeeded(preflight, index_path)
+        report = self._load_ready_report_or_refuse(preflight, export_dir, index_path)
+        self._assert_ready(report)
+        return report
+
+    @staticmethod
+    def _assert_preflight_succeeded(
+        preflight: subprocess.CompletedProcess[str], index_path: Path
+    ) -> None:
+        """The preflight is *expected* to exit 0: `lib/preflight.ts` ends it with
+        `process.exit(0)` on `before_agent_start`. A non-zero code therefore
+        means pi itself could not get that far — a bad `-e` path, an
+        unloadable extension, a refused project — which is the same fail-open
+        c34 exists to close, so it is refused with the same error class.
+        """
+        if preflight.returncode == 0:
+            return
+        tail = stderr_tail(preflight.stderr)
+        raise ExtensionNotLoadedError(
+            f"the preflight run of pi exited {preflight.returncode}, so the associate "
+            f"extension at {index_path} was never proven to load"
+            + (f" (pi stderr: {tail})" if tail else ""),
+            remediation=(
+                f"run pi by hand with -e {index_path} to see why it fails, and keep "
+                "--approve for a checkout whose project files pi must trust"
+            ),
+        )
+
+    def _load_ready_report_or_refuse(
+        self,
+        preflight: subprocess.CompletedProcess[str],
+        export_dir: Path,
+        index_path: Path,
+    ) -> dict[str, Any]:
+        report = self._read_ready_report(export_dir)
+        if report is not None:
+            return report
+        tail = stderr_tail(preflight.stderr)
+        if tail:
+            self._warn("associate: pi stderr tail: " + tail)
+        raise ExtensionNotLoadedError(
+            f"the preflight run wrote no {READY_REPORT_FILENAME} in {export_dir}, so the "
+            f"associate extension at {index_path} did not load and the run is refused",
+            remediation=(
+                f"check that {index_path} loads under the installed pi (it is passed with "
+                "-e), keep --approve for a checkout whose project files pi must trust, and "
+                f"set {EXTENSION_PATH_ENV} if the extension lives elsewhere"
+            ),
+        )
+
+    def _run_task_turn(
+        self,
+        executable: str,
+        base_args: list[str],
+        env: dict[str, str],
+        task: dict[str, Any],
+        export_dir: Path,
+    ) -> subprocess.CompletedProcess[str]:
+        """The task turn, unchanged: run once the preflight has passed the gate.
+
+        A run that failed must not be handed back as a result. The launcher
+        used to build the artifact paths from the session id alone, so a pi
+        that died on the task turn — or one that ran and wrote nothing —
+        still exited 0 with a result naming files that were absent or, worse,
+        left over from an earlier run under the same id.
+        """
+        prompt = self._prompt or task.get("prompt") or READINESS_PROMPT
+        completed = self._run_pi(executable, [*base_args, prompt], env, timeout=self._timeout)
+        self._assert_task_succeeded(completed, export_dir)
+        return completed
+
+    def _assemble_result(self, export_dir: Path, report: dict[str, Any]) -> dict[str, Any]:
+        """The result dict handed back by ``collect()``."""
+        return {
             "walk_path": str(export_dir / WALK_FILENAME),
             "statements_path": str(export_dir / STATEMENTS_FILENAME),
             "statements_md_path": str(export_dir / STATEMENTS_MD_FILENAME),
@@ -777,7 +820,6 @@ class PiHarness(Harness):
         failure — a bench row is not worth an exception — and the bearer, if
         one is set, is sent as a header and never printed anywhere.
         """
-        import urllib.error
         import urllib.request
 
         env = self._base_env if self._base_env is not None else os.environ
@@ -797,7 +839,7 @@ class PiHarness(Harness):
         try:
             with urllib.request.urlopen(request, timeout=5) as response:  # nosec B310
                 payload = json.loads(response.read().decode("utf-8"))
-        except (OSError, ValueError, urllib.error.URLError):
+        except (OSError, ValueError):
             return None
 
         data = payload.get("data") if isinstance(payload, dict) else None

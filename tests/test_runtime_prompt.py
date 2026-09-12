@@ -136,7 +136,8 @@ def test_culture_yaml_declares_the_acp_backend():
 
 def test_culture_yaml_launches_pi_acp():
     command = _acp_command()
-    assert isinstance(command, list) and command, "acp_command must be a non-empty list"
+    assert isinstance(command, list), "acp_command must be a non-empty list"
+    assert command, "acp_command must be a non-empty list"
     assert command[0] == "pi-acp"
 
 
