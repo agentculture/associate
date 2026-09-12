@@ -94,7 +94,17 @@ test("associate_ready reports no active writer under defaultTools: []", async ()
         (await pi.tool("associate_ready").execute("call-1", {})).content[0]!.text,
       ) as { tools: string[]; active_tools: string[]; writer_tools_active: string[] };
       assert.ok(report.tools.includes("write"), "configured built-ins are reported as configured");
-      assert.deepEqual(report.active_tools, ["associate_ready", "finish"]);
+      // The active set is the extension's own tools and no pi built-in: the
+      // core two plus whatever tools/ registers. Asserted as "the core two are
+      // there and no built-in is" rather than as a fixed list, so adding a tool
+      // module is not a test edit.
+      assert.ok(
+        ["associate_ready", "finish"].every((name) => report.active_tools.includes(name)),
+        `the core tools must stay active: ${report.active_tools.join(", ")}`,
+      );
+      for (const builtin of ["read", "bash", "edit", "write"]) {
+        assert.ok(!report.active_tools.includes(builtin), `${builtin} must not be active`);
+      }
       assert.deepEqual(report.writer_tools_active, [], "no writer may be active");
 
       pi.activeBuiltinTools = ["write"];
@@ -178,8 +188,13 @@ test("the extension creates its session dirs and writes nothing into the checkou
 });
 
 test("every module under tools/ is discovered and must export register()", async () => {
-  // The directory ships empty (only .gitkeep); the next wave drops modules in.
-  assert.deepEqual(discoverToolModules(toolsDir), []);
+  // Every shipped module must export register(); the underscore-prefixed
+  // helpers (tools/_procs.ts) are deliberately not modules and must be skipped.
+  for (const path of discoverToolModules(toolsDir)) {
+    const mod = (await import(path)) as { register?: unknown };
+    assert.equal(typeof mod.register, "function", `${path} must export register(pi, ctx)`);
+    assert.ok(!path.split("/").pop()!.startsWith("_"), "helper files are not tool modules");
+  }
 
   const dir = mkdtempSync(join(tmpdir(), "associate-tools-"));
   try {
