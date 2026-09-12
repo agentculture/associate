@@ -13,7 +13,10 @@
  *    extension actually loaded rather than trusting that the config file is on
  *    disk (spec c34) — and `finish`, whose payload is the hand-back;
  * 4. registers the `tool_call` write guard (spec c4/c5);
- * 5. dynamically imports every module under `tools/` and calls its
+ * 5. registers the `associate` provider from the environment, with the hook
+ *    that switches reasoning off on the wire (spec c14/c28) — or, with no key
+ *    configured, registers nothing and prints one hint;
+ * 6. dynamically imports every module under `tools/` and calls its
  *    `register(pi, ctx)`, so the next wave of tools plugs in without editing
  *    this file.
  *
@@ -25,6 +28,7 @@ import type { ExtensionAPI } from "@earendil-works/pi-coding-agent";
 import { Type } from "typebox";
 import { evaluateToolCall } from "./lib/guard.ts";
 import { normalizeHandback, unreferencedCount } from "./lib/handback.ts";
+import { registerAssociateProvider } from "./lib/provider.ts";
 import { createAssociateContext, loadToolModules } from "./lib/runtime.ts";
 import { installWalkRecorder } from "./lib/walk.ts";
 
@@ -149,6 +153,13 @@ export default async function (pi: ExtensionAPI) {
       declaredNonWriters: ctx.declaredNonWriters(),
     });
   });
+
+  // ---------------------------------------------------------------- provider
+  // The lane's endpoint, key and model id are configuration (spec c14/h22);
+  // reasoning is switched off in the request payload, not assumed from a
+  // compat flag (spec c28/h8). With no key set this registers nothing and
+  // prints one hint naming the variables — a clone still starts.
+  registerAssociateProvider(pi);
 
   // ------------------------------------------------------------- tool modules
   await loadToolModules(pi, ctx);
