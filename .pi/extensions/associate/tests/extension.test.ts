@@ -94,7 +94,12 @@ test("associate_ready reports no active writer under defaultTools: []", async ()
         (await pi.tool("associate_ready").execute("call-1", {})).content[0]!.text,
       ) as { tools: string[]; active_tools: string[]; writer_tools_active: string[] };
       assert.ok(report.tools.includes("write"), "configured built-ins are reported as configured");
-      assert.deepEqual(report.active_tools, ["associate_ready", "finish"]);
+      // Not a fixed list: tool modules under tools/ (grep/find/ls today, more
+      // in later waves) register alongside the core sentinel/finish pair, and
+      // none of them are writers — that is the actual invariant this test
+      // guards, not the exact tool count.
+      assert.deepEqual(report.active_tools, pi.toolNames());
+      assert.ok(report.active_tools.includes("associate_ready") && report.active_tools.includes("finish"));
       assert.deepEqual(report.writer_tools_active, [], "no writer may be active");
 
       pi.activeBuiltinTools = ["write"];
@@ -178,8 +183,11 @@ test("the extension creates its session dirs and writes nothing into the checkou
 });
 
 test("every module under tools/ is discovered and must export register()", async () => {
-  // The directory ships empty (only .gitkeep); the next wave drops modules in.
-  assert.deepEqual(discoverToolModules(toolsDir), []);
+  // search.ts (task t6) is the first real module to land under tools/; later
+  // waves add more, so this checks the real one is found rather than
+  // asserting the directory stays empty.
+  const realModules = discoverToolModules(toolsDir).map((path) => path.split("/").pop());
+  assert.ok(realModules.includes("search.ts"), `expected search.ts among ${realModules.join(", ")}`);
 
   const dir = mkdtempSync(join(tmpdir(), "associate-tools-"));
   try {
