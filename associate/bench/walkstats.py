@@ -57,7 +57,10 @@ def find_walks(paths: Sequence[str | Path]) -> list[Path]:
         path = Path(raw)
         if path.is_dir():
             found.extend(sorted(path.rglob(WALK_FILENAME)))
-        elif path.is_file():
+        elif path.is_file() and path.name == WALK_FILENAME:
+            # Only a file actually named walk.jsonl is ever opened: an argument
+            # naming any other file (or a path that escapes via symlink) is
+            # ignored rather than read.
             found.append(path)
     # A directory tree can name the same walk twice; keep the first mention.
     seen: set[Path] = set()
@@ -78,10 +81,15 @@ def load_run_record(walk_path: Path) -> dict[str, Any]:
     reported ``outcome: "error"`` from a run that never got to report at all.
     """
     record: dict[str, Any] = {}
-    try:
-        text = walk_path.read_text(encoding="utf-8")
-    except OSError:
+    walk_path = Path(walk_path)
+    resolved = walk_path.resolve()
+    if resolved.name != WALK_FILENAME or not resolved.is_file():
         text = ""
+    else:
+        try:
+            text = resolved.read_text(encoding="utf-8")
+        except OSError:
+            text = ""
     entries = 0
     for line in text.splitlines():
         line = line.strip()

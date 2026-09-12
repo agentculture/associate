@@ -16,7 +16,22 @@ rather than reaching for a dependency.
 from __future__ import annotations
 
 import re
+from functools import lru_cache
 from typing import Any
+
+#: Longest regex the contract will compile. Schemas and policy.json are package
+#: data, not user input, but a cap plus a compile cache keeps a pathological
+#: pattern from ever reaching ``re`` uncompiled on every call.
+MAX_PATTERN_LENGTH = 256
+
+
+@lru_cache(maxsize=256)
+def compile_pattern(pattern: str) -> re.Pattern[str]:
+    """Compile a contract pattern once, refusing anything over the length cap."""
+    if not isinstance(pattern, str) or len(pattern) > MAX_PATTERN_LENGTH:
+        raise ValueError(f"contract pattern rejected (max {MAX_PATTERN_LENGTH} chars)")
+    return re.compile(pattern)
+
 
 __all__ = ["ValidationError", "validate", "assert_valid"]
 
@@ -76,7 +91,11 @@ def _check(instance: Any, schema: dict[str, Any], root: dict[str, Any], path: st
         errors.append(f"{path}: {instance!r} is not one of {schema['enum']}")
 
     pattern = schema.get("pattern")
-    if pattern is not None and isinstance(instance, str) and not re.search(pattern, instance):
+    if (
+        pattern is not None
+        and isinstance(instance, str)
+        and not compile_pattern(pattern).search(instance)
+    ):
         errors.append(f"{path}: {instance!r} does not match pattern {pattern!r}")
 
     if isinstance(instance, dict):

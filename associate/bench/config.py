@@ -27,6 +27,7 @@ from typing import Any
 
 from associate import contract
 from associate.cli._commands.whoami import find_culture_yaml, read_agent_fields
+from associate.contract import validate
 
 __all__ = ["describe", "pi_version", "extension_version", "redact"]
 
@@ -40,7 +41,7 @@ def redact(text: str) -> str:
     """Run *text* through the contract's redaction patterns (policy.json)."""
     policy = contract.load_policy()["redaction"]
     for pattern in policy["patterns"]:
-        text = re.sub(pattern, policy["replacement"], text)
+        text = validate.compile_pattern(pattern).sub(policy["replacement"], text)
     return text
 
 
