@@ -52,7 +52,11 @@ test("the extension registers associate_ready and finish and no writer", async (
       const names = pi.toolNames();
       assert.ok(names.includes("associate_ready"), `missing sentinel: ${names.join(", ")}`);
       assert.ok(names.includes("finish"), `missing finish: ${names.join(", ")}`);
-      for (const forbidden of ["edit", "write", "bash", "apply_patch"]) {
+      // `bash` is NOT in this list: the allowlisted shell (spec c35, t7)
+      // registers under that name on purpose, as an override of pi's built-in.
+      // It is covered by tests/shell.test.ts, which asserts there is exactly
+      // one and that it is the extension's.
+      for (const forbidden of ["edit", "write", "apply_patch"]) {
         assert.ok(!names.includes(forbidden), `the extension must not register ${forbidden}`);
       }
     });
@@ -100,6 +104,10 @@ test("associate_ready reports no active writer under defaultTools: []", async ()
       // guards, not the exact tool count.
       assert.deepEqual(report.active_tools, pi.toolNames());
       assert.ok(report.active_tools.includes("associate_ready") && report.active_tools.includes("finish"));
+      // The allowlisted shell overrides the built-in name `bash` but declares
+      // itself a non-writer (spec c35), so the launcher's check stays empty.
+      assert.ok(report.active_tools.includes("bash"));
+      assert.deepEqual(report.writer_tools_active, []);
       assert.deepEqual(report.writer_tools_active, [], "no writer may be active");
 
       pi.activeBuiltinTools = ["write"];
@@ -189,7 +197,7 @@ test("every module under tools/ is discovered and must export register()", async
   // waves add more, so this checks the real one is found rather than
   // asserting the directory stays empty.
   const realModules = discoverToolModules(toolsDir).map((path) => path.split("/").pop());
-  for (const m of ["search.ts", "read.ts"]) {
+  for (const m of ["search.ts", "read.ts", "shell.ts"]) {
     assert.ok(realModules.includes(m), `expected ${m} among ${realModules.join(", ")}`);
   }
 

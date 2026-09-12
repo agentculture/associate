@@ -81,11 +81,28 @@ export interface GuardOptions {
    * tool module declares its own nature instead of this list growing here.
    */
   readonly declaredWriters?: Iterable<string>;
+  /**
+   * Tool names this extension registered as a *safe override* of a built-in
+   * writer. The allowlisted shell (spec c35) is the case this exists for: it
+   * registers under the built-in name `bash` — that is what makes it an
+   * override — but takes an argv array, spawns with no shell, and refuses
+   * everything that is not read-only, so it must not be judged by the built-in
+   * name's reputation. A declared non-writer wins over
+   * {@link BUILTIN_WRITER_TOOLS}; nothing else clears that list.
+   */
+  readonly declaredNonWriters?: Iterable<string>;
 }
 
 /** Whether a tool call can persist a change, by name. */
-export function isWriterTool(toolName: string, declaredWriters?: Iterable<string>): boolean {
+export function isWriterTool(
+  toolName: string,
+  declaredWriters?: Iterable<string>,
+  declaredNonWriters?: Iterable<string>,
+): boolean {
   const name = toolName.toLowerCase();
+  for (const declared of declaredNonWriters ?? []) {
+    if (declared.toLowerCase() === name) return false;
+  }
   if (BUILTIN_WRITER_TOOLS.includes(name)) return true;
   for (const declared of declaredWriters ?? []) {
     if (declared.toLowerCase() === name) return true;
@@ -121,7 +138,9 @@ export function collectPathArguments(input: unknown): string[] {
  * only by the startup tool list).
  */
 export function evaluateToolCall(options: GuardOptions): GuardDecision | undefined {
-  if (!isWriterTool(options.toolName, options.declaredWriters)) return undefined;
+  if (!isWriterTool(options.toolName, options.declaredWriters, options.declaredNonWriters)) {
+    return undefined;
+  }
 
   const targets = collectPathArguments(options.input);
 

@@ -42,6 +42,9 @@ export function createAssociateContext(options: CreateContextOptions = {}): Asso
     });
 
   const writers = new Set<string>();
+  // Overrides of a built-in writer's name that cannot write — see
+  // AssociateContext.declareNonWriter and lib/guard.ts.
+  const nonWriters = new Set<string>();
 
   return {
     extensionVersion: EXTENSION_VERSION,
@@ -64,7 +67,7 @@ export function createAssociateContext(options: CreateContextOptions = {}): Asso
         return resolved;
       },
       isWriter(toolName: string): boolean {
-        return isWriterTool(toolName, writers);
+        return isWriterTool(toolName, writers, nonWriters);
       },
     },
     declareWriter(toolName: string): void {
@@ -72,6 +75,12 @@ export function createAssociateContext(options: CreateContextOptions = {}): Asso
     },
     declaredWriters(): readonly string[] {
       return [...writers];
+    },
+    declareNonWriter(toolName: string): void {
+      nonWriters.add(toolName);
+    },
+    declaredNonWriters(): readonly string[] {
+      return [...nonWriters];
     },
   };
 }

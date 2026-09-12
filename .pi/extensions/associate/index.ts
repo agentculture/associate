@@ -146,6 +146,7 @@ export default async function (pi: ExtensionAPI) {
       scratchDir: session.scratchDir,
       cwd: ctx.checkoutRoot,
       declaredWriters: ctx.declaredWriters(),
+      declaredNonWriters: ctx.declaredNonWriters(),
     });
   });
 
