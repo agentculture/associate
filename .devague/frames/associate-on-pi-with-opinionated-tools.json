@@ -4,7 +4,7 @@
   "schema_version": 6,
   "status": "exported",
   "created": "2026-09-12T09:17:50Z",
-  "updated": "2026-09-12T12:28:12Z",
+  "updated": "2026-09-12T12:34:11Z",
   "claims": [
     {
       "id": "c1",
@@ -1470,6 +1470,73 @@
       "refs": [
         "t9",
         "t2"
+      ],
+      "origin": "llm",
+      "status": "proposed"
+    },
+    {
+      "id": "l19",
+      "code": "assumption-for-measurement",
+      "what": "t5: 'session root' in the brief was read as the examined checkout (ctx.checkoutRoot) rather than the session scratch dir, by analogy with resolveWithin's default base; not confirmed against the brief author",
+      "skipped_check": "ask which root the read tool confines to",
+      "refs": [
+        "t5",
+        "c29"
+      ],
+      "origin": "llm",
+      "status": "proposed"
+    },
+    {
+      "id": "l20",
+      "code": "control-absent",
+      "what": "t7: the agent first chose to stay inside its two files and merely report the guard conflict, which would have shipped a green suite over a dead feature; it reversed after recognizing this",
+      "skipped_check": "an integration check that the registered shell tool is callable through the guard, before declaring done",
+      "refs": [
+        "t7"
+      ],
+      "origin": "llm",
+      "status": "proposed"
+    },
+    {
+      "id": "l21",
+      "code": "assumption-for-measurement",
+      "what": "t11: two probe runs were lost to a wrong first hypothesis (JSON-vs-SSE) when pi -p was actually blocking on inherited non-TTY stdin; empty stdout and stderr were the available evidence and were not read",
+      "skipped_check": "read the empty-output evidence before hypothesizing",
+      "refs": [
+        "t11"
+      ],
+      "origin": "llm",
+      "status": "proposed"
+    },
+    {
+      "id": "l22",
+      "code": "provenance-missing",
+      "what": "t11: /recall was not run before starting, against the repo's memory discipline; the knob question was re-derived from docs",
+      "skipped_check": "/recall 'reasoning off nemotron pi provider'",
+      "refs": [
+        "t11"
+      ],
+      "origin": "llm",
+      "status": "proposed"
+    },
+    {
+      "id": "l23",
+      "code": "control-absent",
+      "what": "t8: binary names were hardcoded first and corrected only when contract.test.ts's no-hardcoded-policy scan failed; the guard test had not been read",
+      "skipped_check": "read the structural tests before designing",
+      "refs": [
+        "t8"
+      ],
+      "origin": "llm",
+      "status": "proposed"
+    },
+    {
+      "id": "l24",
+      "code": "control-absent",
+      "what": "t8: _procs.ts was written before its tests; only the two tool modules were test-first",
+      "skipped_check": "failing test first for the shared helper",
+      "refs": [
+        "t8"
       ],
       "origin": "llm",
       "status": "proposed"

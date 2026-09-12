@@ -5,7 +5,7 @@
   "schema_version": 5,
   "status": "exported",
   "created": "2026-09-12T11:11:15Z",
-  "updated": "2026-09-12T12:28:12Z",
+  "updated": "2026-09-12T12:34:11Z",
   "targets": [
     {
       "id": "c1",
@@ -1062,6 +1062,46 @@
       "text": "t9: the contract's redaction patterns use PCRE inline flags ((?i)) that JavaScript rejects; walk.ts translates a leading (?i) and raises on anything else so a pattern is never silently dropped \u2014 policy.json patterns must stay within that translatable subset, or the contract should switch to a JS-and-Python-safe dialect",
       "kind": "follow_up",
       "task_id": "t16",
+      "resolved": false,
+      "resolution": ""
+    },
+    {
+      "id": "r19",
+      "text": "t7: pi's inherited built-in bash renderer reads args.command, which the argv-based override lacks, so an interactive session renders the call line as 'invalid args'; headless runs are unaffected; a renderer needs pi-tui, which c44 keeps out",
+      "kind": "follow_up",
+      "task_id": "t7",
+      "resolved": false,
+      "resolution": ""
+    },
+    {
+      "id": "r20",
+      "text": "t11: the knob chosen (chat_template_kwargs enable_thinking false) is a risk judgement, not a measurement \u2014 the fake server honours nothing; t15 must measure it live and compare against ASSOCIATE_REASONING_OFF=off (baseline), reasoning_effort, and both",
+      "kind": "unknown_nonblocking",
+      "task_id": "t15",
+      "resolved": false,
+      "resolution": ""
+    },
+    {
+      "id": "r21",
+      "text": "t11: the payload carries max_completion_tokens (pi default); older vLLM builds accept only max_tokens (compat.maxTokensField) \u2014 a plausible live-lane failure to check first in t15; contextWindow 131072 and maxTokens 16384 are unmeasured constants",
+      "kind": "unknown_nonblocking",
+      "task_id": "t15",
+      "resolved": false,
+      "resolution": ""
+    },
+    {
+      "id": "r22",
+      "text": "c14's instruction says the README names the ASSOCIATE_* variables; t14 put them in CLAUDE.md only \u2014 t12 (or the PR prep) must add them to README before t15 closes",
+      "kind": "unknown_nonblocking",
+      "task_id": "t12",
+      "resolved": false,
+      "resolution": ""
+    },
+    {
+      "id": "r23",
+      "text": "t8 dependency: the webglass-code-lens-as-tools plan has not merged; its skills and the ledger rows for the two CLIs do not exist, so the extension's wrappers are the only surface today; that plan still owes the human/bash skills and the ledger rows",
+      "kind": "follow_up",
+      "task_id": "t8",
       "resolved": false,
       "resolution": ""
     }
