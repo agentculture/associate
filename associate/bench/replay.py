@@ -48,10 +48,14 @@ def replay_kwargs(case: Case, checkout: Path) -> dict[str, Any]:
     script: list[dict[str, Any]] = []
 
     for term in expect.get("searches", []):
+        # The `grep` tool, with the term in `args.pattern` — the shape
+        # `tools/search.ts` records and the only shape the search check
+        # believes. An argv-shell entry that merely *mentions* the term is not
+        # a search, and the checks stopped pretending it was.
         script.append(
             {
-                "tool": "shell",
-                "args": {"argv": ["rg", "--line-number", term, "."]},
+                "tool": "grep",
+                "args": {"pattern": term, "path": "."},
                 "result": {"content": _grep(checkout, term)},
             }
         )

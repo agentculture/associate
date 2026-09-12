@@ -14,13 +14,35 @@ from __future__ import annotations
 
 import hashlib
 import json
+import re
 from pathlib import Path
 from typing import Any
 
 from associate import contract
 from associate.contract import validate
 
-__all__ = ["Artifacts", "load_artifacts", "run_checks", "FORBIDDEN_TOOLS", "digest_files"]
+__all__ = [
+    "Artifacts",
+    "load_artifacts",
+    "run_checks",
+    "FORBIDDEN_TOOLS",
+    "SEARCH_PATTERN_FIELDS",
+    "digest_files",
+]
+
+#: The tools that search, and the argument each one carries its pattern in —
+#: read off ``tools/search.ts``'s ``GREP_SCHEMA``/``FIND_SCHEMA``. A ``searches``
+#: expectation is satisfied only by one of these fields, never by a term that
+#: merely appears somewhere in some other tool's arguments.
+SEARCH_PATTERN_FIELDS: dict[str, tuple[str, ...]] = {
+    "grep": ("pattern", "glob"),
+    "find": ("pattern", "glob"),
+}
+
+#: One line of a read result, stamped with its absolute line number
+#: (``policy.json``'s ``read.line_numbers: "absolute"``). The stub pads the
+#: number, ``tools/read.ts`` does not; both are accepted.
+_STAMPED_LINE = re.compile(r"^\s*(\d+)\t")
 
 #: Tool names that must never appear in a walk. The role forbids ``repo_action``
 #: and ``code_authoring`` (role.json), and the policy registers no write path.
@@ -239,15 +261,50 @@ def _check_reads(expect: dict[str, Any], artifacts: Artifacts) -> list[str]:
     return failures
 
 
+def _search_succeeded(entry: dict[str, Any]) -> bool:
+    """True when a search entry records a search that actually ran and returned.
+
+    A walk entry carries an ``error`` only when the runtime flagged the tool
+    result as an error; ``tools/search.ts`` instead hands the model a structured
+    ``{"ok": false, …}`` payload for a refused or failed search, recorded as an
+    ordinary result. Both are failures here: "the run searched for X" is not
+    satisfied by a search that produced nothing.
+    """
+    if entry.get("error"):
+        return False
+    content = (entry.get("result") or {}).get("content")
+    if not isinstance(content, str) or not content.lstrip().startswith("{"):
+        return True
+    try:
+        payload = json.loads(content)
+    except json.JSONDecodeError:
+        return True
+    return not (isinstance(payload, dict) and payload.get("ok") is False)
+
+
 def _check_searches(expect: dict[str, Any], artifacts: Artifacts) -> list[str]:
+    """A search expectation is met only by a successful search *for that term*.
+
+    The earlier version accepted the term anywhere in any non-``read`` tool's
+    arguments, so a run that never searched at all still passed: the term comes
+    from the task prompt, and it reappears in a ``finish`` summary or a ``bash``
+    argv. That made every ``searches`` expectation in the corpus unfalsifiable.
+    The check now names the tools that search and the argument each one puts its
+    pattern in (``tools/search.ts``) — never the whole argument blob.
+    """
     failures = []
     for term in expect.get("searches", []):
-        found = any(
-            entry.get("tool") != "read" and term in json.dumps(entry.get("args", {}))
-            for entry in artifacts.entries
-        )
+        found = False
+        for entry in artifacts.entries:
+            fields = SEARCH_PATTERN_FIELDS.get(str(entry.get("tool", "")).lower())
+            if not fields or not _search_succeeded(entry):
+                continue
+            args = entry.get("args") or {}
+            if any(isinstance(args.get(field), str) and term in args[field] for field in fields):
+                found = True
+                break
         if not found:
-            failures.append(f"the walk records no search for {term!r}")
+            failures.append(f"the walk records no successful search for {term!r}")
     return failures
 
 
@@ -280,17 +337,99 @@ def _check_facts(expect: dict[str, Any], artifacts: Artifacts) -> list[str]:
     return failures
 
 
+def _as_int(value: Any, default: int) -> int:
+    """*value* as an ``int`` when it plausibly is one, else *default*."""
+    if isinstance(value, bool):
+        return default
+    if isinstance(value, int):
+        return value
+    if isinstance(value, str):
+        try:
+            return int(value.strip())
+        except ValueError:
+            return default
+    return default
+
+
+def _read_max_lines() -> int:
+    """The read budget's line cap, from the contract — never a literal here."""
+    budget = contract.load_policy().get("budgets", {}).get("read", {})
+    return _as_int(budget.get("max_lines"), 1000)
+
+
+def _stamped_range(entry: dict[str, Any]) -> tuple[int, int] | None:
+    """The absolute line range a read's recorded content actually delivered.
+
+    ``tools/read.ts`` stamps every returned line with its absolute number
+    (``policy.json``'s ``read.line_numbers: "absolute"``), so the content itself
+    is the honest record of what the model saw — including when the read was
+    cut short by the budget. Returns ``None`` for content that is not stamped,
+    so a runtime that records raw file text falls back to the arguments.
+    """
+    content = (entry.get("result") or {}).get("content")
+    if not isinstance(content, str) or not content:
+        return None
+    first: int | None = None
+    last: int | None = None
+    for line in content.splitlines():
+        match = _STAMPED_LINE.match(line)
+        if match is None:
+            if first is None:
+                return None  # not a stamped read at all
+            continue
+        number = int(match.group(1))
+        if first is None:
+            first = number
+        last = number
+    if first is None or last is None:
+        return None
+    return (first, last)
+
+
+def _covered_range(entry: dict[str, Any], max_lines: int) -> tuple[int, int] | None:
+    """The inclusive line range a successful read entry proves was seen.
+
+    Two argument vocabularies are understood. The Pi ``read`` tool records
+    ``start_line``/``end_line``, both 1-based and **inclusive**; the replaying
+    stub records ``offset``/``limit``. In either vocabulary an *open-ended*
+    read is not proof the whole file was read: ``tools/read.ts`` bounds its
+    output by ``policy.budgets.read``, so a read with no ``end_line`` delivered
+    at most ``max_lines`` lines from ``start_line``. The recorded content says
+    exactly how far it got, so it wins when it is stamped; the budget is the
+    fallback when the walk inlined no content.
+    """
+    args = entry.get("args") or {}
+    stamped = _stamped_range(entry)
+
+    if "start_line" in args or "end_line" in args:
+        start = _as_int(args.get("start_line"), 1)
+        if args.get("end_line") is not None:
+            return (start, max(start, _as_int(args.get("end_line"), start)))
+        return stamped or (start, start + max_lines - 1)
+
+    if "offset" in args or "limit" in args:
+        start = _as_int(args.get("offset"), 1)
+        if args.get("limit") is not None:
+            return (start, start + max(0, _as_int(args.get("limit"), 0)) - 1)
+        return stamped or (start, start + max_lines - 1)
+
+    # A whole-file read with no window argument at all: still bounded.
+    return stamped or (1, max_lines)
+
+
 def _covered(artifacts: Artifacts, path: str, line: int) -> bool:
-    """True when a recorded read of *path* covers *line*."""
+    """True when a recorded, successful read of *path* covers *line*.
+
+    A citation marked ``encountered`` claims the agent saw that line. It is
+    believed only when a read range that really reached the line is on the
+    walk — an unbounded read is bounded by the read budget, not by the file.
+    """
+    max_lines = _read_max_lines()
     for entry in _reads_for(artifacts, path):
         if entry.get("error"):
             continue
-        args = entry.get("args", {})
-        offset = args.get("offset", 1)
-        limit = args.get("limit")
-        if limit is None:
-            return True
-        if offset <= line < offset + limit:
+        covered = _covered_range(entry, max_lines)
+        if covered is not None and covered[0] <= line <= covered[1]:
             return True
     return False
 
