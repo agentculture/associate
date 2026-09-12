@@ -4,7 +4,7 @@
   "schema_version": 6,
   "status": "exported",
   "created": "2026-09-12T09:17:50Z",
-  "updated": "2026-09-12T13:09:00Z",
+  "updated": "2026-09-12T14:30:34Z",
   "claims": [
     {
       "id": "c1",
@@ -997,8 +997,8 @@
       "text": "how reasoning is switched off on the wire through Pi's openai-completions provider: models.json reasoning:false / thinkingLevelMap only shape what Pi sends (pi docs/models.md:204-291); the served lane emits reasoning by default under --reasoning-parser nemotron_v3, so the knob may have to be a chat_template_kwargs flag injected via a before_provider_request hook, if Nemotron's template honors one \u2014 unverified",
       "kind": "unknown_nonblocking",
       "claim_id": null,
-      "resolved": false,
-      "resolution": "",
+      "resolved": true,
+      "resolution": "measured live 2026-09-12 (t15): with ASSOCIATE_REASONING_OFF=off the lane returned 2 thinking blocks (412 chars) on a one-word prompt; with chat_template_kwargs enable_thinking=false (the default) 0 thinking blocks; reasoning_effort 'none' also 0 and no server error; both 0. The default knob works on the wire",
       "resolution_claim_id": null
     },
     {
@@ -1437,7 +1437,7 @@
         "t13"
       ],
       "origin": "llm",
-      "status": "proposed"
+      "status": "approved"
     },
     {
       "id": "l16",
@@ -1449,7 +1449,7 @@
         "c50"
       ],
       "origin": "llm",
-      "status": "proposed"
+      "status": "approved"
     },
     {
       "id": "l17",
@@ -1460,7 +1460,7 @@
         "t9"
       ],
       "origin": "llm",
-      "status": "proposed"
+      "status": "approved"
     },
     {
       "id": "l18",
@@ -1472,7 +1472,7 @@
         "t2"
       ],
       "origin": "llm",
-      "status": "proposed"
+      "status": "approved"
     },
     {
       "id": "l19",
@@ -1484,7 +1484,7 @@
         "c29"
       ],
       "origin": "llm",
-      "status": "proposed"
+      "status": "approved"
     },
     {
       "id": "l20",
@@ -1495,7 +1495,7 @@
         "t7"
       ],
       "origin": "llm",
-      "status": "proposed"
+      "status": "approved"
     },
     {
       "id": "l21",
@@ -1506,7 +1506,7 @@
         "t11"
       ],
       "origin": "llm",
-      "status": "proposed"
+      "status": "approved"
     },
     {
       "id": "l22",
@@ -1517,7 +1517,7 @@
         "t11"
       ],
       "origin": "llm",
-      "status": "proposed"
+      "status": "approved"
     },
     {
       "id": "l23",
@@ -1528,7 +1528,7 @@
         "t8"
       ],
       "origin": "llm",
-      "status": "proposed"
+      "status": "approved"
     },
     {
       "id": "l24",
@@ -1539,7 +1539,7 @@
         "t8"
       ],
       "origin": "llm",
-      "status": "proposed"
+      "status": "approved"
     },
     {
       "id": "l25",
@@ -1550,7 +1550,7 @@
         "t10"
       ],
       "origin": "llm",
-      "status": "proposed"
+      "status": "approved"
     },
     {
       "id": "l26",
@@ -1562,7 +1562,7 @@
         "r15"
       ],
       "origin": "llm",
-      "status": "proposed"
+      "status": "approved"
     },
     {
       "id": "l27",
@@ -1574,7 +1574,7 @@
         "c25"
       ],
       "origin": "llm",
-      "status": "proposed"
+      "status": "approved"
     },
     {
       "id": "l28",
@@ -1585,7 +1585,7 @@
         "t10"
       ],
       "origin": "llm",
-      "status": "proposed"
+      "status": "approved"
     },
     {
       "id": "l29",
@@ -1597,7 +1597,7 @@
         "c34"
       ],
       "origin": "llm",
-      "status": "proposed"
+      "status": "approved"
     },
     {
       "id": "l30",
@@ -1609,7 +1609,7 @@
         "r16"
       ],
       "origin": "llm",
-      "status": "proposed"
+      "status": "approved"
     },
     {
       "id": "l31",
@@ -1618,6 +1618,28 @@
       "skipped_check": "error-path tests for the adapter",
       "refs": [
         "t12"
+      ],
+      "origin": "llm",
+      "status": "approved"
+    },
+    {
+      "id": "l32",
+      "code": "control-absent",
+      "what": "t15 issue #3 run 1 is invalid: the launcher was invoked with 'uv run --directory <associate>' from the lobes-cli checkout, which changed the working directory, so the run mapped the associate repo instead of lobes-cli (walk shows 49 tool calls, reads of associate/); the 900 s timeout then killed it. The harness behaved correctly (valid partial walk with a run record on kill); the operator's invocation was wrong",
+      "skipped_check": "assert the checkout path in the walk's first read before counting a run",
+      "refs": [
+        "t15"
+      ],
+      "origin": "llm",
+      "status": "approved"
+    },
+    {
+      "id": "l33",
+      "code": "assumption-for-measurement",
+      "what": "d8 implementation: passing -e index.ts inside the repo means pi sees the extension twice (flag plus project discovery); the double-registration question was checked only after the fact from ready.json (no duplicates \u2014 pi dedupes by resolved path), not before shipping",
+      "skipped_check": "a pre-check that tools and active_tools carry no duplicates when both load paths apply",
+      "refs": [
+        "d8"
       ],
       "origin": "llm",
       "status": "proposed"

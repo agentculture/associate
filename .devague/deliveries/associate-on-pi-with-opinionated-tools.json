@@ -2,7 +2,7 @@
   "plan_slug": "associate-on-pi-with-opinionated-tools",
   "schema_version": 2,
   "created": "2026-09-12T11:41:38Z",
-  "updated": "2026-09-12T13:19:14Z",
+  "updated": "2026-09-12T14:30:06Z",
   "deviations": [
     {
       "id": "d1",
@@ -43,7 +43,7 @@
         "t8"
       ],
       "origin": "llm",
-      "status": "proposed",
+      "status": "approved",
       "classification": "acceptable",
       "seq": 3
     },
@@ -57,7 +57,7 @@
         "t8"
       ],
       "origin": "llm",
-      "status": "proposed",
+      "status": "approved",
       "classification": "acceptable",
       "seq": 4
     },
@@ -71,7 +71,7 @@
         "t12"
       ],
       "origin": "llm",
-      "status": "proposed",
+      "status": "approved",
       "classification": "acceptable",
       "seq": 5
     },
@@ -84,7 +84,7 @@
         "t15"
       ],
       "origin": "llm",
-      "status": "proposed",
+      "status": "approved",
       "classification": "needs-follow-up",
       "seq": 6
     },
@@ -101,6 +101,35 @@
       "status": "approved",
       "classification": "risky",
       "seq": 7
+    },
+    {
+      "id": "d8",
+      "what": "measured 2026-09-12 (t15): (1) the Pi adapter's readiness check depends on the model calling associate_ready in the same turn as the task \u2014 with a real task prompt the model skipped the sentinel and the launcher refused a healthy run (check 1), while the readiness-only prompt passed; (2) the adapter relies on the project's .pi/ being present, so 'associate bench --harness pi' in fixture checkouts got Unknown provider and no extension. Proposed divergence: the extension writes the sentinel report to <export_dir>/ready.json on session_start (deterministic, no model turn), the launcher reads that file for its fail-closed gate and falls back to the tool event, and the launcher passes -e <repo>/.pi/extensions/associate/index.ts explicitly so the extension loads in any checkout without depending on project trust or a global install",
+      "task_ref": "t12",
+      "reason": "t12's positive path was proven only against a scripted fake pi (lapse l29); the first real task prompt and the first foreign checkout exposed both assumptions",
+      "affects": [
+        "t15",
+        "t2"
+      ],
+      "origin": "llm",
+      "status": "approved",
+      "classification": "acceptable",
+      "seq": 12
+    },
+    {
+      "id": "d9",
+      "what": "measured 2026-09-12 (t15 mesh check): through pi-acp the model put its whole answer in the finish payload and ended the turn with no final text, so culture's ACP bridge (which relays agent_message_chunk text, cultureagent/clients/acp/agent_runner.py:393) posted nothing to IRC \u2014 the hand-back was recorded in the walk but never delivered to the requester. Proposed divergence, Pi-and-model-tailored per c50: (1) the finish tool's result text tells the model 'hand-back recorded (N statements); now reply to the requester with the summary as your final message'; (2) AGENTS.md states that after finish the final message is the payload's summary, because a reply left only in finish does not reach a mesh requester; (3) the mesh-delivery check becomes a bench case (a run passes only if the final assistant text is non-empty after finish)",
+      "task_ref": "t15",
+      "reason": "the mesh path relays chat text, the harness delivers via finish; nothing in the plan reconciled the two channels \u2014 the issue #3 final-message loss reappeared one layer up",
+      "affects": [
+        "t13",
+        "t2",
+        "t17"
+      ],
+      "origin": "llm",
+      "status": "proposed",
+      "classification": "acceptable",
+      "seq": 17
     }
   ],
   "evidence": [
@@ -160,6 +189,101 @@
       "status": "proposed",
       "superseded": false,
       "seq": 10
+    },
+    {
+      "id": "e4",
+      "obligation_ref": "o14",
+      "test_ref": "manual: four pi -p --mode json runs against the live lane with ASSOCIATE_REASONING_OFF in {off, chat_template_kwargs, reasoning_effort, both}, counting assistant thinking content blocks in the event stream",
+      "behavior_text": "a captured request/response to the lane shows reasoning disabled (no or empty reasoning field)",
+      "contract_text": "c28: reasoning is off on the lane",
+      "evidence_type": "observation",
+      "strength": "sensitivity",
+      "strength_basis": "the control (knob off) produced 2 thinking blocks totalling 412 chars; every knob-on variant produced 0 thinking blocks with the same final answer 'pong'; a sensitivity test because the measurement moved with the knob",
+      "outcome": "pass",
+      "run": {
+        "timestamp": "2026-09-12",
+        "commit": "59c0485"
+      },
+      "origin": "llm",
+      "status": "proposed",
+      "superseded": false,
+      "seq": 11
+    },
+    {
+      "id": "e5",
+      "obligation_ref": "o11",
+      "test_ref": "manual: uv run associate run --harness pi --json --export-root <scratch> 'call associate_ready, then finish' on the live lane, commit 59c0485",
+      "behavior_text": "every headless run creates walk.jsonl and statements.md and prints both paths, with no --export flag required",
+      "contract_text": "c23: exploration output is persisted by default",
+      "evidence_type": "observation",
+      "strength": "execution",
+      "strength_basis": "observed: exit 0 in 9.3 s; stdout JSON carried walk_path, statements_path, statements_md_path, export_dir, outcome ok; the export dir held walk.jsonl (w1 associate_ready, w2 finish, run record), statements.json, statements.md",
+      "outcome": "pass",
+      "run": {
+        "timestamp": "2026-09-12",
+        "commit": "59c0485"
+      },
+      "origin": "llm",
+      "status": "proposed",
+      "superseded": false,
+      "seq": 13
+    },
+    {
+      "id": "e6",
+      "obligation_ref": "o1",
+      "test_ref": "manual: the same live run's active_tools field from the sentinel report",
+      "behavior_text": "the reported tool list equals the extension's registered set and contains neither edit nor write",
+      "contract_text": "c3: the extension sets defaultTools so built-in edit and write are structurally absent",
+      "evidence_type": "observation",
+      "strength": "execution",
+      "strength_basis": "observed active_tools on the live lane: associate_ready, finish, code_lens, read, grep, find, ls, bash, web_search, web_page \u2014 no edit, no write; git status in the checkout unchanged after the run",
+      "outcome": "pass",
+      "run": {
+        "timestamp": "2026-09-12",
+        "commit": "59c0485"
+      },
+      "origin": "llm",
+      "status": "proposed",
+      "superseded": false,
+      "seq": 14
+    },
+    {
+      "id": "e7",
+      "obligation_ref": "o6",
+      "test_ref": "manual: culture agents register . ; culture agents start spark-associate on the running local server 'spark'; agent log at ~/.culture/logs/agent-spark-associate.log",
+      "behavior_text": "culture start associate spawns the acp_command from culture.yaml and completes initialize and session/new against pi-acp",
+      "contract_text": "c11: associate's mesh backend becomes acp with acp_command launching pi-acp",
+      "evidence_type": "observation",
+      "strength": "execution",
+      "strength_basis": "observed 2026-09-12 17:25 local: culture spawned pi-acp 0.0.33 (cmd=pi-acp), ACP initialized, session/new returned session 01a09602-... with the checkout as cwd, ACPDaemon started, agent joined #general; the extension loaded in that session (walk export 20260912T142525Z with w1 associate_ready)",
+      "outcome": "pass",
+      "run": {
+        "timestamp": "2026-09-12",
+        "commit": "59c0485"
+      },
+      "origin": "llm",
+      "status": "proposed",
+      "superseded": false,
+      "seq": 15
+    },
+    {
+      "id": "e8",
+      "obligation_ref": "o8",
+      "test_ref": "manual: culture agents message spark-associate '<read AGENTS.md and reply with its first heading and tool count, citing [wN]>' on the live server; read ~/.culture/logs/agent-spark-associate.log, the culture history db, and the pi session transcript",
+      "behavior_text": "the agent answers one channel message end to end through pi-acp on a real culture server",
+      "contract_text": "c15: culture's ACP backend is exercised end to end with pi-acp",
+      "evidence_type": "observation",
+      "strength": "execution",
+      "strength_basis": "observed 2026-09-12: the message reached the agent (attention IDLE\u2192HOT), pi ran 30 tool calls and called finish with a 4-statement payload (walk export 20260912T142525Z), but the last assistant text was 'Let me use the allowed tools to check for IRC-related functionality' and no message from spark-associate appears in the culture history \u2014 the hand-back stayed in the finish payload and was never relayed to IRC",
+      "outcome": "fail",
+      "run": {
+        "timestamp": "2026-09-12",
+        "commit": "59c0485"
+      },
+      "origin": "llm",
+      "status": "proposed",
+      "superseded": false,
+      "seq": 16
     }
   ],
   "deltas": [],

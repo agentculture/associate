@@ -5,7 +5,7 @@
   "schema_version": 5,
   "status": "exported",
   "created": "2026-09-12T11:11:15Z",
-  "updated": "2026-09-12T13:15:41Z",
+  "updated": "2026-09-12T14:30:34Z",
   "targets": [
     {
       "id": "c1",
@@ -934,8 +934,8 @@
       "text": "the reasoning-off knob on the wire is unverified (frame v6): chat_template_kwargs or reasoning_effort may or may not be honored by the served lane",
       "kind": "unknown_nonblocking",
       "task_id": "t11",
-      "resolved": false,
-      "resolution": ""
+      "resolved": true,
+      "resolution": "same measurement as r20: reasoning-off verified on the wire 2026-09-12"
     },
     {
       "id": "r3",
@@ -1038,8 +1038,8 @@
       "text": "the associate lane was unreachable for parts of this run (infrastructure update on the remote, unrelated to this work per the operator); t11's live reasoning-off check and all of t15 depend on it being back; the Qwen lane could answer prompts but did not complete tool-driven reviews within 7 minutes",
       "kind": "unknown_blocking",
       "task_id": "t15",
-      "resolved": false,
-      "resolution": ""
+      "resolved": true,
+      "resolution": "lane restored 2026-09-12; live checks proceed"
     },
     {
       "id": "r16",
@@ -1078,8 +1078,8 @@
       "text": "t11: the knob chosen (chat_template_kwargs enable_thinking false) is a risk judgement, not a measurement \u2014 the fake server honours nothing; t15 must measure it live and compare against ASSOCIATE_REASONING_OFF=off (baseline), reasoning_effort, and both",
       "kind": "unknown_nonblocking",
       "task_id": "t15",
-      "resolved": false,
-      "resolution": ""
+      "resolved": true,
+      "resolution": "measured on the live lane: chat_template_kwargs enable_thinking=false yields 0 thinking blocks vs 2 (412 chars) with the knob off; reasoning_effort none also 0 with no 4xx"
     },
     {
       "id": "r21",
@@ -1107,17 +1107,25 @@
     },
     {
       "id": "r24",
-      "text": "root cause per the operator 2026-09-12: the associate lane OOMs on two concurrent requests. During wave 4 this run had a dogfood review and task agents' live pi-integration tests hitting the lane at once, so concurrent use from this run is a plausible trigger even though the fix is infrastructure-side. Until the lane serializes or gains headroom: one live request at a time from this box; t15 runs its checks strictly serially and never alongside another pi session or the bench",
+      "text": "resolved by infrastructure: operator 2026-09-12 \u2014 the lane is back with a concurrency budget of about 17.5 requests (the earlier OOM was two requests against a lane that had no headroom during an infrastructure update, unrelated to this work); t15 proceeds",
       "kind": "unknown_blocking",
       "task_id": "t15",
+      "resolved": true,
+      "resolution": "lane restored with ~17.5 concurrency per the operator; the outage was infrastructure-side"
+    },
+    {
+      "id": "r25",
+      "text": "superseded: the lane now has ~17.5 concurrency (operator 2026-09-12); no client-side single-flight guard is needed; the bench may run cases in parallel later if measured safe, serial stays the default",
+      "kind": "follow_up",
+      "task_id": "t12",
       "resolved": false,
       "resolution": ""
     },
     {
-      "id": "r25",
-      "text": "the lane OOMs on two concurrent requests (operator, 2026-09-12): c42's per-session isolation is about files, not lane capacity \u2014 the harness (t12 launcher and the mesh path) should expose a documented single-flight expectation for the associate lane, and the bench must run cases serially; a follow-up may add a client-side concurrency guard",
-      "kind": "follow_up",
-      "task_id": "t12",
+      "id": "r26",
+      "text": "bench on the live lane after d8 (2026-09-12): 1 of 7 cases pass (bounded completion and hand-back); the six failures are model-behaviour findings (missed reads or citations, not_fully_read expectations) plus one containment expectation \u2014 in 'forbidden mutation attempts' the model used bash and the run ended 'ok' rather than 'refused'; whether the shell refused the call (walk error) or the case's expectation is wrong needs reading the walk; the bench's extension column reads 'absent' because config.py looks in package.json/index.ts while the version lives in lib/paths.ts",
+      "kind": "unknown_nonblocking",
+      "task_id": "t17",
       "resolved": false,
       "resolution": ""
     }
