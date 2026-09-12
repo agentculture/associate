@@ -5,7 +5,7 @@
   "schema_version": 5,
   "status": "exported",
   "created": "2026-09-12T11:11:15Z",
-  "updated": "2026-09-12T12:12:08Z",
+  "updated": "2026-09-12T12:28:12Z",
   "targets": [
     {
       "id": "c1",
@@ -538,7 +538,7 @@
       "id": "t1",
       "summary": "Track the Pi project config and package manifest: .pi/settings.json, package.json (pi key), .gitignore entries",
       "origin": "llm",
-      "status": "proposed",
+      "status": "confirmed",
       "acceptance_criteria": [
         ".pi/settings.json is tracked, contains no '~' or '/home' path, sets defaultTools to [] and, because Pi resolves project settings paths relative to the .pi directory, sets skills to ../.claude/skills and extensions to extensions/associate; both resolve to existing directories from .pi",
         "package.json exists with a pi key naming .pi/extensions/associate and .claude/skills, has no dependencies or scripts, and 'uv run pytest' still passes with dependencies = [] unchanged",
@@ -881,7 +881,7 @@
       "id": "t16",
       "summary": "Portable contract module: role.json, policy.json, task/walk/statements schemas, a small adapter base, and a plumbing-only stub",
       "origin": "llm",
-      "status": "proposed",
+      "status": "confirmed",
       "acceptance_criteria": [
         "associate/contract/ holds role.json, policy.json, and schemas/task.schema.json, schemas/walk.schema.json, schemas/statements.schema.json, and no prompt file; a test validates a sample walk.jsonl and statements.json against the schemas",
         "associate/harness/base.py defines the interface and stub.py satisfies it; a test drives the stub end to end without pi installed",
@@ -1038,6 +1038,30 @@
       "text": "the associate lane was unreachable (503 via the gateway) for part of this run; t11's live reasoning-off check and all of t15 depend on it being back; reviews fell back to the Qwen lane",
       "kind": "unknown_blocking",
       "task_id": "t15",
+      "resolved": false,
+      "resolution": ""
+    },
+    {
+      "id": "r16",
+      "text": "measured by t13: Pi loads context files from ancestor directories, so the workspace-level CLAUDE.md (one directory above the repo, ~5 KB of unrelated workspace guidance) lands in the lane's system prompt; AGENTS.override.md cannot suppress an ancestor. t12's launcher must pass --no-context-files and have the extension inject AGENTS.md itself via before_agent_start (or an equivalent Pi setting), and t14 should document it",
+      "kind": "unknown_blocking",
+      "task_id": "t12",
+      "resolved": false,
+      "resolution": ""
+    },
+    {
+      "id": "r17",
+      "text": "pi-acp is not installed on this box; culture.yaml now declares acp_command [pi-acp] but nothing has launched it; t15 needs pi-acp 0.0.33 installed (npm, pinned) before the mesh check",
+      "kind": "unknown_nonblocking",
+      "task_id": "t15",
+      "resolved": false,
+      "resolution": ""
+    },
+    {
+      "id": "r18",
+      "text": "t9: the contract's redaction patterns use PCRE inline flags ((?i)) that JavaScript rejects; walk.ts translates a leading (?i) and raises on anything else so a pattern is never silently dropped \u2014 policy.json patterns must stay within that translatable subset, or the contract should switch to a JS-and-Python-safe dialect",
+      "kind": "follow_up",
+      "task_id": "t16",
       "resolved": false,
       "resolution": ""
     }

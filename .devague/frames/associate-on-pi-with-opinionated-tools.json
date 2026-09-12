@@ -4,7 +4,7 @@
   "schema_version": 6,
   "status": "exported",
   "created": "2026-09-12T09:17:50Z",
-  "updated": "2026-09-12T12:12:08Z",
+  "updated": "2026-09-12T12:28:12Z",
   "claims": [
     {
       "id": "c1",
@@ -1354,7 +1354,7 @@
         "policy.json"
       ],
       "origin": "llm",
-      "status": "proposed"
+      "status": "approved"
     },
     {
       "id": "l9",
@@ -1366,7 +1366,7 @@
         "c48"
       ],
       "origin": "llm",
-      "status": "proposed"
+      "status": "approved"
     },
     {
       "id": "l10",
@@ -1378,7 +1378,7 @@
         "t2"
       ],
       "origin": "llm",
-      "status": "proposed"
+      "status": "approved"
     },
     {
       "id": "l11",
@@ -1389,7 +1389,7 @@
         "t2"
       ],
       "origin": "llm",
-      "status": "proposed"
+      "status": "approved"
     },
     {
       "id": "l12",
@@ -1401,7 +1401,7 @@
         "c42"
       ],
       "origin": "llm",
-      "status": "proposed"
+      "status": "approved"
     },
     {
       "id": "l13",
@@ -1413,7 +1413,7 @@
         "h1"
       ],
       "origin": "llm",
-      "status": "proposed"
+      "status": "approved"
     },
     {
       "id": "l14",
@@ -1424,6 +1424,52 @@
         "t3",
         "t17",
         "v3"
+      ],
+      "origin": "llm",
+      "status": "approved"
+    },
+    {
+      "id": "l15",
+      "code": "control-absent",
+      "what": "t13: the first AGENTS.md draft drifted from the verbatim instruction ('does not fit the bound' vs 'cannot be completed'); the agent's own test caught it rather than attention to the brief",
+      "skipped_check": "re-read the brief against the prose before running the test",
+      "refs": [
+        "t13"
+      ],
+      "origin": "llm",
+      "status": "proposed"
+    },
+    {
+      "id": "l16",
+      "code": "n-below-claim",
+      "what": "t13: criterion 2 was framed as a yes/no about one file; the ancestor CLAUDE.md leak surfaced only because the whole contextFiles list was printed \u2014 a grep-for-marker check would have reported a clean pass and missed a regression against c50",
+      "skipped_check": "enumerate every context file Pi loaded, not only the expected one",
+      "refs": [
+        "t13",
+        "c50"
+      ],
+      "origin": "llm",
+      "status": "proposed"
+    },
+    {
+      "id": "l17",
+      "code": "assumption-for-measurement",
+      "what": "t9: a mean_tool_calls expectation was computed in the agent's head (1.89 vs the real 2.0); the test caught it and the expectation was corrected, with the sum shown in a comment",
+      "skipped_check": "compute the expected aggregate from the fixture rather than mentally",
+      "refs": [
+        "t9"
+      ],
+      "origin": "llm",
+      "status": "proposed"
+    },
+    {
+      "id": "l18",
+      "code": "control-absent",
+      "what": "t9: whether a call blocked by the write guard is observed by the walk recorder (do later tool_call handlers run after a block?) was not resolved from the docs; a blocked call surfaces today as an entry with an error and run outcome 'error', never 'refused'",
+      "skipped_check": "a test that blocks a call via the guard and asserts what the recorder wrote",
+      "refs": [
+        "t9",
+        "t2"
       ],
       "origin": "llm",
       "status": "proposed"
