@@ -15,6 +15,7 @@ Layout::
     config.py   the complete configuration every row is stamped with
     runner.py   run one case / the whole suite
     table.py    render the table
+    walkstats.py  aggregate many runs' walk.jsonl into a latency/failure table
 
 A run against the stub adapter exercises all of that with no pi and no lane. It
 is labelled ``plumbing-only`` everywhere it is reported, and must never be

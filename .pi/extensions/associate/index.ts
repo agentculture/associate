@@ -26,6 +26,7 @@ import { Type } from "typebox";
 import { evaluateToolCall } from "./lib/guard.ts";
 import { normalizeHandback, unreferencedCount } from "./lib/handback.ts";
 import { createAssociateContext, loadToolModules } from "./lib/runtime.ts";
+import { installWalkRecorder } from "./lib/walk.ts";
 
 /** Registered by this file rather than by a module under `tools/`. */
 export const CORE_TOOL_NAMES = ["associate_ready", "finish"] as const;
@@ -33,6 +34,12 @@ export const CORE_TOOL_NAMES = ["associate_ready", "finish"] as const;
 export default async function (pi: ExtensionAPI) {
   const ctx = createAssociateContext();
   const { contract, session } = ctx;
+
+  // ------------------------------------------------------------ walk record
+  // Installed before anything else registers a tool, so the first tool event
+  // of the run is already recorded and `walk.jsonl` exists for the sentinel to
+  // name. The export is unconditional — there is no flag (spec c23).
+  const walk = installWalkRecorder(pi, ctx);
 
   // ---------------------------------------------------------------- sentinel
   pi.registerTool({
@@ -57,6 +64,7 @@ export default async function (pi: ExtensionAPI) {
           id_from_env: session.sessionIdFromEnv,
           scratch_dir: session.scratchDir,
           export_dir: session.exportDir,
+          walk_path: walk.walkPath,
         },
         // What a launcher checks (spec c34). Measured against pi 0.84.2:
         // `getAllTools()` lists every *configured* tool, built-ins included,

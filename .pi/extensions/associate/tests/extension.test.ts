@@ -144,7 +144,9 @@ test("the tool_call hook is registered and blocks a write into the checkout", as
   const s = scratch();
   try {
     await withExtension(s.env, async ({ pi }) => {
-      assert.equal(pi.handlers.get("tool_call")?.length, 1, "exactly one tool_call hook");
+      // The guard is one of the `tool_call` hooks; the walk recorder is the
+      // other, and it records without ever blocking.
+      assert.ok((pi.handlers.get("tool_call")?.length ?? 0) >= 1, "no tool_call hook");
 
       const blocked = (await pi.fireToolCall({
         toolName: "write",
