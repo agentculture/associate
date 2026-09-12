@@ -241,3 +241,10 @@ skills.local.yaml
 .pi/git/
 node_modules/
 .associate-runs/
+
+# The Pi extension's own TypeScript modules live in `.pi/extensions/*/lib/`,
+# which the Python `lib/` rule above (setuptools build output) would otherwise
+# swallow. Re-include that tree explicitly — the directory itself has to be
+# un-excluded before git will look at the files inside it.
+!.pi/extensions/*/lib/
+!.pi/extensions/*/lib/**
