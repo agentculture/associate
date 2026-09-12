@@ -2,7 +2,7 @@
   "plan_slug": "associate-on-pi-with-opinionated-tools",
   "schema_version": 2,
   "created": "2026-09-12T11:41:38Z",
-  "updated": "2026-09-12T14:30:06Z",
+  "updated": "2026-09-12T14:52:29Z",
   "deviations": [
     {
       "id": "d1",
@@ -127,7 +127,7 @@
         "t17"
       ],
       "origin": "llm",
-      "status": "proposed",
+      "status": "approved",
       "classification": "acceptable",
       "seq": 17
     }
@@ -284,6 +284,82 @@
       "status": "proposed",
       "superseded": false,
       "seq": 16
+    },
+    {
+      "id": "e9",
+      "obligation_ref": "o12",
+      "test_ref": "manual: issue #3 run 1 on lobes-cli via associate run; reviewer check of all 9 path:line citations against the source (scratchpad t15-issue3-r1-review.md)",
+      "behavior_text": "each returned line is prefixed with its absolute file line number regardless of the requested window; a wrong path:N citation is flagged by the verifier",
+      "contract_text": "c24: absolute line numbers and citation post-verification",
+      "evidence_type": "manual",
+      "strength": "execution",
+      "strength_basis": "9/9 citations resolved to recorded read ranges (ENCOUNTERED); reads used start_line windows (525, 1017, 1482...) and the cited absolute lines were correct in 8 of 9 cases; the 9th (server.py:3375 for the serve() thread pattern) was encountered but does not support its statement \u2014 the verifier correctly claims encounter only",
+      "outcome": "pass",
+      "run": {
+        "timestamp": "2026-09-12",
+        "commit": "7793887"
+      },
+      "origin": "llm",
+      "status": "proposed",
+      "superseded": false,
+      "seq": 18
+    },
+    {
+      "id": "e10",
+      "obligation_ref": "o13",
+      "test_ref": "manual: issue #3 run 1 artifacts",
+      "behavior_text": "walk ids are monotonic, read entries carry content hashes, statement entries carry evidence lists, and --continue-from loads the walk as first context",
+      "contract_text": "c25: pass the torch",
+      "evidence_type": "observation",
+      "strength": "execution",
+      "strength_basis": "walk.jsonl w1..w69 monotonic with sha256 on reads; statements.json 9 entries each with an evidence list and status referenced; the continue-from half was verified by t10's live check, not this run",
+      "outcome": "pass",
+      "run": {
+        "timestamp": "2026-09-12",
+        "commit": "7793887"
+      },
+      "origin": "llm",
+      "status": "proposed",
+      "superseded": false,
+      "seq": 19
+    },
+    {
+      "id": "e11",
+      "obligation_ref": "o17",
+      "test_ref": "manual: issue #3 run 1 statements.md Completeness section",
+      "behavior_text": "the not-fully-read marker is present exactly when a tool truncated its input, set by the tool",
+      "contract_text": "c31: a summary ships with what makes it checkable",
+      "evidence_type": "observation",
+      "strength": "execution",
+      "strength_basis": "server.py (5466 lines) exceeded the read budget; the walk's run record has truncated=true and statements.md carries NOT FULLY READ; set from the walk flags, not the model",
+      "outcome": "pass",
+      "run": {
+        "timestamp": "2026-09-12",
+        "commit": "7793887"
+      },
+      "origin": "llm",
+      "status": "proposed",
+      "superseded": false,
+      "seq": 20
+    },
+    {
+      "id": "e12",
+      "obligation_ref": "o8",
+      "test_ref": "manual: culture agents message spark-associate '<read AGENTS.md ...>' after the d9 restart; culture channel read '#general'",
+      "behavior_text": "the agent answers one channel message end to end through pi-acp on a real culture server",
+      "contract_text": "c15: culture's ACP backend is exercised end to end with pi-acp",
+      "evidence_type": "observation",
+      "strength": "execution",
+      "strength_basis": "observed 2026-09-12 ~17:44 local: three lines spoken by <spark-associate> appeared in #general, relayed by culture's ACP bridge from pi-acp; so the message reached the agent, pi ran under the associate extension (walk export 20260912T144305Z, 35 tool calls) and its text came back over IRC. Caveats, recorded as risk r30: culture relays every assistant text chunk, so the channel received working narration rather than only the final answer; culture's ACP prompt timed out the turn at 5 min and retried; culture's injected prompt claims irc tools the agent lacks, steering it off-task. Supersedes e8 (fail) which measured the pre-d9 state",
+      "outcome": "pass",
+      "run": {
+        "timestamp": "2026-09-12",
+        "commit": "7793887"
+      },
+      "origin": "llm",
+      "status": "proposed",
+      "superseded": false,
+      "seq": 21
     }
   ],
   "deltas": [],
