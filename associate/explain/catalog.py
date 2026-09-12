@@ -115,11 +115,23 @@ adapter can prove it is contained. That refusal is the verb's point.
 
 Pi's non-interactive modes load a project's `.pi/extensions` only on a trusted
 checkout; without trust they fall back to Pi's **full built-in tool set**,
-`edit` and `write` included. So the launcher passes `--approve` and then checks
-the tool list **pi itself reports** — the `associate_ready` sentinel's result in
-the `--mode json` event stream, never the presence of a config file on disk. A
-run whose sentinel never arrives, or whose report lists an active writer tool,
-exits `2` and serves nothing.
+`edit` and `write` included. So the launcher checks the tool list **pi itself
+reports**, never the presence of a config file on disk. A run with no report, or
+whose report lists an active writer tool, exits `2` and serves nothing.
+
+Readiness is proven by a **preflight**, not by the task turn. Every run is two
+pi invocations: the first adds `-e lib/preflight.ts`, an extension whose only
+handler ends the process on `before_agent_start`, so pi loads every extension,
+fires `session_start` — where the associate extension writes its report to
+`<export dir>/ready.json` — and then exits before any model request. The
+launcher reads that file, and only then runs the real task turn, unchanged.
+Asking the model to call `associate_ready` in the same turn as the task was the
+earlier design and it was not a proof: a model handed real work goes to the
+work, and healthy runs were refused for it. The extension itself is passed
+explicitly with `-e <index.ts>` in both invocations, so the lane loads in **any**
+checkout — a fixture repo, an unrelated project — rather than depending on the
+examined checkout carrying its own `.pi/`. `$ASSOCIATE_EXTENSION_PATH` overrides
+which `index.ts` that is.
 
 Measured against pi 0.84.2: the *full* tool list still names `edit` and `write`
 even when they are inactive, so the check is on `active_tools` and
@@ -127,7 +139,7 @@ even when they are inactive, so the check is on `active_tools` and
 
 ## What it passes pi
 
-`-p --mode json --no-session --approve --no-context-files`, with
+`-p --mode json --no-session --approve --no-context-files -e <index.ts>`, with
 `--no-context-files` there because pi otherwise loads `AGENTS.md`/`CLAUDE.md`
 from every *ancestor* directory — a workspace-level file one level above the
 checkout would leak into the system prompt. The checkout's own `AGENTS.md` is

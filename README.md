@@ -106,7 +106,7 @@ uv run teken cli doctor . --strict    # the agent-first rubric gate CI runs
 | `overview` | Read-only descriptive snapshot of the agent. |
 | `doctor` | Check the agent-identity invariants (prompt-file-present, backend-consistency). |
 | `cli overview` | Describe the CLI surface itself. |
-| `run [prompt]` | Run one task on a harness adapter (`pi` by default). Exits `2` **without serving** unless pi reports the `associate_ready` sentinel and no active writer tool. |
+| `run [prompt]` | Run one task on a harness adapter (`pi` by default). Exits `2` **without serving** unless a preflight proves the extension loaded with no active writer tool. |
 | `bench --harness <name>` | Run the behavioral suite against one adapter (`pi` or `stub`) and print a per-category pass/fail table. |
 
 Every command takes `--json`. **Results go to stdout, errors and diagnostics go
@@ -117,6 +117,21 @@ environment error, `3+` reserved.
 
 The runtime package has **no third-party dependencies** — it installs and starts
 fast, which is the whole point of a harness.
+
+### How `associate run` proves the lane is contained
+
+Readiness is proven by a **preflight**, never by hoping the model calls a
+sentinel tool mid-task. Each run is two `pi` invocations: the first adds
+`-e <extension>/lib/preflight.ts`, an extension whose only handler ends the
+process on `before_agent_start`, so pi loads every extension, fires
+`session_start` — where the associate extension writes its readiness report to
+`<export dir>/ready.json` — and exits before a single model request. The
+launcher reads that file, refuses with exit `2` if it is missing or names an
+active writer tool, and only then runs the real task turn. The extension is
+passed explicitly with `-e <index.ts>` in both invocations, so the lane loads in
+**any** checkout — a fixture repo, an unrelated project — instead of depending on
+the examined checkout carrying its own `.pi/`; `ASSOCIATE_EXTENSION_PATH`
+overrides which `index.ts` that is.
 
 ## What you get
 
@@ -197,6 +212,7 @@ variable is unset.
 | `ASSOCIATE_EXPORT_ROOT` | `.associate-runs` beside the checkout | Where the run's session directory (`<root>/<session id>/export`) is created — always outside the examined checkout. |
 | `ASSOCIATE_CONTINUE_FROM` | — | A prior run's export directory, loaded as this session's first context instead of re-walking it. Set by `associate run --continue-from`. |
 | `ASSOCIATE_INJECT_PROMPT` | — | Set to `1` by `associate run`: with pi's ancestor context-file discovery turned off, the extension injects the checkout's own `AGENTS.md` and nothing above it. |
+| `ASSOCIATE_EXTENSION_PATH` | the `.pi/extensions/associate/index.ts` above the installed package | The extension entry point `associate run` hands pi with `-e`, in both the preflight and the task turn. |
 
 The launcher checks the installed `pi` against the tested pin (**0.84.2**) and
 warns on stderr naming that version — it never refuses on a version number

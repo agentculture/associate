@@ -55,17 +55,23 @@ if "--version" in argv or "-v" in argv:
 
 root = Path(os.environ["ASSOCIATE_EXPORT_ROOT"])
 root.mkdir(parents=True, exist_ok=True)
-(root / "invocation.json").write_text(
-    json.dumps(
-        {{
-            "argv": argv,
-            "cwd": os.getcwd(),
-            "env": {{k: v for k, v in os.environ.items() if k.startswith("ASSOCIATE_")}},
-            "stdin_closed": sys.stdin.read() == "",
-        }}
-    ),
-    encoding="utf-8",
+# The launcher invokes pi TWICE per run (deviation d8): a preflight that loads
+# the extensions and exits, then the task turn. Both are recorded, in order.
+invocations_path = root / "invocation.json"
+invocations = (
+    json.loads(invocations_path.read_text(encoding="utf-8"))
+    if invocations_path.exists()
+    else []
 )
+invocations.append(
+    {{
+        "argv": argv,
+        "cwd": os.getcwd(),
+        "env": {{k: v for k, v in os.environ.items() if k.startswith("ASSOCIATE_")}},
+        "stdin_closed": sys.stdin.read() == "",
+    }}
+)
+invocations_path.write_text(json.dumps(invocations), encoding="utf-8")
 
 export = root / os.environ["ASSOCIATE_SESSION_ID"] / "export"
 export.mkdir(parents=True, exist_ok=True)
@@ -79,20 +85,30 @@ run_record = {{
     encoding="utf-8",
 )
 
+report = {{
+    "ok": True,
+    "extension_version": "0.1.0",
+    "contract_version": 1,
+    "contract_dir": os.environ.get("ASSOCIATE_CONTRACT_DIR", ""),
+    "contract_source": "env",
+    "tools": ["read", "bash", "edit", "write", "associate_ready", "finish"],
+    "active_tools": ["associate_ready", "finish", "bash"] + WRITERS,
+    "writer_tools_active": WRITERS,
+    "session": {{"id": os.environ["ASSOCIATE_SESSION_ID"], "export_dir": str(export)}},
+}}
+if READY:
+    # What the real extension writes on session_start, before any model request.
+    (export / "ready.json").write_text(json.dumps(report), encoding="utf-8")
+
 print(json.dumps({{"type": "session", "version": 3, "id": "fake", "cwd": os.getcwd()}}))
+
+if any(arg.endswith("preflight.ts") for arg in argv):
+    # The preflight extension ends the process on before_agent_start: no turn
+    # runs, so no sentinel event is ever emitted.
+    raise SystemExit(0)
+
 print(json.dumps({{"type": "agent_start"}}))
 if READY:
-    report = {{
-        "ok": True,
-        "extension_version": "0.1.0",
-        "contract_version": 1,
-        "contract_dir": os.environ.get("ASSOCIATE_CONTRACT_DIR", ""),
-        "contract_source": "env",
-        "tools": ["read", "bash", "edit", "write", "associate_ready", "finish"],
-        "active_tools": ["associate_ready", "finish", "bash"] + WRITERS,
-        "writer_tools_active": WRITERS,
-        "session": {{"id": os.environ["ASSOCIATE_SESSION_ID"], "export_dir": str(export)}},
-    }}
     print(
         json.dumps(
             {{
@@ -213,22 +229,6 @@ def test_unknown_harness_in_json_mode_emits_the_error_object(
 # ---------------------------------------------------------------- fail closed
 
 
-def test_a_run_without_the_sentinel_fails_closed(
-    fake_pi, checkout: Path, tmp_path: Path, capsys: pytest.CaptureFixture[str]
-):
-    """Criterion 1: no sentinel in the reported tool list → exit 2, nothing served."""
-    fake_pi(ready=False)
-
-    code = _run([], checkout, tmp_path)
-    assert code == 2
-
-    captured = capsys.readouterr()
-    assert captured.out == "", "a refused run must serve nothing on stdout"
-    assert "associate_ready" in captured.err
-    assert "extension" in captured.err
-    assert "--approve" in captured.err or "approve" in captured.err
-
-
 def test_an_active_writer_tool_fails_closed(
     fake_pi, checkout: Path, tmp_path: Path, capsys: pytest.CaptureFixture[str]
 ):
@@ -288,8 +288,18 @@ def test_json_mode_prints_the_result_object(
 # ------------------------------------------------- what the launcher passes pi
 
 
-def _invocation(tmp_path: Path) -> dict:
+def _invocations(tmp_path: Path) -> list[dict]:
+    """Every pi invocation the run made, in order: the preflight, then the task."""
     return json.loads((tmp_path / "runs" / "invocation.json").read_text(encoding="utf-8"))
+
+
+def _invocation(tmp_path: Path) -> dict:
+    """The **task** invocation — the last one, after the d8 preflight."""
+    return _invocations(tmp_path)[-1]
+
+
+def _extension_flags(argv: list[str]) -> list[str]:
+    return [argv[index + 1] for index, arg in enumerate(argv) if arg == "-e"]
 
 
 def test_the_launcher_passes_the_flags_the_contract_requires(
@@ -310,6 +320,106 @@ def test_the_launcher_passes_the_flags_the_contract_requires(
     assert "ASSOCIATE_CONTINUE_FROM" not in invocation["env"]
     # The recorded gotcha: pi blocks on an inherited stdin, so it gets DEVNULL.
     assert invocation["stdin_closed"] is True
+
+
+def test_the_launcher_always_passes_the_extension_explicitly(
+    fake_pi, checkout: Path, tmp_path: Path
+):
+    """d8, half two: `-e <index.ts>` so the extension loads in ANY checkout.
+
+    Relying on the examined checkout carrying its own ``.pi/`` is what made
+    ``associate bench --harness pi`` fail in a fixture repo with ``Unknown
+    provider "associate"`` and no extension at all.
+    """
+    from associate.harness.pi import resolve_extension_path
+
+    assert _run([], checkout, tmp_path) == 0
+
+    index = str(resolve_extension_path())
+    for invocation in _invocations(tmp_path):
+        assert index in _extension_flags(invocation["argv"]), invocation["argv"]
+
+
+def test_the_preflight_runs_first_and_loads_the_preflight_extension(
+    fake_pi, checkout: Path, tmp_path: Path
+):
+    """d8, half one: readiness is proven by a run that never reaches the model."""
+    assert _run([], checkout, tmp_path) == 0
+
+    invocations = _invocations(tmp_path)
+    assert len(invocations) == 2, "one preflight, then the task turn"
+
+    preflight, task = invocations
+    preflight_flags = _extension_flags(preflight["argv"])
+    assert any(path.endswith("lib/preflight.ts") for path in preflight_flags), preflight_flags
+    assert not any(
+        path.endswith("lib/preflight.ts") for path in _extension_flags(task["argv"])
+    ), "the task turn must not exit before the model runs"
+    # Same session, same cwd: the preflight writes the ready.json the task
+    # run's export directory is checked for.
+    assert preflight["env"]["ASSOCIATE_SESSION_ID"] == task["env"]["ASSOCIATE_SESSION_ID"]
+    assert preflight["cwd"] == task["cwd"] == str(checkout.resolve())
+    assert preflight["stdin_closed"] is True
+
+
+def test_a_missing_ready_json_fails_closed_before_the_task_runs(
+    fake_pi, checkout: Path, tmp_path: Path, capsys: pytest.CaptureFixture[str]
+):
+    fake_pi(ready=False)
+
+    assert _run([], checkout, tmp_path) == 2
+
+    captured = capsys.readouterr()
+    assert captured.out == "", "a refused run must serve nothing on stdout"
+    assert "ready.json" in captured.err
+    assert "index.ts" in captured.err
+    assert "extension" in captured.err
+    assert "approve" in captured.err
+    # The task turn is never reached: only the preflight ran.
+    assert len(_invocations(tmp_path)) == 1
+
+
+def test_a_stale_ready_json_cannot_stand_in_for_this_run(
+    fake_pi, checkout: Path, tmp_path: Path, capsys: pytest.CaptureFixture[str]
+):
+    """The gate is evidence *this* preflight produced, not a leftover file."""
+    fake_pi(ready=False)
+    stale = tmp_path / "runs" / "pinned" / "export"
+    stale.mkdir(parents=True)
+    (stale / "ready.json").write_text(
+        json.dumps({"ok": True, "active_tools": ["associate_ready"], "writer_tools_active": []}),
+        encoding="utf-8",
+    )
+
+    assert _run(["--session-id", "pinned"], checkout, tmp_path) == 2
+    assert "ready.json" in capsys.readouterr().err
+
+
+def test_the_extension_path_resolves_from_the_repo(monkeypatch: pytest.MonkeyPatch):
+    from associate.harness.pi import resolve_extension_path
+
+    monkeypatch.delenv("ASSOCIATE_EXTENSION_PATH", raising=False)
+    resolved = resolve_extension_path()
+    assert resolved == REPO_ROOT / ".pi" / "extensions" / "associate" / "index.ts"
+    assert resolved.is_file()
+
+
+def test_the_extension_path_honours_the_environment(tmp_path: Path):
+    from associate.harness.pi import resolve_extension_path
+
+    override = tmp_path / "elsewhere" / "index.ts"
+    override.parent.mkdir(parents=True)
+    override.write_text("export default async function () {}\n", encoding="utf-8")
+
+    assert resolve_extension_path({"ASSOCIATE_EXTENSION_PATH": str(override)}) == override
+
+
+def test_an_extension_path_that_does_not_exist_is_a_harness_error(tmp_path: Path):
+    from associate.harness.pi import resolve_extension_path
+
+    with pytest.raises(HarnessError) as err:
+        resolve_extension_path({"ASSOCIATE_EXTENSION_PATH": str(tmp_path / "nope.ts")})
+    assert "ASSOCIATE_EXTENSION_PATH" in (err.value.remediation or "")
 
 
 def test_continue_from_reaches_the_extension(fake_pi, checkout: Path, tmp_path: Path):
@@ -425,12 +535,17 @@ def test_the_real_pi_writes_both_artifacts_against_the_fake_lane(
     leaves the checkout untouched.
 
     The fake lane answers plain JSON where pi's ``openai-completions`` path
-    wants SSE (see ``tests/test_provider_wire.py``), so the turn never
-    completes and the sentinel never arrives: the launcher **fails closed**,
-    which is the correct behaviour and is asserted as such. What the run does
-    prove is that the extension loaded and persisted its artifacts without any
-    model turn — ``statements.md`` at construction, ``walk.jsonl`` from the
-    exit hook — which is exactly claim c30's "persistence is the harness's job".
+    wants SSE (see ``tests/test_provider_wire.py``), so the task turn never
+    completes. Under deviation d8 that is no longer a refusal: readiness is
+    proven by the **preflight**, which loads the extension, writes
+    ``ready.json`` at ``session_start`` and exits before any provider request —
+    so a dead lane cannot make a loaded extension look unloaded. The run
+    therefore serves (exit 0) with the artifacts the extension persisted on its
+    own — ``statements.md`` at construction, ``walk.jsonl`` from the exit hook —
+    which is exactly claim c30's "persistence is the harness's job".
+
+    This is the honest end-to-end proof of d8 with the real binary: no model
+    ever answered, and the gate still passed on evidence the extension wrote.
     """
     require_pi()
 
@@ -461,7 +576,8 @@ def test_the_real_pi_writes_both_artifacts_against_the_fake_lane(
 
     assert (export_dir / "statements.md").is_file(), "the extension must write statements.md"
     assert (export_dir / "walk.jsonl").is_file(), "the extension must write walk.jsonl"
-    assert code == 2, "with no completed turn there is no sentinel, so the launcher refuses"
+    assert (export_dir / "ready.json").is_file(), "the preflight must write ready.json"
+    assert code == 0, "the preflight proved readiness without any completed model turn"
 
 
 def test_the_real_pi_help_offers_the_flags_the_launcher_passes():

@@ -9,7 +9,7 @@
 
 import test from "node:test";
 import assert from "node:assert/strict";
-import { existsSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
+import { existsSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { loadExtension } from "./load-extension.ts";
@@ -229,4 +229,51 @@ test("writers are deactivated at load even when the host offered them (deviation
   // the argv shell overrides `bash` and declares itself a non-writer, so it stays
   assert.ok(active.includes("bash"));
   cleanup();
+});
+
+test("session_start writes ready.json carrying the sentinel's report (deviation d8)", async () => {
+  // d8 (measured 2026-09-12): proving readiness by hoping the model calls
+  // `associate_ready` in the same turn as the task is not a proof — with a real
+  // task prompt the model skipped the sentinel and a healthy run was refused.
+  // The report is therefore also written to disk at session_start, where a
+  // preflight invocation can read it without any model request at all.
+  const s = scratch();
+  const readyPath = join(s.root, "unit-session", "export", "ready.json");
+  try {
+    const { pi, cleanup } = await loadExtension(s.env, (fake) => {
+      fake.builtinTools = ["read", "bash", "edit", "write"];
+      fake.activeBuiltinTools = ["read", "bash", "edit", "write"];
+    });
+    try {
+      assert.ok(!existsSync(readyPath), "ready.json is written on session_start, not at load");
+
+      await pi.fireSessionStart();
+      assert.ok(existsSync(readyPath), `no ready.json at ${readyPath}`);
+
+      const onDisk = JSON.parse(readFileSync(readyPath, "utf8")) as Record<string, any>;
+      const sentinel = JSON.parse(
+        (await pi.tool("associate_ready").execute("call-1", {})).content[0]!.text,
+      ) as Record<string, any>;
+      assert.deepEqual(
+        Object.keys(onDisk).sort(),
+        Object.keys(sentinel).sort(),
+        "ready.json must carry the same fields the sentinel reports",
+      );
+      assert.equal(onDisk.ok, true);
+      assert.match(onDisk.extension_version, /^\d+\.\d+\.\d+$/);
+      assert.ok(onDisk.contract_version >= 1);
+      assert.equal(onDisk.session.id, "unit-session");
+      assert.ok(onDisk.active_tools.includes("associate_ready"));
+      assert.ok(onDisk.active_tools.includes("finish"));
+      // Written AFTER dropWriters, so no writer can appear in either list.
+      assert.deepEqual(onDisk.writer_tools_active, [], "no writer may be active in ready.json");
+      for (const writer of ["edit", "write"]) {
+        assert.ok(!onDisk.active_tools.includes(writer), `${writer} is still active`);
+      }
+    } finally {
+      cleanup();
+    }
+  } finally {
+    s.dispose();
+  }
 });

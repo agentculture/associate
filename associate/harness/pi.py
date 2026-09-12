@@ -6,16 +6,32 @@ package, and the unrelated PyPI distribution that happens to be named
 ``pi-coding-agent`` is never installed: spec claim c13 makes driving Pi a
 *process* boundary, which is what keeps ``dependencies = []`` true.
 
-How readiness is decided (c34, honesty condition h26)
------------------------------------------------------
+How readiness is decided (c34, honesty condition h26, deviation d8)
+-------------------------------------------------------------------
 h26 pins the mechanism: the check is made **from the tool list Pi reports**,
 never from trusting that ``.pi/settings.json`` or the extension directory
 exists on disk. Pi 0.84.2 offers no ``--list-tools``, and its JSON event stream
 carries no startup tool inventory — the session header is
-``{"type":"session",…}`` and nothing else precedes the first turn. The only
-list Pi reports is therefore the one the extension's ``associate_ready``
-sentinel returns, so this adapter drives one turn ("call ``associate_ready``,
-then ``finish``") and reads the report off the ``tool_execution_end`` event.
+``{"type":"session",…}`` and nothing else precedes the first turn.
+
+The first implementation read that list off an ``associate_ready`` tool result
+in the task's own turn, which made the proof depend on the *model* choosing to
+call the sentinel: measured on the live lane on 2026-09-12, a model handed real
+work went straight to the work and a perfectly healthy run was refused.
+Deviation d8 moves the proof off the model. Every run is now two pi
+invocations:
+
+1. a **preflight** — the same argv plus ``-e lib/preflight.ts``, an extension
+   whose only handler ends the process on ``before_agent_start``. Pi fires
+   ``session_start`` at startup, where the associate extension writes the same
+   report the sentinel returns to ``<export dir>/ready.json``; the preflight
+   then exits before a single provider request. No ``ready.json`` means the
+   extension did not load, and the run is refused right there;
+2. the **task turn**, unchanged, run only once that report passed the gate.
+
+The extension is also passed explicitly with ``-e <index.ts>`` in *both*, so
+the lane travels with the launcher instead of depending on the examined
+checkout carrying its own ``.pi/`` — the second half of d8.
 
 Two things are checked on that report, and the distinction is measured, not
 guessed (risk r14, against pi 0.84.2): ``defaultTools: []`` narrows the
@@ -71,7 +87,9 @@ __all__ = [
     "PINNED_PI_VERSION",
     "SENTINEL_TOOL",
     "READINESS_PROMPT",
+    "READY_REPORT_FILENAME",
     "resolve_export_root",
+    "resolve_extension_path",
     "sanitize_session_id",
     "generate_session_id",
 ]
@@ -94,6 +112,21 @@ READINESS_PROMPT = (
     "Call the associate_ready tool to confirm the extension is loaded, then call "
     "finish with a one-line summary of what it reported. Do nothing else."
 )
+
+#: What the extension writes into the export directory on ``session_start``.
+READY_REPORT_FILENAME = "ready.json"
+
+#: Where the extension lives inside a checkout, relative to the repo root.
+EXTENSION_RELATIVE_PATH = Path(".pi") / "extensions" / "associate" / "index.ts"
+
+#: The preflight extension, beside the entry point it accompanies.
+PREFLIGHT_RELATIVE_PATH = Path("lib") / "preflight.ts"
+
+#: Overrides the resolved entry point — an installed copy, or a fork's.
+EXTENSION_PATH_ENV = "ASSOCIATE_EXTENSION_PATH"
+
+#: A preflight loads extensions and exits; it must never wait a full task budget.
+PREFLIGHT_TIMEOUT = 60.0
 
 _UNSAFE_SEGMENT = re.compile(r"[^A-Za-z0-9._-]+")
 _LEADING_JUNK = re.compile(r"^[.-]+")
@@ -166,6 +199,60 @@ def resolve_export_root(checkout: Path | str, override: str | None = None) -> Pa
 
 def _is_inside(parent: Path, child: Path) -> bool:
     return child == parent or parent in child.parents
+
+
+# ------------------------------------------------------------ the extension
+
+
+def resolve_extension_path(env: dict[str, str] | None = None) -> Path:
+    """The extension entry point this launcher hands pi with ``-e``.
+
+    Deviation d8, half two. Pi auto-discovers ``.pi/extensions/*/index.ts``
+    **relative to the checkout it is run in**, so an adapter that relies on
+    discovery only works when the examined checkout happens to be this repo:
+    ``associate bench --harness pi`` in a fixture checkout got ``Unknown
+    provider "associate"`` and no extension at all, which is the precise
+    fail-open c34 exists to close. Naming the file explicitly makes the lane
+    the *launcher's* property rather than the examined repo's, and needs
+    neither project trust nor a global install.
+
+    Resolution order: ``$ASSOCIATE_EXTENSION_PATH`` (an installed or forked
+    copy), else the repo the package was imported from, found by walking up
+    from this module. Raises ``HarnessError`` when neither exists — a run
+    without the extension is one with pi's full built-in tool set.
+    """
+    source = env if env is not None else os.environ
+    override = (source.get(EXTENSION_PATH_ENV) or "").strip()
+    if override:
+        candidate = Path(override).expanduser().resolve()
+        if candidate.is_file():
+            return candidate
+        raise HarnessError(
+            f"{EXTENSION_PATH_ENV} names {candidate}, which is not a file",
+            remediation=(
+                f"point {EXTENSION_PATH_ENV} at the extension's index.ts, or unset it to use "
+                "the copy shipped in this checkout"
+            ),
+        )
+
+    for parent in Path(__file__).resolve().parents:
+        candidate = parent / EXTENSION_RELATIVE_PATH
+        if candidate.is_file():
+            return candidate
+
+    raise HarnessError(
+        f"the associate Pi extension ({EXTENSION_RELATIVE_PATH}) was not found above "
+        f"{Path(__file__).resolve().parent}",
+        remediation=(
+            f"run from a checkout of associate, or set {EXTENSION_PATH_ENV} to the "
+            "index.ts of an extension copy pi should load"
+        ),
+    )
+
+
+def preflight_extension_path(index_path: Path) -> Path:
+    """``lib/preflight.ts`` beside *index_path* — the load-and-exit extension."""
+    return index_path.parent / PREFLIGHT_RELATIVE_PATH
 
 
 # ------------------------------------------------------------- event stream
@@ -287,39 +374,59 @@ class PiHarness(Harness):
         executable = self._resolve_executable()
         self._check_version(executable)
 
-        prompt = self._prompt or task.get("prompt") or READINESS_PROMPT
-        argv = [executable, *self.pi_arguments(), prompt]
+        base_args = self.pi_arguments()
         env = self.environment(task)
 
-        try:
-            completed = subprocess.run(  # nosec B603 - fixed argv, shell=False
-                argv,
-                capture_output=True,
-                text=True,
-                cwd=str(self._checkout),
-                env=env,
-                # The recorded gotcha: pi blocks reading an inherited stdin in
-                # print mode, so it is closed rather than passed through.
-                stdin=subprocess.DEVNULL,
-                timeout=self._timeout,
-                check=False,
-            )
-        except subprocess.TimeoutExpired as err:
-            raise HarnessError(
-                f"pi did not finish within {self._timeout:g}s",
-                remediation="raise --timeout, or check that the configured lane is reachable",
-            ) from err
-        except OSError as err:
-            raise HarnessError(
-                f"could not run {executable}: {err}",
-                remediation="install pi and make sure it is on PATH",
-            ) from err
-
-        events = parse_events(completed.stdout)
-        report = sentinel_report(events)
-        self._assert_ready(report, completed)
+        # -- 1. the preflight (deviation d8) -------------------------------
+        # The old proof asked the *model* to call the sentinel in the same turn
+        # as the task; measured on the live lane, a model given real work went
+        # straight to it and a healthy run was refused. So readiness is proven
+        # by a run that never reaches the model at all: `lib/preflight.ts` ends
+        # the process on `before_agent_start`, after `session_start` has
+        # written `ready.json`, and the gate is that file.
+        index_path = resolve_extension_path(self._base_env)
+        preflight_args = [*base_args, "-e", str(preflight_extension_path(index_path))]
+        # A report left by an earlier run under the same pinned session id must
+        # never stand in for this one's: the gate is evidence *this* pi wrote.
+        self.export_dir.mkdir(parents=True, exist_ok=True)
+        (self.export_dir / READY_REPORT_FILENAME).unlink(missing_ok=True)
+        preflight = self._run_pi(
+            executable,
+            [*preflight_args, READINESS_PROMPT],
+            env,
+            timeout=min(PREFLIGHT_TIMEOUT, self._timeout),
+        )
 
         export_dir = self.export_dir
+        report = self._read_ready_report(export_dir)
+        if report is None:
+            tail = (preflight.stderr or "").strip().splitlines()[-3:]
+            if tail:
+                self._warn("associate: pi stderr tail: " + " | ".join(tail))
+            raise ExtensionNotLoadedError(
+                f"the preflight run wrote no {READY_REPORT_FILENAME} in {export_dir}, so the "
+                f"associate extension at {index_path} did not load and the run is refused",
+                remediation=(
+                    f"check that {index_path} loads under the installed pi (it is passed with "
+                    "-e), keep --approve for a checkout whose project files pi must trust, and "
+                    f"set {EXTENSION_PATH_ENV} if the extension lives elsewhere"
+                ),
+            )
+        self._assert_ready(report)
+
+        # -- 2. the task turn, unchanged -----------------------------------
+        prompt = self._prompt or task.get("prompt") or READINESS_PROMPT
+        completed = self._run_pi(executable, [*base_args, prompt], env, timeout=self._timeout)
+
+        # The task run's own session_start rewrites ready.json; the sentinel
+        # event is only a fallback for a pi that somehow wrote no file, and the
+        # preflight's report is the last resort.
+        report = (
+            self._read_ready_report(export_dir)
+            or sentinel_report(parse_events(completed.stdout))
+            or report
+        )
+
         self._result = {
             "walk_path": str(export_dir / WALK_FILENAME),
             "statements_path": str(export_dir / STATEMENTS_FILENAME),
@@ -337,6 +444,55 @@ class PiHarness(Harness):
             raise HarnessError("PiHarness.collect() called before submit()")
         return dict(self._result)
 
+    # -- running pi --------------------------------------------------------
+
+    def _run_pi(
+        self,
+        executable: str,
+        argv_tail: list[str],
+        env: dict[str, str],
+        *,
+        timeout: float,
+    ) -> subprocess.CompletedProcess[str]:
+        """One pi invocation: fixed argv, no shell, closed stdin."""
+        try:
+            return subprocess.run(  # nosec B603 - fixed argv, shell=False
+                [executable, *argv_tail],
+                capture_output=True,
+                text=True,
+                cwd=str(self._checkout),
+                env=env,
+                # The recorded gotcha: pi blocks reading an inherited stdin in
+                # print mode, so it is closed rather than passed through.
+                stdin=subprocess.DEVNULL,
+                timeout=timeout,
+                check=False,
+            )
+        except subprocess.TimeoutExpired as err:
+            raise HarnessError(
+                f"pi did not finish within {timeout:g}s",
+                remediation="raise --timeout, or check that the configured lane is reachable",
+            ) from err
+        except OSError as err:
+            raise HarnessError(
+                f"could not run {executable}: {err}",
+                remediation="install pi and make sure it is on PATH",
+            ) from err
+
+    @staticmethod
+    def _read_ready_report(export_dir: Path) -> dict[str, Any] | None:
+        """The ``ready.json`` the extension wrote, or ``None`` if there is none.
+
+        An unreadable or malformed file is *no report*: the launcher then fails
+        closed exactly as it does for a missing one, which is the only safe
+        reading of "the extension may not have loaded".
+        """
+        try:
+            parsed = json.loads((export_dir / READY_REPORT_FILENAME).read_text(encoding="utf-8"))
+        except (OSError, json.JSONDecodeError):
+            return None
+        return parsed if isinstance(parsed, dict) else None
+
     # -- what pi is told ---------------------------------------------------
 
     def pi_arguments(self) -> list[str]:
@@ -352,8 +508,13 @@ class PiHarness(Harness):
           exact fail-open c34 exists to close.
         * ``--no-context-files`` — risk r16: ancestor ``CLAUDE.md``/``AGENTS.md``
           files would leak into the system prompt.
+        * ``-e <index.ts>`` — deviation d8: the extension is named explicitly
+          so it loads in **any** checkout, not only one that happens to carry
+          its own ``.pi/``. ``--approve`` stays: the examined checkout may
+          still carry project files pi needs to trust.
         """
         args = ["-p", "--mode", "json", "--no-session", "--approve", "--no-context-files"]
+        args.extend(["-e", str(resolve_extension_path(self._base_env))])
         provider = self._provider_arguments()
         if provider:
             args.extend(provider)
@@ -436,24 +597,13 @@ class PiHarness(Harness):
             )
         return found or None
 
-    def _assert_ready(
-        self, report: dict[str, Any] | None, completed: subprocess.CompletedProcess[str]
-    ) -> None:
-        """Fail closed unless Pi itself reported a loaded, writer-free extension."""
-        if report is None:
-            tail = (completed.stderr or "").strip().splitlines()[-3:]
-            if tail:
-                self._warn("associate: pi stderr tail: " + " | ".join(tail))
-            raise ExtensionNotLoadedError(
-                f"pi never reported the {SENTINEL_TOOL} tool, so the associate extension "
-                "did not load and the run is refused",
-                remediation=(
-                    "run from a checkout containing .pi/extensions/associate, keep --approve "
-                    "(headless pi ignores project extensions on an untrusted checkout), and "
-                    "check that the configured lane can complete one turn"
-                ),
-            )
+    def _assert_ready(self, report: dict[str, Any]) -> None:
+        """Fail closed unless the report Pi produced names a writer-free lane.
 
+        The report is the preflight's ``ready.json`` (deviation d8) — written
+        by the extension itself at ``session_start``, so it is evidence the
+        extension loaded, not a claim the model made.
+        """
         active = [str(name) for name in report.get("active_tools") or []]
         if SENTINEL_TOOL not in active:
             raise ExtensionNotLoadedError(
