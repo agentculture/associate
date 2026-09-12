@@ -1,0 +1,49 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://github.com/agentculture/associate/contract/statements.schema.json",
+  "title": "associate statements",
+  "description": "Artifact B of a run (issue #4): the model's output, where each claim carries evidence references into the walk. A reference into a recorded read range proves the agent encountered those lines, not that they support the claim.",
+  "type": "object",
+  "required": ["statements", "citations", "not_fully_read"],
+  "properties": {
+    "statements": {"type": "array", "items": {"$ref": "#/$defs/statement"}},
+    "citations": {"type": "array", "items": {"$ref": "#/$defs/citation"}},
+    "not_fully_read": {
+      "type": "boolean",
+      "description": "Set by the tool that truncated, never by the model."
+    },
+    "plumbing_only": {
+      "type": "boolean",
+      "description": "True when the artifact came from a stub adapter: plumbing verified, model reliability not."
+    }
+  },
+  "$defs": {
+    "statement": {
+      "type": "object",
+      "required": ["text", "evidence", "status"],
+      "properties": {
+        "text": {"type": "string"},
+        "evidence": {
+          "type": "array",
+          "items": {"type": "string", "pattern": "^w[1-9][0-9]*$"}
+        },
+        "status": {
+          "enum": ["referenced", "unreferenced"],
+          "description": "unreferenced marks a claim with no evidence reference at all."
+        }
+      }
+    },
+    "citation": {
+      "type": "object",
+      "required": ["path", "line", "check"],
+      "properties": {
+        "path": {"type": "string"},
+        "line": {"type": "integer"},
+        "check": {
+          "enum": ["encountered", "unverifiable"],
+          "description": "encountered = the walk shows this line was read; unverifiable = it does not."
+        }
+      }
+    }
+  }
+}

@@ -1,0 +1,25 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://github.com/agentculture/associate/contract/task.schema.json",
+  "title": "associate task input",
+  "description": "The task an adapter is asked to run. Portable: identical for every harness.",
+  "type": "object",
+  "required": ["id", "prompt", "checkout", "session_id", "export_dir"],
+  "properties": {
+    "id": {"type": "string", "description": "Caller-assigned task id."},
+    "prompt": {"type": "string", "description": "The task text handed to the lane."},
+    "checkout": {"type": "string", "description": "Absolute path of the checkout to examine."},
+    "session_id": {
+      "type": "string",
+      "description": "The mesh/ACP session id, or a generated id for a headless run. Keys the scratch and export dirs."
+    },
+    "export_dir": {
+      "type": "string",
+      "description": "Directory the run's walk.jsonl and statements.json are written to. Outside the examined checkout."
+    },
+    "continue_from": {
+      "type": "string",
+      "description": "Optional export dir of a prior run whose walk is loaded as given context instead of re-walking."
+    }
+  }
+}
