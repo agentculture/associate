@@ -1,6 +1,6 @@
 [project]
 name = "associate"
-version = "0.9.0"
+version = "0.9.1"
 description = "A non-coding agent harness: a fast, reliable worker for read, summarize, and find work across local files and the web. Modelled on the Pi harness, merged from colleague base tools, initially backed by NVIDIA Nemotron 3.5 Lightning. It takes non-coding tool work off colleague so colleague can focus on coding and thinking."
 readme = "README.md"
 license = "Apache-2.0"
