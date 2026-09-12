@@ -2,7 +2,7 @@
   "plan_slug": "associate-on-pi-with-opinionated-tools",
   "schema_version": 2,
   "created": "2026-09-12T11:41:38Z",
-  "updated": "2026-09-12T13:15:25Z",
+  "updated": "2026-09-12T13:19:14Z",
   "deviations": [
     {
       "id": "d1",
@@ -141,6 +141,25 @@
       "status": "proposed",
       "superseded": false,
       "seq": 9
+    },
+    {
+      "id": "e3",
+      "obligation_ref": "o26",
+      "test_ref": "manual, after d7: pi install /home/spark/git/associate (local-path form; git-ref form needs a pushed tag), then in an unrelated directory pi -p --no-session --no-context-files -e dump-tools.ts with a before_agent_start dump of getActiveTools",
+      "behavior_text": "installing the repo as a Pi package and running pi in an unrelated directory yields the associate tool list with no edit or write",
+      "contract_text": "c45/c44: the global install is authoritative for the mesh path so tool restriction never depends on project trust",
+      "evidence_type": "observation",
+      "strength": "execution",
+      "strength_basis": "observed on pi 0.84.2 on this box 2026-09-12 after the d7 fix: active tools read, bash, associate_ready, finish, code_lens, grep, find, ls, web_search, web_page \u2014 no edit, no write; supersedes e1 (fail) which measured the pre-fix state; the git-ref install form remains unmeasured until a tag is pushed",
+      "outcome": "pass",
+      "run": {
+        "timestamp": "2026-09-12",
+        "commit": "2d85336"
+      },
+      "origin": "llm",
+      "status": "proposed",
+      "superseded": false,
+      "seq": 10
     }
   ],
   "deltas": [],
