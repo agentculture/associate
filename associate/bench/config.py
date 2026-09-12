@@ -117,7 +117,7 @@ def _served_model_id(harness: Any, result: dict[str, Any]) -> str:
     if callable(probe):
         try:
             value = probe()
-        except Exception:  # noqa: BLE001 - a probe failure is a column, not a crash
+        except Exception:  # a probe failure is a column, not a crash
             return "unavailable"
         if isinstance(value, str) and value:
             return value

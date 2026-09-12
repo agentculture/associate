@@ -39,6 +39,9 @@ __all__ = [
 
 SCHEMA_NAMES: tuple[str, ...] = ("task", "walk", "statements")
 
+#: Key under which a schema keeps its local subschema definitions.
+DEFS_KEY = "$defs"
+
 
 def contract_dir() -> Path:
     """Absolute path of the contract directory as installed."""
@@ -84,8 +87,8 @@ def _walk_def(key: str) -> dict[str, Any]:
     pointers still resolve.
     """
     walk = load_schema("walk")
-    subschema = dict(walk["$defs"][key])
-    subschema["$defs"] = walk["$defs"]
+    subschema = dict(walk[DEFS_KEY][key])
+    subschema[DEFS_KEY] = walk[DEFS_KEY]
     return subschema
 
 

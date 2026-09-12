@@ -190,7 +190,8 @@ def test_validator_resolves_local_refs():
 def test_validator_error_messages_name_the_path():
     schema = {"type": "object", "properties": {"a": {"type": "string"}}}
     errors = validate.validate({"a": 1}, schema)
-    assert errors and "$.a" in errors[0]
+    assert errors
+    assert "$.a" in errors[0]
 
 
 def test_assert_valid_raises_on_a_bad_instance():
