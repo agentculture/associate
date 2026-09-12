@@ -1,0 +1,165 @@
+# associate on Pi with opinionated tools
+
+> associate ships as a Pi-based agent on Nemotron 3.5 Lightning: pi (pi.dev) drives the lobes associate lane with a project extension that registers opinionated read/find/summarize/web tools, a structurally restricted toolset (no edit/write into any checkout), and precision aids where the model is weak
+> instruction: verify: culture.yaml backend: acp; tracked .pi/ config and extension present; 'pi -p' completes a read/find task on the lane using only registered tools; no edit/write tool is registered
+
+## Audience
+
+- three readers: the associate mesh resident (culture start associate launching pi-acp over backend: acp), colleague delegating non-coding read/find/summarize/web work to the lane, and an operator or the associate Python package driving pi headlessly (pi -p / pi --mode rpc) in a checkout
+  - instruction: verify: culture.yaml declares backend: acp with an `acp_command` naming pi-acp; AGENTS.md addresses the resident; README Quickstart shows one headless invocation that works from a clean clone
+
+## Before → After
+
+- Before: today associate is a scaffold: introspection verbs only, no harness loop, backend: colleague inheriting colleague's full tool set (`write_file`/`edit_file` exposed, restrained by prompt only), and a home-dir Pi config that points straight at the Orin with a plaintext bearer; README.md 'Status: scaffold, not yet a harness' and CLAUDE.md 'Current state vs. target' both say so
+  - instruction: verify historically: at the pre-change HEAD, git show HEAD:culture.yaml shows backend: colleague, no .pi/ directory is tracked, and README.md contains 'not yet a harness'
+- After: associate runs as pi on the lobes associate role: a tracked .pi/ project config plus extension registers the opinionated tools, edit/write are structurally absent, the endpoint is pure configuration, culture launches it through pi-acp as backend: acp, and AGENTS.md is the runtime prompt; the CLI keeps its afi contract and gains a verb that drives pi headlessly
+  - instruction: verify: from a clean clone with pi and pi-acp on PATH and endpoint env set, 'uv run associate doctor' passes, 'pi -p "list the files under associate/cli"' completes using only registered tools, and 'pi --list-models associate' resolves the configured provider
+
+## Why it matters
+
+- colleague spends budget on read/find/summarize chores it should delegate; a fast 3B-active lane with tools that make it precise (deterministic search, bounded reads, validated arguments, wrapped CLIs) takes that work off colleague, and enforcing the no-write bound in code makes the lane safe to hand any checkout
+  - instruction: verify: the Pi extension's `tool_call` hook rejects any write outside the session scratch dir and the rejection is covered by a test that runs pi -p against a fixture repo
+- measured 2026-09-11 (issue #4): cortex given a diff cold made 20 reads and 9 greps and delivered nothing in 64 minutes; associate mapped the same diff in 4 minutes with a 323-line map — the value of the lane is realized only if the next agent can trust the map's facts as facts, which needs the walk exported separately from the prose
+  - instruction: verify: re-run the issue #4 read-think-write cycle with cortex given associate's exported walk plus statements and record whether cortex starts from judgement (no re-reads of files already in the walk)
+
+## Requirements
+
+- the opinionated tools land as a tracked Pi project extension under .pi/extensions/ that registers associate's read/find/summarize/web tools and sets defaultTools so Pi's built-in edit and write are structurally absent (per docs/settings.md defaultTools and docs/extensions.md registerTool in the pi package)
+  - instruction: verify: .pi/extensions/ is tracked and contains the tool registrations; .pi/settings.json sets defaultTools to the registered tool names only; a session startup block lists no edit or write tool
+  - honesty: the extension is project-local and tracked (.pi/extensions/), loads after project trust, and does not depend on anything under ~/.pi/agent/ except provider credentials
+- the restriction is enforced in code, not prompt: colleague/colleague/roles.py has no associate role and AGENTS.colleague.md enforces `repo_action`-forbidden by instruction only ('having a tool is not authorization to use it'); on Pi, defaultTools plus a `tool_call` hook that blocks writes outside a scratch dir closes that gap
+  - instruction: verify: the extension sets defaultTools without edit/write and registers a `tool_call` hook; a test drives pi -p with a prompt that asks to modify a file and asserts the file is unchanged and the transcript shows a refusal
+  - honesty: removing edit/write via defaultTools is verified by the startup tool list, and the `tool_call` hook is verified by a test that asserts a blocked call — both, not either
+- Pi loads AGENTS.md or CLAUDE.md as context files at startup (pi docs/usage.md:100-108); CLAUDE.md here is the Claude Code session prompt, so the repo needs a Pi-facing AGENTS.md (or AGENTS.override.md) carrying the associate lane prompt, and culture.yaml's backend-consistency invariant must still map to a present prompt file
+  - instruction: verify: AGENTS.md exists at the repo root and carries the associate lane prompt; 'uv run associate doctor' and steward doctor backend-consistency pass with backend: acp; CLAUDE.md is unchanged in role
+  - honesty: Pi's context-file loading is confirmed against the installed version: with AGENTS.md present, CLAUDE.md is not injected into the runtime prompt
+- the untracked .pi/settings.json currently points skills at ~/.claude/skills, an absolute home path; committed Pi config must use a repo-relative skills path (.claude/skills) or steward doctor portability fails
+  - instruction: verify: the tracked .pi/settings.json contains no '~' or '/home' path and points skills at .claude/skills; steward doctor portability passes
+  - honesty: the committed Pi config works on a machine whose skills live only in the repo — no home-dir skills directory required
+- the Pi provider entry for the associate lane (baseUrl, apiKey, model id) must resolve from environment or a git-ignored local file, never from a committed models.json: the current ~/.pi/agent/models.json holds a plaintext bearer for the Orin endpoint, and steward doctor portability forbids committed home paths; pi docs/custom-provider.md and docs/environment-variables.md document env-driven provider config
+  - instruction: verify: git grep for the Orin host, port, or any bearer in tracked files returns nothing; the provider entry is built from documented env vars or a git-ignored local file; the README names the variables
+  - honesty: the default configuration addresses the lobes gateway by role name; a user can retarget to any OpenAI-compatible endpoint by changing configuration only, with zero code edits
+- culture's ACP backend is exercised end to end with pi-acp before the cutover: pi-acp is an MVP-grade adapter developed against Zed (README Status + Limitations), so the ACP features culture's ACPDaemon relies on must be verified against it, and copilot/acp are exempt from culture's parity gate so nothing upstream guarantees the path today
+  - instruction: verify: with pi-acp installed, 'culture start associate' brings the agent onto a local culture server and it answers one message; the pi-acp README Limitations list is checked against the ACP features culture's ACPDaemon uses, and any gap is recorded
+  - honesty: pi-acp's ACP feature set covers what culture's ACPDaemon requires (prompt, streaming chunks, `tool_call` updates, session new); each required feature is checked against pi-acp's README Limitations and one live run
+- the opinionated tool set is fixed and small: bounded read (path plus optional line range, hard byte cap, returns truncation markers), find and grep backed by pi's vendored fd/rg with result caps, ls, a bash tool restricted to an allowlist of read-only commands, code-lens and webglass wrappers delegating to the PATH CLIs per the webglass-code-lens-as-tools spec, and finish/handback that returns drafts and summaries as the result payload; no edit, no write, no unrestricted shell
+  - instruction: verify: 'pi --list-tools' (or the extension's registered tool list in the session startup block) shows exactly the named tools and neither edit nor write; a request to run 'rm', 'git commit', or 'git push' through the bash tool is refused with a structured error
+  - honesty: the tool list is enumerated in the spec and the shipped extension registers exactly that list — additions require a spec amendment
+- precision aids compensate for the model where the lobes role says it is weak: every tool validates its arguments against a JSON schema inside the tool and returns a corrective error the model can retry on (so strict server-side tool calling is not required), long inputs are chunked with explicit continuation cursors rather than truncated silently, and summaries cite file:line or URL provenance so a caller can check them
+  - instruction: verify: feed each tool one malformed argument set and confirm the response is a structured error naming the offending field; read a file larger than the byte cap and confirm the response carries a continuation cursor; a summarize run over a fixture returns at least one file:line citation per claimed fact
+  - honesty: argument validation lives inside each tool and works regardless of whether the server honors strict tool schemas — so the strict-mode unknown stops blocking design
+- exploration output is persisted by default, never only in the final message: every headless run writes its run artifacts to an export directory (the Pi --mode json event stream as walk.jsonl plus the model's final statements as a file) and returns the paths, because issue #3 measured three runs where text mode returned a 318 B to 1.6 KB meta-summary ('the map is complete') and only json mode plus a mandated scratch-file write produced the 421-line map
+  - instruction: verify: run 'associate run' (or the documented pi -p wrapper) on a fixture repo with no --export flag; assert an export dir is created containing walk.jsonl and statements.md and that stdout names both paths
+  - honesty: the default export happens even when the model never calls a write tool — persistence is the harness's job, not the model's habit
+- the bounded read tool stamps absolute file line numbers on every returned line (cat -n style) regardless of the window requested, and the harness post-verifies every path:N citation in the statements against the walk's recorded read ranges, marking unverifiable ones — issue #3 measured citations off by 40-50 lines (server.py:3444 cited vs 3494 actual) with only 6 of 421 map lines carrying a precise file:line
+  - instruction: verify: read a fixture file with offset 3400 and assert the first returned line is prefixed 3400 not 1; add a statements file with one correct and one wrong path:N and assert the verifier accepts the first and flags the second
+  - honesty: line numbers in statements are checked against what the read tool actually returned in the walk, never against the model's recollection
+- pass the torch (issue #4): a run exports two separable artifacts — A, the walk: an ordered log of every tool call and its result with stable ids (w1, w2, ...), timestamps, and for reads the returned content or its hash; B, the statements: the model's output where each claim carries evidence references into A, with unreferenced claims flagged unsupported — and a --continue-from that lets a second agent load A as given context without re-walking
+  - instruction: verify: after a run, walk.jsonl entries have monotonically increasing ids and each read entry carries a content hash; statements.json entries carry an evidence list; a statement with an empty evidence list renders with an unsupported marker; `associate run --continue-from <dir>` starts a session whose first context contains the walk contents
+  - honesty: walk entries are produced by the harness from tool events and are never editable by the model; statements may be wrong but the walk cannot be hallucinated
+- reasoning is off on the lane: colleague/colleague/associate.py:7-9 records 'Nemotron spends its first tokens thinking; a scout seat must not' and sets `reasoning_effort` off for the associate seat; the Pi provider config must send the equivalent (the served lane runs --reasoning-parser `nemotron_v3` with reasoning on by default), and ~/.pi/agent/models.json today declares supportsReasoningEffort false, so the exact knob is unverified
+  - instruction: verify: one pi -p run against the lane with the configured provider shows no reasoning field (or an empty one) in the raw response captured by a `before_provider_request`/after hook; document the knob used
+  - honesty: reasoning-off is verified on the wire, not assumed from the models.json compat flag
+- containment guards are ported before features (issue #1): every local tool confines paths to the session root (colleague `search_tools.py` confine at line 90 and `_refuse_pattern_escape` at 105), bounds output at a per-tool budget with spill-to-disk (readpage.py, 1000 lines / 25,000 chars default), caps search results (`DEFAULT_MAX_RESULTS` 200), and the web tool enforces a URL check and a raw-size ceiling (web.py `_MAX_RAW_CHARS` 2,000,000) and returns a typed error for a failed, denied, or paywalled fetch instead of truncated page text
+  - instruction: verify: a read of ../outside-root and a grep pattern containing ../ are refused with a structured error; a 5 MB fixture read returns at most the budget plus a spill path; a webglass denial (loopback) and a 402/403 fetch each return a typed error object, never page text
+  - honesty: the guards are ported from colleague with the origin recorded in docs/skill-sources.md or an equivalent ledger row, and the answer to 'what happens when colleague's version changes' is written down
+- reliability is observable (issue #1): every run records wall time, tool-call count, exit outcome, and whether output was truncated, in the walk export, so latency and failure rate can be reported per task class rather than asserted
+  - instruction: verify: walk.jsonl's final entry carries run.`duration_ms`, run.`tool_calls`, run.outcome, and run.truncated; a script aggregates ten runs into a latency and failure table
+  - honesty: the recorded numbers come from the harness, not from the model's self-report
+- a summary always ships with what makes it checkable (issue #1): source spans or file:line citations into the walk, and an explicit not-fully-read marker when the read budget cut the input short
+  - instruction: verify: summarize a fixture larger than the read budget and assert the output carries the not-fully-read marker and at least one citation; summarize a small fixture and assert the marker is absent
+  - honesty: the not-fully-read marker is set by the tool that truncated, never by the model
+
+## Honesty conditions
+
+- the announcement holds only if the same pi extension behaves identically in interactive, -p, and rpc modes — the tool restriction is not a TUI-only setting
+- no registered tool can cause a persistent change to a checkout: writes land only in a per-session scratch directory outside the repo, and git state is byte-identical before and after a full task run
+- the wrappers reuse the skills the webglass-code-lens-as-tools plan lands (tasks t1-t3) rather than a second copy; if that plan has not merged first, this work depends on it and says so
+- each of the three audiences has one documented invocation path that works from a clean clone
+- the before state is checkable at the pre-change HEAD and is not softened after the fact
+- the after state is demonstrated by a run on the real lane, not only by unit tests with a mocked model
+- a task colleague would otherwise run end to end is shown delegated to associate and completed with the result handed back
+- the three numbers are measured on the live Orin lane and recorded in the PR body with the command that produced each
+- the 64 min versus 4 min comparison is quoted from issue #4 as measured there, and the spec claims the benefit only after a re-run demonstrates it
+- the four numbers are measured on the live lane against the issue #3 prompt, not on a mocked model
+
+## Success signals
+
+- from a clean clone: (1) the tool allowlist contains 0 write-capable tools and a scripted attempt to write into the checkout fails 100% of 10 tries; (2) 'pi -p' answers a find-and-summarize task over the associate package in under 60 s on the Orin lane; (3) culture start associate connects to the mesh through pi-acp and answers one channel message
+  - instruction: verify: run the three checks from a fresh shell in a clean clone with the endpoint configured via env; record the wall-clock of (2) and the transcript of (3) in the PR body
+- on the issue #3 task (map lobes/gateway/server.py and four siblings for a coder): a headless run completes in under 5 min with the map persisted to a file of at least 300 lines, at least 90% of its path:N citations verify against the walk, and 0 runs return a final message without an artifact path
+  - instruction: verify: re-run issue #3's prompt three times through the harness and record wall time, map line count, citation verification rate, and artifact paths in the PR body
+
+## Scope / boundaries
+
+- the tool surface honors lobes/roles.py exactly: allowed tokens execution, `ground_work`, `bulk_transform`, drafting, `repo_inspection`, `run_authorized_commands`, `tool_use`; forbidden `final_decision`, `security_decision`, `code_authoring`, `repo_action` — so no tool writes, edits, commits, or pushes into a checkout, and drafts are returned in the result, never applied
+  - instruction: verify: for each forbidden token in lobes/roles.py `ROLE_FORBIDDEN`\['associate'\], name the tool or hook that makes it impossible; run a full task and assert 'git status --porcelain' is empty afterwards
+- code-lens and webglass stay PATH CLIs invoked through their skills, per the exported frame webglass-code-lens-as-tools (docs/specs/2026-09-05-webglass-code-lens-as-tools.md); Pi tools wrap those CLIs rather than re-implementing repo profiling or guarded web fetch, and dependencies = \[\] in pyproject.toml stays empty
+  - instruction: verify: grep the extension for any reimplementation of repo profiling or web fetch (none); the code-lens and webglass tools shell out to the PATH CLIs and degrade with an install hint; pyproject.toml dependencies stays \[\]
+
+## Non-goals
+
+- colleague's tool loop (colleague/colleague/`tool_schemas.py`, tools.py) and lobes' role registry (lobes-cli/lobes/roles.py) are not modified by this work; associate consumes both as they are
+
+## Assumptions
+
+- the runtime is the installed Pi coding agent (@earendil-works/pi-coding-agent 0.84.2 at ~/.nvm/.../bin/pi), not a Python reimplementation of its loop: Pi already provides custom OpenAI-compatible providers (~/.pi/agent/models.json, api: openai-completions), a project extension API (.pi/extensions/\*.ts: registerTool, `tool_call`/`tool_result` hooks, `before_agent_start`), a defaultTools allowlist, and headless drivers (-p, --mode json, --mode rpc, AgentSession SDK)
+- Nemotron 3.5 Lightning tool calling is usable as served: lobes-cli docs/nemotron-3.5-lightning-30b-a3b-nvfp4.md records a validated structured tool call under --tool-call-parser `qwen3_coder` with --reasoning-parser `nemotron_v3`; the checkpoint has no vision tower, serves 128k on the Orin shape, decodes ~50-54 tok/s flat to 32k depth — so tools should lean on long-context bulk reading and fast turns, and never assume image input
+
+## Scope exploration
+
+- `s1` — `pi coding agent (@earendil-works/pi-coding-agent 0.84.2; docs/extensions.md, docs/settings.md, docs/usage.md, docs/rpc.md, docs/sdk.md in the npm package)`: Pi is a complete host: custom OpenAI-compatible providers via ~/.pi/agent/models.json, project extensions under .pi/extensions/\*.ts (registerTool, registerProvider, `tool_call`/`tool_result`/`before_agent_start` hooks), defaultTools allowlist plus --tools/--exclude-tools, built-ins read/bash/edit/write/grep/find/ls with vendored rg/fd, and headless -p / --mode json / --mode rpc / AgentSession SDK; no extension or tool restriction exists yet globally or in this repo
+  - seeds: `c2`, `c3`
+- `s2` — `lobes-cli/lobes/roles.py (associate role, lines ~101-118, 348-356, 424-429) + profiles/builtin_shapes/orin-associate.toml`: associate is worker minus `repo_action` with allowed tokens execution, `ground_work`, `bulk_transform`, drafting, `repo_inspection`, `run_authorized_commands`, `tool_use` and forbidden `final_decision`, `security_decision`, `code_authoring`, `repo_action`; it deliberately does not claim summarization, `retrieval_synthesis`, `structured_extraction` or image understanding; the orin-associate shape serves 128k context and is marked declared-not-validated
+  - seeds: `c4`
+- `s3` — `lobes-cli/docs/nemotron-3.5-lightning-30b-a3b-nvfp4.md + docs/orin-associate-deployment.md`: structured tool calling validated live (`qwen3_coder` tool parser, `nemotron_v3` reasoning parser, reasoning field present by default); strict/xgrammar tool calling unprobed (parked v2); no vision tower; ~50-54 tok/s flat to 32k depth on `sm_87`; sampling recommendations absent (parked v1); Marlin NVFP4 fallback on `sm_87` rests on a small probe set
+  - seeds: `c6`
+- `s4` — `lobes gateway localhost:8001 (read-only probe)`: GET /v1/models answers `invalid_api_key` without a bearer, matching the documented auth front; no completion or tool-call probe was sent, so live behavior of model=associate through the gateway is unobserved this pass (parked v3); CLAUDE.md also records the readiness-probe defect that hides the role from discovery
+- `s5` — `colleague/colleague/{tool_schemas.py,tools.py,roles.py,associate_config.py,config.py,oilcheck/tool_calling.py} + AGENTS.colleague.md`: colleague's loop is OpenAI function calling with no text-protocol fallback; `BUILTIN_ROLES` has no associate entry so `repo_action`-forbidden is enforced only by the AGENTS.colleague.md prompt; skills load from .colleague/skills/ not .claude/skills/; colleague never mentions Pi
+  - seeds: `c5`, `c8`
+- `s6` — `docs/specs/2026-09-05-webglass-code-lens-as-tools.md + docs/plans/2026-09-05-webglass-code-lens-as-tools.md (exported, unimplemented)`: code-lens and webglass are already scoped as PATH CLIs with repo skills and install-hint degradation; they are the find/read and web-fetch building blocks the Pi tools should wrap, not duplicate; that plan's t1-t6 have not landed yet
+  - seeds: `c7`
+- `s7` — `README.md, CLAUDE.md, AGENTS.colleague.md, culture.yaml (prompt-file and backend-consistency invariants)`: 'modelled on the Pi harness' is stated but nothing in-repo is Pi-shaped; Pi auto-loads AGENTS.md or CLAUDE.md, which would feed the Claude Code session prompt to the runtime unless an AGENTS.md exists; changing backend: requires the matching prompt file per associate doctor / steward doctor
+  - seeds: `c9`
+- `s8` — `eidetic memory (recall 'associate harness Pi Nemotron tools')`: no prior records about the harness design; only a colleague work-lesson noise hit — nothing to build on, nothing contradicted
+- `s9` — `~/.pi/agent/{models.json,settings.json,trust.json,sessions/} and the untracked .pi/settings.json`: a 'nemotron' provider with model id 'associate' is already configured and resolvable (pi --list-models associate), pointed directly at the Orin vLLM :8000 rather than the lobes gateway localhost:8001 (raised as pending decision q2); this repo is trusted and has two prior pi sessions from 2026-09-05; the project .pi/settings.json only sets skills to ~/.claude/skills, an absolute home path that would fail steward doctor portability if committed
+  - seeds: `c10`
+- `s10` — `culture/culture_core/cli/agents.py _BACKEND_DAEMON_FACTORIES + culture_core/config.py + devtools/backend_parity.py`: backends are claude, codex, colleague, acp (hardwired to 'opencode acp'), copilot; no pi backend and no generic ACP target; parity is enforced for claude/codex/colleague; culture start associate resolves backend: colleague to ColleagueDaemon today — how a Pi-based associate joins the mesh is pending decision q1
+  - seeds: `c8`
+- `s11` — `associate repo: pyproject.toml (dependencies = [], afi CLI, rubric gate), associate/cli/__init__.py, .github/workflows/tests.yml, CLAUDE.md invariants`: the package is a dependency-free Python CLI gated by teken cli doctor --strict, four linters, and a mandatory version bump; Pi is a Node package, so the harness entry point either wraps pi from a new verb (keeping the CLI contract) or lives in .pi/ beside a Python CLI that stays introspection-only — pending decision q3
+  - seeds: `c7`
+- `s12` — `npm pi-acp 0.0.33 (github svkozak/pi-acp) + culture_core/config.py acp_command extras`: an ACP adapter for pi exists: ACP JSON-RPC over stdio bridged to 'pi --mode rpc', pi >=0.80.4, Node 22+, sessions mapped under ~/.pi/pi-acp; culture's ACP backend takes a per-agent `acp_command` override, so backend: acp + `acp_command` can host Pi without a new culture backend; the adapter self-describes as MVP-grade and Zed-centred with listed limitations
+  - seeds: `c11`, `c15`
+- `s13` — `PyPI pi-coding-agent 0.6.0 METADATA`: name collision: the PyPI 'pi-coding-agent' is Ashutosh0428/pi-agent (MIT, multi-provider Streamlit demo), unrelated to pi.dev / @earendil-works/pi-coding-agent; a Python harness cannot pip-install pi.dev and must drive the Node binary over rpc/print JSONL (pi docs/rpc.md Python client example, docs/json.md)
+  - seeds: `c13`
+- `s14` — `pi docs/custom-provider.md, docs/environment-variables.md, ~/.pi/agent/models.json (secret present)`: provider config today lives in a home-dir models.json carrying a plaintext bearer for the direct Orin endpoint; the agnostic-endpoint decision means the committed harness ships no endpoint constants and documents env-driven provider config, addressing the lobes gateway role by default
+  - seeds: `c12`, `c14`
+- `s15` — `github agentculture/associate issue #3 (field report, 2026-09-11 runs on the associate lane via pi -p)`: three headless runs: text mode returned only a meta-summary (1.6 KB, 318 B) even when told to print the map; json mode plus mandated scratch-file write produced a 421-line map in ~4 min with 56 reads, 52 bash, 4 writes; structure, names and dispatch ordering verified correct; file:line citations drift 40-50 lines, likely from windowed reads; recommended fixes are harness-level: persist output by default, absolute line-number stamping, citation post-verification
+  - seeds: `c23`, `c24`, `c27`
+- `s16` — `github agentculture/associate issue #4 (pass the torch)`: asks for a two-part hand-off artifact: A the walk (deterministic tool calls and results with stable ids and read content or hashes, from Pi's --mode json events) and B the statements (model prose with evidence refs into A, unsupported claims flagged); suggests `associate run --export <dir>` and `--continue-from <dir>`; motivation is the lobes-cli read-think-write cycle where cortex cold took 64 min for nothing versus associate 4 min for a 323-line map
+  - seeds: `c25`, `c26`
+- `s17` — `github agentculture/associate issue #1 (guildmaster build brief) + colleague/colleague/{associate.py,search_tools.py,readpage.py,web.py}`: the brief defines the lane (read/find/summarize/extract/classify/verify; never edit/write/PR), says take Pi's posture but do not vendor Pi, asks to merge colleague's base tools with their containment guards (confine, `_refuse_pattern_escape`, output budgets, web URL check and raw ceiling), inherit `reasoning_effort` off for Nemotron (associate.py:7-9), define reliability as bounded output plus containment plus typed result and make it measurable, and put an engine seam in on day one; it parks where the model runs, intern-cli/lobes-cli boundaries, and colleague-as-caller
+  - seeds: `c28`, `c29`, `c30`, `c31`
+
+## Decisions
+
+- associate's mesh backend becomes acp: culture.yaml sets backend: acp and an `acp_command` that launches pi-acp (npm, bridges ACP stdio to pi --mode rpc); the runtime prompt file becomes AGENTS.md, satisfying both culture's backend-consistency map and Pi's context-file loading
+- the model endpoint is configuration, not code: the harness addresses the lobes role 'associate' through the gateway by default, and every endpoint fact (base URL, bearer, model id) is overridable so other deployments can point at cloud, localhost, or a different gateway
+- the associate Python package may drive Pi as a subprocess over its rpc/print JSONL protocol; it does not import the unrelated PyPI 'pi-coding-agent' and adds no runtime dependency
+- Pi is the runtime, approved over issue #1's do-not-vendor note: the harness runs the installed pi binary (pi-acp for the mesh, pi -p / --mode rpc headless) and keeps Pi's discipline of a tiny prompt surface and on-demand skills
+- colleague's base tools are ported case by case, only where a Pi built-in or PATH CLI does not already cover the need; each port records origin colleague in the ledger with a note on drift handling
+
+## Hard questions
+
+- Issue #1 (guildmaster build brief) says 'Do not vendor Pi; build the same discipline', while today's direction runs the installed Pi binary as the runtime through pi-acp. Running Pi as an installed tool is not vendoring it, but the brief's intent was a self-owned sub-1000-token loop. Which holds: Pi-as-runtime (today's decisions c11-c13), or Pi-as-posture with an owned loop merged from colleague's tools? (resolved: user: Pi-as-runtime approved — the installed Pi binary (via pi-acp for the mesh, pi -p / rpc headless) is the loop; issue #1's 'do not vendor Pi' is superseded for this repo. The brief's discipline (tiny prompt surface, on-demand skills, nothing clever in the loop) still applies to how the extension and AGENTS.md are written.)
+
+## Open parks
+
+- [unknown_nonblocking] recommended sampling parameters for Nemotron 3.5 Lightning (temperature/`top_p`) are recorded nowhere in lobes-cli docs; the harness should not hardcode them until measured
+- [unknown_nonblocking] the live lane was not exercised this pass: GET /v1/models on localhost:8001 returned `invalid_api_key` without a bearer, and no probe was sent to model=associate — reachability, reported model id, and live `tool_calls` emission rest on lobes-cli docs and evidence files, not on an observed run today
+- [unknown_nonblocking] the pi models.json entry for the associate lane declares contextLimit 1048576 while pi --list-models reports 128K; whether that is a schema-field mismatch (contextLimit vs contextWindow) or display only is unverified
+- [unknown_nonblocking] relationship to intern-cli (sibling small-model harness at ../intern-cli) and whether colleague calls associate as a delegate seat (colleague/associate.py already models the seat) are two-repo decisions issue #1 parks; not decided here
+
+## Resolved vagueness
+
+- [unknown_blocking] strict / schema-constrained tool calling (strict:true, xgrammar structural tags) on the served Nemotron lane is explicitly unprobed (lobes-cli model doc) — precision tools that depend on guaranteed-valid JSON arguments need a probe before design commits to them — resolved: tools validate their own arguments; strict server-side tool calling is not required
