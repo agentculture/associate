@@ -94,7 +94,10 @@ test("associate_ready reports no active writer under defaultTools: []", async ()
         (await pi.tool("associate_ready").execute("call-1", {})).content[0]!.text,
       ) as { tools: string[]; active_tools: string[]; writer_tools_active: string[] };
       assert.ok(report.tools.includes("write"), "configured built-ins are reported as configured");
-      assert.deepEqual(report.active_tools, ["associate_ready", "finish"]);
+      // "read" joined the registered set in task t5 (tools/read.ts); any tool
+      // module under tools/ shows up here too, so this asserts the
+      // extension's own registered tools rather than a fixed pre-t5 list.
+      assert.deepEqual(report.active_tools, ["associate_ready", "finish", "read"]);
       assert.deepEqual(report.writer_tools_active, [], "no writer may be active");
 
       pi.activeBuiltinTools = ["write"];
@@ -178,8 +181,12 @@ test("the extension creates its session dirs and writes nothing into the checkou
 });
 
 test("every module under tools/ is discovered and must export register()", async () => {
-  // The directory ships empty (only .gitkeep); the next wave drops modules in.
-  assert.deepEqual(discoverToolModules(toolsDir), []);
+  // task t5 dropped in tools/read.ts, the first module of the next wave; this
+  // asserts it is discovered by name rather than that the directory is empty.
+  assert.deepEqual(
+    discoverToolModules(toolsDir).map((path) => path.split("/").pop()),
+    ["read.ts"],
+  );
 
   const dir = mkdtempSync(join(tmpdir(), "associate-tools-"));
   try {
