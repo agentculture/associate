@@ -488,18 +488,24 @@ export class StatementsRecorder {
   recordHandback(handback: Handback): StatementEntry[] {
     const ranges = this.ranges();
     const added: StatementEntry[] = [];
+    // This path RE-DERIVES evidence from prose (`parseEvidence`) whenever the
+    // payload carried none, so `normalizeHandback`'s own known-id filter is
+    // not enough here: an id parsed back out of the text has never been
+    // checked against the walk. A well-shaped id that names no entry is not
+    // evidence, so drop it and let the statement fall to `unreferenced`.
+    const known = this.knownWalkIds();
 
     for (const statement of handback.statements) {
       const text = this.filter.apply(statement.text);
       const evidence = statement.evidence.length
         ? statement.evidence
         : parseEvidence(text);
-      added.push(this.buildStatement(text, evidence, ranges));
+      added.push(this.buildStatement(text, this.keepKnown(evidence, known), ranges));
     }
     if (added.length === 0 && handback.summary) {
       const redacted = this.filter.apply(handback.summary);
       for (const text of splitStatements(redacted)) {
-        added.push(this.buildStatement(text, parseEvidence(text), ranges));
+        added.push(this.buildStatement(text, this.keepKnown(parseEvidence(text), known), ranges));
       }
     }
 
@@ -527,6 +533,16 @@ export class StatementsRecorder {
 
   private ranges(): ReadRange[] {
     return readRangesFromWalk(readWalkEntries(this.walkPath));
+  }
+
+  /** Every id the walk actually recorded — the citable evidence, in full. */
+  private knownWalkIds(): ReadonlySet<string> {
+    return new Set(readWalkEntries(this.walkPath).map((entry) => entry.id));
+  }
+
+  /** *evidence*, minus any id the walk does not contain. */
+  private keepKnown(evidence: readonly string[], known: ReadonlySet<string>): string[] {
+    return evidence.filter((id) => known.has(id));
   }
 
   private buildStatement(

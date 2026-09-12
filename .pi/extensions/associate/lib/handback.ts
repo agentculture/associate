@@ -49,11 +49,39 @@ function asString(value: unknown): string {
 }
 
 /**
+ * Walk ids the run actually produced, as a membership test.
+ *
+ * `index.ts` passes the recorder's own ids (`WalkRecorder.entryIds()`); a
+ * caller with no walk to check against passes nothing and no id is dropped.
+ */
+export type KnownEvidenceIds = ReadonlySet<string> | readonly string[];
+
+function membership(known: KnownEvidenceIds | undefined): ((id: string) => boolean) | undefined {
+  if (known === undefined) return undefined;
+  const set = known instanceof Set ? known : new Set(known as readonly string[]);
+  return (id) => set.has(id);
+}
+
+/**
  * Build the hand-back artifact from what the model passed to `finish`.
  *
  * `notFullyRead` comes from the run, not the payload.
+ *
+ * `knownIds` closes the "claims can cite nonexistent evidence" hole: the
+ * `wN` SHAPE being right said nothing about the entry EXISTING, so a model
+ * could mark a claim `referenced` by citing `w999` from a three-entry walk —
+ * exactly the unverifiable citation the artifact exists to prevent. When the
+ * run's ids are supplied, an id that is not among them is dropped, and a
+ * statement left with no surviving id falls back to `unreferenced`. Omitting
+ * `knownIds` keeps the old, shape-only behaviour for callers (tests, the
+ * Python adapter's replay) that have no walk in hand.
  */
-export function normalizeHandback(input: FinishInput, notFullyRead = false): Handback {
+export function normalizeHandback(
+  input: FinishInput,
+  notFullyRead = false,
+  knownIds?: KnownEvidenceIds,
+): Handback {
+  const isKnown = membership(knownIds);
   const rawStatements = Array.isArray(input.statements) ? input.statements : [];
   const statements = rawStatements
     .map((entry) => {
@@ -61,7 +89,8 @@ export function normalizeHandback(input: FinishInput, notFullyRead = false): Han
       const text = asString(item.text).trim();
       const evidence = (Array.isArray(item.evidence) ? item.evidence : [])
         .filter((id): id is string => typeof id === "string" && EVIDENCE_ID.test(id.trim()))
-        .map((id) => id.trim());
+        .map((id) => id.trim())
+        .filter((id) => isKnown === undefined || isKnown(id));
       return {
         text,
         evidence,

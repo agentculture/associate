@@ -14,7 +14,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { createAssociateContext } from "../lib/runtime.ts";
 import { loadContract } from "../lib/contract.ts";
-import { register } from "../tools/read.ts";
+import { register, signCursor } from "../tools/read.ts";
 import type { AssociateContext } from "../lib/context.ts";
 
 // ---------------------------------------------------------------------------
@@ -284,6 +284,151 @@ test("respects the checkout's .gitignore", async () => {
     const payload = JSON.parse(result.content[0]!.text as string);
     assert.equal(payload.ok, false);
     assert.equal(payload.error.code, "path_denied");
+  } finally {
+    h.dispose();
+  }
+});
+
+// ---------------------------------------------------------------------------
+// continuation cursors are caller-controlled input (security finding:
+// "forged cursors expose denied files")
+// ---------------------------------------------------------------------------
+
+/** Parse an error result's payload. */
+function payloadOf(result: { content: Array<{ text: string }> }): any {
+  return JSON.parse(result.content[0]!.text);
+}
+
+test("a forged cursor naming an arbitrary file is refused, not read", async () => {
+  const h = await harness();
+  try {
+    for (const spillPath of ["/etc/passwd", "/etc/hostname"]) {
+      const forged = JSON.stringify({ offset: 0, total: 10_000, chunkChars: 1000, spillPath });
+      const result = await h.readTool.execute("call-forge", { cursor: forged });
+      const payload = payloadOf(result);
+      assert.equal(payload.ok, false, `${spillPath} was read through a forged cursor`);
+      assert.equal(payload.error.code, "cursor_invalid");
+      assert.equal(payload.field, "cursor");
+      assert.ok(!result.content[0]!.text.includes("root:"), "file content leaked");
+    }
+  } finally {
+    h.dispose();
+  }
+});
+
+test("a forged cursor naming a denylisted file inside the checkout is refused", async () => {
+  const h = await harness();
+  try {
+    write(h.checkout, ".env", "SECRET=hunter2\n");
+    const forged = JSON.stringify({
+      offset: 0,
+      total: 100,
+      chunkChars: 100,
+      spillPath: join(h.checkout, ".env"),
+    });
+    const result = await h.readTool.execute("call-forge-env", { cursor: forged });
+    const payload = payloadOf(result);
+    assert.equal(payload.ok, false);
+    assert.equal(payload.error.code, "cursor_invalid");
+    assert.ok(!result.content[0]!.text.includes("hunter2"), "the secret leaked through a cursor");
+  } finally {
+    h.dispose();
+  }
+});
+
+test("a cursor with a tampered offset is refused", async () => {
+  const h = await harness();
+  try {
+    write(h.checkout, "big.txt", fiveThousandLines());
+    const first = await h.readTool.execute("call-tamper", { path: "big.txt" });
+    const genuine = JSON.parse(first.details.cursor as string);
+
+    for (const tampered of [
+      { ...genuine, offset: genuine.offset + 1 },
+      { ...genuine, chunkChars: 10_000_000 },
+      { ...genuine, spillPath: "/etc/passwd" },
+      { ...genuine, tag: "0".repeat(64) },
+      { offset: genuine.offset, total: genuine.total, chunkChars: genuine.chunkChars, spillPath: genuine.spillPath },
+    ]) {
+      const result = await h.readTool.execute("call-tamper-b", { cursor: JSON.stringify(tampered) });
+      const payload = payloadOf(result);
+      assert.equal(payload.ok, false, `a tampered cursor was accepted: ${JSON.stringify(tampered)}`);
+      assert.equal(payload.error.code, "cursor_invalid");
+    }
+
+    // …while the untouched one still works.
+    const ok = await h.readTool.execute("call-tamper-c", { cursor: first.details.cursor as string });
+    assert.ok((ok.content[0]!.text as string).length > 0);
+    assert.match(ok.content[0]!.text as string, /^\d+\t/);
+  } finally {
+    h.dispose();
+  }
+});
+
+test("even a correctly signed cursor is refused when its spill file is not ours", async () => {
+  // Defence in depth: the signature is the first gate, the confinement check
+  // the second. A key compromise (or a future bug that signs attacker input)
+  // must still not turn the cursor into an arbitrary-file read.
+  const h = await harness();
+  try {
+    const outside = join(h.checkout, "..", "outside.txt");
+    writeFileSync(outside, "not a spill file\n", "utf8");
+    const budget = (h.ctx.policy.budgets as any).read;
+
+    const cases: Array<[string, Record<string, unknown>]> = [
+      ["outside the scratch dir", { offset: 0, total: 10, chunkChars: 10, spillPath: outside }],
+      ["no spill file at all", { offset: 0, total: 10, chunkChars: 10 }],
+      [
+        "a scratch path with a name we never write",
+        {
+          offset: 0,
+          total: 10,
+          chunkChars: 10,
+          spillPath: join(h.ctx.session.scratchDir, "not-a-spill.txt"),
+        },
+      ],
+    ];
+    for (const [why, cursor] of cases) {
+      const signed = JSON.stringify({ ...cursor, tag: signCursor(cursor as any) });
+      const result = await h.readTool.execute("call-signed", { cursor: signed });
+      const payload = payloadOf(result);
+      assert.equal(payload.ok, false, `accepted a signed cursor ${why}`);
+      assert.equal(payload.error.code, "cursor_invalid");
+    }
+
+    // The numeric fields are re-validated too, on a genuine spill file.
+    write(h.checkout, "big2.txt", fiveThousandLines());
+    const first = await h.readTool.execute("call-signed-b", { path: "big2.txt" });
+    const genuine = JSON.parse(first.details.cursor as string);
+    const spillPath = genuine.spillPath as string;
+    for (const bad of [
+      { offset: -1, total: 10, chunkChars: 10, spillPath },
+      { offset: 1e12, total: 10, chunkChars: 10, spillPath },
+      { offset: 0, total: 10, chunkChars: 0, spillPath },
+      { offset: 0, total: 10, chunkChars: budget.max_output_chars + 1, spillPath },
+      { offset: 0.5, total: 10, chunkChars: 10, spillPath },
+    ]) {
+      const signed = JSON.stringify({ ...bad, tag: signCursor(bad as any) });
+      const result = await h.readTool.execute("call-signed-c", { cursor: signed });
+      const payload = payloadOf(result);
+      assert.equal(payload.ok, false, `accepted out-of-range cursor ${JSON.stringify(bad)}`);
+      assert.equal(payload.error.code, "cursor_invalid");
+    }
+
+    rmSync(outside, { force: true });
+  } finally {
+    h.dispose();
+  }
+});
+
+test("a cursor that is not JSON, or is missing fields, names the cursor field", async () => {
+  const h = await harness();
+  try {
+    for (const cursor of ["not json", "{}", '{"offset":1}']) {
+      const payload = payloadOf(await h.readTool.execute("call-bad-cursor", { cursor }));
+      assert.equal(payload.ok, false);
+      assert.equal(payload.field, "cursor");
+    }
   } finally {
     h.dispose();
   }

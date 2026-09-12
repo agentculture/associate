@@ -270,6 +270,19 @@ export class WalkRecorder {
     return this.nextId - 1;
   }
 
+  /**
+   * Every walk id that exists so far — `w1` … `w<entryCount>`.
+   *
+   * Ids are issued densely from 1 (see {@link append}), so this is the exact
+   * set of citable evidence at the moment it is called. `finish` uses it to
+   * drop a claim's references to entries that were never recorded.
+   */
+  entryIds(): string[] {
+    const ids: string[] = [];
+    for (let n = 1; n <= this.entryCount; n += 1) ids.push(`w${n}`);
+    return ids;
+  }
+
   /** Pin the run's outcome; the guard or a launcher may know better than us. */
   markOutcome(outcome: WalkOutcome): void {
     this.explicitOutcome = outcome;

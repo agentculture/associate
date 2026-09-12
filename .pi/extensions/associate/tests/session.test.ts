@@ -33,9 +33,48 @@ test("a generated id is used when no session id is in the environment", () => {
 });
 
 test("a session id can never escape its directory", () => {
-  assert.equal(sanitizeSessionId("../../etc/passwd"), "etc-passwd");
-  assert.equal(sanitizeSessionId("a/b"), "a-b");
+  assert.match(sanitizeSessionId("../../etc/passwd"), /^etc-passwd-[0-9a-f]{8}$/);
+  assert.match(sanitizeSessionId("a/b"), /^a-b-[0-9a-f]{8}$/);
   assert.ok(!sanitizeSessionId("...").includes("."));
+  for (const raw of ["../../etc/passwd", "a/b", "...", "  ", "a\0b"]) {
+    assert.ok(!sanitizeSessionId(raw).includes("/"), `${JSON.stringify(raw)} kept a separator`);
+    assert.ok(!sanitizeSessionId(raw).startsWith("."), `${JSON.stringify(raw)} kept a leading dot`);
+  }
+});
+
+test("an id that needs no sanitizing is returned verbatim", () => {
+  for (const raw of ["session-alpha", "task-a", "abc_123.4", "A".repeat(96)]) {
+    assert.equal(sanitizeSessionId(raw), raw);
+  }
+});
+
+test("two ids that clean to the same text get different directories", () => {
+  // The finding: `task/a` and `task-a` both cleaned to `task-a`, so two
+  // concurrent runs shared one scratch dir and could corrupt each other's
+  // artifacts. Distinct ids must stay distinct.
+  const slashed = sanitizeSessionId("task/a");
+  const dashed = sanitizeSessionId("task-a");
+  assert.notEqual(slashed, dashed);
+  assert.equal(dashed, "task-a");
+  assert.match(slashed, /^task-a-[0-9a-f]{8}$/);
+  // Stable across calls — the directory has to be findable again.
+  assert.equal(sanitizeSessionId("task/a"), slashed);
+  // …and the same for two other ids that clean alike.
+  assert.notEqual(sanitizeSessionId("a/b"), sanitizeSessionId("a b"));
+});
+
+test("an over-long id is truncated but still unique", () => {
+  const a = sanitizeSessionId("x".repeat(200));
+  const b = sanitizeSessionId(`${"x".repeat(199)}y`);
+  assert.equal(a.length, 96);
+  assert.equal(b.length, 96);
+  assert.match(a, /^x{87}-[0-9a-f]{8}$/);
+  assert.notEqual(a, b);
+});
+
+test("an id that sanitizes to nothing falls back to a generated one", () => {
+  assert.match(sanitizeSessionId("..."), /^\d{8}T\d{6}Z-[0-9a-f]{8}$/);
+  assert.match(sanitizeSessionId("   "), /^\d{8}T\d{6}Z-[0-9a-f]{8}$/);
 });
 
 test("the export root sits outside the examined checkout", () => {

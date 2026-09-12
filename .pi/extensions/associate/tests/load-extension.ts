@@ -116,6 +116,13 @@ export class FakePi {
     }
   }
 
+  /** Run every `tool_result` handler — what the walk recorder listens on. */
+  async fireToolResult(event: Record<string, unknown>): Promise<void> {
+    for (const handler of this.handlers.get("tool_result") ?? []) {
+      await handler(event);
+    }
+  }
+
   async fireToolCall(event: Record<string, unknown>): Promise<unknown> {
     for (const handler of this.handlers.get("tool_call") ?? []) {
       const decision = await handler(event);

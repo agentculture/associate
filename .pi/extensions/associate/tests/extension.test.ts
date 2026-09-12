@@ -9,7 +9,17 @@
 
 import test from "node:test";
 import assert from "node:assert/strict";
-import { existsSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import {
+  existsSync,
+  mkdirSync,
+  mkdtempSync,
+  readFileSync,
+  readdirSync,
+  readlinkSync,
+  rmSync,
+  writeFileSync,
+} from "node:fs";
+import { createHash } from "node:crypto";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { loadExtension } from "./load-extension.ts";
@@ -28,11 +38,41 @@ async function withExtension<T>(
   }
 }
 
-function scratch(): { root: string; env: Record<string, string>; dispose: () => void } {
+/**
+ * Every file under *dir*, recursively, as `relative path -> sha256 of its
+ * bytes`. Directory entries are recorded too (with a marker), so a created or
+ * removed empty directory is caught as well as a changed file.
+ */
+function snapshotTree(dir: string, prefix = ""): Map<string, string> {
+  const seen = new Map<string, string>();
+  for (const entry of readdirSync(dir, { withFileTypes: true }).sort((a, b) =>
+    a.name < b.name ? -1 : 1,
+  )) {
+    const rel = prefix ? `${prefix}/${entry.name}` : entry.name;
+    const abs = join(dir, entry.name);
+    if (entry.isDirectory()) {
+      seen.set(rel, "<dir>");
+      for (const [key, value] of snapshotTree(abs, rel)) seen.set(key, value);
+    } else if (entry.isSymbolicLink()) {
+      seen.set(rel, `<symlink>${readlinkSync(abs)}`);
+    } else {
+      seen.set(rel, createHash("sha256").update(readFileSync(abs)).digest("hex"));
+    }
+  }
+  return seen;
+}
+
+function scratch(): {
+  root: string;
+  checkout: string;
+  env: Record<string, string>;
+  dispose: () => void;
+} {
   const root = mkdtempSync(join(tmpdir(), "associate-runs-"));
   const checkout = mkdtempSync(join(tmpdir(), "associate-checkout-"));
   return {
     root,
+    checkout,
     env: {
       ASSOCIATE_EXPORT_ROOT: root,
       ASSOCIATE_CHECKOUT_ROOT: checkout,
@@ -125,16 +165,27 @@ test("finish returns the hand-back as its payload and leaves one text reply (d9)
   const s = scratch();
   try {
     await withExtension(s.env, async ({ pi }) => {
+      // One recorded tool result, so the walk has an entry to cite: `w1` is
+      // evidence only because this call happened. `w7` never did.
+      await pi.fireToolResult({
+        toolCallId: "tc-walk-1",
+        toolName: "read",
+        input: { path: "server.py" },
+        content: [{ type: "text", text: "1\tprint('hi')" }],
+      });
+
       const result = (await pi.tool("finish").execute("call-2", {
         summary: "Two routes are registered.",
         statements: [
-          { text: "Route /walk is registered.", evidence: ["w1", "bogus"] },
+          { text: "Route /walk is registered.", evidence: ["w1", "bogus", "w7"] },
           { text: "Nothing evidences this." },
         ],
         citations: [{ path: "server.py", line: 3444 }],
       })) as any;
       const handback = JSON.parse(result.content[0].text);
       assert.equal(handback.summary, "Two routes are registered.");
+      // `bogus` is the wrong shape; `w7` is the right shape for an entry that
+      // does not exist. Neither is evidence.
       assert.deepEqual(handback.statements[0].evidence, ["w1"]);
       assert.equal(handback.statements[0].status, "referenced");
       assert.equal(handback.statements[1].status, "unreferenced");
@@ -188,13 +239,31 @@ test("the tool_call hook is registered and blocks a write into the checkout", as
 test("the extension creates its session dirs and writes nothing into the checkout", async () => {
   const s = scratch();
   try {
+    // The checkout has to have something in it for "unchanged" to mean
+    // anything — an empty directory is trivially unchanged.
+    writeFileSync(join(s.checkout, "README.md"), "# fixture\n");
+    mkdirSync(join(s.checkout, "pkg"), { recursive: true });
+    writeFileSync(join(s.checkout, "pkg", "server.py"), "print('hello')\n");
+    writeFileSync(join(s.checkout, ".gitignore"), "build/\n");
+    const before = snapshotTree(s.checkout);
+    assert.ok(before.size >= 4, "precondition: the fixture checkout has files to protect");
+
     await withExtension(s.env, async ({ pi }) => {
       const result = await pi.tool("associate_ready").execute("call-1", {});
       const report = JSON.parse(result.content[0]!.text) as any;
       assert.ok(existsSync(report.session.scratch_dir));
       assert.ok(existsSync(report.session.export_dir));
       assert.ok(report.session.scratch_dir.startsWith(s.root));
+      // Nothing the session writes may land in the checkout.
+      assert.ok(!report.session.scratch_dir.startsWith(s.checkout));
+      assert.ok(!report.session.export_dir.startsWith(s.checkout));
+      assert.ok(!report.session.walk_path.startsWith(s.checkout));
     });
+
+    // The claim in this test's name, actually checked: same files, same bytes.
+    const after = snapshotTree(s.checkout);
+    assert.deepEqual([...after.keys()], [...before.keys()], "the checkout's file list changed");
+    assert.deepEqual([...after.entries()], [...before.entries()], "a file in the checkout changed");
   } finally {
     s.dispose();
   }
