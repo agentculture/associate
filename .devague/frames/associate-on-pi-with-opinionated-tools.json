@@ -4,7 +4,7 @@
   "schema_version": 6,
   "status": "exported",
   "created": "2026-09-12T09:17:50Z",
-  "updated": "2026-09-12T12:34:11Z",
+  "updated": "2026-09-12T13:09:00Z",
   "claims": [
     {
       "id": "c1",
@@ -1537,6 +1537,87 @@
       "skipped_check": "failing test first for the shared helper",
       "refs": [
         "t8"
+      ],
+      "origin": "llm",
+      "status": "proposed"
+    },
+    {
+      "id": "l25",
+      "code": "control-absent",
+      "what": "t10: all 31 new tests passed on their first run against an API already designed in the agent's head \u2014 procedurally test-first, but no test failed for the right reason, so they show self-consistency more than fault detection",
+      "skipped_check": "a deliberately wrong implementation to confirm the tests fail",
+      "refs": [
+        "t10"
+      ],
+      "origin": "llm",
+      "status": "proposed"
+    },
+    {
+      "id": "l26",
+      "code": "instrument-changed-mid-series",
+      "what": "t10: a second live pi invocation returned 'EngineCore encountered an issue' and the lane then refused connections; the agent did not verify whether its call crashed the Orin's vLLM or it fell independently, and reported the 3 pi-integration skips as part of '222 tests, 0 fail' \u2014 read that as 219 executed, 3 unverified",
+      "skipped_check": "check the lane health before and after the live call; record the request that preceded the engine error",
+      "refs": [
+        "t10",
+        "r15"
+      ],
+      "origin": "llm",
+      "status": "proposed"
+    },
+    {
+      "id": "l27",
+      "code": "assumption-for-measurement",
+      "what": "t10: statement segmentation (one paragraph or list item = one statement) was taken from the brief; the real run shows the model writing '**Evidence:** ...' as its own paragraph, which records as a second unreferenced statement \u2014 a likely source of inflated unreferenced counts, untuned",
+      "skipped_check": "measure unreferenced counts on real outputs and tune the splitter",
+      "refs": [
+        "t10",
+        "c25"
+      ],
+      "origin": "llm",
+      "status": "proposed"
+    },
+    {
+      "id": "l28",
+      "code": "assumption-for-measurement",
+      "what": "t10: pathsMatch accepts a suffix match on a / boundary so short citations resolve; it can mark encountered for two same-named files in different directories \u2014 a false-positive risk traded for a false-negative one without data",
+      "skipped_check": "a test corpus with same-named files in two directories",
+      "refs": [
+        "t10"
+      ],
+      "origin": "llm",
+      "status": "proposed"
+    },
+    {
+      "id": "l29",
+      "code": "assumption-for-measurement",
+      "what": "t12: the positive half of criterion 1 (sentinel present, both artifact paths printed) is proven against a scripted fake pi; the real pi's tool_execution_end payload shape is assumed from an existing integration assertion, not observed \u2014 the lane was down",
+      "skipped_check": "one real associate run on the live lane (t15)",
+      "refs": [
+        "t12",
+        "c34"
+      ],
+      "origin": "llm",
+      "status": "proposed"
+    },
+    {
+      "id": "l30",
+      "code": "assumption-for-measurement",
+      "what": "t12: the ancestor CLAUDE.md fix (r16) is proven structurally (--no-context-files in the received argv; injector reads one path) \u2014 pi's assembled system prompt was not read",
+      "skipped_check": "capture the assembled system prompt on a real turn with the launcher's flags (t13's before_agent_start dump technique)",
+      "refs": [
+        "t12",
+        "r16"
+      ],
+      "origin": "llm",
+      "status": "proposed"
+    },
+    {
+      "id": "l31",
+      "code": "n-below-claim",
+      "what": "t12: the pin-mismatch warning path is exercised only via a fake pi reporting 0.99.0; pi.py timeout/OSError/unreadable-walk branches are untested (85% coverage)",
+      "skipped_check": "error-path tests for the adapter",
+      "refs": [
+        "t12"
       ],
       "origin": "llm",
       "status": "proposed"

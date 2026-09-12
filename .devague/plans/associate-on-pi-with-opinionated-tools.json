@@ -5,7 +5,7 @@
   "schema_version": 5,
   "status": "exported",
   "created": "2026-09-12T11:11:15Z",
-  "updated": "2026-09-12T12:34:11Z",
+  "updated": "2026-09-12T13:09:00Z",
   "targets": [
     {
       "id": "c1",
@@ -731,9 +731,9 @@
       "id": "t10",
       "summary": "Statements artifact, citation verifier, not-fully-read marker, and continue-from loader",
       "origin": "llm",
-      "status": "confirmed",
+      "status": "proposed",
       "acceptance_criteria": [
-        "a statement with no [wN] reference renders with an UNSUPPORTED marker; one with references carries them in statements.json evidence",
+        "a statement with no [wN] reference renders with an UNREFERENCED marker; one with references carries them in statements.json evidence",
         "given one correct and one wrong path:N citation the verifier accepts the first and flags the second",
         "the not-fully-read marker is present exactly when a walk entry has truncated=true; continue-from starts a session whose first context contains the prior walk contents",
         "a citation that resolves into a recorded read range is marked ENCOUNTERED, never SUPPORTED; a statement with no reference is marked UNREFERENCED"
@@ -1030,12 +1030,12 @@
       "text": "measured under pi 0.84.2 (t2): defaultTools [] narrows pi.getActiveTools() but pi.getAllTools() still lists read, bash, edit, write, grep, find, ls \u2014 the t12 launcher's fail-closed check must assert on the ACTIVE tool set (the sentinel reports active_tools and writer_tools_active), not on the full list",
       "kind": "unknown_nonblocking",
       "task_id": "t12",
-      "resolved": false,
-      "resolution": ""
+      "resolved": true,
+      "resolution": "t12: the fail-closed gate asserts associate_ready in active_tools and writer_tools_active == [], obtained from the associate_ready tool_execution_end event on a readiness turn; the full tools list is recorded and never a failure"
     },
     {
       "id": "r15",
-      "text": "the associate lane was unreachable (503 via the gateway) for part of this run; t11's live reasoning-off check and all of t15 depend on it being back; reviews fell back to the Qwen lane",
+      "text": "the associate lane was unreachable for parts of this run (infrastructure update on the remote, unrelated to this work per the operator); t11's live reasoning-off check and all of t15 depend on it being back; the Qwen lane could answer prompts but did not complete tool-driven reviews within 7 minutes",
       "kind": "unknown_blocking",
       "task_id": "t15",
       "resolved": false,
@@ -1046,12 +1046,12 @@
       "text": "measured by t13: Pi loads context files from ancestor directories, so the workspace-level CLAUDE.md (one directory above the repo, ~5 KB of unrelated workspace guidance) lands in the lane's system prompt; AGENTS.override.md cannot suppress an ancestor. t12's launcher must pass --no-context-files and have the extension inject AGENTS.md itself via before_agent_start (or an equivalent Pi setting), and t14 should document it",
       "kind": "unknown_blocking",
       "task_id": "t12",
-      "resolved": false,
-      "resolution": ""
+      "resolved": true,
+      "resolution": "t12: launcher passes --no-context-files and sets ASSOCIATE_INJECT_PROMPT=1; lib/prompt.ts injects only the checkout's AGENTS.md via before_agent_start; observational confirmation on a real turn is owed by t15"
     },
     {
       "id": "r17",
-      "text": "pi-acp is not installed on this box; culture.yaml now declares acp_command [pi-acp] but nothing has launched it; t15 needs pi-acp 0.0.33 installed (npm, pinned) before the mesh check",
+      "text": "pi-acp 0.0.33 installed globally on this box 2026-09-12 with the operator's approval (npm install -g, pinned); culture.yaml's acp_command [pi-acp] now resolves; the live mesh launch is still unverified until t15",
       "kind": "unknown_nonblocking",
       "task_id": "t15",
       "resolved": false,
@@ -1094,14 +1094,30 @@
       "text": "c14's instruction says the README names the ASSOCIATE_* variables; t14 put them in CLAUDE.md only \u2014 t12 (or the PR prep) must add them to README before t15 closes",
       "kind": "unknown_nonblocking",
       "task_id": "t12",
-      "resolved": false,
-      "resolution": ""
+      "resolved": true,
+      "resolution": "t12 added the ASSOCIATE_* table and a run row to README"
     },
     {
       "id": "r23",
       "text": "t8 dependency: the webglass-code-lens-as-tools plan has not merged; its skills and the ledger rows for the two CLIs do not exist, so the extension's wrappers are the only surface today; that plan still owes the human/bash skills and the ledger rows",
       "kind": "follow_up",
       "task_id": "t8",
+      "resolved": false,
+      "resolution": ""
+    },
+    {
+      "id": "r24",
+      "text": "root cause per the operator 2026-09-12: the associate lane OOMs on two concurrent requests. During wave 4 this run had a dogfood review and task agents' live pi-integration tests hitting the lane at once, so concurrent use from this run is a plausible trigger even though the fix is infrastructure-side. Until the lane serializes or gains headroom: one live request at a time from this box; t15 runs its checks strictly serially and never alongside another pi session or the bench",
+      "kind": "unknown_blocking",
+      "task_id": "t15",
+      "resolved": false,
+      "resolution": ""
+    },
+    {
+      "id": "r25",
+      "text": "the lane OOMs on two concurrent requests (operator, 2026-09-12): c42's per-session isolation is about files, not lane capacity \u2014 the harness (t12 launcher and the mesh path) should expose a documented single-flight expectation for the associate lane, and the bench must run cases serially; a follow-up may add a client-side concurrency guard",
+      "kind": "follow_up",
+      "task_id": "t12",
       "resolved": false,
       "resolution": ""
     }
