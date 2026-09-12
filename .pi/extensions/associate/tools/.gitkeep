@@ -1,0 +1,13 @@
+Tool modules live here, one per registered tool.
+
+index.ts dynamically imports every *.ts in this directory (and every
+<name>/index.ts subdirectory) and calls its exported
+
+    register(pi, ctx)
+
+where ctx is the AssociateContext from ../lib/context.ts: the loaded contract
+policy and schemas, this session's scratch and export directories, and the
+containment helpers. A module that does not export register() fails the load
+loudly rather than being skipped.
+
+The next wave adds read.ts, search.ts, shell.ts, codelens.ts and web.ts here.

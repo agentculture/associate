@@ -241,3 +241,8 @@ skills.local.yaml
 .pi/git/
 node_modules/
 .associate-runs/
+
+# The Pi extension's lib/ holds source, not a Python build artifact. The
+# generic `lib/` rule above (from the Python .gitignore template) would
+# otherwise swallow .pi/extensions/associate/lib/.
+!.pi/extensions/associate/lib/
