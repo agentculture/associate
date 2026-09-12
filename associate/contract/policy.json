@@ -1,0 +1,94 @@
+{
+  "$comment": "The permission boundary, ported from colleague's containment guards (issue #1). Origins: colleague/colleague/search_tools.py (confine, _refuse_pattern_escape, DEFAULT_MAX_RESULTS=200), colleague/colleague/readpage.py (1000 lines / 25,000 chars), colleague/colleague/web.py (_MAX_RAW_CHARS=2,000,000). Adapters read these values; they must not hardcode their own copy.",
+  "version": 1,
+  "read": {
+    "confine_to_session_root": true,
+    "refuse_parent_path_segments": true,
+    "respect_gitignore": true,
+    "line_numbers": "absolute",
+    "denylist": [
+      ".env",
+      ".env.*",
+      "*.pem",
+      "*.key",
+      "*.p12",
+      "*.pfx",
+      "id_rsa*",
+      "id_ecdsa*",
+      "id_ed25519*",
+      "*.keystore",
+      ".netrc",
+      ".npmrc",
+      ".pypirc",
+      ".git-credentials",
+      "*credentials*",
+      "*secret*",
+      "*token*",
+      "*apikey*",
+      "*api_key*",
+      "**/.aws/*",
+      "**/.ssh/*",
+      "**/.gnupg/*"
+    ]
+  },
+  "shell": {
+    "argv_only": true,
+    "shell_interpretation": false,
+    "refuse_redirection": true,
+    "refuse_pipes": true,
+    "allowlist": [
+      {"command": "rg", "subcommands": []},
+      {"command": "fd", "subcommands": []},
+      {"command": "ls", "subcommands": []},
+      {"command": "cat", "subcommands": []},
+      {"command": "head", "subcommands": []},
+      {"command": "tail", "subcommands": []},
+      {"command": "wc", "subcommands": []},
+      {"command": "git", "subcommands": ["log", "diff", "show", "status", "blame"]},
+      {"command": "code-lens", "subcommands": []},
+      {"command": "webglass", "subcommands": ["search", "page"]}
+    ]
+  },
+  "budgets": {
+    "read": {
+      "max_lines": 1000,
+      "max_output_chars": 25000,
+      "max_bytes": 1048576,
+      "spill_to_disk": true
+    },
+    "shell": {
+      "max_output_chars": 25000
+    },
+    "web": {
+      "max_output_chars": 25000
+    }
+  },
+  "caps": {
+    "max_results": 200,
+    "max_raw_chars": 2000000,
+    "max_fetches_per_run": 20
+  },
+  "web": {
+    "read_only": true,
+    "registered_verbs": ["search", "page"],
+    "typed_error_on_denied_or_paywalled": true,
+    "record_every_url_in_walk": true
+  },
+  "redaction": {
+    "$comment": "Applied harness-side to every walk/statements artifact before it is written — a filter, never an instruction to the model.",
+    "replacement": "[REDACTED]",
+    "patterns": [
+      "(?i)\\bbearer\\s+[A-Za-z0-9._~+/=-]{12,}",
+      "(?i)\\b(api[_-]?key|apikey|secret|password|passwd|token)\\b\\s*[:=]\\s*\\S+",
+      "\\bsk-[A-Za-z0-9]{16,}\\b",
+      "\\bgh[pousr]_[A-Za-z0-9]{20,}\\b",
+      "\\bAKIA[0-9A-Z]{16}\\b",
+      "-----BEGIN [A-Z ]*PRIVATE KEY-----[\\s\\S]*?-----END [A-Z ]*PRIVATE KEY-----"
+    ]
+  },
+  "export": {
+    "outside_examined_checkout": true,
+    "git_ignored": true,
+    "session_scoped": true
+  }
+}
