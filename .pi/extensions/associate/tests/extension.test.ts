@@ -52,7 +52,11 @@ test("the extension registers associate_ready and finish and no writer", async (
       const names = pi.toolNames();
       assert.ok(names.includes("associate_ready"), `missing sentinel: ${names.join(", ")}`);
       assert.ok(names.includes("finish"), `missing finish: ${names.join(", ")}`);
-      for (const forbidden of ["edit", "write", "bash", "apply_patch"]) {
+      // `bash` is NOT in this list: the allowlisted shell (spec c35, t7)
+      // registers under that name on purpose, as an override of pi's built-in.
+      // It is covered by tests/shell.test.ts, which asserts there is exactly
+      // one and that it is the extension's.
+      for (const forbidden of ["edit", "write", "apply_patch"]) {
         assert.ok(!names.includes(forbidden), `the extension must not register ${forbidden}`);
       }
     });
@@ -94,7 +98,9 @@ test("associate_ready reports no active writer under defaultTools: []", async ()
         (await pi.tool("associate_ready").execute("call-1", {})).content[0]!.text,
       ) as { tools: string[]; active_tools: string[]; writer_tools_active: string[] };
       assert.ok(report.tools.includes("write"), "configured built-ins are reported as configured");
-      assert.deepEqual(report.active_tools, ["associate_ready", "finish"]);
+      assert.deepEqual(report.active_tools, ["associate_ready", "finish", "bash"]);
+      // The allowlisted shell overrides the built-in name `bash` but declares
+      // itself a non-writer (spec c35), so the launcher's check stays empty.
       assert.deepEqual(report.writer_tools_active, [], "no writer may be active");
 
       pi.activeBuiltinTools = ["write"];
@@ -178,8 +184,12 @@ test("the extension creates its session dirs and writes nothing into the checkou
 });
 
 test("every module under tools/ is discovered and must export register()", async () => {
-  // The directory ships empty (only .gitkeep); the next wave drops modules in.
-  assert.deepEqual(discoverToolModules(toolsDir), []);
+  // Every module that ships under tools/ must be discovered; the loader is
+  // what proves each one exports register().
+  assert.deepEqual(
+    discoverToolModules(toolsDir).map((path) => path.split("/").pop()),
+    ["shell.ts"],
+  );
 
   const dir = mkdtempSync(join(tmpdir(), "associate-tools-"));
   try {

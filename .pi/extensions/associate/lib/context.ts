@@ -53,6 +53,16 @@ export interface AssociateContext {
   declareWriter(toolName: string): void;
   /** Tool names declared through {@link declareWriter}, for the guard. */
   declaredWriters(): readonly string[];
+  /**
+   * Declare a registered tool as a safe override of a built-in writer's name —
+   * the allowlisted shell registering as `bash` (spec c35). Without it the
+   * guard would judge the override by the built-in's reputation and block
+   * every call to it, and the `associate_ready` sentinel would report it as an
+   * active writer, which the launcher (c34) refuses to serve on.
+   */
+  declareNonWriter(toolName: string): void;
+  /** Tool names declared through {@link declareNonWriter}, for the guard. */
+  declaredNonWriters(): readonly string[];
 }
 
 /**

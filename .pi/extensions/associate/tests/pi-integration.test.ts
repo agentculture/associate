@@ -109,7 +109,15 @@ test("a real pi run lists associate_ready and finish and activates no writer", {
   // Criterion 1: the sentinel and finish are offered; no writer is.
   assert.ok(report.active_tools.includes("associate_ready"), "associate_ready must be active");
   assert.ok(report.active_tools.includes("finish"), "finish must be active");
-  for (const forbidden of ["edit", "write", "bash"]) {
+  // `bash` is active on purpose: it is the extension's allowlisted override
+  // (spec c35/h27), and the assertion below is that exactly one tool carries
+  // that name and no writer is active.
+  assert.deepEqual(
+    report.active_tools.filter((name: string) => name === "bash"),
+    ["bash"],
+    `exactly one bash must be active: ${report.active_tools.join(", ")}`,
+  );
+  for (const forbidden of ["edit", "write"]) {
     assert.ok(
       !report.active_tools.includes(forbidden),
       `${forbidden} must not be active: ${report.active_tools.join(", ")}`,
