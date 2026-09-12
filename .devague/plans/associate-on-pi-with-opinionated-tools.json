@@ -5,7 +5,7 @@
   "schema_version": 5,
   "status": "exported",
   "created": "2026-09-12T11:11:15Z",
-  "updated": "2026-09-12T13:09:00Z",
+  "updated": "2026-09-12T13:15:41Z",
   "targets": [
     {
       "id": "c1",
@@ -731,7 +731,7 @@
       "id": "t10",
       "summary": "Statements artifact, citation verifier, not-fully-read marker, and continue-from loader",
       "origin": "llm",
-      "status": "proposed",
+      "status": "confirmed",
       "acceptance_criteria": [
         "a statement with no [wN] reference renders with an UNREFERENCED marker; one with references carries them in statements.json evidence",
         "given one correct and one wrong path:N citation the verifier accepts the first and flags the second",
