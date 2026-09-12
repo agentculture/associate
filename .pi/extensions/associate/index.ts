@@ -30,6 +30,8 @@ import { evaluateToolCall } from "./lib/guard.ts";
 import { normalizeHandback, unreferencedCount } from "./lib/handback.ts";
 import { registerAssociateProvider } from "./lib/provider.ts";
 import { createAssociateContext, loadToolModules } from "./lib/runtime.ts";
+import { installStatementsRecorder } from "./lib/statements.ts";
+import { installContinueFrom } from "./lib/torch.ts";
 import { installWalkRecorder } from "./lib/walk.ts";
 
 /** Registered by this file rather than by a module under `tools/`. */
@@ -44,6 +46,19 @@ export default async function (pi: ExtensionAPI) {
   // of the run is already recorded and `walk.jsonl` exists for the sentinel to
   // name. The export is unconditional — there is no flag (spec c23).
   const walk = installWalkRecorder(pi, ctx);
+
+  // ------------------------------------------------------- statements record
+  // Artifact B (spec c25/c31): the model's claims, each carrying the walk ids
+  // it referenced, with every `path:N` citation checked against the walk's
+  // recorded read ranges. Installed after the walk so a statement is always
+  // verified against a walk that is already on disk.
+  installStatementsRecorder(pi, ctx);
+
+  // ------------------------------------------------------------ continue-from
+  // `$ASSOCIATE_CONTINUE_FROM` loads a prior run's walk as this session's
+  // first context, so a second agent does not re-walk it. Registers nothing
+  // when the variable is unset.
+  installContinueFrom(pi, ctx);
 
   // ---------------------------------------------------------------- sentinel
   pi.registerTool({
