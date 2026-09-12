@@ -37,9 +37,9 @@ What exists today:
 - the agent-first CLI (`whoami` / `learn` / `explain` / `overview` / `doctor` /
   `cli overview` / `bench`) — introspection plus a behavioral-suite runner, no
   read/find/summarize domain verbs yet;
-- the mesh identity (`culture.yaml` + `AGENTS.colleague.md`), still
-  `backend: colleague` — the cutover to `backend: acp` (pi-acp, `AGENTS.md`) is
-  a separate, later change, not done in this repo yet;
+- the mesh identity: `culture.yaml` now declares `backend: acp` with
+  `acp_command: [pi-acp]`, and `AGENTS.md` is the Pi runtime prompt
+  (`AGENTS.colleague.md` is retained until the ACP path is verified live);
 - 19 vendored skills under `.claude/skills/`;
 - a green build/lint/publish baseline;
 - **the harness pieces landed so far, per
@@ -58,7 +58,7 @@ What is **still landing** (do not describe any of it as working until it
 ships and a run measures it): the `pi` harness adapter itself
 (`associate/harness/pi.py`) and the `associate run` CLI verb that drives it;
 the Pi provider registration (`lib/provider.ts`, reasoning-off on the wire);
-the mesh cutover to `backend: acp` / `AGENTS.md`; and the walk/statements
+the live proof that `culture start associate` launches through pi-acp; and the walk/statements
 artifacts a real run would produce. **Until a task measures a live `pi`
 adapter run end to end (tracked as t15 in this plan's split), the harness does
 not work end to end — say so plainly, here and in any commit or PR body.**
