@@ -99,4 +99,4 @@ Approved lapses that cap confidence: l4 (invented policy budgets), l5/l29 (adapt
 - r26: bench findings (read via shell vs read tool; evidence markers on short tasks; case expectations); extension version column.
 - r23: the webglass/code-lens skills plan and its ledger rows; r13: ship the corpus as package data; r18/r28: redaction pattern dialect and over-redaction of identifiers.
 - v9: colleague adopting the contract-plus-adapters design (issue on agentculture/colleague).
-- Pending adjudication: evidence e1–e15, deltas b1–b5, lapses l33–l34.
+- Adjudicated by the operator after the squash merge (#6): evidence e1–e15, deltas b1–b5, lapses l33–l36 all confirmed.

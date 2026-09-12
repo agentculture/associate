@@ -4,7 +4,7 @@
   "schema_version": 6,
   "status": "exported",
   "created": "2026-09-12T09:17:50Z",
-  "updated": "2026-09-12T15:52:03Z",
+  "updated": "2026-09-12T16:33:04Z",
   "claims": [
     {
       "id": "c1",
@@ -1651,7 +1651,7 @@
         "d8"
       ],
       "origin": "llm",
-      "status": "proposed"
+      "status": "approved"
     },
     {
       "id": "l34",
@@ -1663,7 +1663,7 @@
         "c35"
       ],
       "origin": "llm",
-      "status": "proposed"
+      "status": "approved"
     },
     {
       "id": "l35",
@@ -1674,7 +1674,7 @@
         "PR #6 review"
       ],
       "origin": "llm",
-      "status": "proposed"
+      "status": "approved"
     },
     {
       "id": "l36",
@@ -1685,7 +1685,7 @@
         "PR #6 review"
       ],
       "origin": "llm",
-      "status": "proposed"
+      "status": "approved"
     }
   ],
   "obligations": [
