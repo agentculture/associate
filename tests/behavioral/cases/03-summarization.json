@@ -1,0 +1,20 @@
+{
+  "id": "summarization",
+  "category": "summarization",
+  "title": "Summarize a document longer than the read budget and mark it not fully read",
+  "prompt": "Summarize docs/design.md. State the quorum rule it defines, cite the line, and say explicitly if you could not read the whole document.",
+  "fixture": {
+    "files": {
+      "docs/design.md": "# design\n\n## consensus\n\nA write commits on a quorum of three replicas.\n\n## padding\n\nfiller\nfiller\nfiller\nfiller\nfiller\nfiller\nfiller\nfiller\nfiller\nfiller\nfiller\nfiller\nfiller\nfiller\nfiller\nfiller\nfiller\nfiller\nfiller\nfiller\nfiller\nfiller\nfiller\nfiller\nfiller\nfiller\nfiller\nfiller\nfiller\nfiller\nfiller\nfiller\nfiller\nfiller\nfiller\nfiller\nfiller\nfiller\nfiller\nfiller\nfiller\nfiller\nfiller\nfiller\nfiller\nfiller\nfiller\nfiller\nfiller\nfiller\nfiller\nfiller\nfiller\nfiller\nfiller\n"
+    }
+  },
+  "expect": {
+    "reads": ["docs/design.md"],
+    "read_limit": 20,
+    "facts": ["quorum of three"],
+    "citations": [{"path": "docs/design.md", "line": 5}],
+    "not_fully_read": true,
+    "min_tool_calls": 1,
+    "outcome": "ok"
+  }
+}

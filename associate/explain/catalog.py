@@ -25,6 +25,8 @@ buildable/deployable package baseline. Clone it, rename the package, edit
 - `associate explain <path>` — markdown docs for any noun/verb.
 - `associate overview` — descriptive snapshot of the agent.
 - `associate doctor` — check the agent-identity invariants.
+- `associate run` — run one task on a harness adapter, or fail closed.
+- `associate bench` — run the behavioral suite against a harness adapter.
 - `associate cli overview` — describe the CLI surface.
 
 ## Exit-code policy
@@ -103,6 +105,111 @@ skills-present check. Exits 1 when unhealthy.
     associate doctor --json
 """
 
+_RUN = """\
+# associate run
+
+Runs one task on a harness adapter — and refuses to run it at all unless the
+adapter can prove it is contained. That refusal is the verb's point.
+
+## Failing closed
+
+Pi's non-interactive modes load a project's `.pi/extensions` only on a trusted
+checkout; without trust they fall back to Pi's **full built-in tool set**,
+`edit` and `write` included. So the launcher checks the tool list **pi itself
+reports**, never the presence of a config file on disk. A run with no report, or
+whose report lists an active writer tool, exits `2` and serves nothing.
+
+Readiness is proven by a **preflight**, not by the task turn. Every run is two
+pi invocations: the first adds `-e lib/preflight.ts`, an extension whose only
+handler ends the process on `before_agent_start`, so pi loads every extension,
+fires `session_start` — where the associate extension writes its report to
+`<export dir>/ready.json` — and then exits before any model request. The
+launcher reads that file, and only then runs the real task turn, unchanged.
+Asking the model to call `associate_ready` in the same turn as the task was the
+earlier design and it was not a proof: a model handed real work goes to the
+work, and healthy runs were refused for it. The extension itself is passed
+explicitly with `-e <index.ts>` in both invocations, so the lane loads in **any**
+checkout — a fixture repo, an unrelated project — rather than depending on the
+examined checkout carrying its own `.pi/`. `$ASSOCIATE_EXTENSION_PATH` overrides
+which `index.ts` that is.
+
+Measured against pi 0.84.2: the *full* tool list still names `edit` and `write`
+even when they are inactive, so the check is on `active_tools` and
+`writer_tools_active` — never on the full list.
+
+## What it passes pi
+
+`-p --mode json --no-session --approve --no-context-files -e <index.ts>`, with
+`--no-context-files` there because pi otherwise loads `AGENTS.md`/`CLAUDE.md`
+from every *ancestor* directory — a workspace-level file one level above the
+checkout would leak into the system prompt. The checkout's own `AGENTS.md` is
+injected by the extension instead (`ASSOCIATE_INJECT_PROMPT=1`).
+
+`--provider associate --model $ASSOCIATE_MODEL` are passed only when
+`ASSOCIATE_API_KEY` is set; with no key the extension registers no provider, so
+pi's own default model applies and the launcher says so on stderr.
+
+## Output
+
+`walk_path`, `statements_path`, `statements_md_path`, `export_dir`, `outcome`
+and `session_id` on stdout — `key=value` lines, or one JSON object with
+`--json`. Diagnostics (the pi version warning, the no-lane note) go to stderr.
+
+## Usage
+
+    associate run
+    associate run "Find every caller of load_policy" --json
+    associate run --harness stub
+    associate run --continue-from <prior export dir>
+    associate run --export-root <dir> --session-id <id>
+
+## Exit codes
+
+- `0` the run served; both artifact paths are on stdout
+- `1` unknown `--harness` (the error lists the registered adapters), or a
+  `--checkout` that is not a directory
+- `2` the adapter failed closed (no sentinel, or an active writer tool), pi is
+  not on PATH, the run timed out, or the export root is inside the checkout
+"""
+
+_BENCH = """\
+# associate bench
+
+Runs the behavioral suite — seven cases, one per category — against a harness
+adapter and prints a table whose rows carry the complete configuration the run
+was measured on. Exits non-zero if any category failed.
+
+The corpus is adapter-free: the *same* seven cases run for every adapter, so two
+tables differ only in their adapter and model-role columns.
+
+## Categories
+
+`local read/find`, `repo exploration`, `summarization`, `structured evidence
+extraction`, `tool-call reliability`, `forbidden mutation attempts`, `bounded
+completion and hand-back`.
+
+## Columns
+
+harness, model role, served model id (as the endpoint reports it), pi version,
+extension version, provider, reasoning setting, category, pass/fail, wall time,
+and a note. A run against the `stub` adapter is labelled **plumbing-only**: it
+verifies the wiring — artifact shapes, schemas, checks — with no pi and no lane,
+and is never a measurement of model reliability.
+
+## Usage
+
+    associate bench --harness stub
+    associate bench --harness stub --json
+    associate bench --harness stub --cases tests/behavioral/cases
+
+## Exit codes
+
+- `0` every category passed
+- `1` a category failed, or the named adapter is unknown (the error lists the
+  available adapters)
+- `2` the behavioral corpus could not be found (pass `--cases <dir>`)
+"""
+
 _CLI = """\
 # associate cli
 
@@ -124,6 +231,8 @@ ENTRIES: dict[tuple[str, ...], str] = {
     ("explain",): _EXPLAIN,
     ("overview",): _OVERVIEW,
     ("doctor",): _DOCTOR,
+    ("run",): _RUN,
+    ("bench",): _BENCH,
     ("cli",): _CLI,
     ("cli", "overview"): _CLI,
 }

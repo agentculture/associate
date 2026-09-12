@@ -5,6 +5,56 @@ All notable changes to this project will be documented in this file.
 Format follows [Keep a Changelog](https://keepachangelog.com/). This project
 adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.9.0] - 2026-09-12
+
+### Added
+
+- **`CLAUDE.md` Tooling prerequisites** gains the exact Pi harness pins (`pi`
+  0.84.2, `pi-acp` 0.0.33, Node >=22, and the extension's own contract
+  version), the upgrade rule (bump a pin only after `associate bench` passes
+  against the new version), and a reference table for the six `ASSOCIATE_*`
+  environment variables (`BASE_URL`, `API_KEY`, `MODEL`, `CONTRACT_DIR`,
+  `SESSION_ID`, `EXPORT_ROOT`).
+- **`docs/skill-sources.md`** gains a "Ported guards — not vendored skills"
+  section with two ledger rows for
+  `.pi/extensions/associate/lib/contain.ts`'s `confine()` /
+  `refusePatternEscape()` and `boundOutput()`, hand-ported from `colleague`'s
+  `search_tools.py` / `readpage.py` / `truncation.py`, plus a drift note
+  explaining that these ports have no scripted re-sync path and must be
+  re-applied by hand when colleague's originals change.
+
+### Changed
+
+- **`README.md`** drops the "Status: scaffold, not yet a harness" framing and
+  replaces it with the boundary the operator set: associate is an opinionated
+  Pi extension plus a thin wrapper around a small portable contract (role and
+  permission boundaries, task input/handback format, evidence artifacts,
+  behavioral cases), while everything else — tool descriptions, prompt
+  construction, context selection, compaction, reasoning/provider settings —
+  stays tailored to Pi and the model; a second harness is added only after a
+  measured benefit. Adds the three reader audiences (mesh resident, colleague
+  or an operator driving it headlessly, a developer running `pi` directly)
+  each with one invocation, the lane boundary (reads/finds/summarizes/verifies,
+  never edits/writes/PRs), and the before state quoted at the pre-change HEAD
+  (commit `2f24585`: `backend: colleague`, no tracked `.pi/`, README literally
+  said "not yet a harness"). Adds `bench` to the CLI table and Quickstart.
+- **`CLAUDE.md`** "Current state vs. target" now lists the harness pieces that
+  have landed in this plan so far (the portable contract, the Pi extension
+  core, the containment library, `associate bench --harness stub`) separately
+  from what is still landing (the `pi` harness adapter, the `run` CLI verb,
+  the provider registration, the mesh cutover to `backend: acp`) and states
+  plainly that the harness does not work end to end until a later task (t15)
+  measures a live `pi` adapter run. "What not to invent" gets a matching
+  entry, plus a reminder that policy values belong in `associate/contract/`,
+  never hardcoded in the Pi extension. Build/test/lint gains an
+  `associate bench` entry, and Skills convention documents the `.gitignore`
+  re-include needed for `.pi/extensions/*/lib/` (the Python-project template's
+  bare `lib/` rule would otherwise swallow the extension's TypeScript source).
+
+This is a docs-only change: no code, no tests, no CLI verb added or modified.
+
+### Fixed
+
 ## [0.8.0] - 2026-09-05
 
 ### Added

@@ -1,5 +1,5 @@
-# `model:` is a lobes ROLE name, not a checkpoint id. The `colleague` backend
-# defaults to the local lobes gateway (http://localhost:8001/v1), which resolves
+# `model:` is a lobes ROLE name, not a checkpoint id. The lane is served by the
+# local lobes gateway (http://localhost:8001/v1), which resolves
 # `associate` to whichever box currently hosts that role — today the Jetson AGX
 # Orin 64GB, proxied over the tailnet (ASSOCIATE_PEER_ORIGIN + _PEER_PROXY),
 # serving nvidia/NVIDIA-Nemotron-3.5-Lightning-30B-A3B-NVFP4. Addressing the
@@ -9,7 +9,19 @@
 # The lobes `associate` role is `worker` MINUS `repo_action` — it executes,
 # drafts, inspects and calls tools, then hands the result BACK rather than
 # enacting it. That is exactly this agent's remit.
+#
+# The mesh backend is `acp`: culture spawns `acp_command` and speaks the Agent
+# Client Protocol to it. `pi-acp` (npm) bridges ACP stdio to `pi --mode rpc`, so
+# the resident runs the same Pi binary and the same `.pi/extensions/associate`
+# tool set as a headless `pi -p` run. Without this key culture_core falls back
+# to its default `["opencode", "acp"]` — a different agent entirely.
+#
+# `backend: acp` also selects the runtime prompt file: culture's
+# backend-consistency invariant maps acp -> AGENTS.md, and Pi loads AGENTS.md as
+# its context file in preference to CLAUDE.md. AGENTS.colleague.md is retained
+# through the transition so this cutover is a single clean `git revert`.
 agents:
 - suffix: associate
-  backend: colleague
+  backend: acp
+  acp_command: ["pi-acp"]
   model: associate

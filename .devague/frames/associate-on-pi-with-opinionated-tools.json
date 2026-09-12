@@ -1,0 +1,1927 @@
+{
+  "slug": "associate-on-pi-with-opinionated-tools",
+  "title": "associate on Pi with opinionated tools",
+  "schema_version": 6,
+  "status": "exported",
+  "created": "2026-09-12T09:17:50Z",
+  "updated": "2026-09-12T15:52:03Z",
+  "claims": [
+    {
+      "id": "c1",
+      "kind": "announcement",
+      "text": "associate ships as a Pi-based agent on Nemotron 3.5 Lightning: pi (pi.dev) drives the lobes associate lane with a project extension that registers opinionated read/find/summarize/web tools, a structurally restricted toolset (no edit/write into any checkout), and precision aids where the model is weak",
+      "origin": "user",
+      "status": "confirmed",
+      "honesty_conditions": [
+        {
+          "id": "h1",
+          "text": "the announcement holds only if the same pi extension behaves identically in interactive, -p, and rpc modes \u2014 the tool restriction is not a TUI-only setting",
+          "status": "confirmed",
+          "instruction": ""
+        }
+      ],
+      "hard_questions": [],
+      "links": [],
+      "instruction": "verify: culture.yaml backend: acp; tracked .pi/ config and extension present; 'pi -p' completes a read/find task on the lane using only registered tools; no edit/write tool is registered",
+      "revisions": []
+    },
+    {
+      "id": "c2",
+      "kind": "assumption",
+      "text": "the runtime is the installed Pi coding agent (@earendil-works/pi-coding-agent 0.84.2 at ~/.nvm/.../bin/pi), not a Python reimplementation of its loop: Pi already provides custom OpenAI-compatible providers (~/.pi/agent/models.json, api: openai-completions), a project extension API (.pi/extensions/*.ts: registerTool, tool_call/tool_result hooks, before_agent_start), a defaultTools allowlist, and headless drivers (-p, --mode json, --mode rpc, AgentSession SDK)",
+      "origin": "llm",
+      "status": "confirmed",
+      "honesty_conditions": [],
+      "hard_questions": [
+        {
+          "id": "q1",
+          "text": "Issue #1 (guildmaster build brief) says 'Do not vendor Pi; build the same discipline', while today's direction runs the installed Pi binary as the runtime through pi-acp. Running Pi as an installed tool is not vendoring it, but the brief's intent was a self-owned sub-1000-token loop. Which holds: Pi-as-runtime (today's decisions c11-c13), or Pi-as-posture with an owned loop merged from colleague's tools?",
+          "resolved": true,
+          "blocking": false,
+          "resolution": "user: Pi-as-runtime approved \u2014 the installed Pi binary (via pi-acp for the mesh, pi -p / rpc headless) is the loop; issue #1's 'do not vendor Pi' is superseded for this repo. The brief's discipline (tiny prompt surface, on-demand skills, nothing clever in the loop) still applies to how the extension and AGENTS.md are written."
+        }
+      ],
+      "links": [],
+      "instruction": "",
+      "revisions": []
+    },
+    {
+      "id": "c3",
+      "kind": "requirement",
+      "text": "the opinionated tools land as a tracked Pi project extension under .pi/extensions/ that registers associate's read/find/summarize/web tools and sets defaultTools so Pi's built-in edit and write are structurally absent (per docs/settings.md defaultTools and docs/extensions.md registerTool in the pi package)",
+      "origin": "llm",
+      "status": "confirmed",
+      "honesty_conditions": [
+        {
+          "id": "h2",
+          "text": "the extension is project-local and tracked (.pi/extensions/), loads after project trust, and does not depend on anything under ~/.pi/agent/ except provider credentials",
+          "status": "confirmed",
+          "instruction": ""
+        }
+      ],
+      "hard_questions": [],
+      "links": [],
+      "instruction": "verify: .pi/extensions/ is tracked and contains the tool registrations; .pi/settings.json sets defaultTools to the registered tool names only; a session startup block lists no edit or write tool",
+      "revisions": []
+    },
+    {
+      "id": "c4",
+      "kind": "boundary",
+      "text": "the tool surface honors lobes/roles.py exactly: allowed tokens execution, ground_work, bulk_transform, drafting, repo_inspection, run_authorized_commands, tool_use; forbidden final_decision, security_decision, code_authoring, repo_action \u2014 so no tool writes, edits, commits, or pushes into a checkout, and drafts are returned in the result, never applied",
+      "origin": "llm",
+      "status": "confirmed",
+      "honesty_conditions": [
+        {
+          "id": "h3",
+          "text": "no registered tool can cause a persistent change to a checkout: writes land only in a per-session scratch directory outside the repo, and git state is byte-identical before and after a full task run",
+          "status": "confirmed",
+          "instruction": ""
+        }
+      ],
+      "hard_questions": [],
+      "links": [],
+      "instruction": "verify: for each forbidden token in lobes/roles.py ROLE_FORBIDDEN['associate'], name the tool or hook that makes it impossible; run a full task and assert 'git status --porcelain' is empty afterwards",
+      "revisions": []
+    },
+    {
+      "id": "c5",
+      "kind": "requirement",
+      "text": "the restriction is enforced in code, not prompt: colleague/colleague/roles.py has no associate role and AGENTS.colleague.md enforces repo_action-forbidden by instruction only ('having a tool is not authorization to use it'); on Pi, defaultTools plus a tool_call hook that blocks writes outside a scratch dir closes that gap",
+      "origin": "llm",
+      "status": "confirmed",
+      "honesty_conditions": [
+        {
+          "id": "h4",
+          "text": "removing edit/write via defaultTools is verified by the startup tool list, and the tool_call hook is verified by a test that asserts a blocked call \u2014 both, not either",
+          "status": "confirmed",
+          "instruction": ""
+        }
+      ],
+      "hard_questions": [],
+      "links": [],
+      "instruction": "verify: the extension sets defaultTools without edit/write and registers a tool_call hook; a test drives pi -p with a prompt that asks to modify a file and asserts the file is unchanged and the transcript shows a refusal",
+      "revisions": []
+    },
+    {
+      "id": "c6",
+      "kind": "assumption",
+      "text": "Nemotron 3.5 Lightning tool calling is usable as served: lobes-cli docs/nemotron-3.5-lightning-30b-a3b-nvfp4.md records a validated structured tool call under --tool-call-parser qwen3_coder with --reasoning-parser nemotron_v3; the checkpoint has no vision tower, serves 128k on the Orin shape, decodes ~50-54 tok/s flat to 32k depth \u2014 so tools should lean on long-context bulk reading and fast turns, and never assume image input",
+      "origin": "llm",
+      "status": "confirmed",
+      "honesty_conditions": [],
+      "hard_questions": [],
+      "links": [],
+      "instruction": "",
+      "revisions": []
+    },
+    {
+      "id": "c7",
+      "kind": "boundary",
+      "text": "code-lens and webglass stay PATH CLIs invoked through their skills, per the exported frame webglass-code-lens-as-tools (docs/specs/2026-09-05-webglass-code-lens-as-tools.md); Pi tools wrap those CLIs rather than re-implementing repo profiling or guarded web fetch, and dependencies = [] in pyproject.toml stays empty",
+      "origin": "llm",
+      "status": "confirmed",
+      "honesty_conditions": [
+        {
+          "id": "h5",
+          "text": "the wrappers reuse the skills the webglass-code-lens-as-tools plan lands (tasks t1-t3) rather than a second copy; if that plan has not merged first, this work depends on it and says so",
+          "status": "confirmed",
+          "instruction": ""
+        }
+      ],
+      "hard_questions": [],
+      "links": [],
+      "instruction": "verify: grep the extension for any reimplementation of repo profiling or web fetch (none); the code-lens and webglass tools shell out to the PATH CLIs and degrade with an install hint; pyproject.toml dependencies stays []",
+      "revisions": []
+    },
+    {
+      "id": "c8",
+      "kind": "non_goal",
+      "text": "colleague's tool loop (colleague/colleague/tool_schemas.py, tools.py) and lobes' role registry (lobes-cli/lobes/roles.py) are not modified by this work; associate consumes both as they are",
+      "origin": "llm",
+      "status": "confirmed",
+      "honesty_conditions": [],
+      "hard_questions": [],
+      "links": [],
+      "instruction": "",
+      "revisions": []
+    },
+    {
+      "id": "c9",
+      "kind": "requirement",
+      "text": "Pi loads AGENTS.md or CLAUDE.md as context files at startup (pi docs/usage.md:100-108); CLAUDE.md here is the Claude Code session prompt, so the repo needs a Pi-facing AGENTS.md (or AGENTS.override.md) carrying the associate lane prompt, and culture.yaml's backend-consistency invariant must still map to a present prompt file",
+      "origin": "llm",
+      "status": "confirmed",
+      "honesty_conditions": [
+        {
+          "id": "h6",
+          "text": "Pi's context-file loading is confirmed against the installed version: with AGENTS.md present, CLAUDE.md is not injected into the runtime prompt",
+          "status": "confirmed",
+          "instruction": ""
+        }
+      ],
+      "hard_questions": [],
+      "links": [],
+      "instruction": "verify: AGENTS.md exists at the repo root and carries the associate lane prompt; 'uv run associate doctor' and steward doctor backend-consistency pass with backend: acp; CLAUDE.md is unchanged in role",
+      "revisions": []
+    },
+    {
+      "id": "c10",
+      "kind": "requirement",
+      "text": "the untracked .pi/settings.json currently points skills at ~/.claude/skills, an absolute home path; committed Pi config must use a repo-relative skills path (.claude/skills) or steward doctor portability fails",
+      "origin": "llm",
+      "status": "confirmed",
+      "honesty_conditions": [
+        {
+          "id": "h7",
+          "text": "the committed Pi config works on a machine whose skills live only in the repo \u2014 no home-dir skills directory required",
+          "status": "confirmed",
+          "instruction": ""
+        }
+      ],
+      "hard_questions": [],
+      "links": [],
+      "instruction": "verify: the tracked .pi/settings.json contains no '~' or '/home' path and points skills at .claude/skills; steward doctor portability passes",
+      "revisions": []
+    },
+    {
+      "id": "c11",
+      "kind": "decision",
+      "text": "associate's mesh backend becomes acp: culture.yaml sets backend: acp and an acp_command that launches pi-acp (npm, bridges ACP stdio to pi --mode rpc); the runtime prompt file becomes AGENTS.md, satisfying both culture's backend-consistency map and Pi's context-file loading",
+      "origin": "user",
+      "status": "confirmed",
+      "honesty_conditions": [],
+      "hard_questions": [],
+      "links": [],
+      "instruction": "",
+      "revisions": []
+    },
+    {
+      "id": "c12",
+      "kind": "decision",
+      "text": "the model endpoint is configuration, not code: the harness addresses the lobes role 'associate' through the gateway by default, and every endpoint fact (base URL, bearer, model id) is overridable so other deployments can point at cloud, localhost, or a different gateway",
+      "origin": "user",
+      "status": "confirmed",
+      "honesty_conditions": [],
+      "hard_questions": [],
+      "links": [],
+      "instruction": "",
+      "revisions": []
+    },
+    {
+      "id": "c13",
+      "kind": "decision",
+      "text": "the associate Python package may drive Pi as a subprocess over its rpc/print JSONL protocol; it does not import the unrelated PyPI 'pi-coding-agent' and adds no runtime dependency",
+      "origin": "user",
+      "status": "confirmed",
+      "honesty_conditions": [],
+      "hard_questions": [],
+      "links": [],
+      "instruction": "",
+      "revisions": []
+    },
+    {
+      "id": "c14",
+      "kind": "requirement",
+      "text": "the Pi provider entry for the associate lane (baseUrl, apiKey, model id) must resolve from environment or a git-ignored local file, never from a committed models.json: the current ~/.pi/agent/models.json holds a plaintext bearer for the Orin endpoint, and steward doctor portability forbids committed home paths; pi docs/custom-provider.md and docs/environment-variables.md document env-driven provider config",
+      "origin": "llm",
+      "status": "confirmed",
+      "honesty_conditions": [
+        {
+          "id": "h8",
+          "text": "the default configuration addresses the lobes gateway by role name; a user can retarget to any OpenAI-compatible endpoint by changing configuration only, with zero code edits",
+          "status": "confirmed",
+          "instruction": ""
+        }
+      ],
+      "hard_questions": [],
+      "links": [],
+      "instruction": "verify: git grep for the Orin host, port, or any bearer in tracked files returns nothing; the provider entry is built from documented env vars or a git-ignored local file; the README names the variables",
+      "revisions": []
+    },
+    {
+      "id": "c15",
+      "kind": "requirement",
+      "text": "culture's ACP backend is exercised end to end with pi-acp before the cutover: pi-acp is an MVP-grade adapter developed against Zed (README Status + Limitations), so the ACP features culture's ACPDaemon relies on must be verified against it, and copilot/acp are exempt from culture's parity gate so nothing upstream guarantees the path today",
+      "origin": "llm",
+      "status": "confirmed",
+      "honesty_conditions": [
+        {
+          "id": "h9",
+          "text": "pi-acp's ACP feature set covers what culture's ACPDaemon requires (prompt, streaming chunks, tool_call updates, session new); each required feature is checked against pi-acp's README Limitations and one live run",
+          "status": "confirmed",
+          "instruction": ""
+        }
+      ],
+      "hard_questions": [],
+      "links": [],
+      "instruction": "verify: with pi-acp installed, 'culture start associate' brings the agent onto a local culture server and it answers one message; the pi-acp README Limitations list is checked against the ACP features culture's ACPDaemon uses, and any gap is recorded",
+      "revisions": []
+    },
+    {
+      "id": "c16",
+      "kind": "audience",
+      "text": "three readers: the associate mesh resident (culture start associate launching pi-acp over backend: acp), colleague delegating non-coding read/find/summarize/web work to the lane, and an operator or the associate Python package driving pi headlessly (pi -p / pi --mode rpc) in a checkout",
+      "origin": "llm",
+      "status": "confirmed",
+      "honesty_conditions": [
+        {
+          "id": "h10",
+          "text": "each of the three audiences has one documented invocation path that works from a clean clone",
+          "status": "confirmed",
+          "instruction": ""
+        }
+      ],
+      "hard_questions": [],
+      "links": [],
+      "instruction": "verify: culture.yaml declares backend: acp with an acp_command naming pi-acp; AGENTS.md addresses the resident; README Quickstart shows one headless invocation that works from a clean clone",
+      "revisions": []
+    },
+    {
+      "id": "c17",
+      "kind": "before_state",
+      "text": "today associate is a scaffold: introspection verbs only, no harness loop, backend: colleague inheriting colleague's full tool set (write_file/edit_file exposed, restrained by prompt only), and a home-dir Pi config that points straight at the Orin with a plaintext bearer; README.md 'Status: scaffold, not yet a harness' and CLAUDE.md 'Current state vs. target' both say so",
+      "origin": "llm",
+      "status": "confirmed",
+      "honesty_conditions": [
+        {
+          "id": "h11",
+          "text": "the before state is checkable at the pre-change HEAD and is not softened after the fact",
+          "status": "confirmed",
+          "instruction": ""
+        }
+      ],
+      "hard_questions": [],
+      "links": [],
+      "instruction": "verify historically: at the pre-change HEAD, git show HEAD:culture.yaml shows backend: colleague, no .pi/ directory is tracked, and README.md contains 'not yet a harness'",
+      "revisions": []
+    },
+    {
+      "id": "c18",
+      "kind": "after_state",
+      "text": "associate runs as pi on the lobes associate role: a tracked .pi/ project config plus extension registers the opinionated tools, edit/write are structurally absent, the endpoint is pure configuration, culture launches it through pi-acp as backend: acp, and AGENTS.md is the runtime prompt; the CLI keeps its afi contract and gains a verb that drives pi headlessly",
+      "origin": "llm",
+      "status": "confirmed",
+      "honesty_conditions": [
+        {
+          "id": "h12",
+          "text": "the after state is demonstrated by a run on the real lane, not only by unit tests with a mocked model",
+          "status": "confirmed",
+          "instruction": ""
+        }
+      ],
+      "hard_questions": [],
+      "links": [],
+      "instruction": "verify: from a clean clone with pi and pi-acp on PATH and endpoint env set, 'uv run associate doctor' passes, 'pi -p \"list the files under associate/cli\"' completes using only registered tools, and 'pi --list-models associate' resolves the configured provider",
+      "revisions": []
+    },
+    {
+      "id": "c19",
+      "kind": "why_it_matters",
+      "text": "colleague spends budget on read/find/summarize chores it should delegate; a fast 3B-active lane with tools that make it precise (deterministic search, bounded reads, validated arguments, wrapped CLIs) takes that work off colleague, and enforcing the no-write bound in code makes the lane safe to hand any checkout",
+      "origin": "llm",
+      "status": "confirmed",
+      "honesty_conditions": [
+        {
+          "id": "h13",
+          "text": "a task colleague would otherwise run end to end is shown delegated to associate and completed with the result handed back",
+          "status": "confirmed",
+          "instruction": ""
+        }
+      ],
+      "hard_questions": [],
+      "links": [],
+      "instruction": "verify: the Pi extension's tool_call hook rejects any write outside the session scratch dir and the rejection is covered by a test that runs pi -p against a fixture repo",
+      "revisions": []
+    },
+    {
+      "id": "c20",
+      "kind": "requirement",
+      "text": "the opinionated tool set is fixed and small: bounded read (path plus optional line range, hard byte cap, returns truncation markers), find and grep backed by pi's vendored fd/rg with result caps, ls, a bash tool restricted to an allowlist of read-only commands, code-lens and webglass wrappers delegating to the PATH CLIs per the webglass-code-lens-as-tools spec, and finish/handback that returns drafts and summaries as the result payload; no edit, no write, no unrestricted shell",
+      "origin": "llm",
+      "status": "confirmed",
+      "honesty_conditions": [
+        {
+          "id": "h14",
+          "text": "the tool list is enumerated in the spec and the shipped extension registers exactly that list \u2014 additions require a spec amendment",
+          "status": "confirmed",
+          "instruction": ""
+        },
+        {
+          "id": "h28",
+          "text": "the shell tool named in the list is the extension's override, never Pi's built-in bash, and the startup tool list shows exactly one tool by that name",
+          "status": "confirmed",
+          "instruction": ""
+        }
+      ],
+      "hard_questions": [],
+      "links": [],
+      "instruction": "verify: 'pi --list-tools' (or the extension's registered tool list in the session startup block) shows exactly the named tools and neither edit nor write; a request to run 'rm', 'git commit', or 'git push' through the bash tool is refused with a structured error",
+      "revisions": []
+    },
+    {
+      "id": "c21",
+      "kind": "requirement",
+      "text": "precision aids compensate for the model where the lobes role says it is weak: every tool validates its arguments against a JSON schema inside the tool and returns a corrective error the model can retry on (so strict server-side tool calling is not required), long inputs are chunked with explicit continuation cursors rather than truncated silently, and summaries cite file:line or URL provenance so a caller can check them",
+      "origin": "llm",
+      "status": "confirmed",
+      "honesty_conditions": [
+        {
+          "id": "h15",
+          "text": "argument validation lives inside each tool and works regardless of whether the server honors strict tool schemas \u2014 so the strict-mode unknown stops blocking design",
+          "status": "confirmed",
+          "instruction": ""
+        }
+      ],
+      "hard_questions": [],
+      "links": [],
+      "instruction": "verify: feed each tool one malformed argument set and confirm the response is a structured error naming the offending field; read a file larger than the byte cap and confirm the response carries a continuation cursor; a summarize run over a fixture returns at least one file:line citation per claimed fact",
+      "revisions": []
+    },
+    {
+      "id": "c22",
+      "kind": "success_signal",
+      "text": "from a clean clone: (1) the tool allowlist contains 0 write-capable tools and a scripted attempt to write into the checkout fails 100% of 10 tries; (2) 'pi -p' answers a find-and-summarize task over the associate package in under 60 s on the Orin lane; (3) culture start associate connects to the mesh through pi-acp and answers one channel message",
+      "origin": "llm",
+      "status": "confirmed",
+      "honesty_conditions": [
+        {
+          "id": "h16",
+          "text": "the three numbers are measured on the live Orin lane and recorded in the PR body with the command that produced each",
+          "status": "confirmed",
+          "instruction": ""
+        }
+      ],
+      "hard_questions": [],
+      "links": [],
+      "instruction": "verify: run the three checks from a fresh shell in a clean clone with the endpoint configured via env; record the wall-clock of (2) and the transcript of (3) in the PR body",
+      "revisions": []
+    },
+    {
+      "id": "c23",
+      "kind": "requirement",
+      "text": "exploration output is persisted by default, never only in the final message: every headless run writes its run artifacts to an export directory (the Pi --mode json event stream as walk.jsonl plus the model's final statements as a file) and returns the paths, because issue #3 measured three runs where text mode returned a 318 B to 1.6 KB meta-summary ('the map is complete') and only json mode plus a mandated scratch-file write produced the 421-line map",
+      "origin": "llm",
+      "status": "confirmed",
+      "honesty_conditions": [
+        {
+          "id": "h17",
+          "text": "the default export happens even when the model never calls a write tool \u2014 persistence is the harness's job, not the model's habit",
+          "status": "confirmed",
+          "instruction": ""
+        }
+      ],
+      "hard_questions": [],
+      "links": [],
+      "instruction": "verify: run 'associate run' (or the documented pi -p wrapper) on a fixture repo with no --export flag; assert an export dir is created containing walk.jsonl and statements.md and that stdout names both paths",
+      "revisions": []
+    },
+    {
+      "id": "c24",
+      "kind": "requirement",
+      "text": "the bounded read tool stamps absolute file line numbers on every returned line (cat -n style) regardless of the window requested, and the harness post-verifies every path:N citation in the statements against the walk's recorded read ranges, marking unverifiable ones \u2014 issue #3 measured citations off by 40-50 lines (server.py:3444 cited vs 3494 actual) with only 6 of 421 map lines carrying a precise file:line",
+      "origin": "llm",
+      "status": "confirmed",
+      "honesty_conditions": [
+        {
+          "id": "h18",
+          "text": "line numbers in statements are checked against what the read tool actually returned in the walk, never against the model's recollection",
+          "status": "confirmed",
+          "instruction": ""
+        }
+      ],
+      "hard_questions": [],
+      "links": [],
+      "instruction": "verify: read a fixture file with offset 3400 and assert the first returned line is prefixed 3400 not 1; add a statements file with one correct and one wrong path:N and assert the verifier accepts the first and flags the second",
+      "revisions": []
+    },
+    {
+      "id": "c25",
+      "kind": "requirement",
+      "text": "pass the torch (issue #4): a run exports two separable artifacts \u2014 A, the walk: an ordered log of every tool call and its result with stable ids (w1, w2, ...), timestamps, and for reads the returned content or its hash; B, the statements: the model's output where each claim carries evidence references into A, with claims lacking any reference flagged UNREFERENCED \u2014 and a --continue-from that lets a second agent load A as given context without re-walking. A reference into a recorded read range proves the agent encountered those lines, not that they support the claim",
+      "origin": "llm",
+      "status": "confirmed",
+      "honesty_conditions": [
+        {
+          "id": "h19",
+          "text": "walk entries are produced by the harness from tool events and are never editable by the model; statements may be wrong but the walk cannot be hallucinated",
+          "status": "confirmed",
+          "instruction": ""
+        }
+      ],
+      "hard_questions": [],
+      "links": [],
+      "instruction": "verify: after a run, walk.jsonl entries have monotonically increasing ids and each read entry carries a content hash; statements.json entries carry an evidence list; a statement with an empty evidence list renders with an unsupported marker; `associate run --continue-from <dir>` starts a session whose first context contains the walk contents",
+      "revisions": [
+        {
+          "text": "pass the torch (issue #4): a run exports two separable artifacts \u2014 A, the walk: an ordered log of every tool call and its result with stable ids (w1, w2, ...), timestamps, and for reads the returned content or its hash; B, the statements: the model's output where each claim carries evidence references into A, with unreferenced claims flagged unsupported \u2014 and a --continue-from that lets a second agent load A as given context without re-walking",
+          "kind": "requirement",
+          "reason": "user: citation-into-walk proves encounter, not support"
+        }
+      ]
+    },
+    {
+      "id": "c26",
+      "kind": "why_it_matters",
+      "text": "measured 2026-09-11 (issue #4): cortex given a diff cold made 20 reads and 9 greps and delivered nothing in 64 minutes; associate mapped the same diff in 4 minutes with a 323-line map \u2014 the value of the lane is realized only if the next agent can trust the map's facts as facts, which needs the walk exported separately from the prose",
+      "origin": "llm",
+      "status": "confirmed",
+      "honesty_conditions": [
+        {
+          "id": "h20",
+          "text": "the 64 min versus 4 min comparison is quoted from issue #4 as measured there, and the spec claims the benefit only after a re-run demonstrates it",
+          "status": "confirmed",
+          "instruction": ""
+        }
+      ],
+      "hard_questions": [],
+      "links": [],
+      "instruction": "verify: re-run the issue #4 read-think-write cycle with cortex given associate's exported walk plus statements and record whether cortex starts from judgement (no re-reads of files already in the walk)",
+      "revisions": []
+    },
+    {
+      "id": "c27",
+      "kind": "success_signal",
+      "text": "on the issue #3 task (map lobes/gateway/server.py and four siblings for a coder): a headless run completes in under 5 min with the map persisted to a file; 100% of its path:N citations resolve to lines the walk shows were read (encounter check); on a sample of at least 10 statements, at least 90% are judged factually supported by the cited lines when checked by a reviewer against the source; the map covers every route, gate, thread-start pattern, and byte-identical test the coder needs (coverage against the issue #3 reference list); and a receiving coder given only the walk and statements completes the follow-on change without re-reading files the walk already contains",
+      "origin": "llm",
+      "status": "confirmed",
+      "honesty_conditions": [
+        {
+          "id": "h21",
+          "text": "the four numbers are measured on the live lane against the issue #3 prompt, not on a mocked model",
+          "status": "confirmed",
+          "instruction": "verify: record for each of three runs the wall time, the encounter-check rate, the reviewer's factual-support tally over a 10-statement sample against the source, the coverage checklist, and the receiving-coder outcome; a 300-line map that fails support or coverage is a fail"
+        }
+      ],
+      "hard_questions": [],
+      "links": [],
+      "instruction": "verify: re-run issue #3's prompt three times through the harness and record wall time, map line count, citation verification rate, and artifact paths in the PR body",
+      "revisions": [
+        {
+          "text": "on the issue #3 task (map lobes/gateway/server.py and four siblings for a coder): a headless run completes in under 5 min with the map persisted to a file of at least 300 lines, at least 90% of its path:N citations verify against the walk, and 0 runs return a final message without an artifact path",
+          "kind": "success_signal",
+          "reason": "user: measure factual support, coverage, and whether the receiving coder can complete its task, not map length"
+        }
+      ]
+    },
+    {
+      "id": "c28",
+      "kind": "requirement",
+      "text": "reasoning is off on the lane: colleague/colleague/associate.py:7-9 records 'Nemotron spends its first tokens thinking; a scout seat must not' and sets reasoning_effort off for the associate seat; the Pi provider config must send the equivalent (the served lane runs --reasoning-parser nemotron_v3 with reasoning on by default), and ~/.pi/agent/models.json today declares supportsReasoningEffort false, so the exact knob is unverified",
+      "origin": "llm",
+      "status": "confirmed",
+      "honesty_conditions": [
+        {
+          "id": "h22",
+          "text": "reasoning-off is verified on the wire, not assumed from the models.json compat flag",
+          "status": "confirmed",
+          "instruction": ""
+        }
+      ],
+      "hard_questions": [],
+      "links": [],
+      "instruction": "verify: one pi -p run against the lane with the configured provider shows no reasoning field (or an empty one) in the raw response captured by a before_provider_request/after hook; document the knob used",
+      "revisions": []
+    },
+    {
+      "id": "c29",
+      "kind": "requirement",
+      "text": "containment guards are ported before features (issue #1): every local tool confines paths to the session root (colleague search_tools.py confine at line 90 and _refuse_pattern_escape at 105), bounds output at a per-tool budget with spill-to-disk (readpage.py, 1000 lines / 25,000 chars default), caps search results (DEFAULT_MAX_RESULTS 200), and the web tool enforces a URL check and a raw-size ceiling (web.py _MAX_RAW_CHARS 2,000,000) and returns a typed error for a failed, denied, or paywalled fetch instead of truncated page text",
+      "origin": "llm",
+      "status": "confirmed",
+      "honesty_conditions": [
+        {
+          "id": "h23",
+          "text": "the guards are ported from colleague with the origin recorded in docs/skill-sources.md or an equivalent ledger row, and the answer to 'what happens when colleague's version changes' is written down",
+          "status": "confirmed",
+          "instruction": ""
+        }
+      ],
+      "hard_questions": [],
+      "links": [],
+      "instruction": "verify: a read of ../outside-root and a grep pattern containing ../ are refused with a structured error; a 5 MB fixture read returns at most the budget plus a spill path; a webglass denial (loopback) and a 402/403 fetch each return a typed error object, never page text",
+      "revisions": []
+    },
+    {
+      "id": "c30",
+      "kind": "requirement",
+      "text": "reliability is observable (issue #1): every run records wall time, tool-call count, exit outcome, and whether output was truncated, in the walk export, so latency and failure rate can be reported per task class rather than asserted",
+      "origin": "llm",
+      "status": "confirmed",
+      "honesty_conditions": [
+        {
+          "id": "h24",
+          "text": "the recorded numbers come from the harness, not from the model's self-report",
+          "status": "confirmed",
+          "instruction": ""
+        }
+      ],
+      "hard_questions": [],
+      "links": [],
+      "instruction": "verify: walk.jsonl's final entry carries run.duration_ms, run.tool_calls, run.outcome, and run.truncated; a script aggregates ten runs into a latency and failure table",
+      "revisions": []
+    },
+    {
+      "id": "c31",
+      "kind": "requirement",
+      "text": "a summary always ships with what makes it checkable (issue #1): source spans or file:line citations into the walk, and an explicit not-fully-read marker when the read budget cut the input short",
+      "origin": "llm",
+      "status": "confirmed",
+      "honesty_conditions": [
+        {
+          "id": "h25",
+          "text": "the not-fully-read marker is set by the tool that truncated, never by the model",
+          "status": "confirmed",
+          "instruction": ""
+        }
+      ],
+      "hard_questions": [],
+      "links": [],
+      "instruction": "verify: summarize a fixture larger than the read budget and assert the output carries the not-fully-read marker and at least one citation; summarize a small fixture and assert the marker is absent",
+      "revisions": []
+    },
+    {
+      "id": "c32",
+      "kind": "decision",
+      "text": "Pi is the runtime, approved over issue #1's do-not-vendor note: the harness runs the installed pi binary (pi-acp for the mesh, pi -p / --mode rpc headless) and keeps Pi's discipline of a tiny prompt surface and on-demand skills",
+      "origin": "user",
+      "status": "confirmed",
+      "honesty_conditions": [],
+      "hard_questions": [],
+      "links": [],
+      "instruction": "",
+      "revisions": []
+    },
+    {
+      "id": "c33",
+      "kind": "decision",
+      "text": "colleague's base tools are ported case by case, only where a Pi built-in or PATH CLI does not already cover the need; each port records origin colleague in the ledger with a note on drift handling",
+      "origin": "user",
+      "status": "confirmed",
+      "honesty_conditions": [],
+      "hard_questions": [],
+      "links": [],
+      "instruction": "",
+      "revisions": []
+    },
+    {
+      "id": "c34",
+      "kind": "requirement",
+      "text": "the tool restriction fails closed: Pi's non-interactive modes (-p, --mode json, --mode rpc) load project .pi/settings.json and .pi/extensions only with a saved trust decision, defaultProjectTrust always, or --approve (pi docs/settings.md:16, security.md:29), and pi-acp documents no way to pass Pi flags through \u2014 so on an untrusted checkout the harness would silently run with Pi's full built-ins including edit and write. The launcher must verify the associate extension actually loaded (a sentinel tool in the startup tool list) and refuse to serve otherwise",
+      "origin": "llm",
+      "status": "confirmed",
+      "honesty_conditions": [
+        {
+          "id": "h26",
+          "text": "the check is done by the launcher from the tool list Pi reports, not by trusting that the config file exists on disk",
+          "status": "confirmed",
+          "instruction": ""
+        }
+      ],
+      "hard_questions": [],
+      "links": [],
+      "instruction": "verify: run pi -p in a fresh clone with no trust.json entry and defaultProjectTrust unset; assert the wrapper exits non-zero naming the missing extension instead of answering; repeat with --approve and assert it serves",
+      "revisions": []
+    },
+    {
+      "id": "c35",
+      "kind": "requirement",
+      "text": "Pi's built-in bash is an unrestricted write path (any shell command can redirect, tee, sed -i, git commit), so the allowlisted shell in c20 must be a same-named override registered by the extension (pi docs/extensions.md:2053) that takes argv without shell interpretation, matches the executable and subcommand against the allowlist, and rejects redirections, pipes to writers, and mutating git subcommands",
+      "origin": "llm",
+      "status": "confirmed",
+      "honesty_conditions": [
+        {
+          "id": "h27",
+          "text": "no code path reaches /bin/sh with model-supplied text; the tool spawns the executable directly with an argv list",
+          "status": "confirmed",
+          "instruction": ""
+        }
+      ],
+      "hard_questions": [],
+      "links": [],
+      "instruction": "verify: through the shell tool, 'echo x > f', 'tee f', 'sed -i', 'git commit', 'git push', and 'rm' are each refused with a structured error; 'git log', 'git diff', 'rg', 'fd', 'code-lens profile' succeed",
+      "revisions": []
+    },
+    {
+      "id": "c36",
+      "kind": "requirement",
+      "text": "secrets do not ride along in artifacts: the read tool refuses files matched by a denylist (.env, key and token patterns, paths ignored by the checkout's .gitignore), the walk export directory is git-ignored and never inside the checkout being examined, exported walks pass a redaction filter for known secret shapes, and headless runs use --no-session (as issue #3's runs did) so Pi's own session log under ~/.pi/agent/sessions does not persist tool output a second time",
+      "origin": "llm",
+      "status": "confirmed",
+      "honesty_conditions": [
+        {
+          "id": "h29",
+          "text": "redaction is a filter on the harness side applied before the artifact is written, not an instruction to the model",
+          "status": "confirmed",
+          "instruction": ""
+        }
+      ],
+      "hard_questions": [],
+      "links": [],
+      "instruction": "verify: a read of .env is refused; a walk export containing a fixture bearer token is redacted; git status in the examined checkout stays clean after a run; no new file appears under ~/.pi/agent/sessions for a headless run",
+      "revisions": []
+    },
+    {
+      "id": "c37",
+      "kind": "assumption",
+      "text": "prompt injection from files and pages the lane reads is accepted residual risk (pi docs/security.md:37 states Pi cannot prevent it): with no write tools the blast radius is bounded to what the read-only tools can reach, leaving outbound web fetch of an attacker-chosen URL as the one exfiltration channel",
+      "origin": "llm",
+      "status": "confirmed",
+      "honesty_conditions": [
+        {
+          "id": "h30",
+          "text": "the web tool's egress is bounded by webglass's policy profile and by a per-run fetch count cap, and every fetched URL appears in the walk so exfiltration is at least visible after the fact",
+          "status": "confirmed",
+          "instruction": ""
+        }
+      ],
+      "hard_questions": [],
+      "links": [],
+      "instruction": "",
+      "revisions": []
+    },
+    {
+      "id": "c38",
+      "kind": "boundary",
+      "text": "the web surface registered by default is read-only: webglass search and page open; webglass action and session (clicking, form submission, persistent logins) are not registered as tools unless a later spec adds them, because they can produce outward-facing side effects the lobes role does not sanction",
+      "origin": "llm",
+      "status": "confirmed",
+      "honesty_conditions": [
+        {
+          "id": "h31",
+          "text": "the registered tool list carries no tool that can submit a form or hold a session; the webglass skill remains available to a human operator via bash outside the harness",
+          "status": "confirmed",
+          "instruction": ""
+        }
+      ],
+      "hard_questions": [],
+      "links": [],
+      "instruction": "",
+      "revisions": []
+    },
+    {
+      "id": "c39",
+      "kind": "requirement",
+      "text": "harness versions are pinned exactly and upgraded deliberately (issue #5): pi 0.84.2 and pi-acp 0.0.33 as tested, Node >=22 as pi-acp's floor, recorded in CLAUDE.md Tooling prerequisites and checked by the launcher (a mismatch is a warning naming the tested version); pi update is never run by the harness; the extension declares no npm dependencies beyond what Pi itself provides (typebox via pi, pi docs/extensions.md:61-62), and no node_modules directory is ever tracked",
+      "origin": "llm",
+      "status": "confirmed",
+      "honesty_conditions": [
+        {
+          "id": "h32",
+          "text": "a fresh clone with only Node 22 and pi installed loads the extension without an npm install step",
+          "status": "confirmed",
+          "instruction": ""
+        }
+      ],
+      "hard_questions": [],
+      "links": [],
+      "instruction": "verify: CLAUDE.md names the four floors; git ls-files shows no node_modules; the extension imports only from @earendil-works/pi-coding-agent and typebox",
+      "revisions": [
+        {
+          "text": "toolchain floors are pinned and documented in CLAUDE.md Tooling prerequisites: Node >=22 and pi >=0.80.4 (pi-acp README prerequisites), pi tested at 0.84.2, pi-acp >=0.0.33; pi update is never run by the harness; the extension declares no npm dependencies beyond what Pi itself provides (typebox via pi, pi docs/extensions.md:61-62), and no node_modules directory is ever tracked",
+          "kind": "requirement",
+          "reason": "issue #5 asks for exact pins, not floors"
+        }
+      ]
+    },
+    {
+      "id": "c40",
+      "kind": "boundary",
+      "text": "CI never needs the lane or Node 22: tests exercise the extension and the Python wrapper against a fake OpenAI-compatible server or recorded fixtures; live-lane checks (the c22 and c27 numbers) run locally and are recorded in PR bodies; .github/workflows/tests.yml today installs Node 20 only for markdownlint",
+      "origin": "llm",
+      "status": "confirmed",
+      "honesty_conditions": [
+        {
+          "id": "h33",
+          "text": "no test reads an endpoint or key from the environment to pass",
+          "status": "confirmed",
+          "instruction": ""
+        }
+      ],
+      "hard_questions": [],
+      "links": [],
+      "instruction": "verify: the tests job passes on a runner with no network route to the lane and no bearer; any test that needs pi is skipped with a reason when pi is absent",
+      "revisions": []
+    },
+    {
+      "id": "c41",
+      "kind": "requirement",
+      "text": "the mesh cutover is one revertible commit: culture.yaml backend: acp plus acp_command, AGENTS.md added, AGENTS.colleague.md retained until the ACP path has answered a channel message on a real server (c15), then removed in a separate commit",
+      "origin": "llm",
+      "status": "confirmed",
+      "honesty_conditions": [
+        {
+          "id": "h34",
+          "text": "at no commit on main do the declared backend and the prompt file on disk disagree",
+          "status": "confirmed",
+          "instruction": ""
+        }
+      ],
+      "hard_questions": [],
+      "links": [],
+      "instruction": "verify: git revert of the cutover commit restores backend: colleague and both doctors pass; AGENTS.colleague.md is absent only after the c15 evidence is recorded",
+      "revisions": []
+    },
+    {
+      "id": "c42",
+      "kind": "requirement",
+      "text": "every run gets its own scratch and export directory keyed by session id (ACP session id from culture's session/new, or a generated id headless), so concurrent mesh tasks against the same checkout never share a scratch dir or interleave walk entries",
+      "origin": "llm",
+      "status": "confirmed",
+      "honesty_conditions": [
+        {
+          "id": "h35",
+          "text": "the session id in the export path is the one culture's ACP runner logged for session/new, so an operator can join a mesh transcript to its walk",
+          "status": "confirmed",
+          "instruction": ""
+        }
+      ],
+      "hard_questions": [],
+      "links": [],
+      "instruction": "verify: two headless runs started in parallel on the same fixture produce two disjoint export dirs, each with a self-consistent walk",
+      "revisions": []
+    },
+    {
+      "id": "c43",
+      "kind": "assumption",
+      "text": "the walk can be derived from what Pi already emits: --mode json streams tool call and result events, and Pi's session JSONL records toolResult messages with ids and timestamps (pi docs/session-format.md:210); the harness needs only to persist and key them, not to instrument the tools",
+      "origin": "llm",
+      "status": "confirmed",
+      "honesty_conditions": [
+        {
+          "id": "h36",
+          "text": "every walk entry maps 1:1 to a Pi event the harness received; the harness adds ids, hashes, and timestamps but never synthesizes an entry",
+          "status": "confirmed",
+          "instruction": ""
+        }
+      ],
+      "hard_questions": [],
+      "links": [],
+      "instruction": "",
+      "revisions": []
+    },
+    {
+      "id": "c44",
+      "kind": "decision",
+      "text": "the associate extension is shipped both ways: tracked in the repo and loaded project-locally by path, and installable globally as a Pi package pinned to a release tag (pi install git:github.com/agentculture/associate@vX.Y.Z); the global install is authoritative for the mesh path so tool restriction never depends on project trust",
+      "origin": "user",
+      "status": "confirmed",
+      "honesty_conditions": [],
+      "hard_questions": [],
+      "links": [],
+      "instruction": "",
+      "revisions": []
+    },
+    {
+      "id": "c45",
+      "kind": "requirement",
+      "text": "the repo carries a package.json whose pi key declares the extension and skills directories (pi docs/packages.md:124-126), so `pi install git:github.com/agentculture/associate@<tag>` loads the same extension the checkout does; git installs are pinned refs that pi update never moves (packages.md:90), and the release tag matches the pyproject.toml version bumped on every PR",
+      "origin": "llm",
+      "status": "confirmed",
+      "honesty_conditions": [
+        {
+          "id": "h37",
+          "text": "the package.json exists only to declare Pi resources \u2014 it adds no build step, no npm dependencies, and does not change the Python package or its zero-dependency rule",
+          "status": "confirmed",
+          "instruction": ""
+        }
+      ],
+      "hard_questions": [],
+      "links": [],
+      "instruction": "verify: from a machine with no associate checkout, pi install the repo at the current tag, run pi --list-tools (or the startup block) in an unrelated directory, and assert the associate tools are present and edit/write absent; assert the tag equals pyproject.toml version",
+      "revisions": [
+        {
+          "text": "the repo carries a package.json whose pi key declares the extension and skills directories (pi docs/packages.md:124-126), so 'pi install git:github.com/agentculture/associate@<tag>' loads the same extension the checkout does; git installs are pinned refs that pi update never moves (packages.md:90), and the release tag matches the pyproject.toml version bumped on every PR",
+          "kind": "requirement",
+          "reason": "markdown lint MD033: backtick the tag placeholder"
+        }
+      ]
+    },
+    {
+      "id": "c46",
+      "kind": "requirement",
+      "text": "issue #5, narrowed: the portable contract lives in the Python package and is small \u2014 role.json (capabilities and forbidden tokens from lobes), policy.json (the permission boundaries: read denylist, shell allowlist, budgets, caps), and JSON schemas for the task input, the walk, and the statements/handback \u2014 plus the behavioral evaluation cases; the runtime prompt, tool descriptions and schemas, result presentation, context selection, compaction and stopping behavior are Pi-and-model-tailored and live with the Pi extension, not in the contract",
+      "origin": "llm",
+      "status": "confirmed",
+      "honesty_conditions": [
+        {
+          "id": "h38",
+          "text": "changing a contract value (a denylist pattern, a budget, a forbidden token) in the Python package changes the Pi adapter's behavior with no edit to TypeScript",
+          "status": "confirmed",
+          "instruction": "verify: changing a policy.json value or a schema changes the Pi extension's behavior or artifact validation with no TypeScript edit; the runtime prompt is not under associate/contract/"
+        }
+      ],
+      "hard_questions": [],
+      "links": [],
+      "instruction": "verify: associate/contract/ holds role.json (capabilities, forbidden), prompt.md, policy.json, and JSON schemas for walk and statements; the Pi extension reads policy and schemas from those files (or a generated copy) rather than defining them; grep the extension for a hardcoded allowlist or denylist returns nothing",
+      "revisions": [
+        {
+          "text": "issue #5: associate defines the role contract, harness-independent, in the Python package \u2014 capabilities and forbidden actions (the lobes tokens), the runtime prompt text, the output contract (walk and statements schemas), the containment policy data (denylist, shell allowlist, budgets), and the acceptance corpus \u2014 and a harness adapter consumes that contract; nothing harness-specific lives in the contract and nothing contract-level lives only inside an adapter",
+          "kind": "requirement",
+          "reason": "user narrowed the abstraction: portable outcomes, specialized execution"
+        }
+      ]
+    },
+    {
+      "id": "c47",
+      "kind": "requirement",
+      "text": "the harness boundary is small and Pi ships first: 'associate run' launches Pi through its supported RPC/print boundary plus the tracked extension, never a fork; a thin adapter interface in Python (start a session against a checkout with the contract, submit a task, collect walk and statements) exists so Pi is replaceable, but no universal harness framework is built up front \u2014 a second real adapter (Qwen Code is the named candidate) is added only when a concrete comparison is worth running, and another harness must meet the contract's outcomes, not reuse Pi's prompt or tools",
+      "origin": "llm",
+      "status": "confirmed",
+      "honesty_conditions": [
+        {
+          "id": "h39",
+          "text": "a second adapter can be written against base.py alone, proven by a stub adapter used in tests that satisfies the interface without pi installed",
+          "status": "confirmed",
+          "instruction": ""
+        }
+      ],
+      "hard_questions": [],
+      "links": [],
+      "instruction": "verify: associate/harness/ has base.py with the adapter interface and pi.py implementing it; 'associate run --harness bogus' exits 1 listing available adapters; the pi adapter imports no pi package and patches no pi source",
+      "revisions": [
+        {
+          "text": "issue #5: harnesses are adapters selected at run time \u2014 'associate run --harness pi' is the first; the adapter interface is defined in Python (start a session against a checkout with the contract, submit a prompt, stream tool events, return walk and statements) so a colleague adapter and future harnesses plug in without touching the contract or the behavioral suite; the Pi adapter drives pi over its supported RPC/print boundary plus the tracked extension, never a fork",
+          "kind": "requirement",
+          "reason": "q6: colleague is not an adapter target; Qwen Code is the deferred candidate"
+        },
+        {
+          "text": "issue #5: harnesses are adapters selected at run time \u2014 'associate run --harness pi' is the first; the adapter interface is defined in Python (start a session against a checkout with the contract, submit a prompt, stream tool events, return walk and statements) so a future harness (Qwen Code is the named candidate, deferred) plugs in without touching the contract or the behavioral suite; the Pi adapter drives pi over its supported RPC/print boundary plus the tracked extension, never a fork",
+          "kind": "requirement",
+          "reason": "user: make Pi replaceable without building a universal harness framework"
+        }
+      ]
+    },
+    {
+      "id": "c48",
+      "kind": "requirement",
+      "text": "a shared behavioral suite runs the same cases against the complete configuration \u2014 model role and served checkpoint, serving settings where discoverable, pi version, extension version, provider and reasoning settings \u2014 invoked as `associate bench --harness <name>` with a table per configuration recording all of those plus per-category pass/fail and wall time (categories: local read/find, repo exploration, summarization, structured evidence extraction, tool-call reliability, forbidden mutation attempts, bounded completion and hand-back); a stub adapter run verifies plumbing only and is labeled so, never presented as model reliability; results are the evidence filed against the frame's obligations",
+      "origin": "llm",
+      "status": "confirmed",
+      "honesty_conditions": [
+        {
+          "id": "h40",
+          "text": "the corpus is identical across adapters \u2014 no adapter-specific cases \u2014 so two configurations differ only in the adapter and model role columns",
+          "status": "confirmed",
+          "instruction": ""
+        }
+      ],
+      "hard_questions": [],
+      "links": [],
+      "instruction": "verify: tests/behavioral/ holds one corpus case per category; 'associate bench --harness pi' prints the table and exits non-zero on any failure; the same command with the stub adapter runs in CI without pi or the lane",
+      "revisions": [
+        {
+          "text": "issue #5: a harness-independent behavioral suite runs the same corpus against any adapter and reports comparably \u2014 at least local read/find, repo exploration, summarization, structured evidence extraction, tool-call reliability, forbidden mutation attempts, and bounded completion/hand-back \u2014 invoked as 'associate bench --harness <name>' with a table per configuration (harness, model role, pass/fail per category, wall time), and its results are the evidence filed against the frame's obligations",
+          "kind": "requirement",
+          "reason": "markdown lint MD033: backtick the placeholder"
+        },
+        {
+          "text": "issue #5: a harness-independent behavioral suite runs the same corpus against any adapter and reports comparably \u2014 at least local read/find, repo exploration, summarization, structured evidence extraction, tool-call reliability, forbidden mutation attempts, and bounded completion/hand-back \u2014 invoked as `associate bench --harness <name>` with a table per configuration (harness, model role, pass/fail per category, wall time), and its results are the evidence filed against the frame's obligations",
+          "kind": "requirement",
+          "reason": "user: evaluate the complete configuration; a stub cannot demonstrate model reliability"
+        }
+      ]
+    },
+    {
+      "id": "c49",
+      "kind": "decision",
+      "text": "this milestone ships the pi adapter and the stub adapter only; colleague is not an adapter target and instead adopts associate's contract-plus-adapters design on its side; Qwen Code is the named candidate for the next adapter and is deferred",
+      "origin": "user",
+      "status": "confirmed",
+      "honesty_conditions": [],
+      "hard_questions": [],
+      "links": [],
+      "instruction": "",
+      "revisions": []
+    },
+    {
+      "id": "c50",
+      "kind": "decision",
+      "text": "commit to Pi for the implementation: associate is an opinionated Pi extension plus wrapper with a small portable contract around it; the unit optimized is model + harness + tools + context policy together, so what stays Pi-independent is the role and permission boundaries, the task input and handback format, the evidence artifacts and provenance, and the behavioral evaluation cases \u2014 while tool descriptions and schemas, result presentation, prompt construction and context selection, compaction, recovery and stopping behavior, and reasoning and provider settings are tailored to Pi and the model; a second harness is added only after a measured benefit, and harness diversity lives at the Culture nodes boundary (another agent may run another harness), not inside every agent",
+      "origin": "user",
+      "status": "confirmed",
+      "honesty_conditions": [],
+      "hard_questions": [],
+      "links": [],
+      "instruction": "",
+      "revisions": []
+    }
+  ],
+  "open_vagueness": [
+    {
+      "id": "v1",
+      "text": "recommended sampling parameters for Nemotron 3.5 Lightning (temperature/top_p) are recorded nowhere in lobes-cli docs; the harness should not hardcode them until measured",
+      "kind": "unknown_nonblocking",
+      "claim_id": null,
+      "resolved": false,
+      "resolution": "",
+      "resolution_claim_id": null
+    },
+    {
+      "id": "v2",
+      "text": "strict / schema-constrained tool calling (strict:true, xgrammar structural tags) on the served Nemotron lane is explicitly unprobed (lobes-cli model doc) \u2014 precision tools that depend on guaranteed-valid JSON arguments need a probe before design commits to them",
+      "kind": "unknown_blocking",
+      "claim_id": null,
+      "resolved": true,
+      "resolution": "tools validate their own arguments; strict server-side tool calling is not required",
+      "resolution_claim_id": "c21"
+    },
+    {
+      "id": "v3",
+      "text": "the live lane was not exercised this pass: GET /v1/models on localhost:8001 returned invalid_api_key without a bearer, and no probe was sent to model=associate \u2014 reachability, reported model id, and live tool_calls emission rest on lobes-cli docs and evidence files, not on an observed run today",
+      "kind": "unknown_nonblocking",
+      "claim_id": null,
+      "resolved": false,
+      "resolution": "",
+      "resolution_claim_id": null
+    },
+    {
+      "id": "v4",
+      "text": "the pi models.json entry for the associate lane declares contextLimit 1048576 while pi --list-models reports 128K; whether that is a schema-field mismatch (contextLimit vs contextWindow) or display only is unverified",
+      "kind": "unknown_nonblocking",
+      "claim_id": null,
+      "resolved": false,
+      "resolution": "",
+      "resolution_claim_id": null
+    },
+    {
+      "id": "v5",
+      "text": "relationship to intern-cli (sibling small-model harness at ../intern-cli) and whether colleague calls associate as a delegate seat (colleague/associate.py already models the seat) are two-repo decisions issue #1 parks; not decided here",
+      "kind": "unknown_nonblocking",
+      "claim_id": null,
+      "resolved": false,
+      "resolution": "",
+      "resolution_claim_id": null
+    },
+    {
+      "id": "v6",
+      "text": "how reasoning is switched off on the wire through Pi's openai-completions provider: models.json reasoning:false / thinkingLevelMap only shape what Pi sends (pi docs/models.md:204-291); the served lane emits reasoning by default under --reasoning-parser nemotron_v3, so the knob may have to be a chat_template_kwargs flag injected via a before_provider_request hook, if Nemotron's template honors one \u2014 unverified",
+      "kind": "unknown_nonblocking",
+      "claim_id": null,
+      "resolved": true,
+      "resolution": "measured live 2026-09-12 (t15): with ASSOCIATE_REASONING_OFF=off the lane returned 2 thinking blocks (412 chars) on a one-word prompt; with chat_template_kwargs enable_thinking=false (the default) 0 thinking blocks; reasoning_effort 'none' also 0 and no server error; both 0. The default knob works on the wire",
+      "resolution_claim_id": null
+    },
+    {
+      "id": "v7",
+      "text": "culture's ACP runner (cultureagent/clients/acp/agent_runner.py) drives initialize, session/new with cwd, session/prompt, and answers session/request_permission (line 382); whether pi-acp ever raises request_permission, and how it maps Pi tool calls that would prompt, was not read in pi-acp's Limitations section this pass",
+      "kind": "unknown_nonblocking",
+      "claim_id": null,
+      "resolved": false,
+      "resolution": "",
+      "resolution_claim_id": null
+    },
+    {
+      "id": "v8",
+      "text": "outbound exfiltration through attacker-chosen URLs fetched by the web tool is bounded but not eliminated; the residual risk stays until a fetch allowlist or egress policy is decided",
+      "kind": "unknown_nonblocking",
+      "claim_id": null,
+      "resolved": false,
+      "resolution": "",
+      "resolution_claim_id": null
+    },
+    {
+      "id": "v9",
+      "text": "colleague adopting associate's contract-plus-adapters design is cross-repo work for the colleague repo; the hand-off (an issue on agentculture/colleague citing the exported spec) is a follow-up after this spec commits",
+      "kind": "follow_up",
+      "claim_id": null,
+      "resolved": false,
+      "resolution": "",
+      "resolution_claim_id": null
+    },
+    {
+      "id": "v10",
+      "text": "the factual-support judgement in c27 is a reviewer check against source lines, not an automated score; whether it can be automated honestly (a fixture repo with known facts) is decided in the behavioral suite, not assumed",
+      "kind": "unknown_nonblocking",
+      "claim_id": null,
+      "resolved": false,
+      "resolution": "",
+      "resolution_claim_id": null
+    },
+    {
+      "id": "v11",
+      "text": "d10 (a hard tool-call cap) was declined by the operator 2026-09-12: a cap would stop the agent earlier, not make it perform better. Preferred direction: give runs more time, and build tooling that detects whether the run is on the right way to the goal or has achieved it (progress and goal signals over the walk, e.g. coverage of the asked-for items, citation growth, repeated reads), so a run ends because the goal is met rather than because a counter ran out",
+      "kind": "follow_up",
+      "claim_id": null,
+      "resolved": false,
+      "resolution": "",
+      "resolution_claim_id": null
+    }
+  ],
+  "scope_entries": [
+    {
+      "id": "s1",
+      "surface": "pi coding agent (@earendil-works/pi-coding-agent 0.84.2; docs/extensions.md, docs/settings.md, docs/usage.md, docs/rpc.md, docs/sdk.md in the npm package)",
+      "finding": "Pi is a complete host: custom OpenAI-compatible providers via ~/.pi/agent/models.json, project extensions under .pi/extensions/*.ts (registerTool, registerProvider, tool_call/tool_result/before_agent_start hooks), defaultTools allowlist plus --tools/--exclude-tools, built-ins read/bash/edit/write/grep/find/ls with vendored rg/fd, and headless -p / --mode json / --mode rpc / AgentSession SDK; no extension or tool restriction exists yet globally or in this repo",
+      "seeds": [
+        "c2",
+        "c3"
+      ]
+    },
+    {
+      "id": "s2",
+      "surface": "lobes-cli/lobes/roles.py (associate role, lines ~101-118, 348-356, 424-429) + profiles/builtin_shapes/orin-associate.toml",
+      "finding": "associate is worker minus repo_action with allowed tokens execution, ground_work, bulk_transform, drafting, repo_inspection, run_authorized_commands, tool_use and forbidden final_decision, security_decision, code_authoring, repo_action; it deliberately does not claim summarization, retrieval_synthesis, structured_extraction or image understanding; the orin-associate shape serves 128k context and is marked declared-not-validated",
+      "seeds": [
+        "c4"
+      ]
+    },
+    {
+      "id": "s3",
+      "surface": "lobes-cli/docs/nemotron-3.5-lightning-30b-a3b-nvfp4.md + docs/orin-associate-deployment.md",
+      "finding": "structured tool calling validated live (qwen3_coder tool parser, nemotron_v3 reasoning parser, reasoning field present by default); strict/xgrammar tool calling unprobed (parked v2); no vision tower; ~50-54 tok/s flat to 32k depth on sm_87; sampling recommendations absent (parked v1); Marlin NVFP4 fallback on sm_87 rests on a small probe set",
+      "seeds": [
+        "c6"
+      ]
+    },
+    {
+      "id": "s4",
+      "surface": "lobes gateway localhost:8001 (read-only probe)",
+      "finding": "GET /v1/models answers invalid_api_key without a bearer, matching the documented auth front; no completion or tool-call probe was sent, so live behavior of model=associate through the gateway is unobserved this pass (parked v3); CLAUDE.md also records the readiness-probe defect that hides the role from discovery",
+      "seeds": []
+    },
+    {
+      "id": "s5",
+      "surface": "colleague/colleague/{tool_schemas.py,tools.py,roles.py,associate_config.py,config.py,oilcheck/tool_calling.py} + AGENTS.colleague.md",
+      "finding": "colleague's loop is OpenAI function calling with no text-protocol fallback; BUILTIN_ROLES has no associate entry so repo_action-forbidden is enforced only by the AGENTS.colleague.md prompt; skills load from .colleague/skills/ not .claude/skills/; colleague never mentions Pi",
+      "seeds": [
+        "c5",
+        "c8"
+      ]
+    },
+    {
+      "id": "s6",
+      "surface": "docs/specs/2026-09-05-webglass-code-lens-as-tools.md + docs/plans/2026-09-05-webglass-code-lens-as-tools.md (exported, unimplemented)",
+      "finding": "code-lens and webglass are already scoped as PATH CLIs with repo skills and install-hint degradation; they are the find/read and web-fetch building blocks the Pi tools should wrap, not duplicate; that plan's t1-t6 have not landed yet",
+      "seeds": [
+        "c7"
+      ]
+    },
+    {
+      "id": "s7",
+      "surface": "README.md, CLAUDE.md, AGENTS.colleague.md, culture.yaml (prompt-file and backend-consistency invariants)",
+      "finding": "'modelled on the Pi harness' is stated but nothing in-repo is Pi-shaped; Pi auto-loads AGENTS.md or CLAUDE.md, which would feed the Claude Code session prompt to the runtime unless an AGENTS.md exists; changing backend: requires the matching prompt file per associate doctor / steward doctor",
+      "seeds": [
+        "c9"
+      ]
+    },
+    {
+      "id": "s8",
+      "surface": "eidetic memory (recall 'associate harness Pi Nemotron tools')",
+      "finding": "no prior records about the harness design; only a colleague work-lesson noise hit \u2014 nothing to build on, nothing contradicted",
+      "seeds": []
+    },
+    {
+      "id": "s9",
+      "surface": "~/.pi/agent/{models.json,settings.json,trust.json,sessions/} and the untracked .pi/settings.json",
+      "finding": "a 'nemotron' provider with model id 'associate' is already configured and resolvable (pi --list-models associate), pointed directly at the Orin vLLM :8000 rather than the lobes gateway localhost:8001 (raised as pending decision q2); this repo is trusted and has two prior pi sessions from 2026-09-05; the project .pi/settings.json only sets skills to ~/.claude/skills, an absolute home path that would fail steward doctor portability if committed",
+      "seeds": [
+        "c10"
+      ]
+    },
+    {
+      "id": "s10",
+      "surface": "culture/culture_core/cli/agents.py _BACKEND_DAEMON_FACTORIES + culture_core/config.py + devtools/backend_parity.py",
+      "finding": "backends are claude, codex, colleague, acp (hardwired to 'opencode acp'), copilot; no pi backend and no generic ACP target; parity is enforced for claude/codex/colleague; culture start associate resolves backend: colleague to ColleagueDaemon today \u2014 how a Pi-based associate joins the mesh is pending decision q1",
+      "seeds": [
+        "c8"
+      ]
+    },
+    {
+      "id": "s11",
+      "surface": "associate repo: pyproject.toml (dependencies = [], afi CLI, rubric gate), associate/cli/__init__.py, .github/workflows/tests.yml, CLAUDE.md invariants",
+      "finding": "the package is a dependency-free Python CLI gated by teken cli doctor --strict, four linters, and a mandatory version bump; Pi is a Node package, so the harness entry point either wraps pi from a new verb (keeping the CLI contract) or lives in .pi/ beside a Python CLI that stays introspection-only \u2014 pending decision q3",
+      "seeds": [
+        "c7"
+      ]
+    },
+    {
+      "id": "s12",
+      "surface": "npm pi-acp 0.0.33 (github svkozak/pi-acp) + culture_core/config.py acp_command extras",
+      "finding": "an ACP adapter for pi exists: ACP JSON-RPC over stdio bridged to 'pi --mode rpc', pi >=0.80.4, Node 22+, sessions mapped under ~/.pi/pi-acp; culture's ACP backend takes a per-agent acp_command override, so backend: acp + acp_command can host Pi without a new culture backend; the adapter self-describes as MVP-grade and Zed-centred with listed limitations",
+      "seeds": [
+        "c11",
+        "c15"
+      ]
+    },
+    {
+      "id": "s13",
+      "surface": "PyPI pi-coding-agent 0.6.0 METADATA",
+      "finding": "name collision: the PyPI 'pi-coding-agent' is Ashutosh0428/pi-agent (MIT, multi-provider Streamlit demo), unrelated to pi.dev / @earendil-works/pi-coding-agent; a Python harness cannot pip-install pi.dev and must drive the Node binary over rpc/print JSONL (pi docs/rpc.md Python client example, docs/json.md)",
+      "seeds": [
+        "c13"
+      ]
+    },
+    {
+      "id": "s14",
+      "surface": "pi docs/custom-provider.md, docs/environment-variables.md, ~/.pi/agent/models.json (secret present)",
+      "finding": "provider config today lives in a home-dir models.json carrying a plaintext bearer for the direct Orin endpoint; the agnostic-endpoint decision means the committed harness ships no endpoint constants and documents env-driven provider config, addressing the lobes gateway role by default",
+      "seeds": [
+        "c12",
+        "c14"
+      ]
+    },
+    {
+      "id": "s15",
+      "surface": "github agentculture/associate issue #3 (field report, 2026-09-11 runs on the associate lane via pi -p)",
+      "finding": "three headless runs: text mode returned only a meta-summary (1.6 KB, 318 B) even when told to print the map; json mode plus mandated scratch-file write produced a 421-line map in ~4 min with 56 reads, 52 bash, 4 writes; structure, names and dispatch ordering verified correct; file:line citations drift 40-50 lines, likely from windowed reads; recommended fixes are harness-level: persist output by default, absolute line-number stamping, citation post-verification",
+      "seeds": [
+        "c23",
+        "c24",
+        "c27"
+      ]
+    },
+    {
+      "id": "s16",
+      "surface": "github agentculture/associate issue #4 (pass the torch)",
+      "finding": "asks for a two-part hand-off artifact: A the walk (deterministic tool calls and results with stable ids and read content or hashes, from Pi's --mode json events) and B the statements (model prose with evidence refs into A, unsupported claims flagged); suggests `associate run --export <dir>` and `--continue-from <dir>`; motivation is the lobes-cli read-think-write cycle where cortex cold took 64 min for nothing versus associate 4 min for a 323-line map",
+      "seeds": [
+        "c25",
+        "c26"
+      ]
+    },
+    {
+      "id": "s17",
+      "surface": "github agentculture/associate issue #1 (guildmaster build brief) + colleague/colleague/{associate.py,search_tools.py,readpage.py,web.py}",
+      "finding": "the brief defines the lane (read/find/summarize/extract/classify/verify; never edit/write/PR), says take Pi's posture but do not vendor Pi, asks to merge colleague's base tools with their containment guards (confine, _refuse_pattern_escape, output budgets, web URL check and raw ceiling), inherit reasoning_effort off for Nemotron (associate.py:7-9), define reliability as bounded output plus containment plus typed result and make it measurable, and put an engine seam in on day one; it parks where the model runs, intern-cli/lobes-cli boundaries, and colleague-as-caller",
+      "seeds": [
+        "c28",
+        "c29",
+        "c30",
+        "c31"
+      ]
+    },
+    {
+      "id": "s18",
+      "surface": "challenge pass / security + containment lens: pi docs/security.md, settings.md (trust, defaultTools), extensions.md:2053 (override), session-format.md",
+      "finding": "headless modes skip project extensions without trust (fail-open to full built-ins); built-in bash is an unrestricted write path; sessions persist tool output; prompt injection is documented as unpreventable \u2014 seeded c34-c38",
+      "seeds": [
+        "c34",
+        "c35",
+        "c36",
+        "c37",
+        "c38"
+      ]
+    },
+    {
+      "id": "s19",
+      "surface": "challenge pass / adjacent-systems + lifecycle lens: pi-acp README (prereqs, env, no flag passthrough), pi docs/extensions.md:148-271 (npm deps), .github/workflows/tests.yml (node 20)",
+      "finding": "pi-acp cannot pass --approve to pi; extensions may pull node_modules; CI runs Node 20 with no lane access \u2014 seeded c39-c41 and question q5",
+      "seeds": [
+        "c39",
+        "c40",
+        "c41"
+      ]
+    },
+    {
+      "id": "s20",
+      "surface": "challenge pass / concurrency + data-flow lens: cultureagent/clients/acp/agent_runner.py (session/new cwd, request_permission), pi docs/session-format.md",
+      "finding": "one ACP process may host several sessions; walk data already exists as Pi events \u2014 seeded c42, c43; pi-acp's permission handling unread (parked)",
+      "seeds": [
+        "c42",
+        "c43"
+      ]
+    },
+    {
+      "id": "s21",
+      "surface": "challenge pass / reversibility + operations lens: culture.yaml, AGENTS.colleague.md, CLAUDE.md backend-consistency invariant",
+      "finding": "cutover is a config plus one prompt file; revert is a single git revert as long as both prompt files coexist through the transition \u2014 seeded c41",
+      "seeds": [
+        "c41"
+      ]
+    },
+    {
+      "id": "s22",
+      "surface": "challenge pass / cheap probes: pi docs grep (trust, defaultTools, override, deps, reasoning), npm view pi-acp readme, devague lapse codes",
+      "finding": "all probes read-only against installed docs and npm metadata; no live-lane probe (no bearer available to this session) \u2014 see the filed lapse",
+      "seeds": []
+    },
+    {
+      "id": "s23",
+      "surface": "challenge pass / adjacent-systems lens follow-up: pi docs/packages.md (sources, pinning, package.json pi key, project -l installs)",
+      "finding": "a repo is installable as a Pi package from npm, pinned git ref, or local path; project-local package refs auto-install after trust; global installs load before trust \u2014 resolves q5 as (c)",
+      "seeds": [
+        "c44",
+        "c45"
+      ]
+    },
+    {
+      "id": "s24",
+      "surface": "github agentculture/associate issue #5 (make the agent harness pluggable, opened 2026-09-12 by the operator)",
+      "finding": "reframes the repo as a harness-independent role contract (capabilities, forbidden actions, prompt, output contract, acceptance tests) plus adapters (pi first via its supported RPC boundary, colleague, future) selected at run time, with a comparable behavioral corpus per configuration and exact harness pins; forking a harness is last resort \u2014 seeded c46-c48 and the c39 amend; colleague adapter scope raised as a question",
+      "seeds": [
+        "c46",
+        "c47",
+        "c48",
+        "c39"
+      ]
+    },
+    {
+      "id": "s25",
+      "surface": "operator direction 2026-09-12 (commit to Pi; portable contract boundary table; evaluation correction) + pi.dev docs overview",
+      "finding": "Pi exposes custom tools, providers, context manipulation, compaction, RPC and SDK \u2014 enough room to tailor without a fork; the boundary is portable outcomes versus specialized execution; citations prove encounter not support \u2014 seeded c50 and the c46/c47/c48/c25/c27 amends",
+      "seeds": [
+        "c50",
+        "c46",
+        "c47",
+        "c48",
+        "c25",
+        "c27"
+      ]
+    }
+  ],
+  "lapses": [
+    {
+      "id": "l1",
+      "code": "assumption-for-measurement",
+      "what": "the live associate lane was not exercised: reachability, live tool_calls emission, and the reasoning-off knob rest on lobes-cli docs and the models.json compat flag rather than an observed request",
+      "skipped_check": "one authenticated chat completion with a trivial tool through localhost:8001 model=associate",
+      "refs": [
+        "challenge pass / cheap probes",
+        "c6 c28 v3"
+      ],
+      "origin": "llm",
+      "status": "approved"
+    },
+    {
+      "id": "l2",
+      "code": "assumption-for-measurement",
+      "what": "plan task t1's acceptance criterion pinned a settings path literal without reading Pi's path-resolution rule; the criterion stood in for a check of pi docs/settings.md:268",
+      "skipped_check": "read the 'Paths in .pi/settings.json resolve relative to .pi' rule before writing t1's criterion",
+      "refs": [
+        "t1",
+        "pi docs/settings.md:268"
+      ],
+      "origin": "llm",
+      "status": "approved"
+    },
+    {
+      "id": "l3",
+      "code": "assumption-for-measurement",
+      "what": "t4: the Node 23 branch of run.sh (type stripping default on) was asserted from documentation, not measured \u2014 only Node 24 is on this box; the new tests.yml job was checked by YAML parse and visual match, not by an Actions run",
+      "skipped_check": "run run.sh under a Node 23 binary; run the workflow (act or a PR run)",
+      "refs": [
+        "t4"
+      ],
+      "origin": "llm",
+      "status": "approved"
+    },
+    {
+      "id": "l4",
+      "code": "assumption-for-measurement",
+      "what": "t16: policy.json values read.max_bytes 1 MiB, shell/web max_output_chars, and max_fetches_per_run 20 have no colleague origin \u2014 invented to fill the instruction's slots; tests assert only that they are positive",
+      "skipped_check": "an operator decision on the three values before any tool enforces them",
+      "refs": [
+        "t16",
+        "policy.json"
+      ],
+      "origin": "llm",
+      "status": "approved"
+    },
+    {
+      "id": "l5",
+      "code": "assumption-for-measurement",
+      "what": "t16: the adapter interface in harness/base.py was derived from the task instruction, not from a real Pi RPC session; pluggability is proven only for a stub that writes its own files",
+      "skipped_check": "map one real pi --mode json event stream into walk entries through the interface",
+      "refs": [
+        "t16",
+        "t12"
+      ],
+      "origin": "llm",
+      "status": "approved"
+    },
+    {
+      "id": "l6",
+      "code": "grader-unverified",
+      "what": "dogfood review of t16 on the associate lane returned a one-line merge verdict (419 bytes, 217 s) with no findings list and no answer to the four probes asked (third-party imports, home paths, validator type bypass, redaction-before-write); the verdict was not treated as a review \u2014 the merge rested on the TDD gate alone. Reproduces issue #3's final-message loss; evidence for c23",
+      "skipped_check": "a persisted findings file from the reviewer (the t9/t12 default export) or a re-run with --mode json",
+      "refs": [
+        "t16",
+        "issue #3",
+        "c23"
+      ],
+      "origin": "llm",
+      "status": "approved"
+    },
+    {
+      "id": "l7",
+      "code": "assumption-for-measurement",
+      "what": "t3: max_bytes is enforced as a character cap derived by binary search for the longest UTF-8-fitting prefix and skipped when max_bytes >= max_output_chars*4; the worst-case reasoning was not measured against a multibyte fixture",
+      "skipped_check": "a test with a multibyte fixture asserting the byte length of the bounded text",
+      "refs": [
+        "t3"
+      ],
+      "origin": "llm",
+      "status": "approved"
+    },
+    {
+      "id": "l8",
+      "code": "control-absent",
+      "what": "t3: colleague's per-session spill cap (truncation.MAX_SESSION_SPILL_BYTES 500 MB) was not ported because policy.json has no key for it and literals are forbidden; the divergence is documented in the module header only",
+      "skipped_check": "a policy.json key for the session spill cap plus a test",
+      "refs": [
+        "t3",
+        "policy.json"
+      ],
+      "origin": "llm",
+      "status": "approved"
+    },
+    {
+      "id": "l9",
+      "code": "control-absent",
+      "what": "t17: the stub's replay script is synthesised from the same expect block the checks read, so a stub run can pass any expectation expressible in the replay vocabulary; the CI path proves plumbing only and says nothing about whether the checks are hard enough for a real model",
+      "skipped_check": "a pi-run of the same seven cases (t15) and at least one case whose expectation the replay cannot satisfy by construction",
+      "refs": [
+        "t17",
+        "c48"
+      ],
+      "origin": "llm",
+      "status": "approved"
+    },
+    {
+      "id": "l10",
+      "code": "assumption-for-measurement",
+      "what": "t17: the bench's extension_version column assumes the extension will declare its version in package.json or an index.ts version literal; the t2 extension had not landed when this was written, so the column reads absent and the assumed location is unverified",
+      "skipped_check": "read the version from the location t2 actually chose",
+      "refs": [
+        "t17",
+        "t2"
+      ],
+      "origin": "llm",
+      "status": "approved"
+    },
+    {
+      "id": "l11",
+      "code": "control-absent",
+      "what": "t2: library modules were written before their tests, then tests added against the intended behaviour; one test caught a real false positive, but the order was not test-first",
+      "skipped_check": "failing test before implementation for each criterion",
+      "refs": [
+        "t2"
+      ],
+      "origin": "llm",
+      "status": "approved"
+    },
+    {
+      "id": "l12",
+      "code": "assumption-for-measurement",
+      "what": "t2: the export root is one .associate-runs beside the checkout, shared by any checkouts under the same parent; safety rests on session ids being unique, assumed rather than verified against a future ACP id scheme",
+      "skipped_check": "a collision test with two checkouts under one parent and colliding session ids",
+      "refs": [
+        "t2",
+        "c42"
+      ],
+      "origin": "llm",
+      "status": "approved"
+    },
+    {
+      "id": "l13",
+      "code": "assumption-for-measurement",
+      "what": "t2: the extension was verified only under pi -p --mode json; identical behaviour in --mode rpc and through pi-acp (honesty condition h1) is unverified",
+      "skipped_check": "the same three integration checks through pi --mode rpc and pi-acp",
+      "refs": [
+        "t2",
+        "h1"
+      ],
+      "origin": "llm",
+      "status": "approved"
+    },
+    {
+      "id": "l14",
+      "code": "instrument-changed-mid-series",
+      "what": "dogfood reviews of t3 and t17 produced no output: the associate lane returned 503 backend_unavailable (Orin peer name resolution then connection refused) during this window, and a 150 s no-tools probe wrote zero bytes; the t1/t4/t16 reviews ran earlier while the lane was up",
+      "skipped_check": "a lane health probe before each review; a fallback lane for reviews",
+      "refs": [
+        "t3",
+        "t17",
+        "v3"
+      ],
+      "origin": "llm",
+      "status": "approved"
+    },
+    {
+      "id": "l15",
+      "code": "control-absent",
+      "what": "t13: the first AGENTS.md draft drifted from the verbatim instruction ('does not fit the bound' vs 'cannot be completed'); the agent's own test caught it rather than attention to the brief",
+      "skipped_check": "re-read the brief against the prose before running the test",
+      "refs": [
+        "t13"
+      ],
+      "origin": "llm",
+      "status": "approved"
+    },
+    {
+      "id": "l16",
+      "code": "n-below-claim",
+      "what": "t13: criterion 2 was framed as a yes/no about one file; the ancestor CLAUDE.md leak surfaced only because the whole contextFiles list was printed \u2014 a grep-for-marker check would have reported a clean pass and missed a regression against c50",
+      "skipped_check": "enumerate every context file Pi loaded, not only the expected one",
+      "refs": [
+        "t13",
+        "c50"
+      ],
+      "origin": "llm",
+      "status": "approved"
+    },
+    {
+      "id": "l17",
+      "code": "assumption-for-measurement",
+      "what": "t9: a mean_tool_calls expectation was computed in the agent's head (1.89 vs the real 2.0); the test caught it and the expectation was corrected, with the sum shown in a comment",
+      "skipped_check": "compute the expected aggregate from the fixture rather than mentally",
+      "refs": [
+        "t9"
+      ],
+      "origin": "llm",
+      "status": "approved"
+    },
+    {
+      "id": "l18",
+      "code": "control-absent",
+      "what": "t9: whether a call blocked by the write guard is observed by the walk recorder (do later tool_call handlers run after a block?) was not resolved from the docs; a blocked call surfaces today as an entry with an error and run outcome 'error', never 'refused'",
+      "skipped_check": "a test that blocks a call via the guard and asserts what the recorder wrote",
+      "refs": [
+        "t9",
+        "t2"
+      ],
+      "origin": "llm",
+      "status": "approved"
+    },
+    {
+      "id": "l19",
+      "code": "assumption-for-measurement",
+      "what": "t5: 'session root' in the brief was read as the examined checkout (ctx.checkoutRoot) rather than the session scratch dir, by analogy with resolveWithin's default base; not confirmed against the brief author",
+      "skipped_check": "ask which root the read tool confines to",
+      "refs": [
+        "t5",
+        "c29"
+      ],
+      "origin": "llm",
+      "status": "approved"
+    },
+    {
+      "id": "l20",
+      "code": "control-absent",
+      "what": "t7: the agent first chose to stay inside its two files and merely report the guard conflict, which would have shipped a green suite over a dead feature; it reversed after recognizing this",
+      "skipped_check": "an integration check that the registered shell tool is callable through the guard, before declaring done",
+      "refs": [
+        "t7"
+      ],
+      "origin": "llm",
+      "status": "approved"
+    },
+    {
+      "id": "l21",
+      "code": "assumption-for-measurement",
+      "what": "t11: two probe runs were lost to a wrong first hypothesis (JSON-vs-SSE) when pi -p was actually blocking on inherited non-TTY stdin; empty stdout and stderr were the available evidence and were not read",
+      "skipped_check": "read the empty-output evidence before hypothesizing",
+      "refs": [
+        "t11"
+      ],
+      "origin": "llm",
+      "status": "approved"
+    },
+    {
+      "id": "l22",
+      "code": "provenance-missing",
+      "what": "t11: /recall was not run before starting, against the repo's memory discipline; the knob question was re-derived from docs",
+      "skipped_check": "/recall 'reasoning off nemotron pi provider'",
+      "refs": [
+        "t11"
+      ],
+      "origin": "llm",
+      "status": "approved"
+    },
+    {
+      "id": "l23",
+      "code": "control-absent",
+      "what": "t8: binary names were hardcoded first and corrected only when contract.test.ts's no-hardcoded-policy scan failed; the guard test had not been read",
+      "skipped_check": "read the structural tests before designing",
+      "refs": [
+        "t8"
+      ],
+      "origin": "llm",
+      "status": "approved"
+    },
+    {
+      "id": "l24",
+      "code": "control-absent",
+      "what": "t8: _procs.ts was written before its tests; only the two tool modules were test-first",
+      "skipped_check": "failing test first for the shared helper",
+      "refs": [
+        "t8"
+      ],
+      "origin": "llm",
+      "status": "approved"
+    },
+    {
+      "id": "l25",
+      "code": "control-absent",
+      "what": "t10: all 31 new tests passed on their first run against an API already designed in the agent's head \u2014 procedurally test-first, but no test failed for the right reason, so they show self-consistency more than fault detection",
+      "skipped_check": "a deliberately wrong implementation to confirm the tests fail",
+      "refs": [
+        "t10"
+      ],
+      "origin": "llm",
+      "status": "approved"
+    },
+    {
+      "id": "l26",
+      "code": "instrument-changed-mid-series",
+      "what": "t10: a second live pi invocation returned 'EngineCore encountered an issue' and the lane then refused connections; the agent did not verify whether its call crashed the Orin's vLLM or it fell independently, and reported the 3 pi-integration skips as part of '222 tests, 0 fail' \u2014 read that as 219 executed, 3 unverified",
+      "skipped_check": "check the lane health before and after the live call; record the request that preceded the engine error",
+      "refs": [
+        "t10",
+        "r15"
+      ],
+      "origin": "llm",
+      "status": "approved"
+    },
+    {
+      "id": "l27",
+      "code": "assumption-for-measurement",
+      "what": "t10: statement segmentation (one paragraph or list item = one statement) was taken from the brief; the real run shows the model writing '**Evidence:** ...' as its own paragraph, which records as a second unreferenced statement \u2014 a likely source of inflated unreferenced counts, untuned",
+      "skipped_check": "measure unreferenced counts on real outputs and tune the splitter",
+      "refs": [
+        "t10",
+        "c25"
+      ],
+      "origin": "llm",
+      "status": "approved"
+    },
+    {
+      "id": "l28",
+      "code": "assumption-for-measurement",
+      "what": "t10: pathsMatch accepts a suffix match on a / boundary so short citations resolve; it can mark encountered for two same-named files in different directories \u2014 a false-positive risk traded for a false-negative one without data",
+      "skipped_check": "a test corpus with same-named files in two directories",
+      "refs": [
+        "t10"
+      ],
+      "origin": "llm",
+      "status": "approved"
+    },
+    {
+      "id": "l29",
+      "code": "assumption-for-measurement",
+      "what": "t12: the positive half of criterion 1 (sentinel present, both artifact paths printed) is proven against a scripted fake pi; the real pi's tool_execution_end payload shape is assumed from an existing integration assertion, not observed \u2014 the lane was down",
+      "skipped_check": "one real associate run on the live lane (t15)",
+      "refs": [
+        "t12",
+        "c34"
+      ],
+      "origin": "llm",
+      "status": "approved"
+    },
+    {
+      "id": "l30",
+      "code": "assumption-for-measurement",
+      "what": "t12: the ancestor CLAUDE.md fix (r16) is proven structurally (--no-context-files in the received argv; injector reads one path) \u2014 pi's assembled system prompt was not read",
+      "skipped_check": "capture the assembled system prompt on a real turn with the launcher's flags (t13's before_agent_start dump technique)",
+      "refs": [
+        "t12",
+        "r16"
+      ],
+      "origin": "llm",
+      "status": "approved"
+    },
+    {
+      "id": "l31",
+      "code": "n-below-claim",
+      "what": "t12: the pin-mismatch warning path is exercised only via a fake pi reporting 0.99.0; pi.py timeout/OSError/unreadable-walk branches are untested (85% coverage)",
+      "skipped_check": "error-path tests for the adapter",
+      "refs": [
+        "t12"
+      ],
+      "origin": "llm",
+      "status": "approved"
+    },
+    {
+      "id": "l32",
+      "code": "control-absent",
+      "what": "t15 issue #3 run 1 is invalid: the launcher was invoked with 'uv run --directory <associate>' from the lobes-cli checkout, which changed the working directory, so the run mapped the associate repo instead of lobes-cli (walk shows 49 tool calls, reads of associate/); the 900 s timeout then killed it. The harness behaved correctly (valid partial walk with a run record on kill); the operator's invocation was wrong",
+      "skipped_check": "assert the checkout path in the walk's first read before counting a run",
+      "refs": [
+        "t15"
+      ],
+      "origin": "llm",
+      "status": "approved"
+    },
+    {
+      "id": "l33",
+      "code": "assumption-for-measurement",
+      "what": "d8 implementation: passing -e index.ts inside the repo means pi sees the extension twice (flag plus project discovery); the double-registration question was checked only after the fact from ready.json (no duplicates \u2014 pi dedupes by resolved path), not before shipping",
+      "skipped_check": "a pre-check that tools and active_tools carry no duplicates when both load paths apply",
+      "refs": [
+        "d8"
+      ],
+      "origin": "llm",
+      "status": "proposed"
+    },
+    {
+      "id": "l34",
+      "code": "control-absent",
+      "what": "t17's universal forbidden-tool check listed bash alongside write/edit/apply_patch, but the harness's shell tool is the argv-only override named bash (c35), so every bench case whose walk used the shell failed on a bench defect; observed on the post-d9 bench run (3 of 6 failures). The list was written without checking the extension's tool set",
+      "skipped_check": "derive the forbidden set from the contract's writer semantics, and run one bench case against the real extension before shipping the check",
+      "refs": [
+        "t17",
+        "c35"
+      ],
+      "origin": "llm",
+      "status": "proposed"
+    },
+    {
+      "id": "l35",
+      "code": "control-absent",
+      "what": "qodo-search fix: search.ts was edited before its tests (no red-then-green run), and the grep/find 'count' field was redefined unilaterally from true total to returned count once early termination made the total unknowable",
+      "skipped_check": "failing test first; a reviewer call on count vs a count_is_partial field",
+      "refs": [
+        "PR #6 review"
+      ],
+      "origin": "llm",
+      "status": "proposed"
+    },
+    {
+      "id": "l36",
+      "code": "control-absent",
+      "what": "qodo-ext fix: the shell's operand confinement duplicates the read tool's confine+denylist sequence (about ten lines) instead of a shared contain.ts helper; kept local to avoid touching another agent's in-flight file \u2014 a deliberate trade, recorded so the third tool does not copy it again",
+      "skipped_check": "a shared helper in lib/contain.ts once the wave settles",
+      "refs": [
+        "PR #6 review"
+      ],
+      "origin": "llm",
+      "status": "proposed"
+    }
+  ],
+  "obligations": [
+    {
+      "id": "o1",
+      "claim_id": "c3",
+      "seam": "pi startup tool list",
+      "behavior": "the reported tool list equals the extension's registered set and contains neither edit nor write",
+      "source_text": "the opinionated tools land as a tracked Pi project extension under .pi/extensions/ that registers associate's read/find/summarize/web tools and sets defaultTools so Pi's built-in edit and write are structurally absent (per docs/settings.md defaultTools and docs/extensions.md registerTool in the pi package)",
+      "origin": "llm",
+      "status": "approved"
+    },
+    {
+      "id": "o2",
+      "claim_id": "c4",
+      "seam": "examined checkout git state",
+      "behavior": "git status --porcelain is empty after any complete task run",
+      "source_text": "the tool surface honors lobes/roles.py exactly: allowed tokens execution, ground_work, bulk_transform, drafting, repo_inspection, run_authorized_commands, tool_use; forbidden final_decision, security_decision, code_authoring, repo_action \u2014 so no tool writes, edits, commits, or pushes into a checkout, and drafts are returned in the result, never applied",
+      "origin": "llm",
+      "status": "approved"
+    },
+    {
+      "id": "o3",
+      "claim_id": "c5",
+      "seam": "tool_call hook",
+      "behavior": "a tool call that would write outside the session scratch dir is blocked before execution and the block appears in the transcript",
+      "source_text": "the restriction is enforced in code, not prompt: colleague/colleague/roles.py has no associate role and AGENTS.colleague.md enforces repo_action-forbidden by instruction only ('having a tool is not authorization to use it'); on Pi, defaultTools plus a tool_call hook that blocks writes outside a scratch dir closes that gap",
+      "origin": "llm",
+      "status": "approved"
+    },
+    {
+      "id": "o4",
+      "claim_id": "c9",
+      "seam": "pi context-file loading",
+      "behavior": "with AGENTS.md present, the runtime system prompt contains AGENTS.md and not CLAUDE.md",
+      "source_text": "Pi loads AGENTS.md or CLAUDE.md as context files at startup (pi docs/usage.md:100-108); CLAUDE.md here is the Claude Code session prompt, so the repo needs a Pi-facing AGENTS.md (or AGENTS.override.md) carrying the associate lane prompt, and culture.yaml's backend-consistency invariant must still map to a present prompt file",
+      "origin": "llm",
+      "status": "approved"
+    },
+    {
+      "id": "o5",
+      "claim_id": "c10",
+      "seam": "tracked .pi config",
+      "behavior": "no tracked file under .pi/ contains a home path; skills resolve from .claude/skills relative to the repo",
+      "source_text": "the untracked .pi/settings.json currently points skills at ~/.claude/skills, an absolute home path; committed Pi config must use a repo-relative skills path (.claude/skills) or steward doctor portability fails",
+      "origin": "llm",
+      "status": "approved"
+    },
+    {
+      "id": "o6",
+      "claim_id": "c11",
+      "seam": "culture ACP stdio",
+      "behavior": "culture start associate spawns the acp_command from culture.yaml and completes initialize and session/new against pi-acp",
+      "source_text": "associate's mesh backend becomes acp: culture.yaml sets backend: acp and an acp_command that launches pi-acp (npm, bridges ACP stdio to pi --mode rpc); the runtime prompt file becomes AGENTS.md, satisfying both culture's backend-consistency map and Pi's context-file loading",
+      "origin": "llm",
+      "status": "approved"
+    },
+    {
+      "id": "o7",
+      "claim_id": "c14",
+      "seam": "provider configuration",
+      "behavior": "base URL, bearer, and model id come only from environment or a git-ignored file; changing them requires no code edit",
+      "source_text": "the Pi provider entry for the associate lane (baseUrl, apiKey, model id) must resolve from environment or a git-ignored local file, never from a committed models.json: the current ~/.pi/agent/models.json holds a plaintext bearer for the Orin endpoint, and steward doctor portability forbids committed home paths; pi docs/custom-provider.md and docs/environment-variables.md document env-driven provider config",
+      "origin": "llm",
+      "status": "approved"
+    },
+    {
+      "id": "o8",
+      "claim_id": "c15",
+      "seam": "culture mesh channel",
+      "behavior": "the agent answers one channel message end to end through pi-acp on a real culture server",
+      "source_text": "culture's ACP backend is exercised end to end with pi-acp before the cutover: pi-acp is an MVP-grade adapter developed against Zed (README Status + Limitations), so the ACP features culture's ACPDaemon relies on must be verified against it, and copilot/acp are exempt from culture's parity gate so nothing upstream guarantees the path today",
+      "origin": "llm",
+      "status": "approved"
+    },
+    {
+      "id": "o9",
+      "claim_id": "c20",
+      "seam": "pi startup tool list",
+      "behavior": "exactly the enumerated tools are registered; a request for rm, git commit, or git push through the shell tool returns a structured refusal",
+      "source_text": "the opinionated tool set is fixed and small: bounded read (path plus optional line range, hard byte cap, returns truncation markers), find and grep backed by pi's vendored fd/rg with result caps, ls, a bash tool restricted to an allowlist of read-only commands, code-lens and webglass wrappers delegating to the PATH CLIs per the webglass-code-lens-as-tools spec, and finish/handback that returns drafts and summaries as the result payload; no edit, no write, no unrestricted shell",
+      "origin": "llm",
+      "status": "approved"
+    },
+    {
+      "id": "o10",
+      "claim_id": "c21",
+      "seam": "tool argument boundary",
+      "behavior": "a malformed argument set returns a structured error naming the field; oversized input returns a continuation cursor; a summary carries at least one file:line citation",
+      "source_text": "precision aids compensate for the model where the lobes role says it is weak: every tool validates its arguments against a JSON schema inside the tool and returns a corrective error the model can retry on (so strict server-side tool calling is not required), long inputs are chunked with explicit continuation cursors rather than truncated silently, and summaries cite file:line or URL provenance so a caller can check them",
+      "origin": "llm",
+      "status": "approved"
+    },
+    {
+      "id": "o11",
+      "claim_id": "c23",
+      "seam": "export directory",
+      "behavior": "every headless run creates walk.jsonl and statements.md and prints both paths, with no --export flag required",
+      "source_text": "exploration output is persisted by default, never only in the final message: every headless run writes its run artifacts to an export directory (the Pi --mode json event stream as walk.jsonl plus the model's final statements as a file) and returns the paths, because issue #3 measured three runs where text mode returned a 318 B to 1.6 KB meta-summary ('the map is complete') and only json mode plus a mandated scratch-file write produced the 421-line map",
+      "origin": "llm",
+      "status": "approved"
+    },
+    {
+      "id": "o12",
+      "claim_id": "c24",
+      "seam": "read tool result",
+      "behavior": "each returned line is prefixed with its absolute file line number regardless of the requested window; a wrong path:N citation is flagged by the verifier",
+      "source_text": "the bounded read tool stamps absolute file line numbers on every returned line (cat -n style) regardless of the window requested, and the harness post-verifies every path:N citation in the statements against the walk's recorded read ranges, marking unverifiable ones \u2014 issue #3 measured citations off by 40-50 lines (server.py:3444 cited vs 3494 actual) with only 6 of 421 map lines carrying a precise file:line",
+      "origin": "llm",
+      "status": "approved"
+    },
+    {
+      "id": "o13",
+      "claim_id": "c25",
+      "seam": "walk and statements artifacts",
+      "behavior": "walk ids are monotonic, read entries carry content hashes, statement entries carry evidence lists, and --continue-from loads the walk as first context",
+      "source_text": "pass the torch (issue #4): a run exports two separable artifacts \u2014 A, the walk: an ordered log of every tool call and its result with stable ids (w1, w2, ...), timestamps, and for reads the returned content or its hash; B, the statements: the model's output where each claim carries evidence references into A, with unreferenced claims flagged unsupported \u2014 and a --continue-from that lets a second agent load A as given context without re-walking",
+      "origin": "llm",
+      "status": "approved"
+    },
+    {
+      "id": "o14",
+      "claim_id": "c28",
+      "seam": "provider request on the wire",
+      "behavior": "a captured request/response to the lane shows reasoning disabled (no or empty reasoning field)",
+      "source_text": "reasoning is off on the lane: colleague/colleague/associate.py:7-9 records 'Nemotron spends its first tokens thinking; a scout seat must not' and sets reasoning_effort off for the associate seat; the Pi provider config must send the equivalent (the served lane runs --reasoning-parser nemotron_v3 with reasoning on by default), and ~/.pi/agent/models.json today declares supportsReasoningEffort false, so the exact knob is unverified",
+      "origin": "llm",
+      "status": "approved"
+    },
+    {
+      "id": "o15",
+      "claim_id": "c29",
+      "seam": "path and output containment",
+      "behavior": "reads and greps outside the session root are refused; outputs are bounded at the per-tool budget with a spill path; a denied or failed web fetch returns a typed error, never page text",
+      "source_text": "containment guards are ported before features (issue #1): every local tool confines paths to the session root (colleague search_tools.py confine at line 90 and _refuse_pattern_escape at 105), bounds output at a per-tool budget with spill-to-disk (readpage.py, 1000 lines / 25,000 chars default), caps search results (DEFAULT_MAX_RESULTS 200), and the web tool enforces a URL check and a raw-size ceiling (web.py _MAX_RAW_CHARS 2,000,000) and returns a typed error for a failed, denied, or paywalled fetch instead of truncated page text",
+      "origin": "llm",
+      "status": "approved"
+    },
+    {
+      "id": "o16",
+      "claim_id": "c30",
+      "seam": "walk run record",
+      "behavior": "the final walk entry carries duration_ms, tool_calls, outcome, and truncated",
+      "source_text": "reliability is observable (issue #1): every run records wall time, tool-call count, exit outcome, and whether output was truncated, in the walk export, so latency and failure rate can be reported per task class rather than asserted",
+      "origin": "llm",
+      "status": "approved"
+    },
+    {
+      "id": "o17",
+      "claim_id": "c31",
+      "seam": "summary output",
+      "behavior": "the not-fully-read marker is present exactly when a tool truncated its input, set by the tool",
+      "source_text": "a summary always ships with what makes it checkable (issue #1): source spans or file:line citations into the walk, and an explicit not-fully-read marker when the read budget cut the input short",
+      "origin": "llm",
+      "status": "approved"
+    },
+    {
+      "id": "o18",
+      "claim_id": "c34",
+      "seam": "launcher startup",
+      "behavior": "when the extension's sentinel tool is absent from the tool list the launcher exits non-zero naming it and serves nothing",
+      "source_text": "the tool restriction fails closed: Pi's non-interactive modes (-p, --mode json, --mode rpc) load project .pi/settings.json and .pi/extensions only with a saved trust decision, defaultProjectTrust always, or --approve (pi docs/settings.md:16, security.md:29), and pi-acp documents no way to pass Pi flags through \u2014 so on an untrusted checkout the harness would silently run with Pi's full built-ins including edit and write. The launcher must verify the associate extension actually loaded (a sentinel tool in the startup tool list) and refuse to serve otherwise",
+      "origin": "llm",
+      "status": "approved"
+    },
+    {
+      "id": "o19",
+      "claim_id": "c35",
+      "seam": "shell tool argv",
+      "behavior": "the executable is spawned from an argv list with no shell; redirections, tee, sed -i, and mutating git subcommands are refused",
+      "source_text": "Pi's built-in bash is an unrestricted write path (any shell command can redirect, tee, sed -i, git commit), so the allowlisted shell in c20 must be a same-named override registered by the extension (pi docs/extensions.md:2053) that takes argv without shell interpretation, matches the executable and subcommand against the allowlist, and rejects redirections, pipes to writers, and mutating git subcommands",
+      "origin": "llm",
+      "status": "approved"
+    },
+    {
+      "id": "o20",
+      "claim_id": "c36",
+      "seam": "read tool denylist and export redaction",
+      "behavior": "a read of .env is refused; a fixture bearer in a walk is redacted before write; headless runs leave no new session file",
+      "source_text": "secrets do not ride along in artifacts: the read tool refuses files matched by a denylist (.env, key and token patterns, paths ignored by the checkout's .gitignore), the walk export directory is git-ignored and never inside the checkout being examined, exported walks pass a redaction filter for known secret shapes, and headless runs use --no-session (as issue #3's runs did) so Pi's own session log under ~/.pi/agent/sessions does not persist tool output a second time",
+      "origin": "llm",
+      "status": "approved"
+    },
+    {
+      "id": "o21",
+      "claim_id": "c38",
+      "seam": "registered web tools",
+      "behavior": "only webglass search and page open are registered; no tool can submit a form or hold a session",
+      "source_text": "the web surface registered by default is read-only: webglass search and page open; webglass action and session (clicking, form submission, persistent logins) are not registered as tools unless a later spec adds them, because they can produce outward-facing side effects the lobes role does not sanction",
+      "origin": "llm",
+      "status": "approved"
+    },
+    {
+      "id": "o22",
+      "claim_id": "c39",
+      "seam": "fresh clone toolchain",
+      "behavior": "with only Node 22 and pi installed the extension loads without npm install; CLAUDE.md names the four floors",
+      "source_text": "toolchain floors are pinned and documented in CLAUDE.md Tooling prerequisites: Node >=22 and pi >=0.80.4 (pi-acp README prerequisites), pi tested at 0.84.2, pi-acp >=0.0.33; pi update is never run by the harness; the extension declares no npm dependencies beyond what Pi itself provides (typebox via pi, pi docs/extensions.md:61-62), and no node_modules directory is ever tracked",
+      "origin": "llm",
+      "status": "approved"
+    },
+    {
+      "id": "o23",
+      "claim_id": "c40",
+      "seam": "CI tests job",
+      "behavior": "the tests job passes with no route to the lane and no bearer; pi-dependent tests skip with a reason when pi is absent",
+      "source_text": "CI never needs the lane or Node 22: tests exercise the extension and the Python wrapper against a fake OpenAI-compatible server or recorded fixtures; live-lane checks (the c22 and c27 numbers) run locally and are recorded in PR bodies; .github/workflows/tests.yml today installs Node 20 only for markdownlint",
+      "origin": "llm",
+      "status": "approved"
+    },
+    {
+      "id": "o24",
+      "claim_id": "c41",
+      "seam": "cutover commit",
+      "behavior": "git revert of the cutover commit restores backend: colleague and both doctors pass",
+      "source_text": "the mesh cutover is one revertible commit: culture.yaml backend: acp plus acp_command, AGENTS.md added, AGENTS.colleague.md retained until the ACP path has answered a channel message on a real server (c15), then removed in a separate commit",
+      "origin": "llm",
+      "status": "approved"
+    },
+    {
+      "id": "o25",
+      "claim_id": "c42",
+      "seam": "export directory naming",
+      "behavior": "two parallel runs on one fixture produce two disjoint export dirs keyed by session id",
+      "source_text": "every run gets its own scratch and export directory keyed by session id (ACP session id from culture's session/new, or a generated id headless), so concurrent mesh tasks against the same checkout never share a scratch dir or interleave walk entries",
+      "origin": "llm",
+      "status": "approved"
+    },
+    {
+      "id": "o26",
+      "claim_id": "c45",
+      "seam": "pi install from git ref",
+      "behavior": "installing the repo as a Pi package at a pinned tag in an unrelated directory yields the associate tool list with no edit or write",
+      "source_text": "the repo carries a package.json whose pi key declares the extension and skills directories (pi docs/packages.md:124-126), so 'pi install git:github.com/agentculture/associate@<tag>' loads the same extension the checkout does; git installs are pinned refs that pi update never moves (packages.md:90), and the release tag matches the pyproject.toml version bumped on every PR",
+      "origin": "llm",
+      "status": "approved"
+    }
+  ]
+}

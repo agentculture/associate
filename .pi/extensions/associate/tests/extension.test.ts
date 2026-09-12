@@ -1,0 +1,356 @@
+/**
+ * The entry point: what it registers, and what it must not register
+ * (acceptance criteria 1 and 2).
+ *
+ * `loadExtension()` runs the real `index.ts` against a fake pi. The companion
+ * proof that a real `pi` process reports the same tool list is in
+ * `pi-integration.test.ts`.
+ */
+
+import test from "node:test";
+import assert from "node:assert/strict";
+import {
+  existsSync,
+  mkdirSync,
+  mkdtempSync,
+  readFileSync,
+  readdirSync,
+  readlinkSync,
+  rmSync,
+  writeFileSync,
+} from "node:fs";
+import { createHash } from "node:crypto";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
+import { loadExtension } from "./load-extension.ts";
+import { toolsDir } from "../lib/paths.ts";
+import { discoverToolModules } from "../lib/runtime.ts";
+
+async function withExtension<T>(
+  env: Record<string, string | undefined>,
+  body: (loaded: Awaited<ReturnType<typeof loadExtension>>) => Promise<T>,
+): Promise<T> {
+  const loaded = await loadExtension(env);
+  try {
+    return await body(loaded);
+  } finally {
+    loaded.cleanup();
+  }
+}
+
+/**
+ * Every file under *dir*, recursively, as `relative path -> sha256 of its
+ * bytes`. Directory entries are recorded too (with a marker), so a created or
+ * removed empty directory is caught as well as a changed file.
+ */
+function snapshotTree(dir: string, prefix = ""): Map<string, string> {
+  const seen = new Map<string, string>();
+  for (const entry of readdirSync(dir, { withFileTypes: true }).sort((a, b) =>
+    a.name < b.name ? -1 : 1,
+  )) {
+    const rel = prefix ? `${prefix}/${entry.name}` : entry.name;
+    const abs = join(dir, entry.name);
+    if (entry.isDirectory()) {
+      seen.set(rel, "<dir>");
+      for (const [key, value] of snapshotTree(abs, rel)) seen.set(key, value);
+    } else if (entry.isSymbolicLink()) {
+      seen.set(rel, `<symlink>${readlinkSync(abs)}`);
+    } else {
+      seen.set(rel, createHash("sha256").update(readFileSync(abs)).digest("hex"));
+    }
+  }
+  return seen;
+}
+
+function scratch(): {
+  root: string;
+  checkout: string;
+  env: Record<string, string>;
+  dispose: () => void;
+} {
+  const root = mkdtempSync(join(tmpdir(), "associate-runs-"));
+  const checkout = mkdtempSync(join(tmpdir(), "associate-checkout-"));
+  return {
+    root,
+    checkout,
+    env: {
+      ASSOCIATE_EXPORT_ROOT: root,
+      ASSOCIATE_CHECKOUT_ROOT: checkout,
+      ASSOCIATE_SESSION_ID: "unit-session",
+    },
+    dispose: () => {
+      rmSync(root, { recursive: true, force: true });
+      rmSync(checkout, { recursive: true, force: true });
+    },
+  };
+}
+
+test("the extension registers associate_ready and finish and no writer", async () => {
+  const s = scratch();
+  try {
+    await withExtension(s.env, async ({ pi }) => {
+      const names = pi.toolNames();
+      assert.ok(names.includes("associate_ready"), `missing sentinel: ${names.join(", ")}`);
+      assert.ok(names.includes("finish"), `missing finish: ${names.join(", ")}`);
+      // `bash` is NOT in this list: the allowlisted shell (spec c35, t7)
+      // registers under that name on purpose, as an override of pi's built-in.
+      // It is covered by tests/shell.test.ts, which asserts there is exactly
+      // one and that it is the extension's.
+      for (const forbidden of ["edit", "write", "apply_patch"]) {
+        assert.ok(!names.includes(forbidden), `the extension must not register ${forbidden}`);
+      }
+    });
+  } finally {
+    s.dispose();
+  }
+});
+
+test("associate_ready reports the extension version, the contract version and the session", async () => {
+  const s = scratch();
+  try {
+    await withExtension(s.env, async ({ pi }) => {
+      const result = await pi.tool("associate_ready").execute("call-1", {});
+      const report = JSON.parse(result.content[0]!.text) as Record<string, any>;
+      assert.equal(report.ok, true);
+      assert.match(report.extension_version, /^\d+\.\d+\.\d+$/);
+      assert.ok(report.contract_version >= 1, "must report the loaded contract's version");
+      assert.deepEqual(report.schemas.sort(), ["statements", "task", "walk"]);
+      assert.equal(report.session.id, "unit-session");
+      assert.ok(report.session.scratch_dir.includes("unit-session"));
+      assert.ok(report.tools.includes("associate_ready") && report.tools.includes("finish"));
+    });
+  } finally {
+    s.dispose();
+  }
+});
+
+test("associate_ready reports no active writer under defaultTools: []", async () => {
+  // Measured against pi 0.84.2: getAllTools() lists the built-ins even when
+  // defaultTools: [] leaves them inactive, so the launcher's check (spec c34)
+  // is writer_tools_active, and the sentinel must not hide a writer that *is*
+  // active.
+  const s = scratch();
+  try {
+    await withExtension(s.env, async ({ pi }) => {
+      pi.builtinTools = ["read", "bash", "edit", "write"];
+
+      let report = JSON.parse(
+        (await pi.tool("associate_ready").execute("call-1", {})).content[0]!.text,
+      ) as { tools: string[]; active_tools: string[]; writer_tools_active: string[] };
+      assert.ok(report.tools.includes("write"), "configured built-ins are reported as configured");
+      // Not a fixed list: tool modules under tools/ (grep/find/ls today, more
+      // in later waves) register alongside the core sentinel/finish pair, and
+      // none of them are writers — that is the actual invariant this test
+      // guards, not the exact tool count.
+      assert.deepEqual(report.active_tools, pi.toolNames());
+      assert.ok(report.active_tools.includes("associate_ready") && report.active_tools.includes("finish"));
+      // The allowlisted shell overrides the built-in name `bash` but declares
+      // itself a non-writer (spec c35), so the launcher's check stays empty.
+      assert.ok(report.active_tools.includes("bash"));
+      assert.deepEqual(report.writer_tools_active, []);
+      assert.deepEqual(report.writer_tools_active, [], "no writer may be active");
+
+      pi.activeBuiltinTools = ["write"];
+      report = JSON.parse(
+        (await pi.tool("associate_ready").execute("call-2", {})).content[0]!.text,
+      ) as typeof report;
+      assert.deepEqual(report.writer_tools_active, ["write"], "an active writer must be reported");
+    });
+  } finally {
+    s.dispose();
+  }
+});
+
+test("finish returns the hand-back as its payload and leaves one text reply (d9)", async () => {
+  const s = scratch();
+  try {
+    await withExtension(s.env, async ({ pi }) => {
+      // One recorded tool result, so the walk has an entry to cite: `w1` is
+      // evidence only because this call happened. `w7` never did.
+      await pi.fireToolResult({
+        toolCallId: "tc-walk-1",
+        toolName: "read",
+        input: { path: "server.py" },
+        content: [{ type: "text", text: "1\tprint('hi')" }],
+      });
+
+      const result = (await pi.tool("finish").execute("call-2", {
+        summary: "Two routes are registered.",
+        statements: [
+          { text: "Route /walk is registered.", evidence: ["w1", "bogus", "w7"] },
+          { text: "Nothing evidences this." },
+        ],
+        citations: [{ path: "server.py", line: 3444 }],
+      })) as any;
+      const handback = JSON.parse(result.content[0].text);
+      assert.equal(handback.summary, "Two routes are registered.");
+      // `bogus` is the wrong shape; `w7` is the right shape for an entry that
+      // does not exist. Neither is evidence.
+      assert.deepEqual(handback.statements[0].evidence, ["w1"]);
+      assert.equal(handback.statements[0].status, "referenced");
+      assert.equal(handback.statements[1].status, "unreferenced");
+      assert.equal(handback.citations[0].check, "unverifiable");
+      assert.equal(handback.not_fully_read, false);
+      // d9: finish no longer terminates the loop; the model gets one text reply.
+      assert.equal(result.terminate, undefined);
+      assert.match(result.content[1].text, /final message/);
+      assert.match(result.content[1].text, /2 statements, 1 unreferenced/);
+      assert.equal(result.details.handback.summary, "Two routes are registered.");
+      assert.equal(result.details.unreferenced, 1);
+      // ...and every tool call after finish is blocked, so only a reply is left.
+      const after = (await pi.fireToolCall({ toolName: "read", input: { path: "server.py" } })) as any;
+      assert.equal(after?.block, true, "tool calls after finish must be blocked");
+      assert.match(String(after?.reason), /handed back/);
+    });
+  } finally {
+    s.dispose();
+  }
+});
+
+test("the tool_call hook is registered and blocks a write into the checkout", async () => {
+  const s = scratch();
+  try {
+    await withExtension(s.env, async ({ pi }) => {
+      // The guard is one of the `tool_call` hooks; the walk recorder is the
+      // other, and it records without ever blocking.
+      assert.ok((pi.handlers.get("tool_call")?.length ?? 0) >= 1, "no tool_call hook");
+
+      const blocked = (await pi.fireToolCall({
+        toolName: "write",
+        toolCallId: "tc-1",
+        input: { path: "README.md", content: "tampered" },
+      })) as { block: boolean; reason: string } | undefined;
+      assert.ok(blocked, "a write into the checkout must be blocked");
+      assert.equal(blocked!.block, true);
+      assert.match(blocked!.reason, /outside this session's scratch directory/);
+
+      const allowed = await pi.fireToolCall({
+        toolName: "read",
+        toolCallId: "tc-2",
+        input: { path: "README.md" },
+      });
+      assert.equal(allowed, undefined, "reads inside the checkout stay allowed");
+    });
+  } finally {
+    s.dispose();
+  }
+});
+
+test("the extension creates its session dirs and writes nothing into the checkout", async () => {
+  const s = scratch();
+  try {
+    // The checkout has to have something in it for "unchanged" to mean
+    // anything — an empty directory is trivially unchanged.
+    writeFileSync(join(s.checkout, "README.md"), "# fixture\n");
+    mkdirSync(join(s.checkout, "pkg"), { recursive: true });
+    writeFileSync(join(s.checkout, "pkg", "server.py"), "print('hello')\n");
+    writeFileSync(join(s.checkout, ".gitignore"), "build/\n");
+    const before = snapshotTree(s.checkout);
+    assert.ok(before.size >= 4, "precondition: the fixture checkout has files to protect");
+
+    await withExtension(s.env, async ({ pi }) => {
+      const result = await pi.tool("associate_ready").execute("call-1", {});
+      const report = JSON.parse(result.content[0]!.text) as any;
+      assert.ok(existsSync(report.session.scratch_dir));
+      assert.ok(existsSync(report.session.export_dir));
+      assert.ok(report.session.scratch_dir.startsWith(s.root));
+      // Nothing the session writes may land in the checkout.
+      assert.ok(!report.session.scratch_dir.startsWith(s.checkout));
+      assert.ok(!report.session.export_dir.startsWith(s.checkout));
+      assert.ok(!report.session.walk_path.startsWith(s.checkout));
+    });
+
+    // The claim in this test's name, actually checked: same files, same bytes.
+    const after = snapshotTree(s.checkout);
+    assert.deepEqual([...after.keys()], [...before.keys()], "the checkout's file list changed");
+    assert.deepEqual([...after.entries()], [...before.entries()], "a file in the checkout changed");
+  } finally {
+    s.dispose();
+  }
+});
+
+test("every module under tools/ is discovered and must export register()", async () => {
+  // search.ts (task t6) is the first real module to land under tools/; later
+  // waves add more, so this checks the real one is found rather than
+  // asserting the directory stays empty.
+  const realModules = discoverToolModules(toolsDir).map((path) => path.split("/").pop());
+  for (const m of ["search.ts", "read.ts", "shell.ts", "codelens.ts", "web.ts"]) {
+    assert.ok(realModules.includes(m), `expected ${m} among ${realModules.join(", ")}`);
+  }
+
+  const dir = mkdtempSync(join(tmpdir(), "associate-tools-"));
+  try {
+    writeFileSync(join(dir, "alpha.ts"), "export function register(pi, ctx) { pi.__alpha = ctx; }\n");
+    writeFileSync(join(dir, "beta.test.ts"), "throw new Error('test files must be skipped');\n");
+    writeFileSync(join(dir, ".hidden.ts"), "throw new Error('dotfiles must be skipped');\n");
+    const found = discoverToolModules(dir);
+    assert.deepEqual(
+      found.map((path) => path.split("/").pop()),
+      ["alpha.ts"],
+    );
+  } finally {
+    rmSync(dir, { recursive: true, force: true });
+  }
+});
+
+test("writers are deactivated at load even when the host offered them (deviation d7)", async () => {
+  const { pi, cleanup } = await loadExtension({}, (fake) => {
+    fake.activeBuiltinTools = ["read", "bash", "edit", "write", "grep"];
+  });
+  assert.ok(pi.getActiveTools().includes("edit"), "precondition: the host offered edit before session_start");
+  await pi.fireSessionStart();
+  const active = pi.getActiveTools();
+  assert.ok(!active.includes("edit"), `edit still active: ${active.join(", ")}`);
+  assert.ok(!active.includes("write"), `write still active: ${active.join(", ")}`);
+  assert.ok(active.includes("associate_ready") && active.includes("finish"));
+  // the argv shell overrides `bash` and declares itself a non-writer, so it stays
+  assert.ok(active.includes("bash"));
+  cleanup();
+});
+
+test("session_start writes ready.json carrying the sentinel's report (deviation d8)", async () => {
+  // d8 (measured 2026-09-12): proving readiness by hoping the model calls
+  // `associate_ready` in the same turn as the task is not a proof — with a real
+  // task prompt the model skipped the sentinel and a healthy run was refused.
+  // The report is therefore also written to disk at session_start, where a
+  // preflight invocation can read it without any model request at all.
+  const s = scratch();
+  const readyPath = join(s.root, "unit-session", "export", "ready.json");
+  try {
+    const { pi, cleanup } = await loadExtension(s.env, (fake) => {
+      fake.builtinTools = ["read", "bash", "edit", "write"];
+      fake.activeBuiltinTools = ["read", "bash", "edit", "write"];
+    });
+    try {
+      assert.ok(!existsSync(readyPath), "ready.json is written on session_start, not at load");
+
+      await pi.fireSessionStart();
+      assert.ok(existsSync(readyPath), `no ready.json at ${readyPath}`);
+
+      const onDisk = JSON.parse(readFileSync(readyPath, "utf8")) as Record<string, any>;
+      const sentinel = JSON.parse(
+        (await pi.tool("associate_ready").execute("call-1", {})).content[0]!.text,
+      ) as Record<string, any>;
+      assert.deepEqual(
+        Object.keys(onDisk).sort(),
+        Object.keys(sentinel).sort(),
+        "ready.json must carry the same fields the sentinel reports",
+      );
+      assert.equal(onDisk.ok, true);
+      assert.match(onDisk.extension_version, /^\d+\.\d+\.\d+$/);
+      assert.ok(onDisk.contract_version >= 1);
+      assert.equal(onDisk.session.id, "unit-session");
+      assert.ok(onDisk.active_tools.includes("associate_ready"));
+      assert.ok(onDisk.active_tools.includes("finish"));
+      // Written AFTER dropWriters, so no writer can appear in either list.
+      assert.deepEqual(onDisk.writer_tools_active, [], "no writer may be active in ready.json");
+      for (const writer of ["edit", "write"]) {
+        assert.ok(!onDisk.active_tools.includes(writer), `${writer} is still active`);
+      }
+    } finally {
+      cleanup();
+    }
+  } finally {
+    s.dispose();
+  }
+});

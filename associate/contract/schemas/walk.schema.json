@@ -1,0 +1,51 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://github.com/agentculture/associate/contract/walk.schema.json",
+  "title": "associate walk",
+  "description": "Artifact A of a run (issue #4): an ordered log of every tool call and its result, written by the harness from tool events and never editable by the model. On disk it is walk.jsonl — one $defs/entry per line, then a final line {\"run\": <$defs/run>}. This top-level document schema describes the same walk assembled in memory.",
+  "type": "object",
+  "required": ["entries", "run"],
+  "properties": {
+    "entries": {"type": "array", "items": {"$ref": "#/$defs/entry"}},
+    "run": {"$ref": "#/$defs/run"}
+  },
+  "$defs": {
+    "entry": {
+      "type": "object",
+      "required": ["id", "ts", "tool", "args", "result", "truncated"],
+      "properties": {
+        "id": {
+          "type": "string",
+          "pattern": "^w[1-9][0-9]*$",
+          "description": "Stable walk id, monotonically increasing from w1 within a run."
+        },
+        "ts": {"type": "string", "description": "ISO 8601 timestamp with offset."},
+        "tool": {"type": "string"},
+        "args": {"type": "object"},
+        "result": {"$ref": "#/$defs/result"},
+        "truncated": {"type": "boolean"},
+        "error": {"type": "string", "description": "Present only when the call failed."}
+      }
+    },
+    "result": {
+      "description": "Either the returned content, or its digest and size when the content is too large to inline.",
+      "type": "object",
+      "properties": {
+        "content": {"type": "string"},
+        "sha256": {"type": "string", "pattern": "^[0-9a-f]{64}$"},
+        "bytes": {"type": "integer"}
+      }
+    },
+    "run": {
+      "description": "The final run record: reliability is observable (issue #1).",
+      "type": "object",
+      "required": ["duration_ms", "tool_calls", "outcome", "truncated"],
+      "properties": {
+        "duration_ms": {"type": "integer"},
+        "tool_calls": {"type": "integer"},
+        "outcome": {"enum": ["ok", "error", "refused", "budget_exceeded"]},
+        "truncated": {"type": "boolean"}
+      }
+    }
+  }
+}

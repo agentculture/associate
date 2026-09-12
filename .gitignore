@@ -228,3 +228,27 @@ __marimo__/
 
 # Per-machine skills config (copy from skills.local.yaml.example)
 skills.local.yaml
+
+# devague working state (not committed by default)
+.devague/reviews/
+
+.devague/questions/
+
+# Pi coding agent — project-local package caches (installed by `pi`, not
+# authored here) and its export root. .pi/settings.json, .pi/extensions/ and
+# other authored .pi/ config stay tracked.
+.pi/npm/
+.pi/git/
+node_modules/
+.associate-runs/
+
+# The Pi extension's own TypeScript modules live in `.pi/extensions/*/lib/`,
+# which the Python `lib/` rule above (setuptools build output) would otherwise
+# swallow. Re-include that tree explicitly — the directory itself has to be
+# un-excluded before git will look at the files inside it.
+!.pi/extensions/*/lib/
+!.pi/extensions/*/lib/**
+# The Pi extension's lib/ holds source, not a Python build artifact. The
+# generic `lib/` rule above (from the Python .gitignore template) would
+# otherwise swallow .pi/extensions/associate/lib/.
+!.pi/extensions/associate/lib/

@@ -41,7 +41,7 @@ def test_whoami_text(capsys: pytest.CaptureFixture[str]) -> None:
     assert rc == 0
     out = capsys.readouterr().out
     assert "nick: associate" in out
-    assert "backend: colleague" in out
+    assert "backend: acp" in out
     assert "model:" in out
 
 
@@ -51,7 +51,7 @@ def test_whoami_json(capsys: pytest.CaptureFixture[str]) -> None:
     payload = json.loads(capsys.readouterr().out)
     assert payload["nick"] == "associate"
     assert payload["version"] == __version__
-    assert payload["backend"] == "colleague"
+    assert payload["backend"] == "acp"
 
 
 # --- learn ----------------------------------------------------------------
