@@ -174,7 +174,9 @@ export default async function (pi: ExtensionAPI) {
       ),
     }),
     async execute(_toolCallId, params) {
-      const handback = normalizeHandback(params);
+      // The walk's own ids are the only evidence that exists: a claim citing
+      // anything else is not referenced, however well-shaped the id looks.
+      const handback = normalizeHandback(params, false, walk.entryIds());
       const unreferenced = unreferencedCount(handback);
       const details = {
         handback,

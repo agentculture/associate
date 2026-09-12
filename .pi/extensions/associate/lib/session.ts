@@ -14,7 +14,7 @@
 
 import { mkdirSync } from "node:fs";
 import { dirname, join, resolve, sep } from "node:path";
-import { randomBytes } from "node:crypto";
+import { createHash, randomBytes } from "node:crypto";
 import { policySection, type ContractPolicy } from "./contract.ts";
 
 /**
@@ -52,19 +52,32 @@ export interface SessionDirs {
   readonly exportDir: string;
 }
 
+/** The longest session id used as a directory name (96 = a safe path segment). */
+const MAX_SESSION_ID_LENGTH = 96;
+
 /**
- * Make an arbitrary id safe to use as one path segment.
+ * Make an arbitrary id safe to use as one path segment — INJECTIVELY.
  *
  * ACP session ids are opaque strings; a `/` or `..` in one must not be able to
- * redirect the scratch directory.
+ * redirect the scratch directory. But sanitizing alone is not enough: a plain
+ * character substitution is many-to-one, so `task/a` and `task-a` — two
+ * genuinely different sessions — used to land in the SAME scratch and export
+ * directory, interleaving each other's walk entries and spill files.
+ *
+ * So an id that survives sanitizing unchanged (and is short enough) keeps its
+ * own name, and every id the sanitizer *altered* — or that is too long —
+ * carries a short digest of the ORIGINAL string, which separates two ids that
+ * clean to the same text. `associate/harness/pi.py`'s `sanitize_session_id`
+ * implements this same algorithm; the two must not diverge, or the Python
+ * adapter and the extension would disagree about where a run's artifacts are.
  */
 export function sanitizeSessionId(raw: string): string {
-  const cleaned = raw
-    .trim()
-    .replace(/[^A-Za-z0-9._-]+/g, "-")
-    .replace(/^[.-]+/, "")
-    .slice(0, 96);
-  return cleaned || generateSessionId();
+  const trimmed = raw.trim();
+  const cleaned = trimmed.replace(/[^A-Za-z0-9._-]+/g, "-").replace(/^[.-]+/, "");
+  if (cleaned === "") return generateSessionId();
+  if (cleaned === trimmed && cleaned.length <= MAX_SESSION_ID_LENGTH) return cleaned;
+  const digest = createHash("sha256").update(trimmed, "utf8").digest("hex").slice(0, 8);
+  return `${cleaned.slice(0, MAX_SESSION_ID_LENGTH - 9)}-${digest}`;
 }
 
 /** A generated id: sortable timestamp plus randomness, unique per process. */

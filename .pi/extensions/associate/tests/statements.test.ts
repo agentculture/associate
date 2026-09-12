@@ -610,3 +610,29 @@ test("the extension installs the statements hooks and writes the artifact from f
     rmSync(checkout, { recursive: true, force: true });
   }
 });
+
+test("a hand-back statement citing a walk id that does not exist is unreferenced", () =>
+  withDir((dir) => {
+    const walkPath = writeWalk(dir, [
+      { id: "w1", args: { path: "lib/walk.ts" }, content: stamp(1, ["alpha"]) },
+    ]);
+    const recorder = recorderIn(dir, walkPath);
+    // Two routes into the same hole: an id on the payload, and an id the
+    // recorder re-derives from the prose when the payload carried none.
+    const handback = normalizeHandback({
+      summary: "A short answer.",
+      statements: [
+        { text: "Backed by a real entry.", evidence: ["w1"] },
+        { text: "Backed by nothing [w999]." },
+      ],
+    });
+    recorder.recordHandback(handback);
+    recorder.finalize();
+
+    const artifact = readJson(dir) as {
+      statements: Array<{ status: string; evidence: string[] }>;
+    };
+    assert.deepEqual(artifact.statements.map((s) => s.status), ["referenced", "unreferenced"]);
+    assert.deepEqual(artifact.statements[0]!.evidence, ["w1"]);
+    assert.deepEqual(artifact.statements[1]!.evidence, [], "w999 names no walk entry");
+  }));

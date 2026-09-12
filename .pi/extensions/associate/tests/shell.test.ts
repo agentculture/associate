@@ -19,7 +19,7 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 import { EventEmitter } from "node:events";
-import { mkdtempSync, rmSync } from "node:fs";
+import { mkdirSync, mkdtempSync, rmSync, symlinkSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { createAssociateContext } from "../lib/runtime.ts";
@@ -415,5 +415,147 @@ test("the loaded extension's tool list carries exactly one bash and it is the ov
     loaded.cleanup();
     rmSync(exportRoot, { recursive: true, force: true });
     rmSync(checkout, { recursive: true, force: true });
+  }
+});
+
+// ---------------------------------------------------------------------------
+// Path operands (security finding: "secret files become visible to agents")
+//
+// The allowlist says a command is read-only; it says nothing about WHAT it
+// reads. These assert that an allowlisted command gets the same path boundary
+// the `read` tool enforces — confinement plus the denylist and .gitignore.
+// ---------------------------------------------------------------------------
+
+function fixtureCheckout(): Ctx {
+  const t = testContext();
+  writeFileSync(join(t.checkout, "a.py"), "print('hi')\n", "utf8");
+  writeFileSync(join(t.checkout, ".env"), "TOKEN=hunter2\n", "utf8");
+  writeFileSync(join(t.checkout, "deploy.key"), "-----BEGIN PRIVATE KEY-----\n", "utf8");
+  writeFileSync(join(t.checkout, ".gitignore"), "ignored/\n", "utf8");
+  mkdirSync(join(t.checkout, "ignored"), { recursive: true });
+  writeFileSync(join(t.checkout, "ignored", "notes.txt"), "local only\n", "utf8");
+  return t;
+}
+
+const OPERAND_REFUSED: Array<{ name: string; argv: string[]; field: string; match: RegExp }> = [
+  { name: "cat .env", argv: ["cat", ".env"], field: "argv[1]", match: /denylist/i },
+  { name: "cat ./.env", argv: ["cat", "./.env"], field: "argv[1]", match: /denylist/i },
+  { name: "cat deploy.key", argv: ["cat", "deploy.key"], field: "argv[1]", match: /denylist/i },
+  { name: "head -n 5 .env", argv: ["head", "-n", "5", ".env"], field: "argv[3]", match: /denylist/i },
+  {
+    name: "cat ../../etc/passwd",
+    argv: ["cat", "../../etc/passwd"],
+    field: "argv[1]",
+    match: /outside the checkout/i,
+  },
+  {
+    name: "head /etc/passwd",
+    argv: ["head", "/etc/passwd"],
+    field: "argv[1]",
+    match: /outside the checkout/i,
+  },
+  {
+    name: "git log -- .env",
+    argv: ["git", "log", "--", ".env"],
+    field: "argv[3]",
+    match: /denylist/i,
+  },
+  {
+    name: "cat a gitignored file",
+    argv: ["cat", "ignored/notes.txt"],
+    field: "argv[1]",
+    match: /gitignore/i,
+  },
+];
+
+for (const c of OPERAND_REFUSED) {
+  test(`operand refused: ${c.name}`, async () => {
+    const t = fixtureCheckout();
+    try {
+      const spawn = fakeSpawn({ stdout: "SHOULD NEVER RUN" });
+      const details = await run(t.ctx, { argv: c.argv }, spawn.fn);
+      assert.equal(details.ok, false, `${c.name} must be refused`);
+      assert.equal(details.code, "shell_refused");
+      assert.equal(details.field, c.field);
+      assert.match(details.message, c.match);
+      assert.ok(details.message.includes(c.argv[Number(c.field.slice(5, -1))]!));
+      assert.equal(spawn.calls.length, 0, "a refused command must never be spawned");
+    } finally {
+      t.dispose();
+    }
+  });
+}
+
+const OPERAND_ALLOWED: Array<{ name: string; argv: string[] }> = [
+  { name: "cat a.py", argv: ["cat", "a.py"] },
+  { name: "git log -- a.py", argv: ["git", "log", "--", "a.py"] },
+  { name: "git log (no operand)", argv: ["git", "log", "--oneline"] },
+  { name: "rg with a pattern that is not a path", argv: ["rg", "-n", "TOKEN", "a.py"] },
+  { name: "rg with a pattern that looks like a path", argv: ["rg", "a.py/b", "."] },
+  { name: "rg with an alternation pattern", argv: ["rg", "foo|bar", "a.py"] },
+  { name: "ls the checkout", argv: ["ls", "."] },
+  { name: "wc a.py", argv: ["wc", "-l", "a.py"] },
+];
+
+for (const c of OPERAND_ALLOWED) {
+  test(`operand allowed: ${c.name}`, async () => {
+    const t = fixtureCheckout();
+    try {
+      const spawn = fakeSpawn({ stdout: "ran\n" });
+      const details = await run(t.ctx, { argv: c.argv }, spawn.fn);
+      assert.equal(details.ok, true, `${c.name} must be allowed: ${details.message}`);
+      assert.equal(spawn.calls.length, 1);
+      assert.deepEqual(spawn.calls[0]!.args, c.argv.slice(1));
+    } finally {
+      t.dispose();
+    }
+  });
+}
+
+test("the subcommand slot is never mistaken for a path operand", async () => {
+  const t = fixtureCheckout();
+  try {
+    // A file literally named `log` next to a `git log` call must not make the
+    // subcommand keyword look like a path (and must not be checked as one).
+    writeFileSync(join(t.checkout, "log"), "not a subcommand\n", "utf8");
+    const spawn = fakeSpawn({ stdout: "ran\n" });
+    const details = await run(t.ctx, { argv: ["git", "log"] }, spawn.fn);
+    assert.equal(details.ok, true, details.message);
+    assert.equal(spawn.calls.length, 1);
+  } finally {
+    t.dispose();
+  }
+});
+
+test("an operand is judged from the cwd the command will actually run in", async () => {
+  const t = fixtureCheckout();
+  try {
+    mkdirSync(join(t.checkout, "pkg"), { recursive: true });
+    writeFileSync(join(t.checkout, "pkg", "mod.py"), "x = 1\n", "utf8");
+    const ok = await run(t.ctx, { argv: ["cat", "mod.py"], cwd: "pkg" }, fakeSpawn().fn);
+    assert.equal(ok.ok, true, ok.message);
+
+    // …and the denylist still bites from a subdirectory.
+    const spawn = fakeSpawn({ stdout: "SHOULD NEVER RUN" });
+    const denied = await run(t.ctx, { argv: ["cat", "../.env"], cwd: "pkg" }, spawn.fn);
+    assert.equal(denied.ok, false);
+    assert.equal(denied.code, "shell_refused");
+    assert.equal(spawn.calls.length, 0);
+  } finally {
+    t.dispose();
+  }
+});
+
+test("a symlink out of the checkout is judged by where it lands", async () => {
+  const t = fixtureCheckout();
+  try {
+    symlinkSync("/etc/passwd", join(t.checkout, "innocent.txt"));
+    const spawn = fakeSpawn({ stdout: "SHOULD NEVER RUN" });
+    const details = await run(t.ctx, { argv: ["cat", "innocent.txt"] }, spawn.fn);
+    assert.equal(details.ok, false, "a symlink out of the checkout must be refused");
+    assert.equal(details.code, "shell_refused");
+    assert.equal(spawn.calls.length, 0);
+  } finally {
+    t.dispose();
   }
 });

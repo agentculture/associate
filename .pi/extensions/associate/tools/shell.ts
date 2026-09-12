@@ -48,13 +48,18 @@
  */
 
 import { spawn as nodeSpawn } from "node:child_process";
-import { join } from "node:path";
+import { lstatSync, readFileSync } from "node:fs";
+import { isAbsolute, join, relative, resolve, sep } from "node:path";
 import {
   boundOutput,
   confine,
+  gitignoreMatcher,
+  isDenylisted,
   makeStructuredError,
   validateArgs,
   type Budget,
+  type GitignoreMatcher,
+  type Policy,
   type StructuredError,
 } from "../lib/contain.ts";
 import { policySection, type ContractPolicy } from "../lib/contract.ts";
@@ -289,6 +294,96 @@ export function refuseArgv(argv: readonly string[], policy: ContractPolicy): Str
 }
 
 // ---------------------------------------------------------------------------
+// Path operands — the same boundary the `read` tool enforces
+//
+// The allowlist alone says nothing about WHAT an allowlisted command reads.
+// `cat` is read-only, so it passes the allowlist; an argv of cat plus a
+// dotenv file is still a secret leaving the box, and cat plus ../../etc/passwd
+// is still a read outside the checkout — both of which the `read` tool refuses
+// outright. An agent that can reach either through `bash` makes `read`'s
+// confinement and denylist decorative. So every operand that names an
+// existing path goes through the same two checks `read` applies: confine to
+// the checkout, then the policy denylist plus the checkout's `.gitignore`.
+//
+// "Names an existing path" is the deliberate limit: an `rg` pattern, a `git`
+// revision or a `--flag` is not refused for merely looking path-shaped, and a
+// path that does not exist can leak nothing. Existence is checked with
+// `lstat`, so a symlink is judged by where it lands (confine resolves it)
+// rather than skipped.
+// ---------------------------------------------------------------------------
+
+/** A token that is an option, not an operand (`--` included: it is syntax). */
+function isFlag(token: string): boolean {
+  return token.startsWith("-");
+}
+
+/** True when *candidate* exists (a dangling symlink counts — lstat sees it). */
+function pathExists(candidate: string): boolean {
+  try {
+    lstatSync(candidate);
+    return true;
+  } catch {
+    return false;
+  }
+}
+
+/**
+ * Refuse an argv whose path operands escape the checkout or name a denied
+ * file. *cwd* is the already-confined working directory the command will run
+ * in, so a relative operand is judged where it will actually resolve.
+ */
+export function refusePathOperands(
+  argv: readonly string[],
+  cwd: string,
+  ctx: AssociateContext,
+): StructuredError | null {
+  const rules = shellRules(ctx.policy);
+  const policy = ctx.policy as unknown as Policy;
+  // The subcommand slot is a keyword, not a path: `git log` must not be read
+  // as "open the file named log" when one happens to exist.
+  const firstOperand = (rules.allowlist.get(argv[0]!)?.length ?? 0) > 0 ? 2 : 1;
+
+  let matcher: GitignoreMatcher | undefined;
+  let matcherLoaded = false;
+  const gitignore = (): GitignoreMatcher | undefined => {
+    if (!matcherLoaded) {
+      matcherLoaded = true;
+      try {
+        matcher = gitignoreMatcher(readFileSync(resolve(ctx.checkoutRoot, ".gitignore"), "utf8"));
+      } catch {
+        matcher = undefined;
+      }
+    }
+    return matcher;
+  };
+
+  for (let index = firstOperand; index < argv.length; index += 1) {
+    const token = argv[index]!;
+    if (token === "" || isFlag(token)) continue;
+    const candidate = isAbsolute(token) ? token : resolve(cwd, token);
+    if (!pathExists(candidate)) continue;
+
+    const field = `argv[${index}]`;
+    const confined = confine(ctx.checkoutRoot, candidate);
+    if (!confined.ok) {
+      return refuse(
+        `operand ${JSON.stringify(token)} resolves outside the checkout being examined; ` +
+          "this shell may only look at paths inside it",
+        field,
+      );
+    }
+    const rel = relative(resolve(ctx.checkoutRoot), confined.path).split(sep).join("/");
+    const denied = isDenylisted(rel, policy, gitignore());
+    if (denied) {
+      const why = denied.message.replace(/^read of '[^']*' is refused: /, "");
+      return refuse(`operand ${JSON.stringify(token)} is refused: ${why}`, field);
+    }
+  }
+
+  return null;
+}
+
+// ---------------------------------------------------------------------------
 // Spawning
 // ---------------------------------------------------------------------------
 
@@ -447,6 +542,18 @@ export function makeShellExecute(ctx: AssociateContext, deps: ShellDeps = {}) {
         });
       }
       cwd = confined.path;
+    }
+
+    // Only now, with cwd settled: a relative operand means nothing until we
+    // know which directory the command runs in.
+    const operandRefusal = refusePathOperands(argv, cwd, ctx);
+    if (operandRefusal) {
+      return asResult({
+        ...(operandRefusal as unknown as Record<string, unknown>),
+        argv,
+        cwd,
+        command_display: quoteForDisplay(argv),
+      });
     }
 
     const outcome = await runChild(spawnFn, argv, cwd, signal);

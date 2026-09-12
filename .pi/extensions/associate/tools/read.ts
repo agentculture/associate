@@ -31,8 +31,9 @@
  * multibyte content — the lapse this task's acceptance criteria calls out.
  */
 
-import { readFileSync, statSync } from "node:fs";
-import { relative, resolve, sep } from "node:path";
+import { lstatSync, readFileSync, realpathSync, statSync } from "node:fs";
+import { createHmac, randomBytes, timingSafeEqual } from "node:crypto";
+import { basename, relative, resolve, sep } from "node:path";
 import {
   boundOutput,
   confine,
@@ -219,8 +220,67 @@ function boundStamped(
   return { text: clippedText, truncated: cursor !== null, cursor };
 }
 
-function encodeCursor(cursor: Cursor): string {
-  return JSON.stringify(cursor);
+// ---------------------------------------------------------------------------
+// Cursors — opaque, authenticated, and confined
+//
+// A cursor is a continuation token the MODEL hands back, so it is
+// caller-controlled input, not internal state. Before this was closed, the
+// `spillPath` inside one was passed straight to `nextChunk`, which opens it:
+// a hand-written cursor `{"offset":0,"total":9,"chunkChars":9,
+// "spillPath":"/etc/passwd"}` read any file the process could read, walking
+// clean past `confine()` and the denylist that guard the `path` argument.
+//
+// Two independent defences, because either alone is one mistake from open:
+//
+//   1. AUTHENTICATION — every cursor carries an HMAC-SHA256 tag over its
+//      fields under a key generated per extension load and never written
+//      anywhere. A cursor this process did not issue does not verify and is
+//      refused before its fields are looked at.
+//   2. CONFINEMENT — even a genuinely-issued cursor is re-checked at use:
+//      the spill file must resolve (realpath, so a symlink cannot stand in
+//      for it) under THIS session's scratch directory, be a regular file, and
+//      carry the name `boundOutput`'s `createSpillFile` produces. Its numeric
+//      fields are re-validated against the file and the read budget.
+//
+// So the worst a forged or tampered cursor achieves is a structured
+// `cursor_invalid` the model can correct — never a read.
+// ---------------------------------------------------------------------------
+
+/**
+ * The per-session HMAC key: 32 random bytes, held only in this module's
+ * memory for the life of the extension. It is never persisted, so a cursor
+ * does not survive a restart — which is correct, since neither does the
+ * session scratch directory the cursor points into.
+ */
+const CURSOR_KEY = randomBytes(32);
+
+/** The spill-file names `contain.ts`'s `createSpillFile` can produce. */
+const SPILL_FILE_NAME = /^[0-9a-f]{64}(?:-[0-9a-f]{8})?\.txt$/;
+
+interface SignedCursor extends Cursor {
+  /** HMAC-SHA256 over the cursor's fields, hex. */
+  tag: string;
+}
+
+/** The exact bytes the tag covers. Field order is fixed, never key order. */
+function cursorPayload(cursor: Cursor): string {
+  return JSON.stringify([cursor.offset, cursor.total, cursor.chunkChars, cursor.spillPath ?? ""]);
+}
+
+/** The authentication tag for *cursor*. Exported so a test can forge honestly. */
+export function signCursor(cursor: Cursor): string {
+  return createHmac("sha256", CURSOR_KEY).update(cursorPayload(cursor)).digest("hex");
+}
+
+function tagMatches(cursor: Cursor, tag: string): boolean {
+  const expected = Buffer.from(signCursor(cursor), "utf8");
+  const actual = Buffer.from(tag, "utf8");
+  return expected.length === actual.length && timingSafeEqual(expected, actual);
+}
+
+export function encodeCursor(cursor: Cursor): string {
+  const signed: SignedCursor = { ...cursor, tag: signCursor(cursor) };
+  return JSON.stringify(signed);
 }
 
 function decodeCursor(raw: string): Cursor | StructuredError {
@@ -239,7 +299,110 @@ function decodeCursor(raw: string): Cursor | StructuredError {
   ) {
     return makeStructuredError("invalid_argument", "cursor is missing offset/total/chunkChars", "cursor");
   }
-  return parsed as Cursor;
+  const candidate = parsed as SignedCursor;
+  const cursor: Cursor = {
+    offset: candidate.offset,
+    total: candidate.total,
+    chunkChars: candidate.chunkChars,
+    ...(typeof candidate.spillPath === "string" ? { spillPath: candidate.spillPath } : {}),
+  };
+  if (typeof candidate.tag !== "string" || !tagMatches(cursor, candidate.tag)) {
+    return makeStructuredError(
+      "cursor_invalid",
+      "cursor is not one this session issued (its authentication tag does not verify); " +
+        "pass back a cursor exactly as it was returned, or re-read with `path`",
+      "cursor",
+    );
+  }
+  return cursor;
+}
+
+/**
+ * Re-check an authenticated cursor at the moment it is used.
+ *
+ * Returns the resolved spill path to read, or the refusal to hand back.
+ * Exported so the confinement can be tested on its own — including against a
+ * *validly signed* cursor pointing outside the scratch directory, which must
+ * still be refused.
+ */
+export function validateContinuationCursor(
+  cursor: Cursor,
+  scratchDir: string,
+  budget: Policy["budgets"]["read"],
+): { ok: true; spillPath: string } | StructuredError {
+  if (!cursor.spillPath) {
+    return makeStructuredError(
+      "cursor_invalid",
+      "cursor carries no spill file to continue from (the original read was not spilled to disk)",
+      "cursor",
+    );
+  }
+
+  let real: string;
+  let scratchReal: string;
+  try {
+    real = realpathSync(cursor.spillPath);
+    scratchReal = realpathSync(scratchDir);
+  } catch (err) {
+    return makeStructuredError(
+      "cursor_invalid",
+      `cursor's spill file could not be resolved: ${(err as Error).message}`,
+      "cursor",
+    );
+  }
+
+  if (real !== scratchReal && !real.startsWith(scratchReal.endsWith(sep) ? scratchReal : scratchReal + sep)) {
+    return makeStructuredError(
+      "cursor_invalid",
+      "cursor's spill file is outside this session's scratch directory; a continuation " +
+        "may only re-read output this session spilled",
+      "cursor",
+    );
+  }
+  if (!SPILL_FILE_NAME.test(basename(real))) {
+    return makeStructuredError(
+      "cursor_invalid",
+      "cursor's spill file is not one this extension wrote (its name is not a spill-file name)",
+      "cursor",
+    );
+  }
+
+  let stat;
+  try {
+    stat = lstatSync(real);
+  } catch (err) {
+    return makeStructuredError(
+      "cursor_invalid",
+      `cursor's spill file could not be read: ${(err as Error).message}`,
+      "cursor",
+    );
+  }
+  if (!stat.isFile()) {
+    return makeStructuredError("cursor_invalid", "cursor's spill file is not a regular file", "cursor");
+  }
+
+  // The file's byte length is an upper bound on its character length, so an
+  // offset past it is out of range whatever the encoding.
+  if (!Number.isInteger(cursor.offset) || cursor.offset < 0 || cursor.offset > stat.size) {
+    return makeStructuredError(
+      "cursor_invalid",
+      `cursor offset ${cursor.offset} is outside the spilled output`,
+      "cursor",
+    );
+  }
+  if (!Number.isInteger(cursor.total) || cursor.total < 0) {
+    return makeStructuredError("cursor_invalid", "cursor total is not a length", "cursor");
+  }
+  const maxChunk = Math.max(budget.max_output_chars, 1);
+  if (!Number.isInteger(cursor.chunkChars) || cursor.chunkChars < 1 || cursor.chunkChars > maxChunk) {
+    return makeStructuredError(
+      "cursor_invalid",
+      `cursor chunkChars ${cursor.chunkChars} is outside the read budget (1..${maxChunk})`,
+      "cursor",
+    );
+  }
+
+  return { ok: true, spillPath: real };
 }
 
 const DESCRIPTION =
@@ -292,7 +455,7 @@ export const register: ToolModule["register"] = async (pi, ctx: AssociateContext
       const args = rawParams as ReadArgs;
 
       if (args.cursor !== undefined) {
-        return continueRead(args.cursor);
+        return continueRead(ctx, args.cursor);
       }
       if (args.path === undefined) {
         return errorResult(makeStructuredError("invalid_argument", "missing required property 'path'", "path"));
@@ -302,23 +465,20 @@ export const register: ToolModule["register"] = async (pi, ctx: AssociateContext
   });
 };
 
-function continueRead(rawCursor: string): ToolResult {
+function continueRead(ctx: AssociateContext, rawCursor: string): ToolResult {
   const decoded = decodeCursor(rawCursor);
   if ("ok" in decoded) return errorResult(decoded);
   const cursor = decoded;
-  if (!cursor.spillPath) {
-    return errorResult(
-      makeStructuredError(
-        "cursor_invalid",
-        "cursor carries no spill file to continue from (the original read was not spilled to disk)",
-        "cursor",
-      ),
-    );
-  }
+
+  const policy = ctx.policy as unknown as Policy;
+  const checked = validateContinuationCursor(cursor, ctx.session.scratchDir, policy.budgets.read);
+  if (!checked.ok) return errorResult(checked);
 
   let chunk;
   try {
-    chunk = nextChunk({ spillPath: cursor.spillPath }, cursor);
+    // The RESOLVED path, not the one the cursor carried: what was checked is
+    // what is opened.
+    chunk = nextChunk({ spillPath: checked.spillPath }, cursor);
   } catch (err) {
     return errorResult(
       makeStructuredError(
