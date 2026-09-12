@@ -44,6 +44,8 @@ export class FakePi {
   readonly tools: RegisteredTool[] = [];
   readonly handlers = new Map<string, EventHandler[]>();
   readonly commands = new Map<string, unknown>();
+  /** Providers registered through `registerProvider`, in registration order. */
+  readonly providers: Array<{ id: string; config: Record<string, unknown> }> = [];
   /**
    * Built-in tools pi has *configured*. Measured against pi 0.84.2:
    * `getAllTools()` lists these even when `defaultTools: []` leaves them
@@ -59,6 +61,20 @@ export class FakePi {
 
   registerCommand(name: string, definition: unknown): void {
     this.commands.set(name, definition);
+  }
+
+  registerProvider(id: string, config: Record<string, unknown>): void {
+    this.providers.push({ id, config });
+  }
+
+  /** Run every `before_provider_request` handler, chaining any replacement. */
+  fireProviderRequest(payload: Record<string, unknown>, ctx?: unknown): Record<string, unknown> {
+    let current = payload;
+    for (const handler of this.handlers.get("before_provider_request") ?? []) {
+      const replacement = handler({ type: "before_provider_request", payload: current }, ctx);
+      if (replacement !== undefined) current = replacement as Record<string, unknown>;
+    }
+    return current;
   }
 
   on(event: string, handler: EventHandler): void {
