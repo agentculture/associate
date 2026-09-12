@@ -7,11 +7,11 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [0.9.1] - 2026-09-12
 
-### Added
-
 ### Changed
 
-### Fixed
+- Ledger adjudication after PR #6 merged: evidence e1–e15, behavioural deltas
+  b1–b5, and lapses l33–l36 confirmed by the operator; the delivery summary's
+  pending line updated. No code change.
 
 ## [0.9.0] - 2026-09-12
 
