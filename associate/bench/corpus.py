@@ -14,8 +14,9 @@ runner's default and can be pointed elsewhere with ``--cases``.
 from __future__ import annotations
 
 import json
+import re
 from dataclasses import dataclass, field
-from pathlib import Path
+from pathlib import Path, PurePosixPath, PureWindowsPath
 from typing import Any
 
 __all__ = [
@@ -24,9 +25,14 @@ __all__ = [
     "EXPECT_KEYS",
     "Case",
     "CorpusError",
+    "check_fixture_path",
     "default_cases_dir",
     "load_cases",
+    "materialize",
 ]
+
+#: Either path separator, so a Windows-flavoured key is segmented too.
+_SEPARATOR = re.compile(r"[\\/]")
 
 #: The seven behavioral categories named by claim c48. One case each.
 CATEGORIES: tuple[str, ...] = (
@@ -148,6 +154,11 @@ def _load_one(path: Path) -> Case:
     files = raw["fixture"].get("files") if isinstance(raw["fixture"], dict) else None
     if not isinstance(files, dict) or not files:
         raise CorpusError(f"{path.name}: 'fixture.files' must be a non-empty object")
+    # The strict loader refuses an escaping fixture key outright, so a bad
+    # custom corpus fails before any case runs rather than mid-suite, after
+    # earlier cases have already written.
+    for relative in files:
+        check_fixture_path(path.name, str(relative))
 
     return Case(
         id=str(raw["id"]),
@@ -170,10 +181,93 @@ def _check_corpus(cases: list[Case], directory: Path) -> None:
 
 
 def materialize(case: Case, checkout: Path) -> Path:
-    """Write *case*'s fixture tree under *checkout* and return it."""
-    checkout.mkdir(parents=True, exist_ok=True)
+    """Write *case*'s fixture tree under *checkout* and return it.
+
+    Every fixture key is checked again here, not only at load time: a ``Case``
+    can be constructed directly (the runner accepts a caller's own ``cases``
+    list), and the one place that turns a corpus key into a filesystem write is
+    the place that must not be able to write outside the checkout.
+
+    Containment is enforced segment by segment rather than by resolving the
+    joined path at the end, because a symlinked intermediate directory would
+    otherwise be *followed* by ``mkdir``/``write_text`` before any check saw it.
+    """
+    root = checkout.resolve()
+    root.mkdir(parents=True, exist_ok=True)
     for relative, content in case.fixture_files.items():
-        target = checkout / relative
-        target.parent.mkdir(parents=True, exist_ok=True)
+        target = _safe_fixture_target(case.id, relative, root)
         target.write_text(content, encoding="utf-8")
     return checkout
+
+
+def _safe_fixture_target(case_id: str, relative: str, root: Path) -> Path:
+    """Create the parents of *relative* under *root* and return the file path.
+
+    Raises :class:`CorpusError` the moment a segment would leave the checkout,
+    traverse a symlink, or overwrite a symlinked file.
+    """
+    segments = check_fixture_path(case_id, relative)
+    current = root
+    for segment in segments[:-1]:
+        current = current / segment
+        if current.is_symlink():
+            raise CorpusError(
+                f"{case_id}: fixture path {relative!r} traverses the symlink {current}; "
+                "a fixture tree is written only into real directories under the checkout"
+            )
+        current.mkdir(exist_ok=True)
+        if not _is_strictly_under(root, current.resolve()):
+            raise CorpusError(
+                f"{case_id}: fixture path {relative!r} resolves to {current.resolve()}, "
+                f"which is outside the checkout {root}"
+            )
+    target = current / segments[-1]
+    if target.is_symlink():
+        raise CorpusError(
+            f"{case_id}: fixture path {relative!r} names the symlink {target}; "
+            "a fixture file is never written through a link"
+        )
+    if not _is_strictly_under(root, current.resolve() / segments[-1]):
+        raise CorpusError(
+            f"{case_id}: fixture path {relative!r} resolves outside the checkout {root}"
+        )
+    return target
+
+
+def _is_strictly_under(root: Path, candidate: Path) -> bool:
+    """True when *candidate* lies strictly beneath *root* (never *root* itself)."""
+    return root in candidate.parents
+
+
+def check_fixture_path(case_id: str, relative: str) -> list[str]:
+    """Validate one fixture key and return its path segments.
+
+    A case file is data, and until this check existed it was data that chose
+    where the bench wrote: ``fixture.files`` keys were joined straight onto the
+    checkout, so ``"../x"``, ``"/etc/x"`` or ``"a/../../x"`` in a custom corpus
+    (``associate bench --cases <dir>``) overwrote files outside it. They are
+    refused here — at load time, and again at write time: absolute paths, any
+    parent (``..``) or dot-only segment, and empty segments.
+    """
+    if not isinstance(relative, str) or not relative.strip():
+        raise CorpusError(f"{case_id}: a fixture file path may not be empty")
+    if relative != relative.strip():
+        raise CorpusError(
+            f"{case_id}: fixture path {relative!r} is padded with whitespace; "
+            "write the path exactly as it should appear on disk"
+        )
+    if PurePosixPath(relative).is_absolute() or PureWindowsPath(relative).is_absolute():
+        raise CorpusError(
+            f"{case_id}: fixture path {relative!r} is absolute; fixture paths are "
+            "relative to the case's own checkout"
+        )
+    segments = _SEPARATOR.split(relative)
+    for segment in segments:
+        if not segment:
+            raise CorpusError(f"{case_id}: fixture path {relative!r} has an empty path segment")
+        if set(segment) == {"."}:
+            raise CorpusError(
+                f"{case_id}: fixture path {relative!r} contains the segment {segment!r}; "
+                "'.' and '..' are refused so a case cannot write outside its checkout"
+            )
+    return segments

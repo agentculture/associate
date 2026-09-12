@@ -62,6 +62,7 @@ behavioural evidence is what the bench is for.
 
 from __future__ import annotations
 
+import hashlib
 import json
 import os
 import re
@@ -92,6 +93,7 @@ __all__ = [
     "resolve_extension_path",
     "sanitize_session_id",
     "generate_session_id",
+    "stderr_tail",
 ]
 
 #: The tested pi version (CLAUDE.md, "The Pi harness floors"; spec c39).
@@ -131,10 +133,52 @@ PREFLIGHT_TIMEOUT = 60.0
 _UNSAFE_SEGMENT = re.compile(r"[^A-Za-z0-9._-]+")
 _LEADING_JUNK = re.compile(r"^[.-]+")
 
+#: The longest a sanitized session id may be — one path segment on every
+#: filesystem this lane runs on. Mirrors ``lib/session.ts``'s own constant.
+MAX_SESSION_ID_LENGTH = 96
+
+#: Hex characters of the disambiguating digest appended to a rewritten id.
+SESSION_ID_DIGEST_LENGTH = 8
+
+#: What is left for the cleaned stem: 87 + "-" + 8 == 96.
+_SESSION_ID_STEM_LENGTH = MAX_SESSION_ID_LENGTH - SESSION_ID_DIGEST_LENGTH - 1
+
+#: How many stderr lines a failure message may quote back.
+_STDERR_TAIL_LINES = 3
+
 
 def _warn(line: str) -> None:
     """Diagnostics go to stderr; stdout carries results only."""
     sys.stderr.write(line if line.endswith("\n") else line + "\n")
+
+
+def _redact(text: str) -> str:
+    """Apply the contract's redaction patterns to *text*.
+
+    Anything quoted back out of pi's stderr passes through here first: a
+    launcher that helpfully pasted the last three lines of a failed run into an
+    error message is a launcher that can paste a bearer token into a log. The
+    patterns are the contract's (``policy.json``'s ``redaction``), never a
+    second copy defined here.
+    """
+    redaction = contract.load_policy().get("redaction", {})
+    replacement = redaction.get("replacement", "[REDACTED]")
+    for pattern in redaction.get("patterns", []):
+        try:
+            text = re.sub(pattern, replacement, text)
+        except re.error:  # pragma: no cover - the contract's patterns compile
+            continue
+    return text
+
+
+def stderr_tail(stderr: str | None, lines: int = _STDERR_TAIL_LINES) -> str:
+    """The last *lines* non-empty, redacted lines of *stderr*, joined for one message.
+
+    Bounded on purpose: a failed pi run can print a great deal, and an error a
+    caller has to scroll is an error nobody reads.
+    """
+    kept = [line.strip() for line in (stderr or "").strip().splitlines() if line.strip()]
+    return " | ".join(_redact(line) for line in kept[-lines:])
 
 
 # ---------------------------------------------------------------- session ids
@@ -144,10 +188,31 @@ def sanitize_session_id(raw: str) -> str:
     """Make an arbitrary id safe as one path segment (mirrors ``lib/session.ts``).
 
     An ACP session id is an opaque string; a ``/`` or ``..`` in one must not be
-    able to redirect the export directory.
+    able to redirect the export directory. But *making* an id safe is a
+    many-to-one map, and this directory keys a run's artifacts: plain
+    substitution sent ``task/a`` and ``task-a`` — and every id longer than the
+    length cap that shares a 96-character prefix — to the same directory, where
+    two concurrent runs appended to one another's ``walk.jsonl``.
+
+    So a rewritten id carries a digest of what it was rewritten *from*:
+
+    * an id that survives cleaning unchanged and fits the cap is returned
+      verbatim, so a well-formed id is still readable on disk;
+    * any other id becomes ``<cleaned stem>-<8 hex of sha256(trimmed)>``, which
+      is collision-free for distinct inputs in every practical sense;
+    * an id that cleans away to nothing gets a generated one.
+
+    ``lib/session.ts`` implements this algorithm byte for byte; the golden
+    value in ``tests/test_run.py`` is what cross-checks the two sides.
     """
-    cleaned = _LEADING_JUNK.sub("", _UNSAFE_SEGMENT.sub("-", raw.strip()))[:96]
-    return cleaned or generate_session_id()
+    trimmed = raw.strip()
+    cleaned = _LEADING_JUNK.sub("", _UNSAFE_SEGMENT.sub("-", trimmed))
+    if not cleaned:
+        return generate_session_id()
+    if cleaned == trimmed and len(cleaned) <= MAX_SESSION_ID_LENGTH:
+        return cleaned
+    digest = hashlib.sha256(trimmed.encode("utf-8")).hexdigest()[:SESSION_ID_DIGEST_LENGTH]
+    return f"{cleaned[:_SESSION_ID_STEM_LENGTH]}-{digest}"
 
 
 def generate_session_id() -> str:
@@ -398,11 +463,28 @@ class PiHarness(Harness):
         )
 
         export_dir = self.export_dir
+        # The preflight is *expected* to exit 0: `lib/preflight.ts` ends it with
+        # `process.exit(0)` on `before_agent_start`. A non-zero code therefore
+        # means pi itself could not get that far — a bad `-e` path, an
+        # unloadable extension, a refused project — which is the same fail-open
+        # c34 exists to close, so it is refused with the same error class.
+        if preflight.returncode != 0:
+            tail = stderr_tail(preflight.stderr)
+            raise ExtensionNotLoadedError(
+                f"the preflight run of pi exited {preflight.returncode}, so the associate "
+                f"extension at {index_path} was never proven to load"
+                + (f" (pi stderr: {tail})" if tail else ""),
+                remediation=(
+                    f"run pi by hand with -e {index_path} to see why it fails, and keep "
+                    "--approve for a checkout whose project files pi must trust"
+                ),
+            )
+
         report = self._read_ready_report(export_dir)
         if report is None:
-            tail = (preflight.stderr or "").strip().splitlines()[-3:]
+            tail = stderr_tail(preflight.stderr)
             if tail:
-                self._warn("associate: pi stderr tail: " + " | ".join(tail))
+                self._warn("associate: pi stderr tail: " + tail)
             raise ExtensionNotLoadedError(
                 f"the preflight run wrote no {READY_REPORT_FILENAME} in {export_dir}, so the "
                 f"associate extension at {index_path} did not load and the run is refused",
@@ -417,6 +499,13 @@ class PiHarness(Harness):
         # -- 2. the task turn, unchanged -----------------------------------
         prompt = self._prompt or task.get("prompt") or READINESS_PROMPT
         completed = self._run_pi(executable, [*base_args, prompt], env, timeout=self._timeout)
+
+        # A run that failed must not be handed back as a result. The launcher
+        # used to build the artifact paths from the session id alone, so a pi
+        # that died on the task turn — or one that ran and wrote nothing —
+        # still exited 0 with a result naming files that were absent or, worse,
+        # left over from an earlier run under the same id.
+        self._assert_task_succeeded(completed, export_dir)
 
         # The task run's own session_start rewrites ready.json; the sentinel
         # event is only a fallback for a pi that somehow wrote no file, and the
@@ -596,6 +685,42 @@ class PiHarness(Harness):
                 "`associate bench` passes on the new version."
             )
         return found or None
+
+    @staticmethod
+    def _assert_task_succeeded(
+        completed: subprocess.CompletedProcess[str], export_dir: Path
+    ) -> None:
+        """Refuse to report success for a task run that failed or wrote nothing.
+
+        Two distinct failures, named separately because they need different
+        remediation: pi exiting non-zero (the run died — the message quotes a
+        bounded, redacted stderr tail so the operator does not have to re-run
+        it blind), and pi exiting 0 having produced no artifact (the run
+        happened but persisted nothing, so there is no walk to check and
+        nothing to hand back).
+        """
+        if completed.returncode != 0:
+            tail = stderr_tail(completed.stderr)
+            raise HarnessError(
+                f"pi exited {completed.returncode} on the task run, so nothing is served"
+                + (f" (pi stderr: {tail})" if tail else ""),
+                remediation=(
+                    "check that the configured lane is reachable and that the prompt is "
+                    "within the run's budget, then run again; the export directory "
+                    f"({export_dir}) holds whatever the run did persist"
+                ),
+            )
+
+        for filename in (WALK_FILENAME, STATEMENTS_MD_FILENAME):
+            if not (export_dir / filename).is_file():
+                raise HarnessError(
+                    f"the task run left no {filename} in {export_dir}, so it produced no "
+                    "artifact to hand back",
+                    remediation=(
+                        "the extension writes both artifacts itself; check that the run "
+                        "reached its export directory and was not killed before it exited"
+                    ),
+                )
 
     def _assert_ready(self, report: dict[str, Any]) -> None:
         """Fail closed unless the report Pi produced names a writer-free lane.

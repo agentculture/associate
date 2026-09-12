@@ -57,10 +57,11 @@ Every reader of this repo needing to *use* the lane falls into one of three
 buckets, each with one invocation meant to work from a clean clone:
 
 1. **The mesh resident** — reached through Culture, `culture start associate`.
-   Today that still resolves `backend: colleague` (see above); the cutover to
-   `backend: acp` (pi-acp bridging ACP to `pi --mode rpc`, with `AGENTS.md` as
-   the runtime prompt) is a separate, later change to this repo, and is the
-   mesh path once it lands.
+   That resolves `backend: acp`: culture spawns `pi-acp`, which bridges ACP
+   stdio to `pi --mode rpc`, so the resident runs the same Pi binary and the
+   same `.pi/extensions/associate` tool set a headless run does, with
+   `AGENTS.md` as the runtime prompt. `AGENTS.colleague.md` is kept only until
+   that path is fully verified.
 2. **colleague, or an operator, driving it headlessly** — the intended
    invocation is `associate run --harness pi "<task>"`, but the `run` verb and
    the `pi` adapter are not wired yet (a later task in the same plan). What
@@ -139,10 +140,13 @@ overrides which `index.ts` that is.
   (`afi-cli`), with the stdout/stderr, `--json`, error-shape, and
   learnability contract above enforced in CI by `teken cli doctor --strict`.
 - **A mesh identity** — `culture.yaml` (`suffix` + `backend` + `model`) and the
-  matching resident prompt file. associate runs `backend: colleague`, so the
-  resident prompt is [`AGENTS.colleague.md`](AGENTS.colleague.md);
-  [`CLAUDE.md`](CLAUDE.md) is the prompt for Claude Code sessions working *on*
-  the repo. Both audiences are real.
+  matching resident prompt file. associate runs `backend: acp`, launched
+  through `pi-acp` (which bridges ACP stdio to `pi --mode rpc`), so the runtime
+  prompt is [`AGENTS.md`](AGENTS.md) — the same context file Pi itself loads.
+  [`AGENTS.colleague.md`](AGENTS.colleague.md) is retained only until the ACP
+  path is fully verified, so backing the cutover out stays a single clean
+  revert. [`CLAUDE.md`](CLAUDE.md) is the prompt for Claude Code sessions
+  working *on* the repo. Both audiences are real.
 - **19 skills** under `.claude/skills/`, vendored cite-don't-import. Provenance
   for every one is tracked in [`docs/skill-sources.md`](docs/skill-sources.md).
 - **A build + deploy baseline** — pytest, four linters, markdownlint, the rubric

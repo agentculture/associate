@@ -19,6 +19,7 @@ fake lane and asserts only what that combination can actually produce.
 
 from __future__ import annotations
 
+import hashlib
 import json
 import os
 import stat
@@ -47,6 +48,11 @@ from pathlib import Path
 READY = {ready!r}
 WRITERS = {writers!r}
 VERSION = {version!r}
+#: Exit code of the TASK turn (the preflight always exits 0, as preflight.ts does).
+TASK_EXIT = {task_exit!r}
+#: Which export artifacts this fake writes — a run that produced none is a
+#: failed run even when pi exits 0.
+ARTIFACTS = {artifacts!r}
 
 argv = sys.argv[1:]
 if "--version" in argv or "-v" in argv:
@@ -78,12 +84,15 @@ export.mkdir(parents=True, exist_ok=True)
 run_record = {{
     "run": {{"duration_ms": 1, "tool_calls": 1, "outcome": "ok", "truncated": False}}
 }}
-(export / "walk.jsonl").write_text(json.dumps(run_record) + "\\n", encoding="utf-8")
-(export / "statements.md").write_text("# Statements\\n", encoding="utf-8")
-(export / "statements.json").write_text(
-    json.dumps({{"statements": [], "citations": [], "not_fully_read": False}}) + "\\n",
-    encoding="utf-8",
-)
+if "walk.jsonl" in ARTIFACTS:
+    (export / "walk.jsonl").write_text(json.dumps(run_record) + "\\n", encoding="utf-8")
+if "statements.md" in ARTIFACTS:
+    (export / "statements.md").write_text("# Statements\\n", encoding="utf-8")
+if "statements.json" in ARTIFACTS:
+    (export / "statements.json").write_text(
+        json.dumps({{"statements": [], "citations": [], "not_fully_read": False}}) + "\\n",
+        encoding="utf-8",
+    )
 
 report = {{
     "ok": True,
@@ -124,7 +133,17 @@ if READY:
         )
     )
 print(json.dumps({{"type": "agent_end", "messages": []}}))
+
+if TASK_EXIT:
+    for number in range(1, 5):
+        print("boom-%d: the task turn failed" % number, file=sys.stderr)
+    # A real failure can print a credential; the launcher must not quote it back.
+    print("Authorization: Bearer sk-abcdefghijklmnop1234", file=sys.stderr)
+    raise SystemExit(TASK_EXIT)
 '''
+
+
+_ALL_ARTIFACTS = ["walk.jsonl", "statements.md", "statements.json"]
 
 
 def _install_fake_pi(
@@ -133,12 +152,20 @@ def _install_fake_pi(
     ready: bool = True,
     writers: list[str] | None = None,
     version: str = "0.84.2",
+    task_exit: int = 0,
+    artifacts: list[str] | None = None,
 ) -> Path:
     """Write an executable fake ``pi`` into *directory* and return its path."""
     directory.mkdir(parents=True, exist_ok=True)
     script = directory / "pi"
     script.write_text(
-        _FAKE_PI.format(ready=ready, writers=writers or [], version=version),
+        _FAKE_PI.format(
+            ready=ready,
+            writers=writers or [],
+            version=version,
+            task_exit=task_exit,
+            artifacts=list(_ALL_ARTIFACTS if artifacts is None else artifacts),
+        ),
         encoding="utf-8",
     )
     script.chmod(script.stat().st_mode | stat.S_IXUSR | stat.S_IXGRP | stat.S_IXOTH)
@@ -283,6 +310,110 @@ def test_json_mode_prints_the_result_object(
     assert Path(payload["walk_path"]).is_file()
     assert Path(payload["statements_md_path"]).is_file()
     assert payload["outcome"] == "ok"
+
+
+# ------------------------------------------------------ a failed task run
+
+# The launcher used to build the result paths from the session id alone, so a
+# task run that died — or ran and persisted nothing — still exited 0 with a
+# result naming files that were absent or left over from an earlier run.
+
+
+def test_a_failed_task_run_is_not_reported_as_success(
+    fake_pi, checkout: Path, tmp_path: Path, capsys: pytest.CaptureFixture[str]
+):
+    fake_pi(task_exit=3)
+
+    assert _run([], checkout, tmp_path) == 2
+
+    captured = capsys.readouterr()
+    assert captured.out == "", "a failed run must serve nothing on stdout"
+    assert "3" in captured.err
+    # The preflight still ran and passed: the refusal is about the task turn.
+    assert len(_invocations(tmp_path)) == 2
+
+
+def test_a_failed_task_run_quotes_a_bounded_redacted_stderr_tail(
+    fake_pi, checkout: Path, tmp_path: Path, capsys: pytest.CaptureFixture[str]
+):
+    """Three lines at most, and never a credential."""
+    fake_pi(task_exit=1)
+
+    assert _run([], checkout, tmp_path) == 2
+
+    err = capsys.readouterr().err
+    assert "boom-4" in err, "the operator gets the end of the failure"
+    assert "boom-1" not in err, "the tail is bounded at three lines"
+    assert "sk-abcdefghijklmnop1234" not in err, "a secret is redacted before it is quoted"
+
+
+def test_a_task_run_that_wrote_no_statements_is_not_reported_as_success(
+    fake_pi, checkout: Path, tmp_path: Path, capsys: pytest.CaptureFixture[str]
+):
+    """pi exiting 0 is not proof it produced anything."""
+    fake_pi(artifacts=["walk.jsonl", "statements.json"])
+
+    assert _run([], checkout, tmp_path) == 2
+
+    captured = capsys.readouterr()
+    assert captured.out == ""
+    assert "statements.md" in captured.err
+
+
+def test_a_task_run_that_wrote_no_walk_is_not_reported_as_success(
+    fake_pi, checkout: Path, tmp_path: Path, capsys: pytest.CaptureFixture[str]
+):
+    fake_pi(artifacts=["statements.md", "statements.json"])
+
+    assert _run([], checkout, tmp_path) == 2
+
+    captured = capsys.readouterr()
+    assert captured.out == ""
+    assert "walk.jsonl" in captured.err
+
+
+def test_a_ready_run_that_produced_both_artifacts_still_serves(
+    fake_pi, checkout: Path, tmp_path: Path, capsys: pytest.CaptureFixture[str]
+):
+    """The other half of the same check: a healthy run is unaffected."""
+    assert _run([], checkout, tmp_path) == 0
+
+    out = capsys.readouterr().out
+    assert "walk.jsonl" in out and "statements.md" in out
+
+
+def test_a_preflight_that_exits_nonzero_fails_closed(
+    fake_pi, checkout: Path, tmp_path: Path, capsys: pytest.CaptureFixture[str]
+):
+    """`lib/preflight.ts` exits 0; anything else means pi never got that far."""
+    from associate.harness.pi import PiHarness
+
+    harness = PiHarness(executable=str(tmp_path / "bin" / "pi"))
+    harness.start(
+        checkout=checkout,
+        contract_dir=Path("associate/contract").resolve(),
+        session_id="preflight-nonzero",
+        export_dir=tmp_path / "runs",
+    )
+
+    def boom(executable, argv_tail, env, *, timeout):
+        return subprocess.CompletedProcess(argv_tail, 9, stdout="", stderr="pi: bad extension\n")
+
+    harness._run_pi = boom  # type: ignore[assignment]
+    harness._check_version = lambda executable: None  # type: ignore[assignment]
+
+    with pytest.raises(ExtensionNotLoadedError) as err:
+        harness.submit(
+            {
+                "id": "t",
+                "prompt": "hi",
+                "checkout": str(checkout),
+                "session_id": "preflight-nonzero",
+                "export_dir": str(tmp_path / "runs"),
+            }
+        )
+    assert "9" in str(err.value)
+    assert "bad extension" in str(err.value)
 
 
 # ------------------------------------------------- what the launcher passes pi
@@ -489,8 +620,51 @@ def test_an_export_root_inside_the_checkout_is_refused(checkout: Path):
 
 
 def test_session_ids_are_safe_path_segments():
-    assert sanitize_session_id("../../etc/passwd") == "etc-passwd"
-    assert sanitize_session_id("sess/01") == "sess-01"
+    """A traversing id is neutered — and now carries a digest of what it was."""
+    assert sanitize_session_id("../../etc/passwd").startswith("etc-passwd-")
+    assert sanitize_session_id("sess/01").startswith("sess-01-")
+    assert "/" not in sanitize_session_id("../../etc/passwd")
+
+
+def test_a_safe_session_id_is_returned_verbatim():
+    """An id that needs no rewriting keeps its name, so a run stays findable."""
+    assert sanitize_session_id("bench-local-read-find-9f2a") == "bench-local-read-find-9f2a"
+    assert sanitize_session_id("  t12-fixture  ") == "t12-fixture"
+
+
+def test_distinct_session_ids_never_collide_after_sanitizing():
+    """Concurrent runs keyed ``task/a`` and ``task-a`` used to share one directory.
+
+    Both cleaned to ``task-a``, so two live runs appended to one another's
+    ``walk.jsonl`` and overwrote one another's ``statements.json``.
+    """
+    assert sanitize_session_id("task/a") != sanitize_session_id("task-a")
+    assert sanitize_session_id("task-a") == "task-a", "an already-safe id is untouched"
+
+
+def test_long_session_ids_with_a_shared_prefix_stay_distinct():
+    """Truncation at 96 characters was the second collision; the digest closes it."""
+    left = "x" * 190 + "-left"
+    right = "x" * 190 + "-right"
+
+    assert sanitize_session_id(left) != sanitize_session_id(right)
+    assert len(sanitize_session_id(left)) == 96
+
+
+def test_the_session_id_algorithm_has_a_golden_value():
+    """The cross-check for ``lib/session.ts``, which implements the same algorithm.
+
+    If the TypeScript side ever drifts, this literal is what catches it: both
+    sides must key one run to one directory.
+    """
+    digest = hashlib.sha256(b"task/a").hexdigest()[:8]
+    assert digest == "aa547b35"
+    assert sanitize_session_id("task/a") == "task-a-aa547b35"
+
+
+def test_a_session_id_that_cleans_away_to_nothing_is_generated():
+    generated = sanitize_session_id("///")
+    assert generated and "/" not in generated
 
 
 def test_the_stub_adapter_still_runs_through_the_verb(

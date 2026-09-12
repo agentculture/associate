@@ -274,3 +274,222 @@ def test_the_argv_shell_named_bash_is_not_a_forbidden_tool():
         {"statements": [], "citations": []},
     )
     assert checks._check_forbidden_tools(walk) == []
+
+
+# ---------------------------------------------------------------------------
+# A search expectation is met only by an actual, successful search
+# ---------------------------------------------------------------------------
+
+
+def _artifacts(entries):
+    from associate.bench import checks
+
+    return checks.Artifacts(entries, {"outcome": "ok"}, {"statements": [], "citations": []})
+
+
+def test_a_finish_summary_mentioning_the_term_is_not_a_search():
+    """The term comes from the prompt, so it reappears in whatever the model says."""
+    from associate.bench import checks
+
+    walk = _artifacts(
+        [
+            {"id": "w1", "tool": "finish", "args": {"summary": "TIMEOUT_SECONDS is 47"}},
+            {"id": "w2", "tool": "bash", "args": {"argv": ["rg", "TIMEOUT_SECONDS", "."]}},
+        ]
+    )
+    assert checks._check_searches({"searches": ["TIMEOUT_SECONDS"]}, walk)
+
+
+def test_a_failed_grep_does_not_satisfy_a_search_expectation():
+    """`tools/search.ts` returns `{"ok": false}` for a refused or failed search."""
+    from associate.bench import checks
+
+    structured = _artifacts(
+        [
+            {
+                "id": "w1",
+                "tool": "grep",
+                "args": {"pattern": "TIMEOUT_SECONDS"},
+                "result": {
+                    "content": json.dumps({"ok": False, "error": {"code": "search_failed"}})
+                },
+            }
+        ]
+    )
+    assert checks._check_searches({"searches": ["TIMEOUT_SECONDS"]}, structured)
+
+    flagged = _artifacts(
+        [
+            {
+                "id": "w1",
+                "tool": "grep",
+                "args": {"pattern": "TIMEOUT_SECONDS"},
+                "result": {},
+                "error": "rg exited with code 2",
+            }
+        ]
+    )
+    assert checks._check_searches({"searches": ["TIMEOUT_SECONDS"]}, flagged)
+
+
+def test_a_successful_grep_satisfies_a_search_expectation():
+    from associate.bench import checks
+
+    walk = _artifacts(
+        [
+            {
+                "id": "w1",
+                "tool": "grep",
+                "args": {"pattern": "TIMEOUT_SECONDS", "path": "."},
+                "result": {"content": json.dumps({"ok": True, "matches": ["src/c.py:3:x"]})},
+            }
+        ]
+    )
+    assert checks._check_searches({"searches": ["TIMEOUT_SECONDS"]}, walk) == []
+
+
+def test_a_successful_find_satisfies_a_search_expectation():
+    from associate.bench import checks
+
+    walk = _artifacts([{"id": "w1", "tool": "find", "args": {"pattern": "constants", "path": "."}}])
+    assert checks._check_searches({"searches": ["constants"]}, walk) == []
+
+
+# ---------------------------------------------------------------------------
+# Citation coverage: a read's recorded range, honestly read
+# ---------------------------------------------------------------------------
+
+
+def _read(args, content=None):
+    entry = {"id": "w1", "tool": "read", "args": args}
+    if content is not None:
+        entry["result"] = {"content": content}
+    return entry
+
+
+def test_a_bounded_pi_read_does_not_cover_a_line_outside_its_window():
+    """`start_line`/`end_line` are inclusive, and they bound what was seen."""
+    from associate.bench import checks
+
+    walk = _artifacts([_read({"path": "a.py", "start_line": 100, "end_line": 150})])
+    assert checks._covered(walk, "a.py", 200) is False
+    assert checks._covered(walk, "a.py", 120) is True
+    assert checks._covered(walk, "a.py", 100) is True
+    assert checks._covered(walk, "a.py", 150) is True, "end_line is inclusive"
+    assert checks._covered(walk, "a.py", 151) is False
+
+
+def test_an_unbounded_pi_read_covers_only_the_read_budget():
+    """A read with no `end_line` is bounded by `policy.budgets.read.max_lines`."""
+    from associate import contract
+    from associate.bench import checks
+
+    max_lines = contract.load_policy()["budgets"]["read"]["max_lines"]
+    walk = _artifacts([_read({"path": "a.py", "start_line": 1})])
+    assert checks._covered(walk, "a.py", max_lines) is True
+    assert checks._covered(walk, "a.py", max_lines + 1) is False
+
+
+def test_an_unbounded_read_covers_more_when_the_content_proves_it():
+    """The stamped line numbers in the result are the honest record of what was seen."""
+    from associate import contract
+    from associate.bench import checks
+
+    max_lines = contract.load_policy()["budgets"]["read"]["max_lines"]
+    stamped = "".join(f"{number}\tline\n" for number in (1, 2, max_lines + 7))
+    walk = _artifacts([_read({"path": "a.py", "start_line": 1}, stamped)])
+    assert checks._covered(walk, "a.py", max_lines + 7) is True
+    assert checks._covered(walk, "a.py", max_lines + 8) is False
+
+
+def test_the_offset_limit_vocabulary_of_the_stub_still_works():
+    from associate.bench import checks
+
+    walk = _artifacts([_read({"path": "a.py", "offset": 1, "limit": 40})])
+    assert checks._covered(walk, "a.py", 40) is True
+    assert checks._covered(walk, "a.py", 41) is False
+
+
+def test_a_citation_outside_every_read_range_is_a_failure():
+    from associate.bench import checks
+
+    artifacts = checks.Artifacts(
+        [_read({"path": "a.py", "start_line": 1, "end_line": 10})],
+        {"outcome": "ok"},
+        {
+            "statements": [],
+            "citations": [{"path": "a.py", "line": 200, "check": "encountered"}],
+        },
+    )
+    failures = checks._check_citations({"citations": [{"path": "a.py", "line": 200}]}, artifacts)
+    assert failures and "encountered" in failures[0]
+
+
+# ---------------------------------------------------------------------------
+# A fixture key may never write outside its checkout
+# ---------------------------------------------------------------------------
+
+
+@pytest.mark.parametrize("escaping", ["../x", "/etc/x", "a/../../x", ".", "..", "a//b", ""])
+def test_an_escaping_fixture_path_is_refused(escaping, tmp_path):
+    case = corpus.Case(
+        id="escaper",
+        category="local read/find",
+        title="t",
+        prompt="p",
+        fixture_files={escaping: "pwned"},
+    )
+    with pytest.raises(corpus.CorpusError):
+        corpus.materialize(case, tmp_path / "checkout")
+    assert not (tmp_path / "x").exists()
+
+
+def test_the_strict_loader_refuses_an_escaping_fixture_path(tmp_path):
+    (tmp_path / "bad.json").write_text(
+        json.dumps(
+            {
+                "id": "bad",
+                "category": "local read/find",
+                "title": "t",
+                "prompt": "p",
+                "fixture": {"files": {"../escaped.txt": "pwned"}},
+                "expect": {},
+            }
+        ),
+        encoding="utf-8",
+    )
+    with pytest.raises(corpus.CorpusError) as excinfo:
+        corpus.load_cases(tmp_path)
+    assert "escaped.txt" in str(excinfo.value)
+
+
+def test_a_symlinked_parent_is_not_traversed(tmp_path):
+    outside = tmp_path / "outside"
+    outside.mkdir()
+    (outside / "keep.txt").write_text("original", encoding="utf-8")
+    checkout = tmp_path / "checkout"
+    checkout.mkdir()
+    (checkout / "link").symlink_to(outside, target_is_directory=True)
+
+    case = corpus.Case(
+        id="symlinker",
+        category="local read/find",
+        title="t",
+        prompt="p",
+        fixture_files={"link/keep.txt": "pwned"},
+    )
+    with pytest.raises(corpus.CorpusError):
+        corpus.materialize(case, checkout)
+    assert (outside / "keep.txt").read_text(encoding="utf-8") == "original"
+
+
+def test_a_normal_nested_fixture_path_is_written(tmp_path):
+    case = corpus.Case(
+        id="ok",
+        category="local read/find",
+        title="t",
+        prompt="p",
+        fixture_files={"src/deep/constants.py": "TIMEOUT_SECONDS = 47\n"},
+    )
+    checkout = corpus.materialize(case, tmp_path / "checkout")
+    assert (checkout / "src" / "deep" / "constants.py").read_text(encoding="utf-8").strip()
