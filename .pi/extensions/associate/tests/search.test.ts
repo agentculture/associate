@@ -56,34 +56,132 @@ interface RecordedCall {
   options: { cwd: string; shell: boolean };
 }
 
-// runGrep/runFind call runProcess(bin, argv, cwd, spawner), and runProcess
-// expects the Spawner to return a ChildProcess-shaped object with .stdout,
-// .stderr and .on(). Build a minimal fake of that instead of stubbing
-// runProcess itself, so the real runProcess code (argv array, shell:false)
-// is exercised end to end.
-function fakeChildProcessSpawner(stdout: string, code: number): { spawner: Spawner; calls: RecordedCall[] } {
+/**
+ * What the fake child recorded about how it was consumed.
+ *
+ * `emittedChunks` is the load-bearing one: it is how the streaming tests prove
+ * the tool stopped *consuming* at the cap instead of reading a huge output and
+ * slicing it afterwards. A fake that had all its chunks read would show the
+ * full count here.
+ */
+interface FakeState {
+  emittedChunks: number;
+  kills: string[];
+  destroyed: boolean;
+}
+
+// runGrep/runFind call runProcess(bin, argv, cwd, limits, spawner), and
+// runProcess expects the Spawner to return a ChildProcess-shaped object with
+// .stdout, .stderr, .kill() and .on(). Build a minimal fake of that instead of
+// stubbing runProcess itself, so the real runProcess code (argv array,
+// shell:false, the streaming collector) is exercised end to end.
+//
+// The fake produces its stdout lazily, chunk by chunk, and stops the moment
+// the consumer destroys the stream or kills the child — exactly what a real
+// pipe does when the reader goes away. That is what makes "it stopped early"
+// observable.
+function chunkSpawner(
+  chunks: () => Iterable<string>,
+  code: number,
+): { spawner: Spawner; calls: RecordedCall[]; state: FakeState } {
   const calls: RecordedCall[] = [];
+  const state: FakeState = { emittedChunks: 0, kills: [], destroyed: false };
   const spawner = ((bin: string, argv: string[], options: { cwd: string; shell: false }) => {
     calls.push({ bin, argv: [...argv], options: { ...options } });
-    const listeners: Record<string, Array<(...args: unknown[]) => void>> = {};
-    const stream = (data: string) => ({
+    const stopped = () => state.destroyed || state.kills.length > 0;
+    const stdout = {
       on(event: string, cb: (chunk: Buffer) => void) {
-        if (event === "data") cb(Buffer.from(data, "utf8"));
-        return stream;
+        if (event === "data") {
+          for (const chunk of chunks()) {
+            if (stopped()) break;
+            state.emittedChunks += 1;
+            cb(Buffer.from(chunk, "utf8"));
+          }
+        }
+        return stdout;
       },
-    });
+      destroy() {
+        state.destroyed = true;
+      },
+    };
+    const stderr = {
+      on() {
+        return stderr;
+      },
+      destroy() {},
+    };
     const fake = {
-      stdout: stream(stdout),
-      stderr: stream(""),
+      stdout,
+      stderr,
+      kill(signal?: string) {
+        state.kills.push(signal ?? "SIGTERM");
+      },
       on(event: string, cb: (...args: unknown[]) => void) {
-        (listeners[event] ??= []).push(cb);
         if (event === "close") queueMicrotask(() => cb(code));
         return fake;
       },
     };
     return fake as unknown as ReturnType<Spawner>;
   }) as Spawner;
+  return { spawner, calls, state };
+}
+
+/** The single-chunk shorthand most tests want. */
+function fakeChildProcessSpawner(
+  stdout: string,
+  code: number,
+): { spawner: Spawner; calls: RecordedCall[]; state: FakeState } {
+  return chunkSpawner(() => (stdout.length > 0 ? [stdout] : []), code);
+}
+
+/** A spawner whose `spawn` throws synchronously, as a missing binary does. */
+function throwingSpawner(err: Error): { spawner: Spawner; calls: RecordedCall[] } {
+  const calls: RecordedCall[] = [];
+  const spawner = ((bin: string, argv: string[], options: { cwd: string; shell: false }) => {
+    calls.push({ bin, argv: [...argv], options: { ...options } });
+    throw err;
+  }) as Spawner;
   return { spawner, calls };
+}
+
+/**
+ * A spawner that returns a child which then emits `error` — how Node actually
+ * reports an ENOENT from `child_process.spawn` (asynchronously, on the child),
+ * as distinct from a synchronous throw.
+ */
+function errorEventSpawner(err: Error): { spawner: Spawner; calls: RecordedCall[] } {
+  const calls: RecordedCall[] = [];
+  const spawner = ((bin: string, argv: string[], options: { cwd: string; shell: false }) => {
+    calls.push({ bin, argv: [...argv], options: { ...options } });
+    const stream = {
+      on() {
+        return stream;
+      },
+      destroy() {},
+    };
+    const fake = {
+      stdout: stream,
+      stderr: stream,
+      kill() {},
+      on(event: string, cb: (...args: unknown[]) => void) {
+        if (event === "error") queueMicrotask(() => cb(err));
+        return fake;
+      },
+    };
+    return fake as unknown as ReturnType<Spawner>;
+  }) as Spawner;
+  return { spawner, calls };
+}
+
+function enoent(binary: string): NodeJS.ErrnoException {
+  const err = new Error(`spawn ${binary} ENOENT`) as NodeJS.ErrnoException;
+  err.code = "ENOENT";
+  return err;
+}
+
+function lineBudget(ctx: ReturnType<typeof context>["ctx"]): number {
+  const budgets = (ctx.policy as { budgets?: { shell?: { max_output_chars?: number } } }).budgets;
+  return budgets?.shell?.max_output_chars ?? 0;
 }
 
 // ---------------------------------------------------------------------------
@@ -165,7 +263,10 @@ test("grep caps at policy.caps.max_results (200) and sets truncated:true when a 
     assert.equal(result.ok, true);
     if (!result.ok) return;
     assert.equal(result.matches.length, 200);
-    assert.equal(result.count, 300);
+    // `count` is the returned count, not a total: the search stops at the cap,
+    // so the 300 the fixture *would* have produced is deliberately never
+    // counted (see the streaming test below).
+    assert.equal(result.count, 200);
     assert.equal(result.truncated, true);
     assert.equal(result.cap, 200);
 
@@ -202,12 +303,162 @@ test("find caps at policy.caps.max_results (200) and sets truncated:true when a 
     assert.equal(result.ok, true);
     if (!result.ok) return;
     assert.equal(result.matches.length, 200);
-    assert.equal(result.count, 300);
+    assert.equal(result.count, 200);
     assert.equal(result.truncated, true);
 
     assert.equal(calls.length, 1);
     assert.ok(Array.isArray(calls[0]!.argv));
     assert.equal(calls[0]!.options.shell, false);
+    // fd's --max-results is a whole-run cap (unlike rg's per-file
+    // --max-count), so the bound is pushed into the binary too.
+    const maxResultsAt = calls[0]!.argv.indexOf("--max-results");
+    assert.ok(maxResultsAt >= 0, "fd must be given --max-results");
+    assert.equal(calls[0]!.argv[maxResultsAt + 1], "201");
+  } finally {
+    c.dispose();
+  }
+});
+
+// ---------------------------------------------------------------------------
+// bounded memory — the cap stops consumption, it does not just slice the end
+// ---------------------------------------------------------------------------
+
+test("grep stops consuming at the cap and kills the child instead of buffering 100,000 lines", async () => {
+  const c = context();
+  try {
+    const total = 100_000;
+    const { spawner, state } = chunkSpawner(function* () {
+      for (let i = 0; i < total; i += 1) yield `src/file${i}.py:1:needle ${i}\n`;
+    }, 0);
+
+    const result = await runGrep(c.ctx, { pattern: "needle" }, spawner);
+    assert.equal(result.ok, true);
+    if (!result.ok) return;
+    assert.equal(result.matches.length, 200);
+    assert.equal(result.truncated, true);
+
+    // The proof this is streaming and not "collect 100,000 lines, then slice":
+    // exactly one chunk past the cap was ever read (the 201st line is what
+    // makes `truncated` honest), and the child was signalled.
+    assert.equal(state.emittedChunks, 201, "the tool must stop consuming one line past the cap");
+    assert.ok(state.emittedChunks < total / 100, "nowhere near the full output may be consumed");
+    assert.deepEqual(state.kills, ["SIGTERM"], "the child must be killed once the cap is reached");
+    assert.equal(state.destroyed, true, "stdout must be destroyed, not drained");
+  } finally {
+    c.dispose();
+  }
+});
+
+test("find stops consuming at the cap and kills the child", async () => {
+  const c = context();
+  try {
+    const { spawner, state } = chunkSpawner(function* () {
+      for (let i = 0; i < 100_000; i += 1) yield `${join(c.checkout, `file${i}.txt`)}\n`;
+    }, 0);
+
+    const result = await runFind(c.ctx, { pattern: "file" }, spawner);
+    assert.equal(result.ok, true);
+    if (!result.ok) return;
+    assert.equal(result.matches.length, 200);
+    assert.equal(result.truncated, true);
+    assert.equal(state.emittedChunks, 201);
+    assert.deepEqual(state.kills, ["SIGTERM"]);
+  } finally {
+    c.dispose();
+  }
+});
+
+test("a single 10 MB line is bounded by the policy's output budget, not stored whole", async () => {
+  const c = context();
+  try {
+    const budget = lineBudget(c.ctx);
+    assert.ok(budget > 0, "the policy fixture must declare budgets.shell.max_output_chars");
+
+    const megabyte = "x".repeat(1_000_000);
+    const { spawner } = chunkSpawner(function* () {
+      for (let i = 0; i < 10; i += 1) yield megabyte; // one 10 MB line, no newline yet
+      yield "\n";
+    }, 0);
+
+    const result = await runGrep(c.ctx, { pattern: "needle" }, spawner);
+    assert.equal(result.ok, true);
+    if (!result.ok) return;
+    assert.equal(result.matches.length, 1);
+    assert.equal(
+      result.matches[0]!.length,
+      budget,
+      "the over-long line must be clipped to the policy budget",
+    );
+    assert.equal(result.truncated, true, "clipping a line must be reported as truncation");
+  } finally {
+    c.dispose();
+  }
+});
+
+// ---------------------------------------------------------------------------
+// a missing or unstartable binary is a structured result, never a rejection
+// ---------------------------------------------------------------------------
+
+test("grep and find report tool_missing when spawn throws ENOENT, instead of rejecting", async () => {
+  const c = context();
+  try {
+    const grep = await runGrep(
+      c.ctx,
+      { pattern: "needle" },
+      throwingSpawner(enoent("rg")).spawner,
+    );
+    assert.equal(grep.ok, false);
+    if (grep.ok) return;
+    assert.equal(grep.error.code, "tool_missing");
+    assert.match(grep.error.message, /rg/);
+    assert.match(grep.error.message, /ripgrep/);
+
+    const find = await runFind(c.ctx, { pattern: "a" }, throwingSpawner(enoent("fd")).spawner);
+    assert.equal(find.ok, false);
+    if (find.ok) return;
+    assert.equal(find.error.code, "tool_missing");
+    assert.match(find.error.message, /fd/);
+  } finally {
+    c.dispose();
+  }
+});
+
+test("grep and find report tool_missing when the child emits an ENOENT 'error' event", async () => {
+  const c = context();
+  try {
+    const grep = await runGrep(
+      c.ctx,
+      { pattern: "needle" },
+      errorEventSpawner(enoent("rg")).spawner,
+    );
+    assert.equal(grep.ok, false);
+    if (grep.ok) return;
+    assert.equal(grep.error.code, "tool_missing");
+
+    const find = await runFind(c.ctx, { pattern: "a" }, errorEventSpawner(enoent("fd")).spawner);
+    assert.equal(find.ok, false);
+    if (find.ok) return;
+    assert.equal(find.error.code, "tool_missing");
+  } finally {
+    c.dispose();
+  }
+});
+
+test("a non-ENOENT spawn failure is a structured search_failed, from a throw or an 'error' event", async () => {
+  const c = context();
+  try {
+    const denied = Object.assign(new Error("spawn rg EACCES"), { code: "EACCES" });
+
+    const thrown = await runGrep(c.ctx, { pattern: "needle" }, throwingSpawner(denied).spawner);
+    assert.equal(thrown.ok, false);
+    if (thrown.ok) return;
+    assert.equal(thrown.error.code, "search_failed");
+    assert.match(thrown.error.message, /EACCES/);
+
+    const emitted = await runFind(c.ctx, { pattern: "a" }, errorEventSpawner(denied).spawner);
+    assert.equal(emitted.ok, false);
+    if (emitted.ok) return;
+    assert.equal(emitted.error.code, "search_failed");
   } finally {
     c.dispose();
   }
