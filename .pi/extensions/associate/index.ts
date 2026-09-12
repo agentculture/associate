@@ -28,6 +28,7 @@ import type { ExtensionAPI } from "@earendil-works/pi-coding-agent";
 import { Type } from "typebox";
 import { evaluateToolCall } from "./lib/guard.ts";
 import { normalizeHandback, unreferencedCount } from "./lib/handback.ts";
+import { installPromptInjection } from "./lib/prompt.ts";
 import { registerAssociateProvider } from "./lib/provider.ts";
 import { createAssociateContext, loadToolModules } from "./lib/runtime.ts";
 import { installStatementsRecorder } from "./lib/statements.ts";
@@ -53,6 +54,14 @@ export default async function (pi: ExtensionAPI) {
   // recorded read ranges. Installed after the walk so a statement is always
   // verified against a walk that is already on disk.
   installStatementsRecorder(pi, ctx);
+
+  // ----------------------------------------------------------- runtime prompt
+  // The launcher passes `--no-context-files` because pi loads AGENTS.md /
+  // CLAUDE.md from every ANCESTOR directory, and a workspace-level file above
+  // the checkout would re-task this lane. With discovery off, this puts the
+  // checkout's own AGENTS.md back — and only that file. Registers nothing
+  // unless `$ASSOCIATE_INJECT_PROMPT` is set.
+  installPromptInjection(pi, ctx);
 
   // ------------------------------------------------------------ continue-from
   // `$ASSOCIATE_CONTINUE_FROM` loads a prior run's walk as this session's

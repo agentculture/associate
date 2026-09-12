@@ -25,6 +25,7 @@ buildable/deployable package baseline. Clone it, rename the package, edit
 - `associate explain <path>` — markdown docs for any noun/verb.
 - `associate overview` — descriptive snapshot of the agent.
 - `associate doctor` — check the agent-identity invariants.
+- `associate run` — run one task on a harness adapter, or fail closed.
 - `associate bench` — run the behavioral suite against a harness adapter.
 - `associate cli overview` — describe the CLI surface.
 
@@ -104,6 +105,61 @@ skills-present check. Exits 1 when unhealthy.
     associate doctor --json
 """
 
+_RUN = """\
+# associate run
+
+Runs one task on a harness adapter — and refuses to run it at all unless the
+adapter can prove it is contained. That refusal is the verb's point.
+
+## Failing closed
+
+Pi's non-interactive modes load a project's `.pi/extensions` only on a trusted
+checkout; without trust they fall back to Pi's **full built-in tool set**,
+`edit` and `write` included. So the launcher passes `--approve` and then checks
+the tool list **pi itself reports** — the `associate_ready` sentinel's result in
+the `--mode json` event stream, never the presence of a config file on disk. A
+run whose sentinel never arrives, or whose report lists an active writer tool,
+exits `2` and serves nothing.
+
+Measured against pi 0.84.2: the *full* tool list still names `edit` and `write`
+even when they are inactive, so the check is on `active_tools` and
+`writer_tools_active` — never on the full list.
+
+## What it passes pi
+
+`-p --mode json --no-session --approve --no-context-files`, with
+`--no-context-files` there because pi otherwise loads `AGENTS.md`/`CLAUDE.md`
+from every *ancestor* directory — a workspace-level file one level above the
+checkout would leak into the system prompt. The checkout's own `AGENTS.md` is
+injected by the extension instead (`ASSOCIATE_INJECT_PROMPT=1`).
+
+`--provider associate --model $ASSOCIATE_MODEL` are passed only when
+`ASSOCIATE_API_KEY` is set; with no key the extension registers no provider, so
+pi's own default model applies and the launcher says so on stderr.
+
+## Output
+
+`walk_path`, `statements_path`, `statements_md_path`, `export_dir`, `outcome`
+and `session_id` on stdout — `key=value` lines, or one JSON object with
+`--json`. Diagnostics (the pi version warning, the no-lane note) go to stderr.
+
+## Usage
+
+    associate run
+    associate run "Find every caller of load_policy" --json
+    associate run --harness stub
+    associate run --continue-from <prior export dir>
+    associate run --export-root <dir> --session-id <id>
+
+## Exit codes
+
+- `0` the run served; both artifact paths are on stdout
+- `1` unknown `--harness` (the error lists the registered adapters), or a
+  `--checkout` that is not a directory
+- `2` the adapter failed closed (no sentinel, or an active writer tool), pi is
+  not on PATH, the run timed out, or the export root is inside the checkout
+"""
+
 _BENCH = """\
 # associate bench
 
@@ -163,6 +219,7 @@ ENTRIES: dict[tuple[str, ...], str] = {
     ("explain",): _EXPLAIN,
     ("overview",): _OVERVIEW,
     ("doctor",): _DOCTOR,
+    ("run",): _RUN,
     ("bench",): _BENCH,
     ("cli",): _CLI,
     ("cli", "overview"): _CLI,

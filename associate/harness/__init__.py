@@ -1,18 +1,24 @@
 """Harness adapters and their registry.
 
-``get_harness(name)`` resolves a registry key to an adapter class. Only
-``stub`` is registered today; the Pi adapter lands with its own task. Imports
-are function-local so importing this package never pulls in an adapter's
-dependencies.
+``get_harness(name)`` resolves a registry key to an adapter class. Two are
+registered: ``pi`` (the fail-closed launcher over the installed ``pi`` binary)
+and ``stub`` (plumbing only — no runtime, no lane). Imports are function-local
+so importing this package never pulls in an adapter's dependencies.
 """
 
 from __future__ import annotations
 
 from typing import Any, Callable
 
-from associate.harness.base import Harness
+from associate.harness.base import ExtensionNotLoadedError, Harness, HarnessError
 
-__all__ = ["Harness", "available_harnesses", "get_harness"]
+__all__ = [
+    "Harness",
+    "HarnessError",
+    "ExtensionNotLoadedError",
+    "available_harnesses",
+    "get_harness",
+]
 
 
 def _load_stub() -> type[Harness]:
@@ -21,7 +27,14 @@ def _load_stub() -> type[Harness]:
     return StubHarness
 
 
+def _load_pi() -> type[Harness]:
+    from associate.harness.pi import PiHarness
+
+    return PiHarness
+
+
 _REGISTRY: dict[str, Callable[[], type[Harness]]] = {
+    "pi": _load_pi,
     "stub": _load_stub,
 }
 
