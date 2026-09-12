@@ -95,18 +95,33 @@ test("no policy value is hardcoded in the extension's TypeScript", () => {
   // test may legitimately name a command it spawns.
   // Quoted, so a policy pattern is only reported when it appears as a literal
   // (".env" the value, not the ".env" inside "process.env").
-  const needles = [
-    ...denylist.slice(0, 5).map((pattern) => `"${pattern}"`),
-    ...allowlist.map((entry) => `"${entry.command}"`),
-  ];
-  const shipped = [
-    join(extensionDir, "index.ts"),
-    ...collectTypeScript(join(extensionDir, "lib")),
-    ...collectTypeScript(join(extensionDir, "tools")),
-  ];
-  for (const path of shipped) {
+  //
+  // The denylist check covers index.ts, lib/ AND tools/: a read/search tool
+  // must never re-decide which paths are secret-shaped by restating a glob.
+  // The allowlist check covers only index.ts and lib/: policy.shell.allowlist
+  // is the set a future *generic* shell tool validates an arbitrary command
+  // against, so re-hardcoding that list would drift from policy.json. A
+  // dedicated tool module under tools/ is a different thing — its whole job
+  // is to spawn one named, specific binary (search.ts's grep/find spawn `rg`
+  // and `fd` by name; that pairing is what the task specifies, not a policy
+  // value that could change out from under it), so naming that binary in the
+  // module that spawns it is not the duplication this check guards against.
+  const denylistNeedles = denylist.slice(0, 5).map((pattern) => `"${pattern}"`);
+  const allowlistNeedles = allowlist.map((entry) => `"${entry.command}"`);
+  const coreShipped = [join(extensionDir, "index.ts"), ...collectTypeScript(join(extensionDir, "lib"))];
+  const toolsShipped = collectTypeScript(join(extensionDir, "tools"));
+  for (const path of coreShipped) {
     const text = readFileSync(path, "utf8");
-    for (const needle of needles) {
+    for (const needle of [...denylistNeedles, ...allowlistNeedles]) {
+      assert.ok(
+        !text.includes(needle),
+        `${path} contains the policy value ${needle}; policy values belong in policy.json only`,
+      );
+    }
+  }
+  for (const path of toolsShipped) {
+    const text = readFileSync(path, "utf8");
+    for (const needle of denylistNeedles) {
       assert.ok(
         !text.includes(needle),
         `${path} contains the policy value ${needle}; policy values belong in policy.json only`,
