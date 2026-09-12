@@ -34,13 +34,30 @@ def test_pi_settings_tracked_with_no_home_paths():
 
     data = _read_json(settings_path)
     assert data["defaultTools"] == []
-    assert ".claude/skills" in data["skills"]
+    # Pi resolves .pi/settings.json paths relative to the .pi directory
+    # (docs/settings.md:268), so the tracked value is ../.claude/skills, not
+    # a repo-root-relative .claude/skills.
+    assert "../.claude/skills" in data["skills"]
 
 
 def test_pi_settings_extensions_point_at_associate_extensions_dir():
     settings_path = REPO_ROOT / ".pi" / "settings.json"
     data = _read_json(settings_path)
-    assert ".pi/extensions/associate" in data["extensions"]
+    # Resolved relative to .pi, this is .pi/extensions/associate.
+    assert "extensions/associate" in data["extensions"]
+
+
+def test_pi_settings_paths_resolve_to_existing_directories_from_pi_dir():
+    pi_dir = REPO_ROOT / ".pi"
+    data = _read_json(pi_dir / "settings.json")
+
+    for skill_path in data["skills"]:
+        resolved = (pi_dir / skill_path).resolve()
+        assert resolved.is_dir(), f"{skill_path!r} does not resolve to a directory from .pi"
+
+    for extension_path in data["extensions"]:
+        resolved = (pi_dir / extension_path).resolve()
+        assert resolved.is_dir(), f"{extension_path!r} does not resolve to a directory from .pi"
 
 
 def test_package_json_pi_key_no_deps_no_scripts():
