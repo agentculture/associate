@@ -379,7 +379,8 @@ def test_a_ready_run_that_produced_both_artifacts_still_serves(
     assert _run([], checkout, tmp_path) == 0
 
     out = capsys.readouterr().out
-    assert "walk.jsonl" in out and "statements.md" in out
+    assert "walk.jsonl" in out
+    assert "statements.md" in out
 
 
 def test_a_preflight_that_exits_nonzero_fails_closed(
@@ -593,7 +594,8 @@ def test_a_version_mismatch_warns_but_still_serves(
     assert _run([], checkout, tmp_path) == 0
 
     captured = capsys.readouterr()
-    assert "0.84.2" in captured.err and "0.99.0" in captured.err
+    assert "0.84.2" in captured.err
+    assert "0.99.0" in captured.err
     assert "walk.jsonl" in captured.out
 
 
@@ -664,7 +666,8 @@ def test_the_session_id_algorithm_has_a_golden_value():
 
 def test_a_session_id_that_cleans_away_to_nothing_is_generated():
     generated = sanitize_session_id("///")
-    assert generated and "/" not in generated
+    assert generated
+    assert "/" not in generated
 
 
 def test_the_stub_adapter_still_runs_through_the_verb(
