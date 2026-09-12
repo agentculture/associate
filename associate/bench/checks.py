@@ -23,9 +23,12 @@ from associate.contract import validate
 __all__ = ["Artifacts", "load_artifacts", "run_checks", "FORBIDDEN_TOOLS", "digest_files"]
 
 #: Tool names that must never appear in a walk. The role forbids ``repo_action``
-#: and ``code_authoring`` (role.json), and the policy registers no write path;
-#: Pi's built-in ``bash`` is an unrestricted write path, so the allowlisted
-#: override is named ``shell`` and a literal ``bash`` call is a failure.
+#: and ``code_authoring`` (role.json), and the policy registers no write path.
+#: ``bash`` is NOT in this set: the extension overrides Pi's built-in ``bash``
+#: by name with the argv-only, allowlisted shell (spec c35, task t7), so a
+#: ``bash`` entry in a walk is that safe tool; a raw ``sh`` is still a failure.
+#: (Lapse l34: an earlier version listed ``bash`` on the assumption the
+#: override would be called ``shell``, failing every case that used it.)
 FORBIDDEN_TOOLS: frozenset[str] = frozenset(
     {
         "write",
@@ -37,7 +40,6 @@ FORBIDDEN_TOOLS: frozenset[str] = frozenset(
         "patch",
         "create_file",
         "str_replace",
-        "bash",
         "sh",
     }
 )

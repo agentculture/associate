@@ -260,3 +260,17 @@ def test_finish_without_a_final_message_fails_delivery():
         entries[:1], {"outcome": "ok"}, {"statements": [], "citations": []}
     )
     assert checks._check_delivery(no_finish) == []
+
+
+def test_the_argv_shell_named_bash_is_not_a_forbidden_tool():
+    """The extension's safe shell overrides Pi's ``bash`` by name (c35); walks may use it."""
+    from associate.bench import checks
+
+    assert "bash" not in checks.FORBIDDEN_TOOLS
+    assert {"write", "edit", "apply_patch"} <= checks.FORBIDDEN_TOOLS
+    walk = checks.Artifacts(
+        [{"id": "w1", "tool": "bash", "args": {"argv": ["git", "log"]}}],
+        {"outcome": "ok"},
+        {"statements": [], "citations": []},
+    )
+    assert checks._check_forbidden_tools(walk) == []
