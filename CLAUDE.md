@@ -35,15 +35,35 @@ the names substituted, not things that happened here.
 What exists today:
 
 - the agent-first CLI (`whoami` / `learn` / `explain` / `overview` / `doctor` /
-  `cli overview`) — introspection only, no domain verbs;
-- the mesh identity (`culture.yaml` + `AGENTS.colleague.md`);
+  `cli overview` / `bench`) — introspection plus a behavioral-suite runner, no
+  read/find/summarize domain verbs yet;
+- the mesh identity (`culture.yaml` + `AGENTS.colleague.md`), still
+  `backend: colleague` — the cutover to `backend: acp` (pi-acp, `AGENTS.md`) is
+  a separate, later change, not done in this repo yet;
 - 19 vendored skills under `.claude/skills/`;
-- a green build/lint/publish baseline.
+- a green build/lint/publish baseline;
+- **the harness pieces landed so far, per
+  `docs/specs/2026-09-12-associate-on-pi-with-opinionated-tools.md`:** a
+  tracked `.pi/` project config and package manifest; the portable contract
+  under `associate/contract/` (`role.json`, `policy.json`, the walk/statements
+  JSON schemas) plus a Python-side adapter boundary (`associate/harness/base.py`,
+  a `stub` adapter — no `pi` adapter registered yet); the Pi extension's core
+  (`.pi/extensions/associate/`: loader, sentinel tool, `finish`, the write
+  guard, session-keyed scratch/export dirs); a containment library
+  (`.pi/extensions/associate/lib/contain.ts`) ported case by case from
+  `colleague`'s guards; and `associate bench --harness stub`, which runs the
+  behavioral suite end to end today to verify plumbing only.
 
-What does **not** exist yet: **the harness itself.** There is no read verb, no
-summarize verb, no find verb, no web fetch, no file-reading tool loop. Nothing
-in this repo currently takes work off colleague. Treat "Project shape" below as
-the ground you build on, not as a description of a working harness.
+What is **still landing** (do not describe any of it as working until it
+ships and a run measures it): the `pi` harness adapter itself
+(`associate/harness/pi.py`) and the `associate run` CLI verb that drives it;
+the Pi provider registration (`lib/provider.ts`, reasoning-off on the wire);
+the mesh cutover to `backend: acp` / `AGENTS.md`; and the walk/statements
+artifacts a real run would produce. **Until a task measures a live `pi`
+adapter run end to end (tracked as t15 in this plan's split), the harness does
+not work end to end — say so plainly, here and in any commit or PR body.**
+Treat "Project shape" below as the ground you build on, not as a description
+of a finished harness.
 
 **One known inconsistency in the inherited scaffold** — don't "fix" it by
 guessing which side is right; ask. The `remember` skill's `SKILL.md` frontmatter
@@ -190,6 +210,11 @@ exists purely to satisfy this and is the pattern to copy.
 - **Run from source:** `uv run associate --version` / `uv run python -m associate ...`
 - **Tests:** `uv run pytest -n auto -v`
 - **Single test:** `uv run pytest tests/test_cli.py::test_whoami_json -v`
+- **Behavioral suite:** `uv run associate bench --harness stub` — runs the
+  same corpus (`tests/behavioral/`) the `pi` adapter will run once it lands,
+  against the plumbing-only stub; prints a per-category pass/fail table and
+  exits non-zero on any failure. Labelled `plumbing-only` output is about the
+  wiring, never a claim about model reliability.
 - **Coverage** (what CI and Sonar consume):
   `uv run pytest -n auto --cov=associate --cov-report=xml:coverage.xml --cov-report=term`
   — `fail_under = 60`, and `relative_files = true` is load-bearing: absolute or
@@ -249,6 +274,17 @@ re-syncing anything.
 Per-machine paths live in `.claude/skills.local.yaml` (git-ignored); the
 committed `.claude/skills.local.yaml.example` documents every key. Skills read
 the local file, falling back to the example.
+
+**A `.gitignore` subtlety for the Pi extension's TypeScript source:** the
+Python-project `.gitignore` template ignores a bare `lib/` (setuptools build
+output), which would silently swallow `.pi/extensions/*/lib/` — the directory
+the Pi extension's actual TypeScript source (`contain.ts`, `contract.ts`,
+`session.ts`, `runtime.ts`, …) lives in. `.gitignore` re-includes that tree
+explicitly (`!.pi/extensions/*/lib/` and `!.pi/extensions/*/lib/**`, plus a
+belt-and-suspenders `!.pi/extensions/associate/lib/` line) — the directory
+itself has to be un-excluded before git will look inside it. If a future
+extension adds another `lib/` under `.pi/extensions/<name>/`, extend the
+existing glob rather than adding a parallel one-off exception.
 
 ### The devague chain (8 skills, origin `devague`)
 
@@ -311,6 +347,45 @@ install hint rather than blocking a clone):
   `COLLEAGUE_*`).
 - **`eidetic`** (>=0.10.0) — for `remember` / `recall`; the version floor is what
   routes public records in-repo instead of to `$HOME`.
+
+#### The Pi harness floors (exact pins, not floors-and-up)
+
+The four things a Pi-driven run of the associate lane depends on, pinned
+exactly because they were the versions actually tested (spec claim c39, see
+`docs/specs/2026-09-12-associate-on-pi-with-opinionated-tools.md`):
+
+- **`pi`** (`@earendil-works/pi-coding-agent`) — **0.84.2**, tested.
+- **`pi-acp`** — **0.0.33**, tested. Bridges ACP JSON-RPC over stdio to
+  `pi --mode rpc`; MVP-grade and Zed-centred per its own README.
+- **Node** — **>=22** (pi-acp's floor).
+- **the extension itself** — version 1 of the portable contract
+  (`associate/contract/`); a contract-version bump is a compatibility event,
+  not a patch note.
+
+**Upgrade rule:** bump a pin only after `associate bench` passes against the
+new version — never bump ahead of a measured run. `pi update` is never run by
+the harness itself; the launcher checks the installed version against the pin
+and warns (naming the tested version) rather than silently working with
+whatever is on PATH.
+
+The extension declares no npm dependency beyond what Pi itself provides
+(`typebox`, via `pi`), and no `node_modules/` directory is ever tracked — see
+the `.gitignore` re-include note under "Skills convention" below for the one
+place that rule gets subtle.
+
+#### `ASSOCIATE_*` environment variables
+
+These are the whole external interface to the Pi lane's endpoint and session
+plumbing — no committed file names a host, port, or bearer:
+
+| Variable | Default | Purpose |
+|----------|---------|---------|
+| `ASSOCIATE_BASE_URL` | `http://localhost:8001/v1` (the local lobes gateway) | OpenAI-compatible base URL the Pi provider (or the bench harness) talks to. |
+| `ASSOCIATE_API_KEY` | — | Bearer for that endpoint. Never committed; never logged; never required to read for a test to pass. |
+| `ASSOCIATE_MODEL` | `associate` | The lobes role name sent as `model` — never a checkpoint id (see "The runtime lane" above). |
+| `ASSOCIATE_CONTRACT_DIR` | repo-relative `associate/contract/` | Where the Pi extension and the Python adapter both load `role.json` / `policy.json` / the walk and statements schemas from — set by the Python adapter when it knows better than the repo-relative fallback. |
+| `ASSOCIATE_SESSION_ID` | generated | Pins the scratch/export directory to one session id (the ACP `session/new` id when running under `culture start associate`, or a generated id headless), so concurrent runs never share a scratch dir. |
+| `ASSOCIATE_EXPORT_ROOT` | — | Where a run's `walk.jsonl` / statements export lands; the Python adapter sets this per run. |
 
 ## `steward doctor` invariants (build to pass these)
 
@@ -377,4 +452,13 @@ root key** — see invariant 3 under "Adding a verb".
 - **Don't edit a vendored skill** to fix a bug in it. Fix it upstream.
 - **Don't skip the version bump** because the change is "just docs".
 - **Don't describe the harness as working** in docs, commits, or PR bodies until
-  a read/summarize/find verb actually ships.
+  a read/summarize/find verb actually ships **and t15 measures a live `pi`
+  adapter run end to end** — the contract, extension core, containment
+  library, and `associate bench --harness stub` landing is real progress, not
+  a working harness. Say exactly what exists and what doesn't; don't round up.
+- **Don't hand-roll a harness pin, an endpoint constant, or a policy value**
+  the contract already owns. The Pi extension reads `policy.json` and the
+  schemas from `associate/contract/` (via `$ASSOCIATE_CONTRACT_DIR` or the
+  repo-relative fallback); it must not define its own copy in TypeScript, and
+  the harness version pins belong in CLAUDE.md's Tooling prerequisites, not
+  scattered as literals.

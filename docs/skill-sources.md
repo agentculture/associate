@@ -49,6 +49,41 @@ is load-bearing, even where guildmaster's upstream copy omits it.
 | `summarize-delivery` | `../devague/.claude/skills/summarize-delivery/` | **devague** (vendored directly — guildmaster's re-broadcast is not cited; see [local divergence](#local-divergence--the-eight-devague-chain-skills-vendored-directly-from-devague-2026-09-05)) | Leg 8 — closes the loop with a planned-versus-actual accountability artifact: mid-work decisions, plan drift, evidence-backed delivery claims, remaining work. Runs on complete, partial, AND failed runs, reporting failure faithfully. Method-only, no `scripts/`. Verbatim. | 2026-09-05 (devague 0.24.1) |
 | `ask-colleague` | `../colleague/.claude/skills/ask-colleague/` | **colleague** (renamed from convertible; vendored directly — guildmaster re-broadcast pending) | The first-party front door to the `colleague` CLI: hand a scoped task to a *different* engine/mind via `explore` / `review` / `write`, run the spec→plan→workforce arc via `plan`, pick a cut or timed-out run back up via `resume` (`--detach` to background it), pilot a live work item with `monitor` / `guide` / `stop`, grade a finished work item via `feedback` (the ROI loop), and reap stale/corrupt `colleague/*` branches a crashed run left behind via `clean`. Thinking effort is per-seat (`--effort`, `--seat-effort S=R`, `--role`). Every verb takes `--json` (result JSON on stdout, diagnostics on stderr). `explore`/`review` run isolated in a throwaway `git worktree`; `write` **previews by default** (throwaway worktree, no side effects) and refuses a dirty tree only when applying (`--apply` / `--pr`). Vendored **byte-verbatim** as of the 1.63.0 sync — the Provenance paragraph is consumer-neutral upstream, so the localization noted for earlier syncs no longer applies; verify with `diff -r ../colleague/.claude/skills/ask-colleague .claude/skills/ask-colleague`. Already carries `type: command`. Optional runtime dep: **`colleague`** on PATH. | 2026-08-24 (colleague 1.63.0, direct) |
 
+## Ported guards — not vendored skills, tracked here anyway
+
+The table above is `.claude/skills/`. The two rows below are a different
+kind of borrowing: `.pi/extensions/associate/lib/contain.ts`, the containment
+library every registered Pi tool goes through before it touches a path, spends
+output budget, or trusts an argument set, ports two functions **case by
+case** from `colleague`'s tool implementation (decision c33 of
+`docs/specs/2026-09-12-associate-on-pi-with-opinionated-tools.md` — colleague's
+base tools are ported one at a time, origin recorded, not bulk-vendored). This
+is source-level porting into a TypeScript module, not a `SKILL.md` +
+`scripts/` skill, so it does not fit the table's columns — but the same
+"know your provenance, know what re-sync means" discipline applies, so it is
+recorded here rather than nowhere.
+
+| Ported into | Upstream | Origin | Notes | Last synced |
+|-------------|----------|--------|-------|-------------|
+| `.pi/extensions/associate/lib/contain.ts` `confine()` / `refusePatternEscape()` | `colleague/colleague/search_tools.py:90-101` (`confine`, mirroring `ToolExecutor._safe_path` at `colleague/tools.py:844-849`) and `:105-118` (`_refuse_pattern_escape`) | **colleague** (ported by hand, not vendored — see the drift note below) | Confines every read/find/grep path to the session root and refuses a pattern containing a parent-path escape (`../`). Ported logic, not a byte-copy: errors are returned as structured, retryable values instead of colleague's thrown `ToolError` (a Pi tool has to hand the model something correctable), and the budget/cap values come from the caller's parsed `policy.json` rather than a literal or an env var. | 2026-09-12 (colleague at the commit read for spec `associate-on-pi-with-opinionated-tools`) |
+| `.pi/extensions/associate/lib/contain.ts` `boundOutput()` | `colleague/colleague/readpage.py` (`bound_output`), delegating to `colleague/colleague/truncation.py:189-255` (`truncate_output`), `:128-172` (`_head_and_tail`), `:175-186` (`_bounded_preview`), and `:258-301` (`_create_spill_file`, the `O_EXCL` / `O_NOFOLLOW` symlink-plant fix, finding #441-5/A) | **colleague** (ported by hand, not vendored — see the drift note below) | Bounds tool output at a per-call budget with spill-to-disk past the cap. Deliberately **not** ported: colleague's 500 MB per-session spill cap (`truncation.MAX_SESSION_SPILL_BYTES`) — there is no `policy.json` key for it yet, so add one before wanting the cap. Colleague reads its budgets from `COLLEAGUE_MAX_OUTPUT_CHARS` / `COLLEAGUE_TOOL_SPILL` env vars; here they are parameters from the caller's parsed policy — this module never reads `policy.json` itself. | 2026-09-12 (colleague at the commit read for spec `associate-on-pi-with-opinionated-tools`) |
+
+**Drift note — what happens when colleague's version changes:** these are
+**hand-ported**, not cited/vendored — there is no `diff -r` against a checked
+out `../colleague` that stays meaningful, because the target language and
+error-handling convention differ by design (see each row's Notes). So a
+colleague change to `search_tools.py`, `readpage.py`, or `truncation.py` does
+**not** auto-propagate here and does **not** get silently reverted by a
+re-sync script the way a vendored skill would. Concretely: if colleague fixes
+a bug or tightens a guard in one of the cited functions (a new symlink attack,
+a widened denylist, a corrected off-by-one in `_head_and_tail`), someone has to
+notice, re-read the upstream fix, and **re-port it into `contain.ts` by hand**
+— there is no automated or scripted re-sync path for this pair the way there
+is for `.claude/skills/`. Check `git log` on the cited colleague files
+periodically, or when a colleague release note mentions `search_tools.py` /
+`readpage.py` / `truncation.py`, and update the "Last synced" cell above after
+each manual re-port.
+
 ## Re-sync procedure
 
 ```bash
