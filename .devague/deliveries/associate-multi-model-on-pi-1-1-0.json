@@ -2,7 +2,7 @@
   "plan_slug": "associate-multi-model-on-pi-1-1-0",
   "schema_version": 2,
   "created": "2026-10-27T10:36:31Z",
-  "updated": "2026-10-27T22:54:15Z",
+  "updated": "2026-10-27T22:57:11Z",
   "deviations": [
     {
       "id": "d1",
@@ -250,6 +250,19 @@
       "status": "approved",
       "classification": "needs-follow-up",
       "seq": 18
+    },
+    {
+      "id": "d19",
+      "what": "amends d16: when no other large-state evaluator is available (no active registry model in large_state.evaluators other than the acting model), the acting model itself evaluates the oversized call in a fresh, history-free request with a short focused gate prompt (the questions and the JSON verdict shape only) and the call's state; the walk marks the verdict as self-evaluated; refusal stays the outcome if that also fails",
+      "task_ref": "t10",
+      "reason": "user accepted d16 and added: if no other model exists, defer to the current model with smaller context and a focused prompt",
+      "affects": [
+        "t5"
+      ],
+      "origin": "user",
+      "status": "approved",
+      "classification": "needs-follow-up",
+      "seq": 19
     }
   ],
   "evidence": [],
