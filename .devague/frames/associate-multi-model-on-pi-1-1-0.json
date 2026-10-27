@@ -4,7 +4,7 @@
   "schema_version": 6,
   "status": "exported",
   "created": "2026-10-27T08:43:47Z",
-  "updated": "2026-10-27T09:37:42Z",
+  "updated": "2026-10-27T09:37:57Z",
   "claims": [
     {
       "id": "c1",
@@ -1522,7 +1522,7 @@
     {
       "id": "s28",
       "surface": "challenge pass / reversibility lens: guard.ts scratchDir model; CLAUDE.md worktree section",
-      "finding": "today every write is confined to a session scratch dir, so nothing needs undoing; c38 drops that confinement for bolt/cortex with no rollback path in the spec; the repo already mandates ../.worktrees.<repo>/ for agent checkouts",
+      "finding": "today every write is confined to a session scratch dir, so nothing needs undoing; c38 drops that confinement for bolt/cortex with no rollback path in the spec; the repo already mandates `../.worktrees.<repo>/` for agent checkouts",
       "seeds": [
         "c51",
         "q18"

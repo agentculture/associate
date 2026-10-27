@@ -179,7 +179,7 @@
   - seeds: `c34`, `c35`
 - `s27` — `challenge pass / security lens: associate/contract/policy.json shell.allowlist; c24, c37`: policy.json allows only read argv today; c24 lets bolt/cortex 'change the repo' and c37 gates 'any shell command outside the read-only allowlist' — which implies arbitrary shell is reachable behind the gate; nothing in the spec bounds the mutation surface or excludes push
   - seeds: `c50` (rejected), `q17` (question, resolved)
-- `s28` — `challenge pass / reversibility lens: guard.ts scratchDir model; CLAUDE.md worktree section`: today every write is confined to a session scratch dir, so nothing needs undoing; c38 drops that confinement for bolt/cortex with no rollback path in the spec; the repo already mandates ../.worktrees.<repo>/ for agent checkouts
+- `s28` — `challenge pass / reversibility lens: guard.ts scratchDir model; CLAUDE.md worktree section`: today every write is confined to a session scratch dir, so nothing needs undoing; c38 drops that confinement for bolt/cortex with no rollback path in the spec; the repo already mandates `../.worktrees.<repo>/` for agent checkouts
   - seeds: `c51`, `q18` (question, resolved)
 - `s29` — `challenge pass / concurrency lens: Pi examples/extensions/subagent/index.ts:33-34,347`: the example runs up to 8 tasks, 4 concurrently, and defaults every child's cwd to the parent's cwd — two bolt children would write the same tree at once
   - seeds: `c52`
