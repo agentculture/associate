@@ -5,7 +5,7 @@
   "schema_version": 5,
   "status": "exported",
   "created": "2026-10-27T09:38:26Z",
-  "updated": "2026-10-27T09:46:28Z",
+  "updated": "2026-10-27T10:12:10Z",
   "targets": [
     {
       "id": "c1",
@@ -1007,6 +1007,22 @@
       "text": "Super VL is deferred (v5): its registry entry and prompt land as pending in t4/t11, and its spawn duty in c5/h6 is pending until lobes serves it",
       "kind": "follow_up",
       "task_id": "t11",
+      "resolved": false,
+      "resolution": ""
+    },
+    {
+      "id": "r7",
+      "text": "pi 0.99.0 added built-in MCP: an operator-configured MCP server with direct exposure would add mcp__* tools to the active set, the guard does not classify them as writers, and the launcher does not pass --no-mcp \u2014 with q17/q21 the safety gate (t10/t12) must cover mcp__* calls or MCP must be disabled",
+      "kind": "unknown_nonblocking",
+      "task_id": "t12",
+      "resolved": false,
+      "resolution": ""
+    },
+    {
+      "id": "r8",
+      "text": "on pi 1.1.0 a writer re-enabled by another extension in agent_start (after our before_agent_start) stays active for later requests; only the tool_call guard catches it \u2014 t12's per-model guard must not rely on setActiveTools alone",
+      "kind": "unknown_nonblocking",
+      "task_id": "t12",
       "resolved": false,
       "resolution": ""
     }
