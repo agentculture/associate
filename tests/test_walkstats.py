@@ -21,8 +21,10 @@ def gate_line(index, tier, decision, *, tool="write"):
     }
     if tier == "clef":
         entry["probabilities"] = {"is_safe": 0.9}
-    if tier == "super":
+    if tier in ("super", "large"):
         entry["verdict"] = {"safe": decision == "allow"}
+    if tier == "large":
+        entry["evaluator"] = "cortex"
     return {"gate": entry}
 
 
@@ -240,7 +242,7 @@ def test_zero_gated_calls_report_zero_shares_without_dividing(tmp_path):
     gates = walkstats.aggregate_gates([]).as_dict()
     assert gates["gated_calls"] == 0
     assert gates["readonly_fallbacks"] == 0
-    for tier in ("clef", "super", "readonly"):
+    for tier in ("clef", "super", "large", "readonly"):
         assert gates["tiers"][tier] == {"count": 0, "share": 0.0, "allow": 0, "refuse": 0}
 
 
@@ -295,3 +297,21 @@ def test_main_json_mode_includes_gate_aggregate(tmp_path, capsys):
     assert payload["gates"]["readonly_fallbacks"] == 2
     assert payload["gates"]["tiers"]["clef"]["share"] == 0.4
     assert payload["aggregate"]["runs"] == 3, "existing fields are unchanged"
+
+
+def test_large_state_gate_lines_count_as_their_own_tier(tmp_path):
+    """d16: a state over CLEF's budget is judged by a registry evaluator, and the
+    report keeps it apart from CLEF and Super."""
+    stats = walkstats.aggregate_gates(
+        [
+            gate_line(1, "large", "allow")["gate"],
+            gate_line(2, "large", "refuse")["gate"],
+            gate_line(3, "clef", "allow")["gate"],
+        ]
+    ).as_dict()
+    assert stats["gated_calls"] == 3
+    assert stats["tiers"]["large"] == {"count": 2, "share": 0.6667, "allow": 1, "refuse": 1}
+    text = walkstats.render_gates(
+        walkstats.aggregate_gates([gate_line(1, "large", "allow")["gate"]])
+    )
+    assert "large=1 (100.0%" in text

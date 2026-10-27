@@ -55,8 +55,8 @@ export const ENV_VARS = ["ASSOCIATE_BASE_URL", "ASSOCIATE_API_KEY", "ASSOCIATE_M
  * are neither model ids, roles nor endpoints). A later task may move them into
  * `models.json` per model.
  */
-const DEFAULT_CONTEXT_WINDOW = 131072;
-const DEFAULT_MAX_TOKENS = 16384;
+export const DEFAULT_CONTEXT_WINDOW = 131072;
+export const DEFAULT_MAX_TOKENS = 16384;
 
 export type Env = Record<string, string | undefined>;
 

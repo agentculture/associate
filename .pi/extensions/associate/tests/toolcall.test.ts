@@ -360,16 +360,147 @@ test("r9: bash eidetic remember and ledger append go through the gate", async ()
   });
 });
 
-test("r15: a mutating call whose gate state was truncated is refused even on a safe verdict", async () => {
+// ------------- d16 / d19: oversized states go to a large-context evaluator
+
+/** A fake pi model registry that knows `roles` and answers every gate prompt with `verdicts`. */
+function fakeModelRegistry(roles: readonly string[], verdicts: () => Record<string, unknown>) {
+  const calls: Array<{ model: any; context: any }> = [];
+  return {
+    calls,
+    find: (provider: string, id: string) => (roles.includes(id) ? { provider, id } : undefined),
+    streamSimple(model: any, context: any) {
+      calls.push({ model, context });
+      const container = Object.keys(GATE.super.answer_shape)[0];
+      const text = JSON.stringify({ [container]: verdicts() });
+      return { result: async () => ({ role: "assistant", content: [{ type: "text", text }], stopReason: "stop" }) };
+    },
+  };
+}
+
+function safeSuperVerdicts(): Record<string, unknown> {
+  const out: Record<string, unknown> = {};
+  for (const [key, want] of Object.entries(GATE.super.allow_when)) out[key] = Array.isArray(want) ? want[0] : want;
+  return out;
+}
+
+let ctxSeq = 0;
+async function callWith(pi: FakePi, toolName: string, input: unknown, ctx: Record<string, unknown>) {
+  ctxSeq += 1;
+  return (await pi.fireToolCall({ type: "tool_call", toolName, toolCallId: `tcx-${ctxSeq}`, input }, ctx)) as
+    | { block: boolean; reason: string }
+    | undefined;
+}
+
+const BIG = () => "x".repeat((GATE.decider.max_input_tokens as number) * 2) + "-TAIL";
+
+test("d16: an oversized write with no evaluator reachable is refused, and CLEF is never asked a cut state", async () => {
   await withRun("worker", async ({ pi, decider, walkPath }) => {
-    const budget = (GATE.decider.max_input_tokens as number) * 2;
-    const decision = await call(pi, "write", { path: "big.txt", content: "x".repeat(budget) });
-    assert.ok(decision?.block, "a truncated mutating call must be refused");
-    assert.match(decision!.reason, /truncated/);
-    assert.equal(decider.calls.length, 1, "the decider was asked and allowed");
+    const decision = await call(pi, "write", { path: "big.txt", content: BIG() });
+    assert.ok(decision?.block, "an oversized write with nobody to judge it must be refused");
+    assert.match(decision!.reason, /no large-state evaluator is reachable/);
+    assert.equal(decider.calls.length, 0, "CLEF would only have seen part of the call");
     const [gate] = gateLines(walkPath);
+    assert.equal(gate.tier, "readonly");
     assert.equal(gate.decision, "refuse");
-    assert.match(gate.reason, /r15/);
+  });
+});
+
+test("d16: worker's oversized write is judged by cortex on the full state, allowed, and the walk names cortex", async () => {
+  await withRun("worker", async ({ pi, decider, walkPath }) => {
+    const registry = fakeModelRegistry(["cortex", "worker"], safeSuperVerdicts);
+    const content = BIG();
+    const decision = await callWith(pi, "write", { path: "big.txt", content }, { modelRegistry: registry });
+    assert.equal(decision, undefined, `refused: ${decision?.reason}`);
+    assert.equal(decider.calls.length, 0);
+    assert.equal(registry.calls.length, 1);
+    assert.equal(registry.calls[0].model.id, "cortex");
+    assert.ok((registry.calls[0].context.messages[0].content as string).includes(content));
+    const [gate] = gateLines(walkPath);
+    assert.equal(gate.tier, "large");
+    assert.equal(gate.evaluator, "cortex");
+    assert.equal(gate.self_evaluated, undefined);
+    assert.equal(gate.decision, "allow");
+    assert.doesNotMatch(gate.reason ?? "", /r15/, "an evaluated full state is not a truncation");
+  });
+});
+
+test("d16: an unsafe large-state verdict refuses the call", async () => {
+  await withRun("worker", async ({ pi, walkPath }) => {
+    const registry = fakeModelRegistry(["cortex"], () => ({ ...safeSuperVerdicts(), destructive: true }));
+    const decision = await callWith(pi, "write", { path: "big.txt", content: BIG() }, { modelRegistry: registry });
+    assert.ok(decision?.block);
+    assert.match(decision!.reason, /tier large/);
+    const [gate] = gateLines(walkPath);
+    assert.equal(gate.evaluator, "cortex");
+    assert.equal(gate.decision, "refuse");
+  });
+});
+
+test("d16: cortex acting → worker evaluates (the actor never judges its own call when another can)", async () => {
+  await withRun("cortex", async ({ pi, walkPath }) => {
+    const registry = fakeModelRegistry(["cortex", "worker"], safeSuperVerdicts);
+    const decision = await callWith(pi, "write", { path: "big.txt", content: BIG() }, { modelRegistry: registry });
+    assert.equal(decision, undefined, decision?.reason);
+    assert.deepEqual(registry.calls.map((c) => c.model.id), ["worker"]);
+    const [gate] = gateLines(walkPath);
+    assert.equal(gate.evaluator, "worker");
+    assert.equal(gate.self_evaluated, undefined);
+  });
+});
+
+test("d19: no other evaluator → the acting model self-evaluates a history-free request, and the walk says self", async () => {
+  await withRun("worker", async ({ pi, walkPath }) => {
+    const registry = fakeModelRegistry(["worker"], safeSuperVerdicts);
+    const decision = await callWith(pi, "write", { path: "big.txt", content: BIG() }, { modelRegistry: registry });
+    assert.equal(decision, undefined, decision?.reason);
+    assert.equal(registry.calls.length, 1);
+    assert.equal(registry.calls[0].model.id, "worker");
+    const messages = registry.calls[0].context.messages;
+    assert.equal(messages.length, 1, "no session transcript is sent");
+    assert.match(messages[0].content, /^STATE:\ntask: /);
+    assert.ok(!messages[0].content.includes("tool_result"));
+    const [gate] = gateLines(walkPath);
+    assert.equal(gate.tier, "large");
+    assert.equal(gate.evaluator, "worker");
+    assert.equal(gate.self_evaluated, true);
+  });
+});
+
+test("d19: with self_fallback off in gate.json, no other evaluator → refused", async () => {
+  const dir = mkdtempSync(join(tmpdir(), "associate-d19-contract-"));
+  try {
+    cpSync(findRepoContractDir(), dir, { recursive: true });
+    const gatePath = join(dir, "gate.json");
+    const doc = JSON.parse(readFileSync(gatePath, "utf8"));
+    doc.large_state.self_fallback = false;
+    writeFileSync(gatePath, JSON.stringify(doc));
+    await withRun(
+      "worker",
+      async ({ pi, walkPath }) => {
+        const registry = fakeModelRegistry(["worker"], safeSuperVerdicts);
+        const decision = await callWith(pi, "write", { path: "big.txt", content: BIG() }, { modelRegistry: registry });
+        assert.ok(decision?.block);
+        assert.match(decision!.reason, /self_fallback is off/);
+        assert.equal(registry.calls.length, 0);
+        const [gate] = gateLines(walkPath);
+        assert.equal(gate.tier, "readonly");
+      },
+      { contractDir: dir },
+    );
+  } finally {
+    rmSync(dir, { recursive: true, force: true });
+  }
+});
+
+test("d16: a state too large even for the evaluator is refused", async () => {
+  await withRun("worker", async ({ pi, decider }) => {
+    const registry = fakeModelRegistry(["cortex", "worker"], safeSuperVerdicts);
+    const huge = "q".repeat((GATE.large_state.max_input_tokens as number) + 1);
+    const decision = await callWith(pi, "write", { path: "huge.txt", content: huge }, { modelRegistry: registry });
+    assert.ok(decision?.block);
+    assert.match(decision!.reason, /large_state\.max_input_tokens/);
+    assert.equal(registry.calls.length, 0);
+    assert.equal(decider.calls.length, 0);
   });
 });
 
@@ -466,16 +597,19 @@ for (const key of ["senses", "worker"]) {
 
 
 for (const key of ["senses", "worker"]) {
-  test(`d6 / r15: ${key}'s truncated eidetic_remember is refused even on a safe verdict`, async () => {
+  test(`d6 / d16: ${key}'s oversized eidetic_remember goes to the large-state evaluator, never to CLEF`, async () => {
     await withRun(key, async ({ pi, decider, walkPath }) => {
       const budget = (GATE.decider.max_input_tokens as number) * 2;
-      const decision = await call(pi, "eidetic_remember", { text: "x".repeat(budget) });
-      assert.ok(decision?.block, "a truncated memory write must be refused");
-      assert.match(decision!.reason, /truncated/);
-      assert.equal(decider.calls.length, 1);
-      const [gate] = gateLines(walkPath);
-      assert.equal(gate.decision, "refuse");
-      assert.match(gate.reason, /r15/);
+      const refused = await call(pi, "eidetic_remember", { text: "x".repeat(budget) });
+      assert.ok(refused?.block, "with no evaluator, an oversized memory write must be refused");
+      const registry = fakeModelRegistry(["cortex", "worker"], safeSuperVerdicts);
+      const allowed = await callWith(pi, "eidetic_remember", { text: "x".repeat(budget) }, { modelRegistry: registry });
+      assert.equal(allowed, undefined, allowed?.reason);
+      assert.equal(decider.calls.length, 0);
+      const [first, second] = gateLines(walkPath);
+      assert.equal(first.decision, "refuse");
+      assert.equal(second.tier, "large");
+      assert.equal(second.evaluator, "cortex", "neither senses nor worker is cortex, so cortex judges");
     });
   });
 }

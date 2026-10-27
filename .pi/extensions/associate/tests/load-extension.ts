@@ -130,9 +130,10 @@ export class FakePi {
     }
   }
 
-  async fireToolCall(event: Record<string, unknown>): Promise<unknown> {
+  /** Run every `tool_call` handler; `ctx` stands in for pi's event context (e.g. `modelRegistry`). */
+  async fireToolCall(event: Record<string, unknown>, ctx?: Record<string, unknown>): Promise<unknown> {
     for (const handler of this.handlers.get("tool_call") ?? []) {
-      const decision = await handler(event);
+      const decision = await handler(event, ctx);
       if (decision) return decision;
     }
     return undefined;

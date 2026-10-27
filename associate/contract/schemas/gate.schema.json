@@ -5,7 +5,7 @@
   "description": "The pre-mutation safety-gate question set (gate.json). Structural shape only; cross-field rules (thresholds in [0,1], every rule names an existing question and option) live in validate.validate_gate.",
   "type": "object",
   "additionalProperties": false,
-  "required": ["version", "decider", "state_fields", "effects", "isolation", "questions", "clef", "super", "readonly_fallback", "redaction"],
+  "required": ["version", "decider", "state_fields", "effects", "isolation", "questions", "clef", "super", "large_state", "readonly_fallback", "redaction"],
   "properties": {
     "$comment": {"type": "string"},
     "version": {"type": "integer"},
@@ -64,6 +64,18 @@
         "model": {"type": "string", "description": "models.json registry key of the Super-tier model."},
         "answer_shape": {"type": "object"},
         "allow_when": {"type": "object"}
+      }
+    },
+    "large_state": {
+      "type": "object",
+      "description": "d16/d19: who judges a state over decider.max_input_tokens. Cross-field rules (registry keys, distinct, a budget above the decider's) live in validate.validate_gate.",
+      "additionalProperties": false,
+      "required": ["evaluators", "max_input_tokens", "self_fallback"],
+      "properties": {
+        "$comment": {"type": "string"},
+        "evaluators": {"type": "array", "items": {"type": "string"}},
+        "max_input_tokens": {"type": "integer"},
+        "self_fallback": {"type": "boolean"}
       }
     },
     "readonly_fallback": {

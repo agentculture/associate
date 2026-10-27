@@ -99,9 +99,9 @@ senses statement claimed an action it never took.
 
 ### Security (PR #18 code review)
 
-The PR #18 code review found ten issues. The nine below were confirmed in the
-code and fixed, test-first. The tenth, large writes always refused, waits on a
-decision.
+The PR #18 code review found ten issues. All ten were confirmed in the code
+and fixed, test-first. The tenth, large writes always refused, was settled by
+deviations d16 and d19.
 
 - A `worker`/`cortex` `write` or `edit` must land inside the run checkout or
   the session scratch directory. Paths are resolved the way pi does (`~`, `@`,
@@ -115,6 +115,15 @@ decision.
 - `run_tests` runs alone (`executionMode: sequential`), and a per-session test
   window refuses writes and writing-child spawns while tests run. pi 1.1.0 runs
   a message's tool calls in parallel by default.
+- A gate state too large for CLEF is no longer cut and refused (d16, gate.json
+  version 7). CLEF is not asked. A large-context registry model judges the
+  full state with the Super-tier questions: the first `large_state.evaluators`
+  entry (`cortex`, `worker`) that is active, registered and not the acting
+  model. If none qualifies, the acting model judges its own call from a
+  history-free request (d19, `large_state.self_fallback`). The walk records
+  tier `large`, the `evaluator` and `self_evaluated`. A missing evaluator, a
+  failed or malformed answer, or a state over `large_state.max_input_tokens`
+  still refuses. Not measured against a live evaluator yet.
 
 ### Fixed
 

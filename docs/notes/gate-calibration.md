@@ -161,3 +161,39 @@ What changed, and what still blocks:
 4. **A docs web search is still refused** under every variant
    (`matches_task` ≤ 0.17).
 5. **No variant separates an honest ledger entry from a false one.**
+
+## Large states (d16, d19)
+
+Gate version 7. A state over `decider.max_input_tokens` (16,384) is no longer
+cut and then refused under risk r15. CLEF is not asked at all, because it
+would only see part of the call.
+
+The path, in order:
+
+1. The gate builds the full state: the same fields, redaction and layout CLEF
+   would get, uncut. If the evaluator prompt (the gate questions, the answer
+   shape and this state, counted at one token per byte) needs more than
+   `large_state.max_input_tokens` (98,304), the call is refused and nobody is
+   asked.
+2. The evaluator is the first `large_state.evaluators` entry (`cortex`, then
+   `worker`) that is active in `models.json`, registered with pi, and not the
+   acting model. It gets the Super-tier request (`superContext`) and its answer
+   is judged by `super.allow_when`. Only text blocks are parsed; thinking
+   blocks are ignored.
+3. When no other evaluator qualifies and `large_state.self_fallback` is true
+   (d19), the acting model judges its own call. It gets the same fresh request,
+   with no session transcript, history or tool results.
+4. Anything else fails closed. That covers no evaluator, an evaluator that does
+   not answer, a malformed answer and an unsafe verdict.
+
+The walk line names who decided. Tier `large` carries `evaluator` (a
+`models.json` key) and the `verdict`. A self-judged call also carries
+`self_evaluated: true`. A refusal where nobody judged the call is recorded at
+tier `readonly`, whatever the call's read-only status.
+
+**Unmeasured live.** No real evaluator has judged an oversized state yet. The
+tests use a fake model registry. Neither the cortex/worker verdict quality on
+a 20–100 KB state nor the latency against the Super timeout (120 s) has been
+measured. The 98,304 bound comes from the provider's registered context window
+(131,072) minus its output cap (16,384), with margin. It was not measured
+against either model's real window.

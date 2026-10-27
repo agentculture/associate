@@ -345,7 +345,9 @@ def validate_gate(doc: dict[str, Any], models: dict[str, Any] | None = None) -> 
     option) with a threshold in [0, 1]; both tiers rule on every question;
     Super's verdict rule matches each question's type; ``super.model`` is a
     key of *models* (``models.json`` when omitted); and ``effects`` names
-    exactly that registry's ``mutating_tools`` + ``gated_tools`` (d10).
+    exactly that registry's ``mutating_tools`` + ``gated_tools`` (d10); and
+    ``large_state`` names distinct registry evaluators with a budget above the
+    decider's (d16).
     """
     from associate.contract import load_models, load_schema  # noqa: PLC0415 - avoid import cycle
 
@@ -360,11 +362,39 @@ def validate_gate(doc: dict[str, Any], models: dict[str, Any] | None = None) -> 
     if doc["super"]["model"] not in models_doc["models"]:
         errors.append(f"super.model: {doc['super']['model']!r} is not a models.json key")
     errors.extend(_gate_effect_errors(doc["effects"], models_doc))
+    errors.extend(_gate_large_state_errors(doc["large_state"], doc["decider"], models_doc))
     errors.extend(
         f"isolation.applies_to: {tool!r} has no entry in effects"
         for tool in doc["isolation"]["applies_to"]
         if tool not in doc["effects"] or tool == "$comment"
     )
+    return errors
+
+
+def _gate_large_state_errors(
+    large: dict[str, Any], decider: dict[str, Any], models: dict[str, Any]
+) -> list[str]:
+    """d16/d19: the large-state evaluators are distinct registry keys with a bigger budget.
+
+    The upper bound (room for the answer in the provider's registered context
+    window) is the extension's own check: the window is not a contract value.
+    """
+    evaluators = large["evaluators"]
+    errors: list[str] = []
+    if not evaluators:
+        errors.append("large_state.evaluators: must name at least one models.json key")
+    if len(set(evaluators)) != len(evaluators):
+        errors.append("large_state.evaluators: keys must be distinct")
+    errors.extend(
+        f"large_state.evaluators: {key!r} is not a models.json key"
+        for key in evaluators
+        if key not in models["models"]
+    )
+    if large["max_input_tokens"] <= decider["max_input_tokens"]:
+        errors.append(
+            "large_state.max_input_tokens: must be above decider.max_input_tokens "
+            f"({decider['max_input_tokens']})"
+        )
     return errors
 
 
@@ -397,6 +427,13 @@ def validate_walk_gate(line: dict[str, Any]) -> list[str]:
         errors.append("$: a super gate line needs a verdict")
     if tier != "clef" and "probabilities" in line:
         errors.append("$: probabilities belong to the clef tier only")
-    if tier != "super" and "verdict" in line:
-        errors.append("$: verdict belongs to the super tier only")
+    if tier == "large" and "verdict" not in line:
+        errors.append("$: a large gate line needs a verdict")
+    if tier == "large" and "evaluator" not in line:
+        errors.append("$: a large gate line needs the evaluator that judged it")
+    if tier not in ("super", "large") and "verdict" in line:
+        errors.append("$: verdict belongs to the super and large tiers only")
+    for field in ("evaluator", "self_evaluated"):
+        if tier != "large" and field in line:
+            errors.append(f"$: {field} belongs to the large tier only")
     return errors

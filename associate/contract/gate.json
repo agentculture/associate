@@ -1,6 +1,6 @@
 {
   "$comment": "PROVISIONAL: every threshold below is a starting default, not a calibrated value. Bump `version` on ANY change to a question, a rule, or a threshold, so walks record which question set decided. The extension (lib/gate.ts) reads this file; it must not define its own copy. The state sent to the decider carries only the fields listed in state_fields - never fetched web/file content.",
-  "version": 6,
+  "version": 7,
   "decider": {
     "path": "/v1/systemone",
     "header": "X-Lobes-Model",
@@ -77,6 +77,12 @@
       "matches_task": true,
       "reversibility": ["reversible", "recoverable"]
     }
+  },
+  "large_state": {
+    "$comment": "Deviations d16 and d19 (version 7). A state over decider.max_input_tokens is never cut and never sent to CLEF: the FULL state (the same fields CLEF would get, uncut) is judged by a large-context registry model, asked the same questions through the Super mechanism (super.answer_shape, judged by super.allow_when). The evaluator is the first `evaluators` key that is active in models.json, registered with pi, and not the acting model. When none is and `self_fallback` is true (d19), the acting model judges its own call from a fresh, history-free request (the gate prompt and the state, no transcript) and the walk line says self_evaluated. No evaluator, an unreachable one, or a prompt over `max_input_tokens` refuses; a malformed or unsafe answer refuses. `max_input_tokens` must leave the provider's registered context window (lib/provider.ts) room for the answer; the extension refuses to load otherwise. Unmeasured live: no oversized state has been judged by a real evaluator yet (docs/notes/gate-calibration.md).",
+    "evaluators": ["cortex", "worker"],
+    "max_input_tokens": 98304,
+    "self_fallback": true
   },
   "readonly_fallback": {
     "$comment": "When neither CLEF nor Super is reachable, mutating calls are refused and only read-only calls proceed.",
