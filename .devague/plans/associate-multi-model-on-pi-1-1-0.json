@@ -5,7 +5,7 @@
   "schema_version": 5,
   "status": "exported",
   "created": "2026-10-27T09:38:26Z",
-  "updated": "2026-10-27T11:15:17Z",
+  "updated": "2026-10-27T11:42:10Z",
   "targets": [
     {
       "id": "c1",
@@ -1097,8 +1097,8 @@
       "text": "the eidetic_remember TOOL is not gated (not in models.json mutating_tools; senses holds it per c35) while 'bash eidetic remember' IS gated \u2014 inconsistent; it writes the memory store. web_search/web_page are ungated reads that can send data off the machine. Needs a user decision on whether either should pass the CLEF gate",
       "kind": "unknown_nonblocking",
       "task_id": "t16",
-      "resolved": false,
-      "resolution": ""
+      "resolved": true,
+      "resolution": "user: 'R17 checked as well' \u2014 eidetic_remember passes the CLEF gate for every model (senses keeps the tool, gated); web_search/web_page gating asked separately"
     },
     {
       "id": "r18",
