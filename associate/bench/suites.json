@@ -1,0 +1,58 @@
+{
+  "$comment": "Public benchmark suites as data (c49). Adding a suite is a data addition: no code changes. argv/env templates use {base_url} {api_key} {model} {output_dir}; argv is a list, never a shell string. `scorer` is the upstream's OWN scorer; `scorer.result` says which file it writes and how a score is read from it. `verified: false` marks entry points taken from upstream docs but not run here.",
+  "version": 1,
+  "suites": [
+    {
+      "name": "bfcl",
+      "version": "bfcl-eval (pin at first operator run; BFCL v3/v4 categories)",
+      "homepage": "https://github.com/ShishirPatil/gorilla/tree/main/berkeley-function-call-leaderboard",
+      "install_hint": "pip install bfcl-eval (not the unrelated `bfcl` package)",
+      "verified": false,
+      "verified_note": "Command names and flags (--model, --test-category, --skip-server-setup, --result-dir, --score-dir, REMOTE_OPENAI_*) confirmed from the upstream README; the --model value for a custom endpoint and the data_overall.csv column name were not run.",
+      "runner": {
+        "argv": ["bfcl", "generate", "--model", "{model}", "--test-category", "all", "--skip-server-setup", "--result-dir", "{output_dir}/result"],
+        "env": {"REMOTE_OPENAI_BASE_URL": "{base_url}", "REMOTE_OPENAI_API_KEY": "{api_key}"}
+      },
+      "scorer": {
+        "name": "bfcl evaluate",
+        "argv": ["bfcl", "evaluate", "--model", "{model}", "--test-category", "all", "--result-dir", "{output_dir}/result", "--score-dir", "{output_dir}/score"],
+        "result": {"file": "{output_dir}/score/data_overall.csv", "format": "csv", "column": "Overall Acc", "row": 0}
+      },
+      "models": ["worker", "senses", "cortex"]
+    },
+    {
+      "name": "mmmu",
+      "version": "lmms-eval mmmu_val (pin at first operator run)",
+      "homepage": "https://github.com/EvolvingLMMs-Lab/lmms-eval",
+      "install_hint": "pip install lmms-eval",
+      "verified": false,
+      "verified_note": "Chosen over the official MMMU repo because lmms-eval ships the mmmu_val task with an OpenAI-compatible client (--model openai, OPENAI_API_KEY; documented 'any OpenAI-compatible endpoint'); the exact base-URL variable (assumed OPENAI_API_BASE) and the results JSON key were not verified.",
+      "runner": {
+        "argv": ["python3", "-m", "lmms_eval", "--model", "openai", "--model_args", "model_version={model}", "--tasks", "mmmu_val", "--batch_size", "1", "--output_path", "{output_dir}"],
+        "env": {"OPENAI_API_KEY": "{api_key}", "OPENAI_API_BASE": "{base_url}", "OPENAI_BASE_URL": "{base_url}"}
+      },
+      "scorer": {
+        "name": "lmms-eval mmmu_val mmmu_acc",
+        "result": {"file": "{output_dir}/results.json", "format": "json", "path": ["results", "mmmu_val", "mmmu_acc,none"]}
+      },
+      "models": ["worker", "senses", "cortex"]
+    },
+    {
+      "name": "livecodebench",
+      "version": "LiveCodeBench release_latest (pin release_version at first operator run)",
+      "homepage": "https://github.com/LiveCodeBench/LiveCodeBench",
+      "install_hint": "git clone https://github.com/LiveCodeBench/LiveCodeBench && uv pip install -e .",
+      "verified": false,
+      "verified_note": "lcb_runner.runner.main flags (--model, --scenario codegeneration, --evaluate, --release_version) confirmed from the README; its docs do not describe an OpenAI-compatible endpoint option (needs a model entry in lm_styles.py), and the eval-file layout/pass@1 key are unverified.",
+      "runner": {
+        "argv": ["python3", "-m", "lcb_runner.runner.main", "--model", "{model}", "--scenario", "codegeneration", "--evaluate", "--release_version", "release_latest"],
+        "env": {"OPENAI_API_KEY": "{api_key}", "OPENAI_BASE_URL": "{base_url}"}
+      },
+      "scorer": {
+        "name": "lcb_runner evaluation pass@1",
+        "result": {"file": "{output_dir}/livecodebench_eval.json", "format": "json", "path": ["pass@1"]}
+      },
+      "models": ["worker", "cortex"]
+    }
+  ]
+}

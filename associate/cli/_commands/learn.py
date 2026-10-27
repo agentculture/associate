@@ -29,7 +29,7 @@ Commands
   associate overview           Descriptive snapshot of the agent.
   associate doctor             Check the agent-identity invariants.
   associate run [prompt]       Run one task on a harness adapter (--model), or fail closed.
-  associate bench              Run public benchmark suites (none configured yet).
+  associate bench              Run a public suite (--suite NAME --model KEY) or list suites.
   associate cli overview       Describe the CLI surface itself.
 
 Machine-readable output
@@ -71,7 +71,7 @@ def _as_json_payload() -> dict[str, object]:
             },
             {
                 "path": ["bench"],
-                "summary": "Run public benchmark suites (none configured yet).",
+                "summary": "Run a public suite (--suite NAME --model KEY) or list suites.",
             },
             {"path": ["cli", "overview"], "summary": "Describe the CLI surface."},
         ],

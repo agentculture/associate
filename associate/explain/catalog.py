@@ -26,7 +26,7 @@ buildable/deployable package baseline. Clone it, rename the package, edit
 - `associate overview` — descriptive snapshot of the agent.
 - `associate doctor` — check the agent-identity invariants.
 - `associate run` — run one task on a harness adapter, or fail closed.
-- `associate bench` — run public benchmark suites (none configured yet).
+- `associate bench` — run a public benchmark suite (BFCL, MMMU, LiveCodeBench) or list them.
 - `associate cli overview` — describe the CLI surface.
 
 ## Exit-code policy
@@ -181,21 +181,34 @@ and `session_id` on stdout — `key=value` lines, or one JSON object with
 _BENCH = """\
 # associate bench
 
-Runs public benchmark suites (BFCL, MMMU, LiveCodeBench) against a harness
-adapter. **No suite is configured yet**, so today the verb has nothing to run: it
-prints that to stderr and exits `2`. It never reports a pass it did not measure.
+Runs a **public** benchmark suite (BFCL, MMMU, LiveCodeBench) against a registry
+model through the gateway. Suites are data (`associate/bench/suites.json`, or the
+file named by `ASSOCIATE_BENCH_SUITES`): name, pinned version, the upstream runner
+as an argv template, the upstream's own scorer, and the models it applies to.
+`associate` never re-implements a scorer or touches a dataset itself; it launches
+the upstream runner/scorer and reads the score the scorer wrote. Adding a suite is
+a data addition.
 
-The in-house behavioral suite (seven cases) was dropped; benchmarks are public
-suites only, and suite entries arrive as data in a later change.
+Each row carries the suite name and version, the scorer, the score, the model key
+and lobes role, and the full configuration stamp. Entries marked
+`verified: false` are best-reference entry points not yet run end to end.
+
+The endpoint comes from `ASSOCIATE_BASE_URL` / `ASSOCIATE_API_KEY` (never printed).
 
 ## Usage
 
-    associate bench
-    associate bench --json
+    associate bench                       # list suites
+    associate bench --suite               # list suites (--json supported)
+    associate bench --suite bfcl --model worker
+    associate bench --suite mmmu --model senses --json --output-dir ./out
 
 ## Exit codes
 
-- `2` no public suites are configured (setup incomplete)
+- `0` listed suites, or the run produced a score
+- `1` unknown suite, unknown or pending model, a model the suite does not list,
+  or `--model` missing
+- `2` upstream runner/scorer not on PATH or failed, its result file unreadable,
+  or the suites file is malformed
 """
 
 _CLI = """\
