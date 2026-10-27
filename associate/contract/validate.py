@@ -347,7 +347,8 @@ def validate_gate(doc: dict[str, Any], models: dict[str, Any] | None = None) -> 
     key of *models* (``models.json`` when omitted); and ``effects`` names
     exactly that registry's ``mutating_tools`` + ``gated_tools`` (d10); and
     ``large_state`` names distinct registry evaluators with a budget above the
-    decider's (d16).
+    decider's (d16) and a positive timeout (d20); and ``change`` applies only to
+    tools with an effect, within positive bounds (d20).
     """
     from associate.contract import load_models, load_schema  # noqa: PLC0415 - avoid import cycle
 
@@ -367,6 +368,22 @@ def validate_gate(doc: dict[str, Any], models: dict[str, Any] | None = None) -> 
         f"isolation.applies_to: {tool!r} has no entry in effects"
         for tool in doc["isolation"]["applies_to"]
         if tool not in doc["effects"] or tool == "$comment"
+    )
+    errors.extend(_gate_change_errors(doc["change"], doc["effects"]))
+    return errors
+
+
+def _gate_change_errors(change: dict[str, Any], effects: dict[str, Any]) -> list[str]:
+    """d20: the change line goes only to described tools, within positive bounds."""
+    errors = [
+        f"change.applies_to: {tool!r} has no entry in effects"
+        for tool in change["applies_to"]
+        if tool not in effects or tool == "$comment"
+    ]
+    errors.extend(
+        f"change.{key}: must be a positive integer"
+        for key in ("max_file_bytes", "max_render_bytes")
+        if change[key] <= 0
     )
     return errors
 
@@ -390,6 +407,8 @@ def _gate_large_state_errors(
         for key in evaluators
         if key not in models["models"]
     )
+    if large["timeout_ms"] <= 0:
+        errors.append("large_state.timeout_ms: must be a positive integer (milliseconds)")
     if large["max_input_tokens"] <= decider["max_input_tokens"]:
         errors.append(
             "large_state.max_input_tokens: must be above decider.max_input_tokens "

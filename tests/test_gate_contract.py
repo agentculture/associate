@@ -368,3 +368,57 @@ def test_evaluator_belongs_to_the_large_tier_only():
     )
     assert validate.validate_walk_gate({**CLEF_GATE, "evaluator": "cortex"})
     assert validate.validate_walk_gate({**READONLY_GATE, "evaluator": "worker"})
+
+
+# ------------- d20: the change line and the large-state evaluator's timeout
+
+
+def test_change_line_is_a_state_field_for_write_only(doc):
+    """d20: a write that replaces a file is told to the decider as the lines it
+    adds and removes; an edit's arguments already are its change."""
+    assert doc["version"] >= 8
+    assert "change" in doc["state_fields"]
+    change = doc["change"]
+    assert change["applies_to"] == ["write"]
+    assert change["max_file_bytes"] > 0
+    assert change["max_render_bytes"] > 0
+    assert "d20" in change["$comment"]
+
+
+def test_change_section_is_required(doc):
+    del doc["change"]
+    assert validate.validate_gate(doc)
+
+
+def test_change_applies_to_only_tools_with_an_effect(doc):
+    doc["change"]["applies_to"] = ["write", "ghost_tool"]
+    assert any("change.applies_to" in e and "ghost_tool" in e for e in validate.validate_gate(doc))
+
+
+@pytest.mark.parametrize("key", ["max_file_bytes", "max_render_bytes"])
+@pytest.mark.parametrize("value", [0, -1, "1024", 1.5, None])
+def test_change_bounds_must_be_positive_integers(doc, key, value):
+    doc["change"][key] = value
+    assert validate.validate_gate(doc)
+
+
+@pytest.mark.parametrize("key", ["max_file_bytes", "max_render_bytes"])
+def test_change_bounds_are_required(doc, key):
+    del doc["change"][key]
+    assert validate.validate_gate(doc)
+
+
+def test_large_state_has_its_own_timeout(doc):
+    """d20: oversized states took 37-213 s live (one pair), past Super's 120 s."""
+    assert doc["large_state"]["timeout_ms"] == 300000
+
+
+def test_large_state_timeout_is_required(doc):
+    del doc["large_state"]["timeout_ms"]
+    assert validate.validate_gate(doc)
+
+
+@pytest.mark.parametrize("value", [0, -5, "300000", 1.5, None, True])
+def test_large_state_timeout_must_be_a_positive_integer(doc, value):
+    doc["large_state"]["timeout_ms"] = value
+    assert any("timeout_ms" in e for e in validate.validate_gate(doc))

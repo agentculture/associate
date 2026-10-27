@@ -5,7 +5,7 @@
   "description": "The pre-mutation safety-gate question set (gate.json). Structural shape only; cross-field rules (thresholds in [0,1], every rule names an existing question and option) live in validate.validate_gate.",
   "type": "object",
   "additionalProperties": false,
-  "required": ["version", "decider", "state_fields", "effects", "isolation", "questions", "clef", "super", "large_state", "readonly_fallback", "redaction"],
+  "required": ["version", "decider", "state_fields", "effects", "isolation", "change", "questions", "clef", "super", "large_state", "readonly_fallback", "redaction"],
   "properties": {
     "$comment": {"type": "string"},
     "version": {"type": "integer"},
@@ -20,7 +20,7 @@
         "max_input_tokens": {"type": "integer"}
       }
     },
-    "state_fields": {"type": "array", "items": {"enum": ["task", "action", "effect", "arguments", "model", "isolation"]}},
+    "state_fields": {"type": "array", "items": {"enum": ["task", "action", "effect", "arguments", "model", "isolation", "change"]}},
     "effects": {
       "type": "object",
       "description": "Tool name -> what the tool does (d10). Must name exactly models.json mutating_tools + gated_tools; checked in validate.validate_gate.",
@@ -43,6 +43,18 @@
             "in-place": {"type": "string", "pattern": "\\S"}
           }
         }
+      }
+    },
+    "change": {
+      "type": "object",
+      "description": "d20: the change line (lines a write adds and removes). Cross-field rules (applies_to tools have effects, positive bounds) live in validate.validate_gate.",
+      "additionalProperties": false,
+      "required": ["applies_to", "max_file_bytes", "max_render_bytes"],
+      "properties": {
+        "$comment": {"type": "string"},
+        "applies_to": {"type": "array", "items": {"type": "string"}},
+        "max_file_bytes": {"type": "integer"},
+        "max_render_bytes": {"type": "integer"}
       }
     },
     "questions": {"type": "object", "additionalProperties": {"$ref": "#/$defs/question"}},
@@ -68,14 +80,15 @@
     },
     "large_state": {
       "type": "object",
-      "description": "d16/d19: who judges a state over decider.max_input_tokens. Cross-field rules (registry keys, distinct, a budget above the decider's) live in validate.validate_gate.",
+      "description": "d16/d19: who judges a state over decider.max_input_tokens; d20: within its own timeout. Cross-field rules (registry keys, distinct, a budget above the decider's, a positive timeout) live in validate.validate_gate.",
       "additionalProperties": false,
-      "required": ["evaluators", "max_input_tokens", "self_fallback"],
+      "required": ["evaluators", "max_input_tokens", "self_fallback", "timeout_ms"],
       "properties": {
         "$comment": {"type": "string"},
         "evaluators": {"type": "array", "items": {"type": "string"}},
         "max_input_tokens": {"type": "integer"},
-        "self_fallback": {"type": "boolean"}
+        "self_fallback": {"type": "boolean"},
+        "timeout_ms": {"type": "integer", "description": "d20: how long the large-state evaluator may take before it counts as unreachable."}
       }
     },
     "readonly_fallback": {
