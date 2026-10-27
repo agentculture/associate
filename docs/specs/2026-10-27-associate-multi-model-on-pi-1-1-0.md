@@ -73,6 +73,21 @@
 - the repo's identity docs describe the multi-model associate: CLAUDE.md (runtime lane, current state, tooling pins), AGENTS.md, culture.yaml model: worker, README — and the stale 'no pi adapter registered' lines (CLAUDE.md:50, :457) are corrected
   - instruction: uv run associate doctor and steward doctor both pass; grep for Lightning/Nemotron-3.5-Lightning returns only CHANGELOG history
   - honesty: associate doctor and steward doctor pass, and CLAUDE.md no longer says no pi adapter is registered or that Lightning is the lane
+- a mutating run works in its own git worktree under the repo-owned worktree root by default, and the result is then merged to main; a bad write before the merge is undone by removing the worktree
+  - instruction: reuse the ../.worktrees.<repo>/ convention from CLAUDE.md; test that a bolt write outside the run's worktree is refused
+  - honesty: a mutating run's writes appear only inside its worktree until the merge; removing the worktree before the merge leaves main and the operator's checkout untouched
+- parallel sub-agents never share a writable checkout: at most one writing child per checkout at a time, or each writing child gets its own worktree; senses children (read-only) may run in parallel freely
+  - honesty: a test spawning two writing bolt children against one checkout shows them serialised or given separate worktrees, never writing concurrently to the same tree
+- associate's remember calls pin the eidetic destination explicitly (scope associate, and either `EIDETIC_DATA_DIR` or --visibility) rather than relying on cwd: a public remember run while associate examines another repo would otherwise commit memory into that repo's .eidetic/memory
+  - honesty: every remember call carries an explicit scope and destination; a remember run while examining another repo writes nothing into that repo; records from web or untrusted-repo content are absent or carry a provenance tag
+- the safety-gate state sent to CLEF/Super carries the task, the proposed action and its arguments, and the model id — not raw fetched web or file content — so text an attacker planted in a page or repo cannot argue the gate into approving
+  - instruction: unit test: a gate request built after a `web_page` call contains no page text
+  - honesty: a gate request built after `web_page` or read calls contains no text from those results — only task, action, arguments and model id
+- the 1.1.0 migration audits every breaking change between 0.84.2 and 1.1.0 against the extension: provider stream inputs became TranscriptContext (0.86.0), ToolCall.arguments became JSON-only, `user_bash` fails closed, shouldStopAfterTurn removed (0.87.0), Azure provider renamed (1.0.3), and `before_agent_start` / tool changes became transcript-backed (0.86.0) — each confirmed harmless or fixed
+  - instruction: list each changelog entry with its verdict in the PR body; run .pi/extensions/associate/tests/run.sh on 1.1.0
+  - honesty: the PR body lists each 0.84.2-1.1.0 breaking change with a verdict, and the extension test suite passes on pi 1.1.0
+- every gate decision (tier, question-set version, probabilities or Super verdict, allow/refuse) and every read-only degradation is visible to the operator in the run's walk and summarised by associate's existing walkstats, so a stretch of CLEF outage shows up as a rate, not just per-run lines
+  - honesty: walkstats over a set of walks reports the share of mutating calls answered by each gate tier and the count of read-only fallbacks
 
 ## Honesty conditions
 
@@ -105,7 +120,8 @@
 ## Assumptions
 
 - 'bolt' is not a lobes role: it is the user-level Pi provider 'bolt' pointing at lobes role 'worker' (nvidia/Qwen3.6-35B-A3B-NVFP4, image+video, tool parser `qwen3_coder`) on the local gateway; associate addresses it as role 'worker'
-- CLEF 27B is a decider, not a chat model: it answers only POST /v1/systemone (header X-Lobes-Model: `decider:<domain>`, default general) with calibrated probabilities over caller-defined options, never text or `tool_calls` — so associate uses it as the pre-action safety gate (c31/c32), not as a model: entry
+- CLEF 27B is a decider, not a chat model: it answers only POST /v1/systemone (header `X-Lobes-Model: decider:<domain>`, default general) with calibrated probabilities over caller-defined options, never text or `tool_calls` — so associate uses it as the pre-action safety gate (c31/c32), not as a model: entry
+- BFCL, MMMU and LiveCodeBench run against each model through the lobes gateway with their own harnesses — they measure the model, not associate's Pi tools, guard, safety gate or delegation; associate-specific behaviour is evidenced only by the live runs in c47/c48
 
 ## Scope exploration
 
@@ -161,6 +177,29 @@
   - seeds: `c32`
 - `s26` — `../embodiment CLAUDE.md; embodiment/tools.py:303-324; embodiment/daemon/app.py:3457; docs/deliveries/2026-10-23-gwen-is-pocketchat-transcripts-as-knowledge.md:63; docs/plans/next-cycle-candidates.md:153`: Gwen's speaker is the senses role and the daemon binds a live tool registry to it (remember, forget, `search_library`, `read_passage`, `read_item`, `fetch_source`, `search_conversations`, `list_todos`, `set_todo_done`) via seam(messages, tools=...); measured: direct senses probe 2/2 tool calls (2026-10-24), and senses (Gemma-4-12B) 2.85s `tool_calls`=1 finish=`tool_calls`; live vision records in docs/live-test-results/senses-vision.md
   - seeds: `c34`, `c35`
+- `s27` — `challenge pass / security lens: associate/contract/policy.json shell.allowlist; c24, c37`: policy.json allows only read argv today; c24 lets bolt/cortex 'change the repo' and c37 gates 'any shell command outside the read-only allowlist' — which implies arbitrary shell is reachable behind the gate; nothing in the spec bounds the mutation surface or excludes push
+  - seeds: `c50` (rejected), `q17` (question, resolved)
+- `s28` — `challenge pass / reversibility lens: guard.ts scratchDir model; CLAUDE.md worktree section`: today every write is confined to a session scratch dir, so nothing needs undoing; c38 drops that confinement for bolt/cortex with no rollback path in the spec; the repo already mandates ../.worktrees.<repo>/ for agent checkouts
+  - seeds: `c51`, `q18` (question, resolved)
+- `s29` — `challenge pass / concurrency lens: Pi examples/extensions/subagent/index.ts:33-34,347`: the example runs up to 8 tasks, 4 concurrently, and defaults every child's cwd to the parent's cwd — two bolt children would write the same tree at once
+  - seeds: `c52`
+- `s30` — `challenge pass / adjacent-systems lens: eidetic-cli eidetic/memory/backend.py:180-215`: eidetic resolves the write dir as `EIDETIC_DATA_DIR`, else <git rev-parse --show-toplevel of cwd>/.eidetic/memory for public records, else home — so the destination follows whatever checkout associate is examining, and public records are shared with every scope on recall
+  - seeds: `c53`, `q19` (question, resolved)
+- `s31` — `challenge pass / security lens: lobes docs/decider.md (state is free text, mesh-forwarded); tools/web.ts`: the decider ranks only from the state text it is given; if the state includes content the model read, injected instructions reach the safety judge; the senses->cortex hand-off is the same path one hop removed
+  - seeds: `c54`
+- `s32` — `challenge pass / unstated-assumption lens: c6, c22, c27, c46`: the frame treats 'benchmark associate' and 'benchmark the models' as one thing; the three suites call a model endpoint directly and never see the extension; with the in-house suite dropped (c28), nothing benchmarks the harness itself
+  - seeds: `c55`, `q20` (question)
+- `s33` — `challenge pass / adjacent-systems lens: lobes orin-decider / orin-associate shapes`: the safety gate's first tier depends on a box whose shape today serves the lane this work retires; CLEF availability is a fleet deployment fact, not a repo fact
+- `s34` — `challenge pass / adjacent-systems lens: pi-acp dist/index.js:2800-2814; culture culture_core/config.py:536`: pi-acp resolves a requested modelId against pi's available models; culture stores model: per agent (config.py:536) but my grep found no session model hand-off in `culture_core` — unexamined, not cleared
+- `s35` — `challenge pass / migration lens: pi-coding-agent CHANGELOG.md:85-87,374-376,436-441`: Breaking Changes sections at 1.0.3, 0.87.0 and 0.86.0 touch providers, tool-call shapes and the `before_agent_start`/tool-change semantics the extension uses for prompt injection (prompt.ts) and setActiveTools (index.ts:256)
+  - seeds: `c56`
+- `s36` — `challenge pass / migration lens: pi CHANGELOG 0.86.0 'ctx.modelRegistry.stream()'`: pi 1.1.0 lets an extension call a configured model directly (ctx.modelRegistry.stream / streamSimple) — the Super fallback tier (c37) can reuse it instead of hand-rolling an HTTP client
+- `s37` — `challenge pass / observability lens: associate/bench/walkstats.py; c32`: walkstats already aggregates latency and failure rates across walk.jsonl files; the spec records gate verdicts per call but nothing makes a degraded gate (Super tier or read-only) visible over time
+  - seeds: `c57`
+- `s38` — `challenge pass / secrets lens: c32 redaction, policy.json redaction, the decider being mesh-forwarded`: clean for the CLEF tier (c32 redacts before the post); not separately examined for the Super chat tier or for remember/workledger payloads — residual
+- `s39` — `challenge pass / overlooked-actors lens: culture.yaml (backend acp), CLAUDE.md audience, c42`: associate serves both the operator and mesh peers (c42); until now a peer could only make it read, so who asked did not matter; with c24 every peer request can reach a writer model and the spec names no trust boundary
+  - seeds: `q21` (question, resolved)
+- `s40` — `challenge pass / lenses examined`: examined: security, reversibility, concurrency, adjacent systems (eidetic, Orin hosting, pi-acp/culture), unstated assumptions (benchmarks), migration (pi changelog), observability, secrets, overlooked actors (mesh peers). Not examined: workledger-cli's design (its verbs don't exist yet), LiveCodeBench/BFCL/MMMU licensing and run cost, colleague's reaction to the lobes associate role no longer having a resident, and the senses checkpoint question (v6). This is a record of what was looked at, not a claim that nothing else is missing
 
 ## Decisions
 
@@ -178,6 +217,10 @@
 - senses uses tools — the embodiment repo is the evidence; it is not parked
 - safety-gate fallback chain: CLEF decider first; when CLEF is unreachable, ask Super; when Super is also unreachable, allow read-only actions only
 - the benchmark suites are BFCL (tool calling), MMMU (vision) and LiveCodeBench, and the bench must accept more public suites in future — adding a suite is a data/config addition, not a rewrite
+- bolt and cortex may use every mutating tool and command (q17: 'all'); the CLEF safety gate is the control on what actually runs
+- mutating runs use a git worktree by default, and the work is then merged to main
+- accepted the q19 recommendation: model-written memory goes to associate's own scope with the destination pinned explicitly, and content read from the web or an untrusted repo is not remembered, or is tagged with its provenance
+- any requester may trigger a mutating run — the operator and every mesh peer (q21: 'all')
 
 ## Hard questions
 
@@ -188,6 +231,7 @@
 - the upgrade rule says bump only after bench passes on the new version: is the 1.1.0 bump gated on the existing in-house bench (now), or on the new public-benchmark run (later)? (resolved: user: nothing gates the bump — get it working, then benchmark (c29))
 - the Nemotron 3.5 Lightning lane (lobes role 'associate', forbidden `repo_action` + `code_authoring` in lobes roles.py:554-559) is not in your model list — does it stay as a model here, and if so is it allowed to change like the others or does it keep lobes' restriction? (resolved: user: Lightning is out, bolt replaces it (c30))
 - with repo changes allowed for all but senses, do `final_decision` and `security_decision` stay forbidden for every model (claim c17), or only where lobes forbids them (cortex holds `final_authority` in lobes roles.py:326-353)? (resolved: user: CLEF with prebuilt questions makes sure actions are safe (c31))
+- who may trigger a mutating run? On the mesh, any peer that can message associate over IRC would now cause bolt/cortex to write — should mutation require the operator (headless associate run, or an allowlisted nick), with mesh requests defaulting to read-only? (resolved: user: all (c61))
 - workledger-cli today has only introspection verbs (whoami/learn/explain/overview/doctor/cli overview) and no ledger verbs, and its binary is not on PATH — does this work include building workledger's append/list verbs in the workledger-cli repo, or wait for them to land there first? (resolved: user: yes — add what is needed in workledger-cli and PR it (c33))
 - which concrete suites: is tool calling BFCL (v3/v4) and vision MMMU (or MMMU-Pro / another)? LiveCodeBench is a code-generation benchmark — which models run it (all that may change code, i.e. not senses)? (resolved: user: tool calling is BFCL, vision is MMMU; LiveCodeBench as named)
 - risk: LiveCodeBench grades by executing generated code and the suites download datasets — both need a sandbox and network, which the CI boundary (c19) keeps out of CI; benchmark runs are operator-side only
@@ -196,11 +240,16 @@
 - risk: the orin-decider shape is DECLARED/UNVALIDATED per lobes #108 and the decider never co-resides with a heavy lobe on the Orin — gate latency and availability are unmeasured
 - risk: until Super VL arrives (v5), the chain is effectively CLEF -> read-only: any CLEF outage makes bolt and cortex read-only
 - risk: Super answering a safety question by chat is a generator judging, not a calibrated scorer — its answers are not comparable to CLEF's probabilities, so the threshold for the Super tier needs its own definition
+- should mutating runs be isolated in a per-run worktree (reversible, hand back a branch), or write the operator's checkout in place (simpler, irreversible without git)? (resolved: user: worktrees by default, then merge to main (c59))
+- where should model-written memory live — associate's own scope in the private home store, associate's repo, or the examined repo's .eidetic? And does content a model read from the web or an untrusted repo get remembered at all (persistent prompt-injection across the mesh)? (resolved: user: yes — recommendation accepted (c60))
+- is model-level public benchmarking enough, or should a suite also run through associate itself (e.g. BFCL's tool calls executed via the Pi extension) so the harness is measured, not just the model?
+- risk: q17 + q21 together: any mesh peer can trigger any command, including git push and network-mutating ones, and the CLEF gate (one model, prebuilt questions, a threshold) is the only control between a peer's message and that command; a gate false-negative is not caught by any second layer
 
 ## Open parks
 
 - [unknown_nonblocking] lobes catalog.py:1136 marks worker (bolt) 'configured', no live boot, yet the user-level Pi config defaults to it — whether the bolt lane is actually served today is unverified
 - [unknown_nonblocking] embodiment's progress doc names senses as Gemma 4 26B A4B (docs/plans/2026-09-21-realtime-embodiment-app-progress.md:173) while lobes profiles/builtin/spark.toml:69 and next-cycle-candidates.md:153 name gemma-4-12B — which checkpoint serves senses on which box is unverified; associate addresses the role, so it only matters for benchmark row stamps
+- [unknown_nonblocking] redaction is specified for the CLEF post only; whether the Super fallback prompt, eidetic remember records and workledger entries go through the same redaction is not stated
 - [follow_up] CLAUDE.md:50 and :457 still say no pi adapter is registered, but associate/harness/pi.py is registered (harness/`__init__.py`:38-40) — stale doc
 - [follow_up] Nemotron 3.5 Super VL joins once lobes serves it — the models config, prompt and sub-agent wiring for Super land in a follow-up
 
@@ -208,3 +257,5 @@
 
 - [unknown_blocking] Nemotron 3.5 Super VL is not in lobes' catalog, roles or shapes — lobes spec 2026-10-17-vllm-0-31-0-fleet.md:81 defers it to its own frame; a standalone endpoint exists only in the user-level Pi models.json (nvidia/nemotron-3.5-super-vl-120b-a12b, a separate local port, reasoning on). Its lobes role name, host and tool parser are unknown, and the no-lobes-change boundary means associate cannot address it by role until lobes adds it — resolved: user: Super VL waits for the model to arrive (lobes to serve it); out of this work's scope until then
 - [unknown_blocking] senses (gemma-4-12B) advertises tools:true but has no `tool_use` responsibility in lobes (docs/colleague-stack.md:214,541-559) — what a 'senses-aligned tool set' is (perception-only? image read + describe?) is undecided — resolved: user: senses uses tools, per ../embodiment (Gwen runs senses with a live tool registry; measured tool calls) — read-only tool set plus memory (c35)
+- [unknown_blocking] CLEF runs in the orin-decider shape, which never co-resides with a heavy lobe on the Orin (lobes docs/decider.md ~190) — the Orin currently runs orin-associate for the Lightning lane; with Lightning out (c30) the Orin may be free to switch shapes, but that is a lobes deployment change outside this repo (c18) and nothing in the spec owns it — resolved: user: the Orin runs CLEF (orin-decider shape)
+- [unknown_blocking] the mesh resident's model is chosen by pi-acp: it calls setModel only when the ACP client requests a modelId (pi-acp dist/index.js:2800-2814), otherwise pi's user-level default provider applies (today 'bolt' in the user-level Pi settings) — I could not find where culture's ACP client sends culture.yaml model:, so whether changing it to worker reaches the resident is unverified — resolved: user: accepted — verifying that the mesh resident runs the model culture.yaml names is the plan's first task; until then the user-level Pi default (bolt) applies
