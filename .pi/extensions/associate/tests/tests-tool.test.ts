@@ -19,7 +19,7 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 import { execFileSync } from "node:child_process";
-import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, unlinkSync, writeFileSync } from "node:fs";
+import { existsSync, lstatSync, mkdirSync, mkdtempSync, readFileSync, readlinkSync, rmSync, symlinkSync, unlinkSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { findRepoContractDir, loadContract } from "../lib/contract.ts";
@@ -28,6 +28,7 @@ import { loadExtension } from "./load-extension.ts";
 import {
   childEnvironment,
   createTestsTool,
+  parsePorcelainZ,
   parseTestCommands,
   TEST_COMMANDS_ENV,
   TESTS_TOOL_NAME,
@@ -94,6 +95,35 @@ test("parseTestCommands: a JSON array of non-empty argv arrays", () => {
     assert.deepEqual(parsed.commands, [], bad);
     assert.ok(parsed.problem, `${bad} must be reported as malformed`);
   }
+});
+
+// ------------------------------------------------------- the porcelain parser
+
+test("parsePorcelainZ returns both sides of a rename or copy entry", () => {
+  // Porcelain v1 with -z: "XY <to>\0<from>\0" — the destination comes first
+  // and the source is the next NUL field (git-status(1), "-z").
+  const out = Buffer.from(
+    "M  tracked.txt\0R  new.txt\0old.txt\0C  dup.txt\0copy.txt\0 D gone.txt\0",
+  );
+  assert.deepEqual(parsePorcelainZ(out), [
+    "tracked.txt",
+    "new.txt",
+    "old.txt",
+    "dup.txt",
+    "copy.txt",
+    "gone.txt",
+  ]);
+});
+
+test("parsePorcelainZ: a rename whose source field is missing still yields the target", () => {
+  // An R/C entry's source path is the next NUL field; when it is absent the
+  // target is still reported and nothing is pasted in from a later field.
+  assert.deepEqual(parsePorcelainZ(Buffer.from("R  new.txt\0")), ["new.txt"]);
+  assert.deepEqual(parsePorcelainZ(Buffer.from("R  new.txt\0old.txt\0 M other\0")), [
+    "new.txt",
+    "old.txt",
+    "other",
+  ]);
 });
 
 test("childEnvironment drops every ASSOCIATE_* variable and keeps the rest", () => {
@@ -325,6 +355,60 @@ test("a clean checkout comes back clean after a test run that dirties it, and no
     const clean = await tool(r, [js("0")]).execute("c", {});
     assert.deepEqual(payload(clean).reverted, []);
   } finally {
+    r.dispose();
+  }
+});
+
+test("a symlink that was dirty before the test run is restored as a symlink", async () => {
+  const r = repo();
+  try {
+    const c = r.checkout;
+    // The model swapped the tracked file for a symlink before the run.
+    unlinkSync(join(c, "tracked.txt"));
+    symlinkSync("elsewhere", join(c, "tracked.txt"));
+
+    const out = payload(
+      await tool(r, [
+        js(
+          "const fs = require('fs'); fs.unlinkSync('tracked.txt'); fs.writeFileSync('tracked.txt', 'run content'); process.exit(0);",
+        ),
+      ]).execute("c", {}),
+    );
+    assert.equal(out.ok, true, JSON.stringify(out));
+    assert.deepEqual(out.reverted, ["tracked.txt"]);
+
+    const stat = lstatSync(join(c, "tracked.txt"));
+    assert.ok(stat.isSymbolicLink(), "tracked.txt was not restored as a symlink");
+    assert.equal(readlinkSync(join(c, "tracked.txt")), "elsewhere");
+  } finally {
+    r.dispose();
+  }
+});
+
+test("restore_failed when a dirty-before path cannot be put back", { skip: process.getuid?.() === 0 ? "root ignores directory permissions" : false }, async () => {
+  const r = repo();
+  const locked = join(r.checkout, "work");
+  try {
+    const c = r.checkout;
+    // The model wrote a new file before the run.
+    mkdirSync(locked);
+    writeFileSync(join(locked, "draft.txt"), "the model's draft\n");
+
+    // The test run deletes it and makes its directory read-only, so the
+    // saved bytes cannot be written back.
+    const out = payload(
+      await tool(r, [
+        js("const fs = require('fs'); fs.unlinkSync('work/draft.txt'); fs.chmodSync('work', 0o500); process.exit(0);"),
+      ]).execute("c", {}),
+    );
+    assert.equal(out.ok, false, JSON.stringify(out));
+    assert.equal(out.code, "restore_failed", JSON.stringify(out));
+    assert.ok(
+      out.detail.restore_errors.some((e: any) => e.path === "work/draft.txt"),
+      "the restore error names the path that could not be put back",
+    );
+  } finally {
+    if (existsSync(locked)) execFileSync("chmod", ["700", locked]);
     r.dispose();
   }
 });
