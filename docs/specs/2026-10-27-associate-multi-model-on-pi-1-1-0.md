@@ -74,7 +74,7 @@
   - instruction: uv run associate doctor and steward doctor both pass; grep for Lightning/Nemotron-3.5-Lightning returns only CHANGELOG history
   - honesty: associate doctor and steward doctor pass, and CLAUDE.md no longer says no pi adapter is registered or that Lightning is the lane
 - a mutating run works in its own git worktree under the repo-owned worktree root by default, and the result is then merged to main; a bad write before the merge is undone by removing the worktree
-  - instruction: reuse the ../.worktrees.<repo>/ convention from CLAUDE.md; test that a bolt write outside the run's worktree is refused
+  - instruction: reuse the `../.worktrees.<repo>/` convention from CLAUDE.md; test that a bolt write outside the run's worktree is refused
   - honesty: a mutating run's writes appear only inside its worktree until the merge; removing the worktree before the merge leaves main and the operator's checkout untouched
 - parallel sub-agents never share a writable checkout: at most one writing child per checkout at a time, or each writing child gets its own worktree; senses children (read-only) may run in parallel freely
   - honesty: a test spawning two writing bolt children against one checkout shows them serialised or given separate worktrees, never writing concurrently to the same tree
