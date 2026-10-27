@@ -59,7 +59,10 @@
  *
  * Limits named here, not in the contract: the stderr tail kept for an error
  * and the largest single stdout line parsed. The hand-back budget and the
- * child wall clock are the contract's (`policy.budgets.spawn`).
+ * child wall clock are the contract's (`policy.budgets.spawn`); the wall clock
+ * is capped by the parent run's own deadline (`ASSOCIATE_RUN_DEADLINE`, set by
+ * the Python launcher from `--timeout`) minus a named safety margin, counting
+ * any time a writing child spent queued for the checkout.
  *
  * Node builtins only; no npm dependency (spec c44). Never a shell.
  */
@@ -114,6 +117,22 @@ const MAX_TASK_CHARS = 100_000;
 
 /** After a kill, how long to wait for the pipes to close before giving up on them. */
 const KILL_GRACE_MS = 5_000;
+
+/**
+ * The parent run's deadline, absolute epoch milliseconds, set by the Python
+ * launcher from its `--timeout` (it kills the parent pi then). Never inherited
+ * from the operator: the launcher sets it or removes it. Snapshotted at load.
+ */
+export const RUN_DEADLINE_ENV = "ASSOCIATE_RUN_DEADLINE";
+
+/**
+ * Run time held back from a child's wall clock: room for the kill grace, the
+ * parent reading the child's result and still finishing before its own kill.
+ */
+export const DEADLINE_SAFETY_MARGIN_MS = 30_000;
+
+/** A child with less wall clock than this is refused rather than started to be killed. */
+export const MIN_CHILD_WALL_MS = 30_000;
 
 type Env = Record<string, string | undefined>;
 
@@ -387,6 +406,16 @@ export interface SpawnDeps {
   recordChild?: (link: ChildLink) => ChildEntry;
   /** Override the contract's child wall clock (tests). */
   timeoutMs?: number;
+  /** The clock the run deadline is measured with; `Date.now` by default (tests). */
+  now?: () => number;
+}
+
+/** The snapshotted deadline, or undefined when none (or a malformed one) was set. */
+function runDeadline(env: Env): number | undefined {
+  const raw = env[RUN_DEADLINE_ENV]?.trim();
+  if (!raw) return undefined;
+  const value = Number(raw);
+  return Number.isFinite(value) && value > 0 ? value : undefined;
 }
 
 type Result = { content: Array<{ type: "text"; text: string }>; details: unknown };
@@ -414,7 +443,13 @@ export function createSpawnTool(ctx: AssociateContext, deps: SpawnDeps = {}) {
   const allowed: string[] = [...(parent.entry?.may_spawn ?? [])];
   const launch = deps.launch ?? defaultLauncher;
   const which = deps.which ?? whichOnPath;
-  const budget = spawnBudget(ctx);
+  const contractBudget = spawnBudget(ctx);
+  const budget =
+    contractBudget && deps.timeoutMs !== undefined && deps.timeoutMs > 0
+      ? { ...contractBudget, timeoutMs: deps.timeoutMs }
+      : contractBudget;
+  const deadline = runDeadline(env);
+  const now = deps.now ?? Date.now;
   const redaction: RedactionFilter = compileRedaction(ctx.policy);
   let sequence = 0;
 
@@ -427,17 +462,49 @@ export function createSpawnTool(ctx: AssociateContext, deps: SpawnDeps = {}) {
       ),
     );
 
+  /**
+   * This child's wall clock: the contract's, capped by what is left of the
+   * parent run (measured now, so time spent queued for the writer lock
+   * counts), or a refusal when too little is left for a child to finish.
+   */
+  function childLimits(
+    model: string,
+    limits: { maxChars: number; timeoutMs: number },
+    waitedMs: number,
+  ): { maxChars: number; timeoutMs: number; capped: boolean } | Result {
+    if (deadline === undefined) return { ...limits, capped: false };
+    const left = deadline - now() - DEADLINE_SAFETY_MARGIN_MS;
+    if (left < MIN_CHILD_WALL_MS) {
+      return toolResult(
+        toolError(
+          "run_deadline",
+          `too little of this run is left to start a child (${Math.max(0, Math.floor(left))} ms after a ` +
+            `${DEADLINE_SAFETY_MARGIN_MS} ms safety margin; a child needs at least ${MIN_CHILD_WALL_MS} ms), ` +
+            "so it was not started: finish with what you have",
+          { child_model: model, remaining_ms: Math.max(0, Math.floor(left)), waited_ms: waitedMs, source: RUN_DEADLINE_ENV },
+        ),
+      );
+    }
+    return left < limits.timeoutMs
+      ? { ...limits, timeoutMs: Math.floor(left), capped: true }
+      : { ...limits, capped: false };
+  }
+
   async function launchChild(
     model: string,
     child: ModelEntry,
     task: string,
     signal: AbortSignal | undefined,
     piPath: string,
-    limits: { maxChars: number; timeoutMs: number },
+    budgetLimits: { maxChars: number; timeoutMs: number },
+    waitedMs = 0,
   ): Promise<Result> {
     if (signal?.aborted) {
       return toolResult(toolError("child_aborted", "the spawn was cancelled before the child started", { child_model: model }));
     }
+    const fitted = childLimits(model, budgetLimits, waitedMs);
+    if ("content" in fitted) return fitted;
+    const limits = fitted;
     sequence += 1;
     const childSession = sanitizeSessionId(
       `${ctx.session.sessionId}-${model}-${sequence}-${randomBytes(4).toString("hex")}`,
@@ -534,7 +601,12 @@ export function createSpawnTool(ctx: AssociateContext, deps: SpawnDeps = {}) {
       return failure("child_failed", `the child could not be run: ${redaction.apply(outcome.error)}`);
     }
     if (outcome.timedOut) {
-      return failure("child_timeout", `the child exceeded its ${limits.timeoutMs} ms wall clock and was killed`);
+      return failure(
+        "child_timeout",
+        `the child exceeded its ${limits.timeoutMs} ms wall clock` +
+          (limits.capped ? " (capped by this run's own deadline)" : "") +
+          " and was killed",
+      );
     }
     if (outcome.aborted) return failure("child_aborted", "the spawn was cancelled and the child was killed");
     if (outcome.exitCode !== 0) {
@@ -635,9 +707,49 @@ export function createSpawnTool(ctx: AssociateContext, deps: SpawnDeps = {}) {
       );
     }
 
-    const go = () => launchChild(model, child, task, signal, piPath, budget);
-    // A child that may mutate holds the checkout for its whole run; readers never wait.
-    return child.may_mutate === true ? withWriterLock(ctx.checkoutRoot, go) : go();
+    // Refuse up front when the run is already too short; nothing is queued or linked.
+    const early = childLimits(model, budget, 0);
+    if ("content" in early) return early;
+    if (child.may_mutate !== true) return launchChild(model, child, task, signal, piPath, budget);
+
+    // A child that may mutate holds the checkout for its whole run; readers never
+    // wait. The wait counts against the run deadline: a writer still queued once
+    // no child could finish in time gives up its place and is never started.
+    const queuedAt = now();
+    let gaveUp = false;
+    let started = false;
+    const queued = withWriterLock(ctx.checkoutRoot, async (): Promise<Result | undefined> => {
+      if (gaveUp) return undefined;
+      started = true;
+      return launchChild(model, child, task, signal, piPath, budget, now() - queuedAt);
+    });
+    if (deadline === undefined) return (await queued)!;
+    const startBy = deadline - DEADLINE_SAFETY_MARGIN_MS - MIN_CHILD_WALL_MS;
+    let timer: ReturnType<typeof setTimeout> | undefined;
+    const expired = new Promise<"expired">((resolveExpired) => {
+      timer = setTimeout(() => resolveExpired("expired"), Math.max(0, startBy - now()));
+    });
+    try {
+      const winner = await Promise.race([queued, expired]);
+      if (winner !== "expired") return winner!;
+      // A child that already holds the lock runs to its own (capped) wall clock.
+      if (started) return (await queued)!;
+      gaveUp = true;
+      return expiredRefusal(model, now() - queuedAt);
+    } finally {
+      if (timer) clearTimeout(timer);
+    }
+  }
+
+  function expiredRefusal(model: string, waitedMs: number): Result {
+    return toolResult(
+      toolError(
+        "run_deadline",
+        `the run's deadline came while this writing child was still waiting ${waitedMs} ms for the checkout, ` +
+          "so it was not started: finish with what you have",
+        { child_model: model, remaining_ms: 0, waited_ms: waitedMs, source: RUN_DEADLINE_ENV },
+      ),
+    );
   }
 
   const childList = allowed.length ? allowed.join(", ") : "none";

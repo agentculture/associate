@@ -1142,3 +1142,51 @@ def test_the_run_result_says_how_the_run_ended(
     payload = json.loads(capsys.readouterr().out)
     assert payload["final_reply"] == ""
     assert payload["stop_reason"] is None
+
+
+# ------------------------------------- r3: the run deadline reaches the extension
+
+
+def test_the_run_deadline_reaches_the_extension(tmp_path: Path):
+    """spawn_subagent caps each child by the parent run's own deadline."""
+    harness = PiHarness(env={}, timeout=120.0)
+    harness.start(
+        checkout=tmp_path, contract_dir=tmp_path, session_id="r3", export_dir=tmp_path / "runs"
+    )
+    before = time.time() * 1000
+    deadline = int(harness.environment(_task(tmp_path))["ASSOCIATE_RUN_DEADLINE"])
+    after = time.time() * 1000
+    assert before + 120_000 - 1 <= deadline <= after + 120_000 + 1
+
+
+def test_an_inherited_run_deadline_is_never_passed_through(tmp_path: Path):
+    """A stale ASSOCIATE_RUN_DEADLINE is overwritten by this run's own, or removed."""
+    stale = {"ASSOCIATE_RUN_DEADLINE": "99999999999999"}
+    harness = _bound_harness(tmp_path, stale)
+    assert harness.environment(_task(tmp_path))["ASSOCIATE_RUN_DEADLINE"] != "99999999999999"
+
+    unbounded = PiHarness(env=stale, timeout=0)
+    unbounded.start(
+        checkout=tmp_path, contract_dir=tmp_path, session_id="r3", export_dir=tmp_path / "runs"
+    )
+    assert "ASSOCIATE_RUN_DEADLINE" not in unbounded.environment(_task(tmp_path))
+
+
+def test_served_model_id_default_comes_from_the_contract(monkeypatch: pytest.MonkeyPatch):
+    """No hand-rolled endpoint: the registry's default_base_url is the fallback."""
+    import urllib.request
+
+    from associate import contract
+
+    registry = json.loads(json.dumps(contract.load_models()))
+    registry["endpoint"]["default_base_url"] = "http://moved.invalid:9/v1"
+    monkeypatch.setattr(contract, "load_models", lambda: registry)
+    seen: list[str] = []
+
+    def fake_urlopen(request, timeout=None):
+        seen.append(request.full_url)
+        raise OSError("not reached")
+
+    monkeypatch.setattr(urllib.request, "urlopen", fake_urlopen)
+    assert PiHarness(env={}).served_model_id() is None
+    assert seen == ["http://moved.invalid:9/v1/models"]
