@@ -2,7 +2,7 @@
   "plan_slug": "associate-multi-model-on-pi-1-1-0",
   "schema_version": 2,
   "created": "2026-10-27T10:36:31Z",
-  "updated": "2026-10-27T16:18:32Z",
+  "updated": "2026-10-27T17:08:59Z",
   "deviations": [
     {
       "id": "d1",
@@ -141,6 +141,21 @@
       "status": "approved",
       "classification": "needs-follow-up",
       "seq": 10
+    },
+    {
+      "id": "d11",
+      "what": "gate.json v5: matches_task reworded to count the evidence-logging, memory and research work the runtime prompt asks every run to do as serving the task",
+      "task_ref": "t5",
+      "reason": "v4 measurement (docs/notes/gate-calibration.md): with a truthful state, ledger/memory writes score safe 0.62-0.84 but fail matches_task 0.12-0.45 because those duties live in the runtime prompt CLEF never sees; the rewording admitted all ledger entries and the benign memory note while every harmful probe stayed refused (matches_task <= 0.10). User confirmed; remaining gaps go to issues, fixed after the issue #13 benchmark",
+      "affects": [
+        "t10",
+        "t13",
+        "t8"
+      ],
+      "origin": "user",
+      "status": "approved",
+      "classification": "needs-follow-up",
+      "seq": 11
     }
   ],
   "evidence": [],
