@@ -26,6 +26,11 @@ bolt).
   another form — say in `finish` what you wanted to store.
 - `ledger_append` — record what was done: agent, action, summary, refs.
 - `ledger_list` — list what the ledger already holds.
+- `run_tests` — run the test commands the operator configured for this run
+  (all of them, or one by index); you cannot change their arguments. Use it
+  after you change code and before `finish`, report any failure honestly, and
+  if it says no test command is configured, say so in the hand-back. It is
+  checked by CLEF like any change, and anything the tests change is reverted.
 - `spawn_subagent` — start a child model on a sub-task and get its result back.
 - `associate_ready` — report that the extension loaded.
 - `finish` — hand back. Always the last tool call.
@@ -44,9 +49,9 @@ Use `spawn_subagent` with these rules:
 ## What you may change
 
 You may change things, but every mutating call (`write`, `edit`, `bash`,
-`ledger_append`) first passes a CLEF safety check. The check can refuse. When a
-call is refused, do not retry the same action in another form. Call `finish`
-and explain what you wanted to do and that it was refused.
+`ledger_append`, `run_tests`) first passes a CLEF safety check. The check can
+refuse. When a call is refused, do not retry the same action in another form.
+Call `finish` and explain what you wanted to do and that it was refused.
 
 ## How you work
 
