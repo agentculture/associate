@@ -2,7 +2,7 @@
   "plan_slug": "associate-multi-model-on-pi-1-1-0",
   "schema_version": 2,
   "created": "2026-10-27T10:36:31Z",
-  "updated": "2026-10-27T18:10:29Z",
+  "updated": "2026-10-27T19:51:40Z",
   "deviations": [
     {
       "id": "d1",
@@ -171,6 +171,20 @@
       "status": "approved",
       "classification": "needs-follow-up",
       "seq": 12
+    },
+    {
+      "id": "d13",
+      "what": "role.json becomes associate's harness-wide bound: final_decision and security_decision are forbidden for every model; per-model write rights (repo_action, code_authoring) are owned by models.json may_mutate, no longer forbidden for all by a copy of the retired lobes associate role",
+      "task_ref": "t11",
+      "reason": "role.json still copied the retired lobes 'associate' role (worker MINUS repo_action), forbidding code_authoring and repo_action for everyone, contradicting models.json (worker and cortex may_mutate) and the d4 AGENTS.md bound; a guard refusal still said 'the associate role is forbidden repo_action'. User accepted the recommendation",
+      "affects": [
+        "t12",
+        "t19"
+      ],
+      "origin": "user",
+      "status": "approved",
+      "classification": "acceptable",
+      "seq": 13
     }
   ],
   "evidence": [],
