@@ -406,6 +406,7 @@ class PiHarness(Harness):
         continue_from: str | None = None,
         timeout: float = 900.0,
         model: str | None = None,
+        untrusted_checkout: bool = False,
         executable: str | None = None,
         env: dict[str, str] | None = None,
         warn: Callable[[str], None] | None = None,
@@ -414,6 +415,7 @@ class PiHarness(Harness):
         self._continue_from = continue_from
         self._timeout = timeout
         self._model_key = model
+        self._untrusted_checkout = untrusted_checkout
         self._executable = executable
         self._base_env = dict(env) if env is not None else None
         self._warn = warn if warn is not None else _warn
@@ -672,13 +674,20 @@ class PiHarness(Harness):
           so it loads in **any** checkout, not only one that happens to carry
           its own ``.pi/``. ``--approve`` stays: the examined checkout may
           still carry project files pi needs to trust.
+        * ``--no-approve --no-extensions`` instead of ``--approve`` when the
+          run is ``untrusted_checkout`` (risk r16, deviation d5, opt-in): pi
+          then ignores the examined checkout's ``.pi`` settings, extensions and
+          MCP config, and loads no built-in extension, so the only extension
+          that runs is the one ``-e`` names. Off by default by the operator's
+          decision.
         """
+        trust = ["--no-approve", "--no-extensions"] if self._untrusted_checkout else ["--approve"]
         args = [
             "-p",
             "--mode",
             "json",
             "--no-session",
-            "--approve",
+            *trust,
             "--no-context-files",
             "--no-mcp",
         ]

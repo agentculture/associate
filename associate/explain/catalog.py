@@ -153,6 +153,13 @@ no key the extension registers no provider, so pi's own default model applies
 and the launcher says so on stderr. An unknown `--model` (the error lists the
 registry's models) or a `pending` one exits `1`.
 
+`--untrusted-checkout` (off by default) launches pi with `--no-approve
+--no-extensions` instead of `--approve`: the examined checkout's own `.pi`
+settings, extensions and MCP config are ignored and no built-in pi extension
+loads, so associate's extension (named with `-e`) is the only one that runs.
+Use it for a repo you do not control, and when associate examines a worktree
+of itself.
+
 ## Output
 
 `walk_path`, `statements_path`, `statements_md_path`, `export_dir`, `outcome`
