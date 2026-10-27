@@ -75,6 +75,7 @@ import re
 import shutil
 import subprocess  # nosec B404 - fixed argv, shell=False; the whole point of c13
 import sys
+import time
 from pathlib import Path
 from typing import Any, Callable, Iterable, Sequence
 
@@ -111,9 +112,6 @@ SENTINEL_TOOL = "associate_ready"
 #: Default export root name when the contract names none — mirrors
 #: ``lib/session.ts``'s ``DEFAULT_EXPORT_ROOT_NAME`` so both sides agree.
 DEFAULT_EXPORT_ROOT_NAME = ".associate-runs"
-
-#: The lobes gateway; the same documented default ``lib/provider.ts`` carries.
-DEFAULT_BASE_URL = "http://localhost:8001/v1"
 
 #: The first (and, for a readiness probe, only) turn.
 READINESS_PROMPT = (
@@ -818,6 +816,16 @@ class PiHarness(Harness):
         else:
             env.pop("ASSOCIATE_ISOLATION", None)
 
+        # r3: the run's own deadline (absolute epoch ms), so spawn_subagent
+        # never starts a child that would outlive the pi process this
+        # launcher kills at --timeout. Computed here, before the preflight,
+        # so it is never later than the task turn's real kill time. Like
+        # isolation, an inherited value is never passed through.
+        if self._timeout and self._timeout > 0:
+            env["ASSOCIATE_RUN_DEADLINE"] = str(int(time.time() * 1000 + self._timeout * 1000))
+        else:
+            env.pop("ASSOCIATE_RUN_DEADLINE", None)
+
         # d12: the operator's test commands, for the extension's run_tests
         # tool. Same rule as isolation — only the task may name them, so a
         # stale value in the operator's environment never reaches the model.
@@ -980,7 +988,7 @@ class PiHarness(Harness):
         import urllib.request
 
         env = self._base_env if self._base_env is not None else os.environ
-        base = (env.get("ASSOCIATE_BASE_URL") or DEFAULT_BASE_URL).strip().rstrip("/")
+        base = (env.get("ASSOCIATE_BASE_URL") or contract.default_base_url()).strip().rstrip("/")
         url = f"{base}/models" if base.endswith("/v1") else f"{base}/v1/models"
 
         # The scheme is checked before a Request is built, so no file:// or

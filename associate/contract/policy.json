@@ -82,7 +82,7 @@
       "max_output_chars": 25000
     },
     "spawn": {
-      "$comment": "spawn_subagent (plan t16): max_output_chars bounds the child's hand-back plus final text returned to the parent; timeout_ms is one child's wall clock (the Python harness's default run timeout, 900 s), after which its process group is killed.",
+      "$comment": "spawn_subagent (plan t16): max_output_chars bounds the child's hand-back plus final text returned to the parent; timeout_ms is one child's wall clock, after which its process group is killed; spawn_subagent caps it further at what is left of the parent run (ASSOCIATE_RUN_DEADLINE, set by the Python harness from its --timeout) minus a safety margin, so a child never outlives its parent.",
       "max_output_chars": 25000,
       "timeout_ms": 900000
     }

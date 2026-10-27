@@ -32,7 +32,10 @@ import {
   createSpawnTool,
   defaultLauncher,
   piTrustFlags,
+  DEADLINE_SAFETY_MARGIN_MS,
+  MIN_CHILD_WALL_MS,
   PI_TRUST_ENV,
+  RUN_DEADLINE_ENV,
   SPAWN_TOOL_NAME,
   type LaunchOutcome,
   type LaunchSpec,
@@ -445,6 +448,135 @@ test("trust: an untrusted (or unknown-trust) parent's child gets --no-approve --
     } finally {
       r.dispose();
     }
+  }
+});
+
+// ------------------------------------------- the parent run's deadline (r3)
+
+const POLICY_TIMEOUT_MS = (CONTRACT.policy.budgets as any).spawn.timeout_ms as number;
+
+test("deadline: with no run deadline the child gets the contract's wall clock", async () => {
+  const r = rig();
+  try {
+    const launcher = fakeLauncher();
+    await run(tool(r, launcher), { model: "senses", task: "read" });
+    assert.equal(launcher.specs[0]!.timeoutMs, POLICY_TIMEOUT_MS);
+  } finally {
+    r.dispose();
+  }
+});
+
+test("deadline: SpawnDeps.timeoutMs overrides the contract's wall clock", async () => {
+  const r = rig();
+  try {
+    const launcher = fakeLauncher();
+    await run(tool(r, launcher, { timeoutMs: 1234 }), { model: "senses", task: "read" });
+    assert.equal(launcher.specs[0]!.timeoutMs, 1234);
+  } finally {
+    r.dispose();
+  }
+});
+
+test("deadline: the run deadline caps the child's wall clock, minus the safety margin", async () => {
+  const now = 1_000_000;
+  const remaining = 200_000;
+  const r = rig("cortex", { [RUN_DEADLINE_ENV]: String(now + remaining) });
+  try {
+    const launcher = fakeLauncher();
+    const out = await run(tool(r, launcher, { now: () => now }), { model: "senses", task: "read" });
+    assert.equal(out.ok, true, JSON.stringify(out));
+    assert.ok(remaining - DEADLINE_SAFETY_MARGIN_MS < POLICY_TIMEOUT_MS);
+    assert.equal(launcher.specs[0]!.timeoutMs, remaining - DEADLINE_SAFETY_MARGIN_MS);
+  } finally {
+    r.dispose();
+  }
+});
+
+test("deadline: the deadline is snapshotted at load, not re-read from a later env", async () => {
+  const now = 1_000_000;
+  const r = rig("cortex", { [RUN_DEADLINE_ENV]: String(now + 200_000) });
+  try {
+    const launcher = fakeLauncher();
+    const t = tool(r, launcher, { now: () => now });
+    r.env[RUN_DEADLINE_ENV] = String(now + 10 * POLICY_TIMEOUT_MS);
+    await run(t, { model: "senses", task: "read" });
+    assert.equal(launcher.specs[0]!.timeoutMs, 200_000 - DEADLINE_SAFETY_MARGIN_MS);
+  } finally {
+    r.dispose();
+  }
+});
+
+test("deadline: time spent waiting for the writer lock counts against it", async () => {
+  let clock = 1_000_000;
+  const deadline = clock + 400_000;
+  const r = rig("cortex", { [RUN_DEADLINE_ENV]: String(deadline) });
+  try {
+    const base = fakeLauncher({ delayMs: 5 });
+    const launch: Launcher = async (spec, onLine) => {
+      const outcome = await base.launch(spec, onLine);
+      clock += 100_000; // the first writer runs 100 s of (fake) wall clock
+      return outcome;
+    };
+    const t = tool(r, { ...base, launch }, { now: () => clock });
+    const [a, b] = await Promise.all([
+      run(t, { model: "worker", task: "edit a" }),
+      run(t, { model: "worker", task: "edit b" }),
+    ]);
+    assert.equal(a.ok, true);
+    assert.equal(b.ok, true);
+    assert.equal(base.specs[0]!.timeoutMs, 400_000 - DEADLINE_SAFETY_MARGIN_MS);
+    assert.equal(base.specs[1]!.timeoutMs, 300_000 - DEADLINE_SAFETY_MARGIN_MS);
+  } finally {
+    r.dispose();
+  }
+});
+
+test("deadline: a spawn with too little run time left is refused and nothing starts", async () => {
+  const now = 1_000_000;
+  const r = rig("cortex", { [RUN_DEADLINE_ENV]: String(now + DEADLINE_SAFETY_MARGIN_MS + MIN_CHILD_WALL_MS - 1) });
+  try {
+    const launcher = fakeLauncher();
+    const out = await run(tool(r, launcher, { now: () => now }), { model: "senses", task: "read" });
+    assert.equal(out.ok, false);
+    assert.equal(out.error.code, "run_deadline", JSON.stringify(out));
+    assert.equal(launcher.specs.length, 0);
+    assert.equal(childLines(r.ctx.session.exportDir + "/" + WALK_FILENAME).length, 0);
+  } finally {
+    r.dispose();
+  }
+});
+
+test("deadline: a writer still queued when the run runs out of time is refused, never started", async () => {
+  // Real clock: the queued writer's start budget is ~150 ms; the first writer holds the lock 400 ms.
+  const r = rig("cortex", {
+    [RUN_DEADLINE_ENV]: String(Date.now() + DEADLINE_SAFETY_MARGIN_MS + MIN_CHILD_WALL_MS + 150),
+  });
+  try {
+    const launcher = fakeLauncher({ delayMs: 400 });
+    const t = tool(r, launcher);
+    const [a, b] = await Promise.all([
+      run(t, { model: "worker", task: "edit a" }),
+      run(t, { model: "worker", task: "edit b" }),
+    ]);
+    assert.equal(a.ok, true, JSON.stringify(a));
+    assert.equal(b.ok, false);
+    assert.equal(b.error.code, "run_deadline", JSON.stringify(b));
+    assert.equal(typeof b.detail.waited_ms, "number", JSON.stringify(b));
+    await new Promise((resolve) => setTimeout(resolve, 50));
+    assert.equal(launcher.specs.length, 1, "the refused writer was started after all");
+  } finally {
+    r.dispose();
+  }
+});
+
+test("deadline: a malformed deadline value falls back to the contract's wall clock", async () => {
+  const r = rig("cortex", { [RUN_DEADLINE_ENV]: "soon" });
+  try {
+    const launcher = fakeLauncher();
+    await run(tool(r, launcher), { model: "senses", task: "read" });
+    assert.equal(launcher.specs[0]!.timeoutMs, POLICY_TIMEOUT_MS);
+  } finally {
+    r.dispose();
   }
 });
 
