@@ -768,6 +768,12 @@ class PiHarness(Harness):
         # The REGISTRY KEY (not the wire id) tells the extension which
         # models.json entry is active.
         env["ASSOCIATE_MODEL"] = self.model_key()
+        # t16: the trust mode this run's pi was launched with, so the
+        # extension's spawn_subagent never launches a child MORE trusting than
+        # its parent. Always set from the launcher's own flag — an inherited
+        # value is overwritten, and the extension reads anything other than
+        # exactly "approve" (including its absence) as untrusted.
+        env["ASSOCIATE_PI_TRUST"] = "untrusted" if self._untrusted_checkout else "approve"
 
         # d8: the gate tells the decider where writes land. Only the task —
         # which ``associate run`` builds from the run it actually started —

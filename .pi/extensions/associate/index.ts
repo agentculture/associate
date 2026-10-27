@@ -115,6 +115,8 @@ export default async function (pi: ExtensionAPI) {
     model: model.key,
     lobes_role: model.entry?.lobes_role,
   });
+  // The spawn tool (tools/spawn.ts, plan t16) links each child walk here.
+  ctx.attachWalk(walk);
 
   // ------------------------------------------------------- statements record
   // Artifact B (spec c25/c31): the model's claims, each carrying the walk ids
