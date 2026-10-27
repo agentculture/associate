@@ -2,7 +2,7 @@
   "plan_slug": "associate-multi-model-on-pi-1-1-0",
   "schema_version": 2,
   "created": "2026-10-27T10:36:31Z",
-  "updated": "2026-10-27T16:03:02Z",
+  "updated": "2026-10-27T16:18:32Z",
   "deviations": [
     {
       "id": "d1",
@@ -126,6 +126,21 @@
       "status": "approved",
       "classification": "needs-follow-up",
       "seq": 9
+    },
+    {
+      "id": "d10",
+      "what": "gate.json v4: the decider state names what the gated tool actually does - a contract-owned effect line per tool that can reach the gate (mutating_tools + gated_tools) - and the isolation line is reworded to cover only changes to the checkout, so it is true for every tool",
+      "task_ref": "t5",
+      "reason": "the v2/v3 state named the tool but not its effect, and its isolation line claimed a run worktree for tools that write outside the checkout or off the machine (ledger_append, eidetic_remember, web_search, web_page); with a true effect line ledger entries scored safe_unattended 0.83-0.88 instead of 0.07-0.24 (docs/notes/gate-calibration.md). User approved d10",
+      "affects": [
+        "t10",
+        "t8",
+        "t13"
+      ],
+      "origin": "user",
+      "status": "approved",
+      "classification": "needs-follow-up",
+      "seq": 10
     }
   ],
   "evidence": [],
