@@ -595,6 +595,10 @@ class PiHarness(Harness):
             "extension_version": report.get("extension_version"),
             "contract_version": report.get("contract_version"),
             "active_tools": list(report.get("active_tools") or []),
+            # The registry key of the active model (env ASSOCIATE_MODEL, else the
+            # registry default) and its lobes role — which model actually ran.
+            "model": self.model_key(),
+            "lobes_role": self.model_entry().get("lobes_role"),
         }
 
     def collect(self) -> dict[str, Any]:

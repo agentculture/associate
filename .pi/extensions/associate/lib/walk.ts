@@ -81,6 +81,10 @@ export interface WalkRun {
   tool_calls: number;
   outcome: WalkOutcome;
   truncated: boolean;
+  /** The registry key of the active model, when one was resolved (env ASSOCIATE_MODEL, else the registry default). */
+  model?: string;
+  /** The active model's lobes role (its wire id), when a model was resolved. */
+  lobes_role?: string;
 }
 
 // ----------------------------------------------------------------- redaction
@@ -215,6 +219,10 @@ export interface WalkRecorderOptions {
   installExitHook?: boolean;
   /** Override read-tool recognition (a tool module may register its own name). */
   isReadTool?: (toolName: string) => boolean;
+  /** Registry key of the active model, when one was resolved (env ASSOCIATE_MODEL, else the registry default). */
+  model?: string;
+  /** The active model's lobes role (its wire id), when a model was resolved. */
+  lobes_role?: string;
 }
 
 /**
@@ -240,6 +248,8 @@ export class WalkRecorder {
   private unresolved = 0;
   private explicitOutcome?: WalkOutcome;
   private finalized?: WalkRun;
+  private readonly model?: string;
+  private readonly lobes_role?: string;
 
   constructor(options: WalkRecorderOptions) {
     this.walkPath = join(options.exportDir, WALK_FILENAME);
@@ -249,6 +259,8 @@ export class WalkRecorder {
     const caps = policySection(options.policy, "caps");
     this.inlineLimit = typeof caps.max_raw_chars === "number" ? caps.max_raw_chars : 0;
     this.startedAt = Date.now();
+    this.model = options.model;
+    this.lobes_role = options.lobes_role;
     this.nextId = countExistingEntries(this.walkPath) + 1;
 
     // A headless `pi -p` may exit without a `session_shutdown`; without this
@@ -385,6 +397,10 @@ export class WalkRecorder {
       tool_calls: this.toolCalls,
       outcome: this.explicitOutcome ?? outcome ?? (this.unresolved > 0 ? "error" : "ok"),
       truncated: this.anyTruncated,
+      // Only when resolved: the on-disk JSON drops undefined keys, and the
+      // returned record must equal the line written.
+      ...(this.model !== undefined ? { model: this.model } : {}),
+      ...(this.lobes_role !== undefined ? { lobes_role: this.lobes_role } : {}),
     };
     appendFileSync(this.walkPath, `${JSON.stringify({ run })}\n`, "utf8");
     this.finalized = run;
@@ -473,10 +489,13 @@ export function installWalkRecorder(
     on(event: string, handler: (event: Record<string, unknown>) => unknown): void;
   },
   ctx: AssociateContext,
+  options: { model?: string; lobes_role?: string } = {},
 ): WalkRecorder {
   const recorder = new WalkRecorder({
     exportDir: ctx.session.exportDir,
     policy: ctx.policy,
+    model: options.model,
+    lobes_role: options.lobes_role,
   });
 
   pi.on("tool_call", (event) => {

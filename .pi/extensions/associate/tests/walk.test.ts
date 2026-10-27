@@ -291,6 +291,34 @@ test("the final line is the run record with duration, calls, outcome and truncat
   });
 });
 
+test("the run record carries the active model's registry key and lobes role", () => {
+  withDir((dir) => {
+    const recorder = recorderIn(dir, { model: "worker", lobes_role: "worker" });
+    callAndResult(recorder, "read", { path: "a.ts" }, "a");
+    const run = recorder.finalize();
+
+    const lines = readLines(dir);
+    const record = lines[lines.length - 1].run as Record<string, unknown>;
+    assert.equal(record.model, "worker");
+    assert.equal(record.lobes_role, "worker");
+    assert.deepEqual(record, run);
+  });
+});
+
+test("the run record omits model and lobes_role when no model resolved", () => {
+  withDir((dir) => {
+    const recorder = recorderIn(dir);
+    callAndResult(recorder, "read", { path: "a.ts" }, "a");
+    const run = recorder.finalize();
+
+    const lines = readLines(dir);
+    const record = lines[lines.length - 1].run as Record<string, unknown>;
+    assert.equal(record.model, undefined);
+    assert.equal(record.lobes_role, undefined);
+    assert.deepEqual(record, run);
+  });
+});
+
 test("finalize is idempotent: two shutdown paths write one run record", () => {
   withDir((dir) => {
     const recorder = recorderIn(dir);
