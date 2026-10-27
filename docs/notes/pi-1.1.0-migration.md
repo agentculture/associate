@@ -33,9 +33,9 @@ difference.
    `streamSimple`/stream function), so pi's own adapter does the conversion;
    the one provider hook, `before_provider_request`, edits the serialized
    payload. On 1.1.0 the first request body carries the system prompt as a
-   leading `system` message, the declared tools, and the reasoning-off field
+   leading `system` message and the declared tools; reasoning is now per model
    (`tests/test_provider_wire.py::test_transcript_backed_prompt_and_tool_changes_reach_the_first_request`,
-   `::test_reasoning_off_reaches_the_wire`).
+   (`::test_reasoning_off_reaches_the_wire_for_that_model_only`).
 2. **`ToolCall.arguments` and `ToolResultMessage.details` restricted to
    JSON-compatible values**; `ToolResultMessage` became a conditional type and
    `JsonValue` arrays readonly.

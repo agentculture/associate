@@ -6,15 +6,13 @@ Three things the TypeScript unit tests cannot show on their own:
   ``ASSOCIATE_MODEL`` set, ``pi --list-models`` lists a provider named
   ``associate``; with them unset, it does not, and the extension prints a hint
   naming the three variables. The endpoint is therefore configuration, not code.
-* **c28 / h8** — reasoning-off is verified *on the wire*: a real request pi
-  sends is captured by the stdlib fake lane and the reasoning-off field the
-  ``before_provider_request`` hook injects is asserted on the captured body,
-  not inferred from the model's compat flags.
+* **per-model reasoning** — verified *on the wire*: a real request pi sends is
+  captured by the stdlib fake lane. A model whose registry entry declares no
+  reasoning override sends no ``chat_template_kwargs``; only an entry that says
+  ``off`` gets ``enable_thinking=false``.
 
-The live-lane half of h8 (does the served Nemotron lane actually *honour* the
-field?) is out of scope here — the lane was 503 through the gateway when this
-landed — and is recorded by the verification task. ``ASSOCIATE_REASONING_OFF``
-selects which field is sent so that check needs no code edit.
+``ASSOCIATE_MODEL`` is a registry key; the wire ``model`` is that entry's
+``lobes_role``.
 
 The fake lane answers plain JSON while pi's ``openai-completions`` path expects
 an SSE stream, so pi never finishes the turn. That is fine and deliberate: the
@@ -27,6 +25,7 @@ from __future__ import annotations
 
 import json
 import os
+import shutil
 import subprocess
 import time
 from pathlib import Path
@@ -47,7 +46,7 @@ _CONTROLLED = (
     "ASSOCIATE_BASE_URL",
     "ASSOCIATE_API_KEY",
     "ASSOCIATE_MODEL",
-    "ASSOCIATE_REASONING_OFF",
+    "ASSOCIATE_CONTRACT_DIR",
 )
 
 
@@ -96,14 +95,15 @@ def test_list_models_shows_the_provider_when_the_env_is_set(fake_lane: FakeLaneS
         _pi_env(
             ASSOCIATE_BASE_URL=f"{fake_lane.base_url}/v1",
             ASSOCIATE_API_KEY=DUMMY_KEY,
-            ASSOCIATE_MODEL="associate",
+            ASSOCIATE_MODEL="worker",
         ),
     )
 
     assert result.returncode == 0, result.stderr
     rows = _provider_rows(result.stdout)
     assert rows, f"no row for provider {PROVIDER_ID!r} in:\n{result.stdout}"
-    assert any("associate" in row.split()[1] for row in rows)
+    # One row per ACTIVE registry model, id = lobes_role; pending is absent.
+    assert sorted(row.split()[1] for row in rows) == ["cortex", "senses", "worker"]
 
 
 def test_no_provider_and_a_hint_when_the_env_is_unset():
@@ -121,33 +121,23 @@ def test_no_provider_and_a_hint_when_the_env_is_unset():
         assert name in combined, f"the hint must name {name}:\n{combined}"
 
 
-@pytest.mark.parametrize(
-    ("mode", "expected"),
-    [
-        (None, {"chat_template_kwargs": {"enable_thinking": False}}),
-        ("reasoning_effort", {"reasoning_effort": "none"}),
-        (
-            "both",
-            {
-                "chat_template_kwargs": {"enable_thinking": False},
-                "reasoning_effort": "none",
-            },
-        ),
-    ],
-)
-def test_reasoning_off_reaches_the_wire(
-    fake_lane: FakeLaneServer, mode: str | None, expected: dict[str, object]
-):
-    require_pi()
+def _contract_with_reasoning(tmp_path: Path, key: str, reasoning: str) -> Path:
+    """A copy of the contract directory whose ``key`` entry has ``reasoning`` set."""
+    dest = tmp_path / "contract"
+    shutil.copytree(REPO_ROOT / "associate" / "contract", dest)
+    path = dest / "models.json"
+    doc = json.loads(path.read_text(encoding="utf-8"))
+    doc["models"][key]["reasoning"] = reasoning
+    path.write_text(json.dumps(doc), encoding="utf-8")
+    return dest
 
-    overrides = {
+
+def _first_chat_body(fake_lane: FakeLaneServer, role: str, **overrides: str) -> dict[str, object]:
+    env = {
         "ASSOCIATE_BASE_URL": f"{fake_lane.base_url}/v1",
         "ASSOCIATE_API_KEY": DUMMY_KEY,
-        "ASSOCIATE_MODEL": "associate",
+        **overrides,
     }
-    if mode is not None:
-        overrides["ASSOCIATE_REASONING_OFF"] = mode
-
     process = subprocess.Popen(  # nosec B603 - fixed argv, no shell
         [
             "pi",
@@ -159,14 +149,14 @@ def test_reasoning_off_reaches_the_wire(
             "--provider",
             PROVIDER_ID,
             "--model",
-            "associate",
+            role,
             "pong",
         ],
         stdout=subprocess.PIPE,
         stderr=subprocess.PIPE,
         stdin=subprocess.DEVNULL,
         text=True,
-        env=_pi_env(**overrides),
+        env=_pi_env(**env),
         cwd=REPO_ROOT,
     )
     try:
@@ -179,17 +169,42 @@ def test_reasoning_off_reaches_the_wire(
 
     captured = fake_lane.requests.chat_completions
     assert captured, "pi sent no /v1/chat/completions request to the fake lane"
+    return captured[0]
 
-    body = captured[0]
-    assert body["model"] == "associate"
-    for field, value in expected.items():
-        assert body.get(field) == value, f"{field} missing or wrong on the wire: {body!r}"
 
-    # The complement: only what the selected mode asks for is sent.
-    if "reasoning_effort" not in expected:
-        assert "reasoning_effort" not in body
-    if "chat_template_kwargs" not in expected:
-        assert "chat_template_kwargs" not in body
+@pytest.mark.parametrize("key", ["worker", "senses", "cortex"])
+def test_no_enable_thinking_override_when_the_entry_declares_none(
+    fake_lane: FakeLaneServer, key: str
+):
+    """The shipped entries are ``on`` or ``model-default``: nothing is injected."""
+    require_pi()
+
+    body = _first_chat_body(fake_lane, key, ASSOCIATE_MODEL=key)
+
+    assert body["model"] == key
+    assert "chat_template_kwargs" not in body, body
+    assert "reasoning_effort" not in body, body
+
+
+def test_reasoning_off_reaches_the_wire_for_that_model_only(
+    fake_lane: FakeLaneServer, tmp_path: Path
+):
+    require_pi()
+    contract = _contract_with_reasoning(tmp_path, "senses", "off")
+
+    body = _first_chat_body(
+        fake_lane, "senses", ASSOCIATE_MODEL="senses", ASSOCIATE_CONTRACT_DIR=str(contract)
+    )
+    assert body["model"] == "senses"
+    assert body.get("chat_template_kwargs") == {"enable_thinking": False}, body
+    assert "reasoning_effort" not in body
+
+    fake_lane.requests.chat_completions.clear()
+    sibling = _first_chat_body(
+        fake_lane, "worker", ASSOCIATE_MODEL="worker", ASSOCIATE_CONTRACT_DIR=str(contract)
+    )
+    assert sibling["model"] == "worker"
+    assert "chat_template_kwargs" not in sibling, sibling
 
 
 # ------------------------------------------------- pi 1.1.0 transcript semantics
@@ -240,7 +255,7 @@ def _first_request_with_extension(
     env = _pi_env(
         ASSOCIATE_BASE_URL=f"{fake_lane.base_url}/v1",
         ASSOCIATE_API_KEY=DUMMY_KEY,
-        ASSOCIATE_MODEL="associate",
+        ASSOCIATE_MODEL="worker",
         ASSOCIATE_CONTRACT_DIR=str(REPO_ROOT / "associate" / "contract"),
         ASSOCIATE_EXPORT_ROOT=str(tmp_path / "runs"),
         **env_overrides,
@@ -258,7 +273,7 @@ def _first_request_with_extension(
             "--provider",
             PROVIDER_ID,
             "--model",
-            "associate",
+            "worker",
             "pong",
         ],
         stdout=subprocess.PIPE,

@@ -207,10 +207,9 @@ variable is unset.
 
 | Variable | Default | Purpose |
 |----------|---------|---------|
-| `ASSOCIATE_BASE_URL` | `http://localhost:8001/v1` | OpenAI-compatible base URL the Pi provider and the bench talk to. |
+| `ASSOCIATE_BASE_URL` | `endpoint.default_base_url` in `associate/contract/models.json` (the local lobes gateway) | OpenAI-compatible base URL the Pi provider and the bench talk to. |
 | `ASSOCIATE_API_KEY` | — | Bearer for that endpoint. With it unset the extension registers no provider and prints one hint; `associate run` then says pi's own default model applies. Never committed, never logged. |
-| `ASSOCIATE_MODEL` | `associate` | The lobes **role** name sent as `model` — never a checkpoint id. |
-| `ASSOCIATE_REASONING_OFF` | `chat_template_kwargs` | Which reasoning-off field is injected on the wire: `chat_template_kwargs`, `reasoning_effort`, `both`, or `off`. |
+| `ASSOCIATE_MODEL` | `default` in `models.json` | The **registry key** of the active model (`worker`, `senses`, `cortex`). The wire `model` is that entry's `lobes_role`, never a checkpoint id. An unknown or pending key registers no provider and prints one error line. |
 | `ASSOCIATE_CONTRACT_DIR` | repo-relative `associate/contract/` | Where the extension and the Python adapter both load `role.json`, `policy.json`, and the schemas from. Set per run by `associate run`. |
 | `ASSOCIATE_SESSION_ID` | generated | Pins the session id that keys the scratch and export directories, so concurrent runs never collide. |
 | `ASSOCIATE_EXPORT_ROOT` | `.associate-runs` beside the checkout | Where the run's session directory (`<root>/<session id>/export`) is created — always outside the examined checkout. |

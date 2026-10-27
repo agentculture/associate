@@ -1,29 +1,39 @@
 /**
- * The `associate` provider: resolved from the environment, reasoning off.
+ * The `associate` provider: built from the model registry and the environment.
  *
- * Covers spec c14 (the provider entry resolves from environment, never from a
- * committed or home-directory `models.json`), h22 (retarget to any
- * OpenAI-compatible endpoint by configuration only), c28 (reasoning off on the
- * lane) and h8 (reasoning-off is verified on the wire, not assumed from a
- * compat flag). The on-the-wire half of h8 lives in
- * `tests/test_provider_wire.py`, which drives the real `pi` binary against the
- * stdlib fake lane; this file covers the shape of what the hook injects.
+ * One pi provider, one `models[]` entry per ACTIVE registry model (wire id =
+ * the entry's `lobes_role`), selected by `ASSOCIATE_MODEL` (a registry key).
+ * Reasoning is applied per model and only as the entry declares it. The
+ * on-the-wire half lives in `tests/test_provider_wire.py`, which drives the
+ * real `pi` binary against the stdlib fake lane.
  */
 
 import test from "node:test";
 import assert from "node:assert/strict";
+import { readFileSync } from "node:fs";
+import { join } from "node:path";
 
 import {
   ASSOCIATE_PROVIDER_ID,
-  DEFAULT_BASE_URL,
-  DEFAULT_MODEL_ID,
   ENV_VARS,
   applyReasoningOff,
-  reasoningOffMode,
-  reasoningOffPatch,
   registerAssociateProvider,
   resolveProviderSettings,
 } from "../lib/provider.ts";
+import { loadContract } from "../lib/contract.ts";
+import type { ContractModels } from "../lib/contract.ts";
+
+const REGISTRY: ContractModels = loadContract({}).models;
+const ACTIVE_KEYS = Object.entries(REGISTRY.models)
+  .filter(([, m]) => m.status === "active")
+  .map(([k]) => k);
+
+/** The real registry with `key`'s reasoning replaced. */
+function withReasoning(key: string, reasoning: "model-default" | "on" | "off"): ContractModels {
+  const copy = structuredClone(REGISTRY) as any;
+  copy.models[key].reasoning = reasoning;
+  return copy;
+}
 
 /** A minimal recorder standing in for pi's `registerProvider` / `on`. */
 function fakeHost() {
@@ -53,70 +63,92 @@ function fakeHost() {
 }
 
 const KEY = { ASSOCIATE_API_KEY: "dummy-test-key" };
+const MINE = { model: { provider: ASSOCIATE_PROVIDER_ID } };
 
 // --------------------------------------------------------------- resolution
 
-test("settings resolve from the three env vars", () => {
-  const resolved = resolveProviderSettings({
-    ASSOCIATE_BASE_URL: "http://example.invalid:9/v1",
-    ASSOCIATE_API_KEY: "dummy-test-key",
-    ASSOCIATE_MODEL: "some-model",
-  });
+test("settings resolve from the env and the registry", () => {
+  const resolved = resolveProviderSettings(
+    { ...KEY, ASSOCIATE_BASE_URL: "http://example.invalid:9/v1", ASSOCIATE_MODEL: "senses" },
+    REGISTRY,
+  );
   assert.equal(resolved.ok, true);
   assert.equal(resolved.ok && resolved.settings.baseUrl, "http://example.invalid:9/v1");
-  assert.equal(resolved.ok && resolved.settings.modelId, "some-model");
+  assert.equal(resolved.ok && resolved.settings.selectedKey, "senses");
+  assert.equal(resolved.ok && resolved.settings.selectedModelId, REGISTRY.models.senses.lobes_role);
 });
 
-test("base URL and model fall back to their documented defaults", () => {
-  const resolved = resolveProviderSettings({ ...KEY });
+test("base URL and model fall back to the registry's defaults", () => {
+  const resolved = resolveProviderSettings({ ...KEY }, REGISTRY);
   assert.equal(resolved.ok, true);
-  assert.equal(resolved.ok && resolved.settings.baseUrl, DEFAULT_BASE_URL);
-  assert.equal(resolved.ok && resolved.settings.modelId, DEFAULT_MODEL_ID);
-  // The lobes gateway, addressed by role — the one documented default (h22).
-  assert.equal(DEFAULT_BASE_URL, "http://localhost:8001/v1");
-  assert.equal(DEFAULT_MODEL_ID, "associate");
+  assert.equal(resolved.ok && resolved.settings.baseUrl, REGISTRY.endpoint.default_base_url);
+  assert.equal(resolved.ok && resolved.settings.selectedKey, REGISTRY.default);
+});
+
+test("an unknown ASSOCIATE_MODEL is an error naming the active models, not a fallback", () => {
+  const resolved = resolveProviderSettings({ ...KEY, ASSOCIATE_MODEL: "nope" }, REGISTRY);
+  assert.equal(resolved.ok, false);
+  const hint = resolved.ok ? "" : resolved.hint;
+  assert.match(hint, /nope/);
+  assert.match(hint, /not in the registry/);
+  for (const key of ACTIVE_KEYS) assert.match(hint, new RegExp(key));
+});
+
+test("a pending ASSOCIATE_MODEL is an error, not a fallback", () => {
+  const pending = Object.entries(REGISTRY.models).find(([, m]) => m.status === "pending");
+  assert.ok(pending, "the registry carries a pending entry");
+  const resolved = resolveProviderSettings({ ...KEY, ASSOCIATE_MODEL: pending![0] }, REGISTRY);
+  assert.equal(resolved.ok, false);
+  assert.match(resolved.ok ? "" : resolved.hint, /pending/);
 });
 
 test("a missing API key resolves to a hint naming all three variables", () => {
-  const resolved = resolveProviderSettings({});
+  const resolved = resolveProviderSettings({}, REGISTRY);
   assert.equal(resolved.ok, false);
   const hint = resolved.ok ? "" : resolved.hint;
   for (const name of ENV_VARS) assert.match(hint, new RegExp(name));
 });
 
 test("a blank API key counts as absent", () => {
-  assert.equal(resolveProviderSettings({ ASSOCIATE_API_KEY: "   " }).ok, false);
+  assert.equal(resolveProviderSettings({ ASSOCIATE_API_KEY: "   " }, REGISTRY).ok, false);
 });
 
 // ------------------------------------------------------------- registration
 
-test("with the key set, the provider registers under its id", () => {
+test("with the key set, one provider registers with one model per active entry", () => {
   const host = fakeHost();
-  const result = registerAssociateProvider(host, { ...KEY }, () => {});
+  const result = registerAssociateProvider(host, { ...KEY }, () => {}, REGISTRY);
 
   assert.equal(result.registered, true);
   assert.equal(host.providers.length, 1);
   const [entry] = host.providers;
   assert.equal(entry.id, ASSOCIATE_PROVIDER_ID);
-  assert.equal(entry.config.baseUrl, DEFAULT_BASE_URL);
+  assert.equal(entry.config.baseUrl, REGISTRY.endpoint.default_base_url);
   assert.equal(entry.config.api, "openai-completions");
-
-  // c14: the key is handed to pi as an env *reference*, never as a value, so
-  // the secret never passes through this extension's memory or logs.
+  // The key is handed to pi as an env *reference*, never as a value.
   assert.equal(entry.config.apiKey, "$ASSOCIATE_API_KEY");
 
   const models = entry.config.models as Array<Record<string, any>>;
-  assert.equal(models.length, 1);
-  assert.equal(models[0].id, DEFAULT_MODEL_ID);
-  assert.equal(models[0].reasoning, false, "c28: the model declares no extended thinking");
-  assert.equal(models[0].compat.supportsDeveloperRole, false, "safe default for a vLLM lane");
-  assert.equal(models[0].compat.supportsReasoningEffort, false);
+  assert.deepEqual(
+    models.map((m) => m.id),
+    ACTIVE_KEYS.map((k) => REGISTRY.models[k].lobes_role),
+    "one entry per active model, id = lobes_role; pending entries absent",
+  );
+  for (const m of models) {
+    assert.equal(m.compat.supportsDeveloperRole, false, "safe default for a vLLM lane");
+    assert.equal(m.compat.supportsReasoningEffort, false);
+  }
+  for (const key of ACTIVE_KEYS) {
+    const m = models.find((x) => x.id === REGISTRY.models[key].lobes_role)!;
+    assert.deepEqual(m.input, REGISTRY.models[key].input, "input comes from the entry");
+    assert.equal(m.reasoning, REGISTRY.models[key].reasoning === "on");
+  }
 });
 
 test("without the key, nothing registers and one hint line is emitted", () => {
   const host = fakeHost();
   const lines: string[] = [];
-  const result = registerAssociateProvider(host, {}, (line) => lines.push(line));
+  const result = registerAssociateProvider(host, {}, (line) => lines.push(line), REGISTRY);
 
   assert.equal(result.registered, false);
   assert.equal(host.providers.length, 0, "no provider registered");
@@ -125,83 +157,81 @@ test("without the key, nothing registers and one hint line is emitted", () => {
   for (const name of ENV_VARS) assert.match(lines[0], new RegExp(name));
 });
 
+test("an unknown ASSOCIATE_MODEL registers nothing and says so", () => {
+  const host = fakeHost();
+  const lines: string[] = [];
+  const result = registerAssociateProvider(
+    host,
+    { ...KEY, ASSOCIATE_MODEL: "nope" },
+    (line) => lines.push(line),
+    REGISTRY,
+  );
+  assert.equal(result.registered, false);
+  assert.equal(host.providers.length, 0);
+  assert.equal(lines.length, 1);
+  assert.match(lines[0], /nope/);
+});
+
 test("the hint never contains a key value", () => {
   const lines: string[] = [];
-  registerAssociateProvider(fakeHost(), { ASSOCIATE_API_KEY: "" }, (line) => lines.push(line));
+  registerAssociateProvider(fakeHost(), { ASSOCIATE_API_KEY: "" }, (l) => lines.push(l), REGISTRY);
   assert.equal(lines.join("\n").includes("ASSOCIATE_API_KEY="), false);
 });
 
-// ----------------------------------------------------------- reasoning off
+// ----------------------------------------------------------------- reasoning
 
-test("the default knob is chat_template_kwargs.enable_thinking=false", () => {
-  assert.equal(reasoningOffMode({}), "chat_template_kwargs");
-  assert.deepEqual(reasoningOffPatch("chat_template_kwargs"), {
-    chat_template_kwargs: { enable_thinking: false },
-  });
-});
-
-test("the alternative knobs are selectable by environment, not by code edit", () => {
-  assert.equal(reasoningOffMode({ ASSOCIATE_REASONING_OFF: "reasoning_effort" }), "reasoning_effort");
-  assert.deepEqual(reasoningOffPatch("reasoning_effort"), { reasoning_effort: "none" });
-
-  assert.equal(reasoningOffMode({ ASSOCIATE_REASONING_OFF: "both" }), "both");
-  assert.deepEqual(reasoningOffPatch("both"), {
-    chat_template_kwargs: { enable_thinking: false },
-    reasoning_effort: "none",
-  });
-
-  assert.equal(reasoningOffMode({ ASSOCIATE_REASONING_OFF: "off" }), "off");
-  assert.deepEqual(reasoningOffPatch("off"), {});
-});
-
-test("an unrecognized mode falls back to the default rather than throwing", () => {
-  assert.equal(reasoningOffMode({ ASSOCIATE_REASONING_OFF: "nonsense" }), "chat_template_kwargs");
-});
-
-test("applyReasoningOff merges into existing chat_template_kwargs", () => {
-  const out = applyReasoningOff(
-    { model: "associate", chat_template_kwargs: { preserve_thinking: true } },
-    "both",
-  );
-  assert.deepEqual(out.chat_template_kwargs, { preserve_thinking: true, enable_thinking: false });
-  assert.equal(out.reasoning_effort, "none");
-  assert.equal(out.model, "associate");
-});
-
-test("applyReasoningOff does not mutate the payload it is given", () => {
-  const payload = { model: "associate" };
-  const out = applyReasoningOff(payload, "chat_template_kwargs");
-  assert.notEqual(out, payload);
-  assert.equal("chat_template_kwargs" in payload, false);
-});
-
-// ------------------------------------------------------------------- hook
-
-test("the hook rewrites the payload for this provider only", () => {
+test("no enable_thinking override is sent for a model whose entry declares none", () => {
   const host = fakeHost();
-  registerAssociateProvider(host, { ...KEY }, () => {});
+  // The shipped registry has `senses` as model-default.
+  assert.equal(REGISTRY.models.senses.reasoning, "model-default");
+  registerAssociateProvider(host, { ...KEY, ASSOCIATE_MODEL: "senses" }, () => {}, REGISTRY);
 
-  const mine = host.firePayload({ model: "associate" }, { model: { provider: ASSOCIATE_PROVIDER_ID } });
-  assert.deepEqual(mine.chat_template_kwargs, { enable_thinking: false });
+  for (const key of ACTIVE_KEYS) {
+    if (REGISTRY.models[key].reasoning === "off") continue;
+    const out = host.firePayload({ model: REGISTRY.models[key].lobes_role }, MINE);
+    assert.equal("chat_template_kwargs" in out, false, `${key}: nothing injected`);
+    assert.equal("reasoning_effort" in out, false);
+  }
+});
 
-  const theirs = host.firePayload({ model: "gpt-x" }, { model: { provider: "openai" } });
-  assert.equal("chat_template_kwargs" in theirs, false, "another provider is left untouched");
+test("reasoning 'on' marks the pi model reasoning-capable and forces nothing off", () => {
+  const host = fakeHost();
+  registerAssociateProvider(host, { ...KEY }, () => {}, withReasoning("senses", "on"));
+  const models = host.providers[0].config.models as Array<Record<string, any>>;
+  const senses = models.find((m) => m.id === REGISTRY.models.senses.lobes_role)!;
+  assert.equal(senses.reasoning, true);
+  const out = host.firePayload({ model: senses.id }, MINE);
+  assert.equal("chat_template_kwargs" in out, false);
+});
+
+test("reasoning 'off' injects enable_thinking=false for that model only", () => {
+  const host = fakeHost();
+  registerAssociateProvider(host, { ...KEY }, () => {}, withReasoning("senses", "off"));
+
+  const off = host.firePayload({ model: REGISTRY.models.senses.lobes_role }, MINE);
+  assert.deepEqual(off.chat_template_kwargs, { enable_thinking: false });
+
+  const other = host.firePayload({ model: REGISTRY.models.worker.lobes_role }, MINE);
+  assert.equal("chat_template_kwargs" in other, false, "a sibling model is untouched");
+
+  const foreign = host.firePayload({ model: REGISTRY.models.senses.lobes_role }, {
+    model: { provider: "openai" },
+  });
+  assert.equal("chat_template_kwargs" in foreign, false, "another provider is untouched");
 });
 
 test("the hook still fires when ctx carries no model, matching on the payload id", () => {
   const host = fakeHost();
-  registerAssociateProvider(host, { ...KEY }, () => {});
-  const out = host.firePayload({ model: DEFAULT_MODEL_ID }, {});
+  registerAssociateProvider(host, { ...KEY }, () => {}, withReasoning("senses", "off"));
+  const out = host.firePayload({ model: REGISTRY.models.senses.lobes_role }, {});
   assert.deepEqual(out.chat_template_kwargs, { enable_thinking: false });
 });
 
-test("mode 'off' registers the provider but injects nothing", () => {
-  const host = fakeHost();
-  const result = registerAssociateProvider(host, { ...KEY, ASSOCIATE_REASONING_OFF: "off" }, () => {});
-  assert.equal(result.registered, true);
-  const out = host.firePayload({ model: "associate" }, { model: { provider: ASSOCIATE_PROVIDER_ID } });
-  assert.equal("chat_template_kwargs" in out, false);
-  assert.equal("reasoning_effort" in out, false);
+test("applyReasoningOff merges into existing chat_template_kwargs and does not mutate", () => {
+  const payload = { model: "m", chat_template_kwargs: { preserve_thinking: true } };
+  const out = applyReasoningOff(payload);
+  assert.deepEqual(out.chat_template_kwargs, { preserve_thinking: true, enable_thinking: false });
+  assert.deepEqual(payload.chat_template_kwargs, { preserve_thinking: true });
 });
 
 // ------------------------------------------------- wired into the extension
@@ -226,8 +256,7 @@ test("index.ts registers the provider when the key is set", async () => {
     loadExtension({
       ASSOCIATE_API_KEY: "dummy-test-key",
       ASSOCIATE_BASE_URL: "http://example.invalid:9/v1",
-      ASSOCIATE_MODEL: "associate",
-      ASSOCIATE_REASONING_OFF: undefined,
+      ASSOCIATE_MODEL: "senses",
     }),
   );
   const { pi, cleanup } = value;
@@ -237,11 +266,17 @@ test("index.ts registers the provider when the key is set", async () => {
     assert.equal(pi.providers[0].config.baseUrl, "http://example.invalid:9/v1");
     assert.equal(lines.length, 0, "no hint when the lane is configured");
 
+    const models = pi.providers[0].config.models as Array<Record<string, any>>;
+    assert.deepEqual(
+      models.map((m) => m.id),
+      ACTIVE_KEYS.map((k) => REGISTRY.models[k].lobes_role),
+    );
+    // Every shipped entry is on / model-default: no override reaches a request.
     const out = pi.fireProviderRequest(
-      { model: "associate" },
+      { model: REGISTRY.models.senses.lobes_role },
       { model: { provider: ASSOCIATE_PROVIDER_ID } },
     );
-    assert.deepEqual(out.chat_template_kwargs, { enable_thinking: false });
+    assert.equal("chat_template_kwargs" in out, false);
   } finally {
     cleanup();
   }
@@ -269,22 +304,38 @@ test("index.ts registers nothing and hints when the key is absent", async () => 
   }
 });
 
-// ------------------------------------------------------- no home-dir config
+// ------------------------------------------------------- no literals in code
 
-test("the module names no home-directory config and no lane host", async () => {
-  const { readFileSync } = await import("node:fs");
-  const { join } = await import("node:path");
+test("provider.ts and contract.ts carry no model id, role name or endpoint literal", async () => {
+  const { libDir } = await import("../lib/paths.ts");
+  const names = new Set<string>();
+  for (const [key, entry] of Object.entries(REGISTRY.models)) {
+    names.add(key);
+    names.add(entry.lobes_role);
+  }
+  for (const file of ["provider.ts", "contract.ts"]) {
+    // Comments may explain; only executable text counts.
+    const source = readFileSync(join(libDir, file), "utf8")
+      .replace(/\/\*[\s\S]*?\*\//g, "")
+      .replace(/^\s*\/\/.*$/gm, "");
+    for (const name of names) {
+      assert.equal(
+        new RegExp(`["'\`]${name}["'\`]`, "i").test(source),
+        false,
+        `${file} names the registry entry ${name}`,
+      );
+    }
+    assert.equal(/https?:\/\//.test(source), false, `${file} carries a URL literal`);
+    assert.equal(/localhost|127\.0\.0\.1/.test(source), false, `${file} names a host`);
+    assert.equal(/\b\d{1,3}\.\d{1,3}\.\d{1,3}\.\d{1,3}\b/.test(source), false);
+    assert.equal(/nemotron|NVIDIA/i.test(source), false, `${file} names a checkpoint`);
+  }
+});
+
+test("the module names no home-directory config and no credential", async () => {
   const { libDir } = await import("../lib/paths.ts");
   const source = readFileSync(join(libDir, "provider.ts"), "utf8");
-  // c14: never read a home-directory model catalogue, and never carry the
-  // lane's host or a credential.
-  assert.equal(source.includes("models.json"), false, "no home-dir model catalogue");
   assert.equal(/\.pi\/agent/.test(source), false, "no pi config directory");
   assert.equal(/\/home\//.test(source), false, "no absolute home path");
   assert.equal(/Authorization/i.test(source), false, "no auth header built here");
-  assert.equal(
-    /\b\d{1,3}\.\d{1,3}\.\d{1,3}\.\d{1,3}\b/.test(source),
-    false,
-    "no host literal; the one documented default is localhost",
-  );
 });

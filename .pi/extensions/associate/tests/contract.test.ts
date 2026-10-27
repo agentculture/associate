@@ -44,6 +44,30 @@ test("loadContract reads policy.json and every schema", () => {
   assert.deepEqual(contract.policy, onDisk);
 });
 
+test("loadContract exposes models.json (incl. tool_names) and gate.json from disk", () => {
+  const contract = loadContract({});
+  const models = JSON.parse(readFileSync(join(contract.dir, "models.json"), "utf8"));
+  const gate = JSON.parse(readFileSync(join(contract.dir, "gate.json"), "utf8"));
+  assert.deepEqual(contract.models, models);
+  assert.deepEqual(contract.gate, gate);
+  assert.ok(contract.models.tool_names.includes("finish"));
+  assert.equal(typeof contract.models.endpoint.default_base_url, "string");
+});
+
+test("a contract dir without models.json is refused", () => {
+  const real = loadContract({});
+  const dir = mkdtempSync(join(tmpdir(), "associate-contract-"));
+  try {
+    mkdirSync(join(dir, "schemas"), { recursive: true });
+    writeFileSync(join(dir, "policy.json"), "{}");
+    for (const name of SCHEMA_NAMES) writeFileSync(join(dir, "schemas", `${name}.schema.json`), "{}");
+    assert.throws(() => loadContract({ ASSOCIATE_CONTRACT_DIR: dir }), /models\.json/);
+    assert.ok(real.dir);
+  } finally {
+    rmSync(dir, { recursive: true, force: true });
+  }
+});
+
 test("ASSOCIATE_CONTRACT_DIR wins over the repo-relative fallback", () => {
   const real = loadContract({});
   const dir = mkdtempSync(join(tmpdir(), "associate-contract-"));
@@ -53,6 +77,8 @@ test("ASSOCIATE_CONTRACT_DIR wins over the repo-relative fallback", () => {
     for (const name of SCHEMA_NAMES) {
       writeFileSync(join(dir, "schemas", `${name}.schema.json`), JSON.stringify({ title: name }));
     }
+    writeFileSync(join(dir, "models.json"), JSON.stringify(real.models));
+    writeFileSync(join(dir, "gate.json"), JSON.stringify(real.gate));
     const contract = loadContract({ ASSOCIATE_CONTRACT_DIR: dir });
     assert.equal(contract.source, "env");
     assert.equal(contract.version, 99);

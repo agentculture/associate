@@ -116,3 +116,9 @@ def test_policy_shell_allows_eidetic_and_ledger_argv():
     assert allow["eidetic"] == ["recall", "remember"]
     assert allow["ledger"] == ["append", "list"]
     assert allow["rg"] == [] and "git" in allow
+
+
+def test_endpoint_default_is_declared_and_required(doc):
+    assert doc["endpoint"]["default_base_url"].startswith("http")
+    del doc["endpoint"]
+    assert validate.validate_models(doc)
