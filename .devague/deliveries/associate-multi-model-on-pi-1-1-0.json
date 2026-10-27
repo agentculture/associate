@@ -2,7 +2,7 @@
   "plan_slug": "associate-multi-model-on-pi-1-1-0",
   "schema_version": 2,
   "created": "2026-10-27T10:36:31Z",
-  "updated": "2026-10-27T10:37:46Z",
+  "updated": "2026-10-27T11:00:59Z",
   "deviations": [
     {
       "id": "d1",
@@ -30,6 +30,20 @@
       "status": "approved",
       "classification": "acceptable",
       "seq": 2
+    },
+    {
+      "id": "d3",
+      "what": "t13's tools are named ledger_append / ledger_list (the contract's tool_names, set in t4 and already used by the t11 prompts and models.json mutating_tools), not workledger_append / workledger_list as t13's plan text says; the released workledger-cli console script is ledger",
+      "task_ref": "t13",
+      "reason": "the main agent's t4 brief chose the ledger_* names before t13 ran; the contract is the single source of truth for tool names, so following the plan text now would split it",
+      "affects": [
+        "t4",
+        "t11"
+      ],
+      "origin": "llm",
+      "status": "proposed",
+      "classification": "acceptable",
+      "seq": 3
     }
   ],
   "evidence": [],
