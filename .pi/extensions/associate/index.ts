@@ -131,7 +131,8 @@ export default async function (pi: ExtensionAPI) {
   // the checkout would re-task this lane. With discovery off, this puts the
   // checkout's own AGENTS.md back — and only that file. Registers nothing
   // unless `$ASSOCIATE_INJECT_PROMPT` is set.
-  installPromptInjection(pi, ctx);
+  // The model prompt follows the model resolved above — one rule, one snapshot.
+  installPromptInjection(pi, ctx, process.env, model);
 
   // ------------------------------------------------------------ continue-from
   // `$ASSOCIATE_CONTINUE_FROM` loads a prior run's walk as this session's

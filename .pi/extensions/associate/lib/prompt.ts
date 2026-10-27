@@ -30,15 +30,29 @@
  * file on disk (culture's backend-consistency check and pi-acp both read it);
  * the model file carries what is specific to one model — its exact tools,
  * whether it may change things, and who it may spawn. The model file comes
- * last so it is the more specific instruction. The active model is
- * `$ASSOCIATE_MODEL` (a registry key) or the registry `default`, the same
- * resolution `lib/provider.ts` uses.
+ * last so it is the more specific instruction.
+ *
+ * Two different trust sources, on purpose:
+ *
+ *   - `AGENTS.md` is the CHECKOUT's own file (r16: what pi itself would have
+ *     loaded from the working directory, minus the ancestors);
+ *   - the model file is ASSOCIATE's own, resolved against the repo holding
+ *     this extension (`lib/paths.ts` `associateRoot`), never the checkout. A
+ *     foreign checkout has no such file, and a hostile one could commit its
+ *     own `.pi/extensions/associate/prompts/worker.md` to be injected as the
+ *     "more specific" instruction.
+ *
+ * The active model is the one `lib/toolset.ts` `resolveActiveModel` resolved
+ * — `index.ts` passes its load-time result in — so a pending or unknown key,
+ * which gets no tool set, gets no model prompt either.
  */
 
 import { existsSync, readFileSync } from "node:fs";
-import { join } from "node:path";
-import type { ContractModels, ModelEntry } from "./contract.ts";
+import { join, relative, resolve, isAbsolute } from "node:path";
+import type { ModelEntry } from "./contract.ts";
 import type { AssociateContext } from "./context.ts";
+import { associateRoot } from "./paths.ts";
+import { resolveActiveModel, type ActiveModel } from "./toolset.ts";
 
 /** The environment variable that turns the injection on. */
 export const INJECT_PROMPT_ENV = "ASSOCIATE_INJECT_PROMPT";
@@ -77,33 +91,20 @@ export function readRuntimePrompt(checkoutRoot: string): string | undefined {
   }
 }
 
-/** The registry key of the active model: `$ASSOCIATE_MODEL`, else the registry default. */
-export function activeModelKey(
-  registry: ContractModels,
-  env: Record<string, string | undefined> = process.env,
-): string {
-  return (env.ASSOCIATE_MODEL ?? "").trim() || registry.default;
-}
-
-/** The active model's registry entry and key, or `undefined` for an unknown key. */
-export function activeModel(
-  registry: ContractModels,
-  env: Record<string, string | undefined> = process.env,
-): { key: string; entry: ModelEntry } | undefined {
-  const key = activeModelKey(registry, env);
-  const entry = registry.models[key];
-  return entry === undefined ? undefined : { key, entry };
-}
-
 /**
- * The active model's own prompt file, read from `entry.prompt_file` (relative
- * to the checkout root), or `undefined` when it is missing or empty.
+ * The active model's own prompt file, `entry.prompt_file` resolved against
+ * the associate repo that holds this extension (`root`, default
+ * `associateRoot`) — never the checkout under examination. `undefined` when
+ * the file is missing, empty, or the path would leave `root`.
  */
 export function readModelPrompt(
-  checkoutRoot: string,
   entry: ModelEntry,
+  root: string = associateRoot,
 ): { text: string; source: string } | undefined {
-  const source = join(checkoutRoot, entry.prompt_file);
+  const base = resolve(root);
+  const source = resolve(base, entry.prompt_file);
+  const rel = relative(base, source);
+  if (rel === "" || rel.startsWith("..") || isAbsolute(rel)) return undefined;
   if (!existsSync(source)) return undefined;
   try {
     const text = readFileSync(source, "utf8");
@@ -130,7 +131,9 @@ export function renderRuntimePrompt(text: string, source: string): string {
  * Install the injection on a pi instance.
  *
  * Returns false — registering nothing at all — when the variable is unset or
- * the checkout has no `AGENTS.md`, so an ordinary session gains no handler.
+ * there is neither a checkout `AGENTS.md` nor a model prompt, so an ordinary
+ * session gains no handler. `active` is the model `index.ts` resolved at load
+ * (`resolveActiveModel`); it is only re-resolved from `env` when omitted.
  */
 export function installPromptInjection(
   pi: {
@@ -138,12 +141,14 @@ export function installPromptInjection(
   },
   ctx: AssociateContext,
   env: Record<string, string | undefined> = process.env,
+  active: ActiveModel = resolveActiveModel(env, ctx.contract.models),
 ): boolean {
   if (!shouldInjectPrompt(env)) return false;
 
   const text = readRuntimePrompt(ctx.checkoutRoot);
-  const selected = activeModel(ctx.contract.models, env);
-  const model = selected ? readModelPrompt(ctx.checkoutRoot, selected.entry) : undefined;
+  const selected =
+    active.key !== undefined && active.entry !== undefined ? { key: active.key, entry: active.entry } : undefined;
+  const model = selected ? readModelPrompt(selected.entry) : undefined;
   if (text === undefined && model === undefined) return false;
 
   const parts: string[] = [];

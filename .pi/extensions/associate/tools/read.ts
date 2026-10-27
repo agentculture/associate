@@ -47,7 +47,7 @@ import {
   type StructuredError,
 } from "../lib/contain.ts";
 import type { AssociateContext, ToolModule } from "../lib/context.ts";
-import { resolveProviderSettings } from "../lib/provider.ts";
+import { resolveActiveModel, type ActiveModel } from "../lib/toolset.ts";
 
 // ---------------------------------------------------------------------------
 // typebox — provided by the pi runtime as a bare "typebox" specifier.
@@ -150,26 +150,29 @@ function sniffImageMime(head: Buffer): string | null {
   return null;
 }
 
-/** True when the ACTIVE registry entry (ASSOCIATE_MODEL, else the default) declares image input. */
-function activeModelAcceptsImages(ctx: AssociateContext): { ok: boolean; key: string } {
-  const registry = ctx.contract.models;
-  // Reuse the provider's resolution; its API-key gate is irrelevant here.
-  const resolved = resolveProviderSettings({ ...process.env, ASSOCIATE_API_KEY: "unused" }, registry);
-  if (!resolved.ok) {
-    const key = (process.env.ASSOCIATE_MODEL ?? "").trim() || registry.default;
-    return { ok: false, key };
+/**
+ * Why an image read is refused for `active`, or null when its model declares
+ * image input.
+ *
+ * `active` is resolved ONCE, at register (= extension load), by the same
+ * `resolveActiveModel` `index.ts` uses for the tool_call guard — never from
+ * `process.env` at call time, so read can never disagree with the model whose
+ * tool set is being enforced. A pending or unknown key declares nothing.
+ */
+function imageRefusal(active: ActiveModel): string | null {
+  if (active.key === undefined || active.entry === undefined) {
+    return `no active model resolved (${(active.problem ?? "").trim()})`;
   }
-  const { selectedKey, activeModels } = resolved.settings;
-  return { ok: activeModels[selectedKey].input.includes("image"), key: selectedKey };
+  return active.entry.input.includes("image") ? null : `the active model '${active.key}' does not declare image input`;
 }
 
-function readImage(ctx: AssociateContext, absPath: string, rel: string, mime: string, size: number): ToolResult {
-  const { ok, key } = activeModelAcceptsImages(ctx);
-  if (!ok) {
+function readImage(active: ActiveModel, absPath: string, rel: string, mime: string, size: number): ToolResult {
+  const refusal = imageRefusal(active);
+  if (refusal !== null) {
     return errorResult(
       makeStructuredError(
         "image_input_unsupported",
-        `'${rel}' is an image (${mime}) but the active model '${key}' does not declare image input; ` +
+        `'${rel}' is an image (${mime}) but ${refusal}; ` +
           "this read is refused. Describe the file by name/metadata only, or run with a vision model.",
         "path",
       ),
@@ -502,6 +505,8 @@ const DESCRIPTION =
 
 export const register: ToolModule["register"] = async (pi, ctx: AssociateContext) => {
   const Type = await resolveTypeBuilder();
+  // Snapshotted at load, like index.ts's own resolution (see imageRefusal).
+  const active = resolveActiveModel({ ...process.env }, ctx.contract.models);
   // `path` is Optional at the SCHEMA level (still type-checked when present)
   // because a continuation call passes only `cursor`; presence of `path` when
   // there is no `cursor` is enforced by hand below, so the missing-`path`
@@ -547,7 +552,7 @@ export const register: ToolModule["register"] = async (pi, ctx: AssociateContext
       if (args.path === undefined) {
         return errorResult(makeStructuredError("invalid_argument", "missing required property 'path'", "path"));
       }
-      return startRead(ctx, args as ReadArgs & { path: string });
+      return startRead(ctx, active, args as ReadArgs & { path: string });
     },
   });
 };
@@ -581,7 +586,7 @@ function continueRead(ctx: AssociateContext, rawCursor: string): ToolResult {
   return { content: [{ type: "text", text: chunk.text }], details };
 }
 
-function startRead(ctx: AssociateContext, args: ReadArgs): ToolResult {
+function startRead(ctx: AssociateContext, active: ActiveModel, args: ReadArgs): ToolResult {
   const confined = confine(ctx.checkoutRoot, args.path);
   if (!confined.ok) return errorResult(confined);
 
@@ -612,7 +617,7 @@ function startRead(ctx: AssociateContext, args: ReadArgs): ToolResult {
   }
 
   const imageMime = sniffImageMime(readHead(confined.path));
-  if (imageMime) return readImage(ctx, confined.path, rel, imageMime, stat.size);
+  if (imageMime) return readImage(active, confined.path, rel, imageMime, stat.size);
 
   const stampedOrError = stampWindow(confined.path, args.start_line, args.end_line);
   if ("ok" in stampedOrError) return errorResult(stampedOrError);
