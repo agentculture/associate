@@ -212,6 +212,14 @@ output_tail}], reverted}` in JSON (the output tail redacted and bounded), one
 summary line in text. Diagnostics (the
 pi version warning, the no-lane note) go to stderr.
 
+## How the turn ended
+
+The task turn ends with three fields reported on stdout (and in JSON with
+`--json`): `final_reply` is the model's last assistant reply, redacted and
+bounded to 2000 characters; `stop_reason` is why pi stopped the model
+(e.g. `stop`, `length`), or `None` when the turn ends without `finish`; and
+`lane_error` is present only when pi reported an error ending the turn.
+
 ## Usage
 
     associate run
