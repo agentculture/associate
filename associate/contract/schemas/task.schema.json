@@ -21,6 +21,12 @@
       "enum": ["worktree", "in-place"],
       "description": "Where the run's writes land (deviation d8): its own run worktree, or the checkout itself. Told to the safety gate's decider."
     },
+    "test_commands": {
+      "type": "array",
+      "minItems": 1,
+      "items": {"type": "array", "minItems": 1, "items": {"type": "string"}},
+      "description": "Optional operator-named test commands (deviation d12), each an argv list run without a shell in the run checkout. The harness runs them after the model finishes and merges a worktree run only when all pass; the extension's run_tests tool lets the model run the same commands."
+    },
     "continue_from": {
       "type": "string",
       "description": "Optional export dir of a prior run whose walk is loaded as given context instead of re-walking."

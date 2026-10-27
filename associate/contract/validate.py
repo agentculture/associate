@@ -6,7 +6,7 @@ contract's own schemas use and nothing more:
 
 ``type`` (object/array/string/integer/number/boolean/null, and a list of
 those), ``required``, ``properties``, ``additionalProperties`` (``false`` or a
-subschema), ``items``, ``enum``, ``pattern``, and local
+subschema), ``items``, ``minItems``, ``enum``, ``pattern``, and local
 ``$ref`` pointers of the form ``#/$defs/<name>``.
 
 Anything else in a schema is ignored rather than guessed at — if a schema
@@ -141,9 +141,14 @@ def _check_object(
 def _check_array(
     instance: Any, schema: dict[str, Any], root: dict[str, Any], path: str
 ) -> list[str]:
-    if not isinstance(instance, list) or "items" not in schema:
+    if not isinstance(instance, list):
         return []
     errors: list[str] = []
+    minimum = schema.get("minItems")
+    if isinstance(minimum, int) and len(instance) < minimum:
+        errors.append(f"{path}: expected at least {minimum} item(s), got {len(instance)}")
+    if "items" not in schema:
+        return errors
     for index, item in enumerate(instance):
         errors.extend(_check(item, schema["items"], root, f"{path}[{index}]"))
     return errors

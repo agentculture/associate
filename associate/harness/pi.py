@@ -187,6 +187,19 @@ def stderr_tail(stderr: str | None, lines: int = _STDERR_TAIL_LINES) -> str:
     return " | ".join(_redact(line) for line in kept[-lines:])
 
 
+def output_tail(text: str | None, chars: int) -> str:
+    """The last *chars* characters of *text*, redacted — for a test command's output.
+
+    Same redaction as :func:`stderr_tail` (the contract's patterns, via
+    :func:`_redact`), but bounded by characters rather than lines: a test
+    run's useful part is its final summary, which can span many lines. The
+    window redacted is wider than the one kept, so a secret cut in half at the
+    window's edge is normally cut away again before the tail is returned.
+    """
+    window = (text or "")[-chars * 8 :]
+    return _redact(window)[-chars:]
+
+
 # ---------------------------------------------------------------- session ids
 
 
@@ -763,6 +776,14 @@ class PiHarness(Harness):
             env["ASSOCIATE_ISOLATION"] = str(task["isolation"])
         else:
             env.pop("ASSOCIATE_ISOLATION", None)
+
+        # d12: the operator's test commands, for the extension's run_tests
+        # tool. Same rule as isolation — only the task may name them, so a
+        # stale value in the operator's environment never reaches the model.
+        if task.get("test_commands"):
+            env["ASSOCIATE_TEST_COMMANDS"] = json.dumps(task["test_commands"])
+        else:
+            env.pop("ASSOCIATE_TEST_COMMANDS", None)
 
         continue_from = self._continue_from or task.get("continue_from")
         if continue_from:

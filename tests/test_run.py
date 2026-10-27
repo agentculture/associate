@@ -1016,3 +1016,42 @@ def test_an_unknown_isolation_mode_is_refused_by_the_task_schema(tmp_path: Path)
         _task(tmp_path, isolation="sandbox"), contract.load_schema("task")
     )
     assert errors
+
+
+# ------------------------------------- d12a: operator-named test commands
+
+
+def test_test_commands_reach_the_extension_as_json(tmp_path: Path):
+    harness = _bound_harness(tmp_path, {})
+    commands = [["uv", "run", "pytest", "-q"], ["make", "lint"]]
+    task = {**_task(tmp_path), "test_commands": commands}
+    assert json.loads(harness.environment(task)["ASSOCIATE_TEST_COMMANDS"]) == commands
+
+
+def test_an_inherited_test_commands_value_is_never_passed_through(tmp_path: Path):
+    """d12: like ASSOCIATE_ISOLATION, only the task may name the test commands."""
+    harness = _bound_harness(tmp_path, {"ASSOCIATE_TEST_COMMANDS": '[["rm", "-rf", "/"]]'})
+    assert "ASSOCIATE_TEST_COMMANDS" not in harness.environment(_task(tmp_path))
+
+
+def test_the_launcher_hands_test_commands_to_pi(fake_pi, checkout: Path, tmp_path: Path):
+    assert _run(["--test-command", "true --flag"], checkout, tmp_path) == 0
+    env = _invocation(tmp_path)["env"]
+    assert json.loads(env["ASSOCIATE_TEST_COMMANDS"]) == [["true", "--flag"]]
+
+
+def test_the_task_schema_accepts_test_commands(tmp_path: Path):
+    from associate import contract
+    from associate.contract import validate as contract_validate
+
+    task = {**_task(tmp_path), "test_commands": [["pytest", "-q"], ["make"]]}
+    assert contract_validate.validate(task, contract.load_schema("task")) == []
+
+
+@pytest.mark.parametrize("bad", [[[]], [["pytest", 3]], ["pytest -q"], [], "pytest"], ids=repr)
+def test_the_task_schema_refuses_malformed_test_commands(tmp_path: Path, bad):
+    from associate import contract
+    from associate.contract import validate as contract_validate
+
+    task = {**_task(tmp_path), "test_commands": bad}
+    assert contract_validate.validate(task, contract.load_schema("task"))
