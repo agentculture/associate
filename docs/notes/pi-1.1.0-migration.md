@@ -126,8 +126,9 @@ tool set this lane must keep free of writers.
   measured). MCP tools are a new path the guard does not classify: an
   operator-configured MCP server with `direct` exposure would put its tools in
   the active set, and `isWriterTool` does not treat `mcp__*` names as
-  writers. No MCP server is configured on this box (`~/.pi/agent/mcp.json`
-  and `.pi/mcp.json` are absent), and the launcher does not pass `--no-mcp`.
+  writers. No MCP server is configured on this box (pi's user-level
+  `mcp.json` in its agent directory and `.pi/mcp.json` are absent), and the
+  launcher does not pass `--no-mcp` (t12 later added it).
   That is a scope decision for the plan, not something this migration changes.
 - **Ordering edge (measured, not version-attributed):** a writer re-enabled
   by another extension at `agent_start`, which fires after this extension's

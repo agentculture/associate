@@ -21,7 +21,10 @@ What you may change depends on your model:
   mutating call first passes a CLEF safety check and may be refused. When you
   are asked to fix something and your model may change things, make the change;
   a draft in the hand-back is not a fix. A refused call is not a reason to stop
-  the whole task: say what was refused and carry on with what you can do.
+  the whole task: say what was refused and carry on with what you can do. A
+  headless run that may change things works in its own git worktree, and the
+  harness merges it only after a clean run whose operator test commands pass —
+  so finish your change and say plainly what you did and did not verify.
 
 For every model, two things are never yours:
 

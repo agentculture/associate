@@ -5,6 +5,100 @@ All notable changes to this project will be documented in this file.
 Format follows [Keep a Changelog](https://keepachangelog.com/). This project
 adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.10.0] - 2026-10-27
+
+The multi-model associate on Pi 1.1.0 (plan
+`docs/plans/2026-10-27-associate-multi-model-on-pi-1-1-0.md`, tasks t1–t19 and
+deviations d1–d12). **Measured live:** worker (bolt) runs on this repo under the
+gate — the bug-F2 fix and three `run_tests` tests, each reviewed and fixed
+before merge. **Not measured yet:** recorded live walks for worker, senses and
+cortex on pi 1.1.0, the `culture start associate` session through pi-acp, a
+run with the decider and Super unreachable, a cortex run that spawns children
+(t20), and every public-benchmark score (t21). Those paths are built and
+unit-tested, not shown to work.
+
+### Added
+
+- **Model registry** `associate/contract/models.json`: `worker` (Pi label
+  "bolt", the default), `senses`, `cortex`, and `super-vl` (pending, no lobes
+  role). Each entry names its lobes role, input modalities, reasoning mode,
+  exact tool set, prompt file, `may_mutate` and `may_spawn`; provider and
+  adapter both read it. `associate run --model <key>` selects one.
+- **Per-model prompts** in `.pi/extensions/associate/prompts/`, injected after
+  `AGENTS.md`; per-model reasoning (no global reasoning-off hook).
+- **The CLEF safety gate** (`lib/gate.ts`, `associate/contract/gate.json`, now
+  version 6): every mutating call and every gated call (`eidetic_remember`,
+  `web_search`, `web_page`) is scored by the lobes decider; Super tier (counts
+  as unreachable while `super-vl` is pending), then a read-only fallback. Gate
+  state carries task, action, arguments and model — never fetched content. The
+  verdict and tier land in the walk; `walkstats` reports tier shares and
+  read-only fallbacks.
+- **Worktree per mutating run** (`associate/harness/worktree.py`): a
+  `may_mutate` model runs in `../.worktrees.<repo>/run-<session>`; only a clean
+  run is committed and merged to `main` locally, never pushed.
+- **Operator test commands** (`--test-command`, `--test-timeout`, deviation
+  d12; `associate/harness/testcmds.py`): the harness runs them after the model,
+  reverts their side effects, and merges a worktree run only when all pass. The
+  same commands are offered to writing models as the gated `run_tests` tool.
+- **`--untrusted-checkout`** (deviation d5): ignore the examined checkout's own
+  `.pi` settings, extensions and MCP config.
+- **Tools:** `eidetic_recall` / `eidetic_remember` (eidetic-cli, destination
+  pinned outside the checkout, untrusted provenance tagged); `ledger_append` /
+  `ledger_list` (workledger-cli 0.8.0); `spawn_subagent` for cortex (children
+  `worker` or `senses` only, one writing child per checkout at a time, child
+  walk paths in the parent walk); image blocks from `read` for models whose
+  entry lists image input.
+- **Public benchmark runner:** `associate bench --suite <name> --model <key>`
+  over `associate/bench/suites.json` (BFCL, MMMU, LiveCodeBench), using each
+  suite's own upstream runner and scorer. Every entry is `verified: false`; no
+  suite has been run.
+- **Run result** names the model and lobes role that ran, isolation and merge
+  outcome, test results, and how the task turn ended (final reply, stop
+  reason, lane error). A guard refusal is recorded in the walk with its reason.
+- **Notes:** `docs/notes/pi-1.1.0-migration.md` (a verdict per breaking change),
+  `docs/notes/gate-calibration.md` (the measured CLEF probe bench),
+  `docs/notes/resident-model-resolution.md` (why `culture.yaml`'s `model:` does
+  not reach the resident, and the extension-side fix).
+- CI fails a PR with unresolved SonarCloud issues (deviation d2).
+
+### Changed
+
+- **Pi pin 0.84.2 → 1.1.0**, with the extension and harness migrated.
+- **The guard is per model:** `senses` keeps the old block on writers;
+  `worker` and `cortex` may write and edit in the run checkout behind the gate.
+  `AGENTS.md` states the per-model bound (live finding L1).
+- **CLEF thresholds** `safe_unattended` and `matches_task` at 0.5 — tentative,
+  from one task's probes (deviation d9); issue #13 is the benchmark that
+  replaces them, #14–#17 the follow-ups. `gate.json` v2–v6 added the isolation
+  line (d8), a truthful per-tool effect line (d10), a `matches_task` wording
+  that counts prompt-mandated duties (d11), and `run_tests` (d12).
+- **`culture.yaml`** `model: associate` → `model: worker` (a registry key).
+  On its own this does not select the resident's model; the extension pins it.
+- **Docs and identity:** `CLAUDE.md` (current state, measured vs. not measured,
+  runtime lanes by lobes role with `roles.py` citations, Pi and contract pins,
+  a full `ASSOCIATE_*` table tied to the code), `README.md`, `AGENTS.md`, the
+  `explain` / `learn` text and the package description now describe the
+  multi-model harness.
+
+### Removed
+
+- **The Nemotron 3.5 Lightning lane** (lobes role `associate`) as associate's
+  model: `worker` replaces it. The lobes role itself is untouched.
+- The single hardcoded provider and the global `enable_thinking` override.
+- The in-house 7-case behavioral suite (`tests/behavioral/`) and
+  `associate bench --harness`; benchmarks are public suites only.
+
+### Security
+
+- Every mutating or data-egressing tool call passes the CLEF gate and fails
+  closed to read-only when no decider tier answers.
+- Gate requests carry no fetched web or file text, so planted content cannot
+  argue the gate into approving.
+- Spawned children are never more trusting than their parent
+  (`ASSOCIATE_PI_TRUST`); the launcher passes `--no-mcp`.
+- Memory and ledger destinations are pinned outside the examined checkout and
+  refused if they resolve inside it.
+
 ## [0.9.1] - 2026-09-12
 
 ### Changed

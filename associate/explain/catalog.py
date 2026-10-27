@@ -12,11 +12,15 @@ from __future__ import annotations
 _ROOT = """\
 # associate
 
-A clonable template for AgentCulture mesh agents. It carries an agent-first CLI
-(cited from the teken `python-cli` reference), a mesh identity (`culture.yaml` +
-`CLAUDE.md`), the canonical guildmaster skill kit under `.claude/skills/`, and a
-buildable/deployable package baseline. Clone it, rename the package, edit
-`culture.yaml`, and you have a new agent.
+A multi-model agent harness on Pi. `associate run` runs one model from the
+contract's registry (`associate/contract/models.json`: `worker`, `senses`,
+`cortex`) on one task with that model's own tools and prompt, behind a CLEF
+safety gate for every mutating call, and hands back a walk of every tool call
+plus statements that cite it. A model that may change things runs in its own
+git worktree, merged to `main` locally only after a clean run. Models are
+addressed by lobes role through the gateway, never by checkpoint id. Live runs
+of senses and cortex, the mesh path, and every public benchmark are not yet
+measured.
 
 ## Verbs
 
@@ -117,7 +121,9 @@ Pi's non-interactive modes load a project's `.pi/extensions` only on a trusted
 checkout; without trust they fall back to Pi's **full built-in tool set**,
 `edit` and `write` included. So the launcher checks the tool list **pi itself
 reports**, never the presence of a config file on disk. A run with no report, or
-whose report lists an active writer tool, exits `2` and serves nothing.
+whose report lists an active writer tool for a model the registry does not mark
+`may_mutate` (`senses`), exits `2` and serves nothing. For `worker` and
+`cortex` the writers are expected; their mutating calls pass the CLEF gate.
 
 Readiness is proven by a **preflight**, not by the task turn. Every run is two
 pi invocations: the first adds `-e lib/preflight.ts`, an extension whose only
@@ -160,6 +166,21 @@ loads, so associate's extension (named with `-e`) is the only one that runs.
 Use it for a repo you do not control, and when associate examines a worktree
 of itself.
 
+## Worktree isolation
+
+A model the registry marks `may_mutate` runs in its own git worktree,
+`dirname(repo)/.worktrees.<name>/run-<session>`, on branch
+`associate-run/<session>`, based on the checkout's `HEAD`; uncommitted operator
+changes are not carried in, and `ASSOCIATE_ISOLATION=worktree` tells the gate so.
+A clean run (outcome `ok`, and every test command passing) is committed there
+and merged to `main` locally — never pushed. Anything else is kept, its
+location printed, and `merge=kept` with `merge_reason` reported; the exit code
+stays `0` because the run served. A merge is refused (and the run kept) when
+there is no `main`, the base commit is not on `main`, `main` is checked out with
+uncommitted changes, or the merge does not apply cleanly. A read-only model
+(`senses`) runs in place; a mutating run on a non-git directory runs in place
+with a stderr warning.
+
 ## Test commands (deviation d12)
 
 `--test-command "<command line>"` (repeatable, no default) names a command the
@@ -183,9 +204,12 @@ extension as `ASSOCIATE_TEST_COMMANDS` for the model's `run_tests` tool.
 
 `walk_path`, `statements_path`, `statements_md_path`, `export_dir`, `outcome`
 and `session_id` on stdout — `key=value` lines, or one JSON object with
-`--json`. With test commands, `tests` too: `{passed, commands: [{argv,
-exit_code, timed_out, duration_ms, output_tail}], reverted}` in JSON (the
-output tail redacted and bounded), one summary line in text. Diagnostics (the
+`--json` — plus `isolation`, `merge`, `merge_reason`, `worktree` and
+`run_branch` when they apply, the model and lobes role that ran, and how the
+task turn ended (final reply, stop reason, lane error). With test commands,
+`tests` too: `{passed, commands: [{argv, exit_code, timed_out, duration_ms,
+output_tail}], reverted}` in JSON (the output tail redacted and bounded), one
+summary line in text. Diagnostics (the
 pi version warning, the no-lane note) go to stderr.
 
 ## Usage
