@@ -397,8 +397,10 @@ export class WalkRecorder {
       tool_calls: this.toolCalls,
       outcome: this.explicitOutcome ?? outcome ?? (this.unresolved > 0 ? "error" : "ok"),
       truncated: this.anyTruncated,
-      model: this.model,
-      lobes_role: this.lobes_role,
+      // Only when resolved: the on-disk JSON drops undefined keys, and the
+      // returned record must equal the line written.
+      ...(this.model !== undefined ? { model: this.model } : {}),
+      ...(this.lobes_role !== undefined ? { lobes_role: this.lobes_role } : {}),
     };
     appendFileSync(this.walkPath, `${JSON.stringify({ run })}\n`, "utf8");
     this.finalized = run;
