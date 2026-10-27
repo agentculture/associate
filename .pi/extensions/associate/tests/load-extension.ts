@@ -123,6 +123,13 @@ export class FakePi {
     }
   }
 
+  /** Run every `tool_execution_end` handler — pi emits one for every prepared call, blocked or run. */
+  async fireToolExecutionEnd(event: Record<string, unknown>): Promise<void> {
+    for (const handler of this.handlers.get("tool_execution_end") ?? []) {
+      await handler({ type: "tool_execution_end", ...event });
+    }
+  }
+
   async fireToolCall(event: Record<string, unknown>): Promise<unknown> {
     for (const handler of this.handlers.get("tool_call") ?? []) {
       const decision = await handler(event);

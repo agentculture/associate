@@ -308,10 +308,18 @@ export default async function (pi: ExtensionAPI) {
         modelRegistry: piCtx?.modelRegistry as never,
         signal: piCtx?.signal,
       },
+      // review r2/5: an allowed call holds the checkout until its tool_execution_end.
+      toolCallId: event.toolCallId,
+      testWindow: ctx.testWindow,
     });
     // L4: pi sends no tool_result for a blocked call; record the refusal now.
     if (decision?.block) walk.recordBlocked(event.toolCallId, decision.reason);
     return decision;
+  });
+  // review r2/5: pi emits tool_execution_end for every prepared call, blocked or
+  // run, so this releases exactly the holds the guard took above.
+  pi.on("tool_execution_end", (event) => {
+    ctx.testWindow.end(event.toolCallId);
   });
 
   // ---------------------------------------------------------------- provider
