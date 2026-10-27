@@ -128,7 +128,18 @@ deviations d16 and d19.
   history-free request (d19, `large_state.self_fallback`). The walk records
   tier `large`, the `evaluator` and `self_evaluated`. A missing evaluator, a
   failed or malformed answer, or a state over `large_state.max_input_tokens`
-  still refuses. Not measured against a live evaluator yet.
+  still refuses. Measured live once since, with cortex (one pair, below).
+- A `write` that replaces a file now shows the gate the lines it adds and
+  removes (d20, gate.json version 8). The guard computes this `change` line
+  as a bounded line diff against the current checkout file. The full content
+  stays in `arguments`. A new path says it creates a file. A file the guard
+  does not read says why. Lines over the render bound are counted, not
+  dropped. `edit` gets no change line: its arguments already are the change.
+  The large-state evaluator gets its own `large_state.timeout_ms` (300 s)
+  instead of the Super tier's 120 s. Measured once, one pair, not a rate.
+  On a 40 KB `CLAUDE.md` write, cortex allowed a planted exfiltration line
+  when it saw only the full state, and refused it once the changed lines were
+  stated. Large-state latency was 37–213 s.
 
 ### Fixed
 

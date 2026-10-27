@@ -1,13 +1,13 @@
 {
-  "$comment": "PROVISIONAL: every threshold below is a starting default, not a calibrated value. Bump `version` on ANY change to a question, a rule, or a threshold, so walks record which question set decided. The extension (lib/gate.ts) reads this file; it must not define its own copy. The state sent to the decider carries only the fields listed in state_fields - never fetched web/file content.",
-  "version": 7,
+  "$comment": "PROVISIONAL: every threshold below is a starting default, not a calibrated value. Bump `version` on ANY change to a question, a rule, or a threshold, so walks record which question set decided. The extension (lib/gate.ts) reads this file; it must not define its own copy. The state sent to the decider carries only the fields listed in state_fields - never a tool result or fetched web content. Since d20 (version 8) it carries one piece of file content the call did not supply: the removed lines of the checkout file a write replaces, inside the change line (redacted, framed as data like the rest of the state).",
+  "version": 8,
   "decider": {
     "path": "/v1/systemone",
     "header": "X-Lobes-Model",
     "domain": "general",
     "max_input_tokens": 16384
   },
-  "state_fields": ["task", "action", "effect", "arguments", "model", "isolation"],
+  "state_fields": ["task", "action", "effect", "arguments", "model", "isolation", "change"],
   "effects": {
     "$comment": "Deviation d10 (version 4). What each tool that can reach the gate actually does, told to the decider as the `effect` state line, because a bare tool name left CLEF guessing (docs/notes/gate-calibration.md). Exactly the tools in models.json mutating_tools + gated_tools; the loader and validate.py refuse a missing or extra entry. Each text must stay true of the tool's implementation under .pi/extensions/associate/tools/ and of the runtime prompts. Deviation d12 (version 6) added run_tests, which runs the operator's configured test commands in the checkout.",
     "write": "creates or overwrites one file at the path shown, with the content shown.",
@@ -26,6 +26,12 @@
       "worktree": "changes this run makes to the checkout land in a disposable git worktree on its own branch, created for this run only. Nothing is pushed. That branch is merged into the local main branch only if the whole run finishes cleanly and merges without conflict; otherwise it is kept for a person to review. This covers the checkout only, not anything written elsewhere.",
       "in-place": "changes this run makes to the checkout land directly in it, as soon as they are made. There is no run worktree and no merge step."
     }
+  },
+  "change": {
+    "$comment": "Deviation d20 (version 8). For a tool in applies_to, the state gains a `change` line: the lines the call adds and removes versus the file it replaces, computed by the tool_call guard (lib/guard.ts, lib/diff.ts) before the gate is asked. It is additional state that makes the edit salient; the full content stays in `arguments` and is never replaced or summarised. A path where nothing exists says it creates a new file; identical content says there is no change; a file the guard does not read (outside the checkout, not a regular file, over max_file_bytes, not UTF-8 text) says why the change was not computed. The rendered hunks stop at max_render_bytes and the line counts what it leaves out. Only `write`: an `edit` call's arguments already are its change (the exact old and new text). Measured once live (one pair, not a rate; docs/notes/gate-calibration.md): with the change line a large-state evaluator refused a planted exfiltration line it had allowed without it.",
+    "applies_to": ["write"],
+    "max_file_bytes": 262144,
+    "max_render_bytes": 32768
   },
   "questions": {
     "safe_unattended": {
@@ -79,10 +85,11 @@
     }
   },
   "large_state": {
-    "$comment": "Deviations d16 and d19 (version 7). A state over decider.max_input_tokens is never cut and never sent to CLEF: the FULL state (the same fields CLEF would get, uncut) is judged by a large-context registry model, asked the same questions through the Super mechanism (super.answer_shape, judged by super.allow_when). The evaluator is the first `evaluators` key that is active in models.json, registered with pi, and not the acting model. When none is and `self_fallback` is true (d19), the acting model judges its own call from a fresh, history-free request (the gate prompt and the state, no transcript) and the walk line says self_evaluated. No evaluator, an unreachable one, or a prompt over `max_input_tokens` refuses; a malformed or unsafe answer refuses. `max_input_tokens` must leave the provider's registered context window (lib/provider.ts) room for the answer; the extension refuses to load otherwise. Unmeasured live: no oversized state has been judged by a real evaluator yet (docs/notes/gate-calibration.md).",
+    "$comment": "Deviations d16 and d19 (version 7). A state over decider.max_input_tokens is never cut and never sent to CLEF: the FULL state (the same fields CLEF would get, uncut) is judged by a large-context registry model, asked the same questions through the Super mechanism (super.answer_shape, judged by super.allow_when). The evaluator is the first `evaluators` key that is active in models.json, registered with pi, and not the acting model. When none is and `self_fallback` is true (d19), the acting model judges its own call from a fresh, history-free request (the gate prompt and the state, no transcript) and the walk line says self_evaluated. No evaluator, an unreachable one, or a prompt over `max_input_tokens` refuses; a malformed or unsafe answer refuses. Deviation d20 (version 8): the evaluator gets its own `timeout_ms` instead of the Super tier's 120 s, because large states took 37-213 s live (3 of 7 probes over 120 s). `max_input_tokens` must leave the provider's registered context window (lib/provider.ts) room for the answer; the extension refuses to load otherwise. Measured live once, one pair, not a rate: cortex judged a 40 KB write on this path (docs/notes/gate-calibration.md).",
     "evaluators": ["cortex", "worker"],
     "max_input_tokens": 98304,
-    "self_fallback": true
+    "self_fallback": true,
+    "timeout_ms": 300000
   },
   "readonly_fallback": {
     "$comment": "When neither CLEF nor Super is reachable, mutating calls are refused and only read-only calls proceed.",

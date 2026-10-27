@@ -41,7 +41,15 @@
  * outcome fails closed: nobody to ask, the evaluator unreachable, or a prompt
  * over `large_state.max_input_tokens` is refused at tier `readonly` whatever
  * `isMutating` says (the read-only fallback does not apply — nobody judged the
- * call); a malformed or unsafe answer refuses at tier `large`.
+ * call); a malformed or unsafe answer refuses at tier `large`. The evaluator
+ * has `large_state.timeout_ms` (d20), not the Super tier's timeout.
+ *
+ * The change line (deviation d20). For a `change.applies_to` tool (`write`)
+ * the state carries a `change` line: the lines the call adds and removes
+ * versus the file it replaces, rendered by the guard (`lib/diff.ts`) and
+ * redacted here. It is extra state beside the full `arguments`, never a
+ * replacement; without one supplied the line says the change was not
+ * computed, so it is never silently absent.
  *
  * Mutating vs read-only is NOT classified here: the caller (t12, from
  * `models.json`'s `mutating_tools`, plus `gated_tools` — d6/d7 — which it always
@@ -49,8 +57,8 @@
  * the boolean `false` counts as mutating.
  *
  * The state (c54/h36): built from the `state_fields` — task, action (tool
- * name), (d10) effect, arguments, model id and (d8) isolation — and nothing
- * else. The request type
+ * name), (d10) effect, arguments, model id, (d8) isolation and (d20) change —
+ * and nothing else. The request type
  * has no field for a tool result, and the builder picks those four fields by
  * name, so a result object a caller passes by mistake never reaches the
  * decider. Arguments are redacted (gate.json `redaction.keys` by key, then the
@@ -84,7 +92,11 @@ export const CLEF_BODY_MODEL = "clef";
 /** How long CLEF may take before it counts as unreachable. Not a contract value. */
 export const DEFAULT_CLEF_TIMEOUT_MS = 30_000;
 
-/** How long the Super tier may take before it counts as unreachable. Not a contract value. */
+/**
+ * How long the Super tier may take before it counts as unreachable. Not a
+ * contract value. The large-state evaluator has its own, contract-owned bound
+ * (`large_state.timeout_ms`, d20): oversized states took 37–213 s live.
+ */
 export const DEFAULT_SUPER_TIMEOUT_MS = 120_000;
 
 /**
@@ -96,7 +108,14 @@ export const DEFAULT_SUPER_TIMEOUT_MS = 120_000;
 export const TEMPLATE_RESERVE_TOKENS = 1024;
 
 /** The state fields this library knows how to fill. `state_fields` may only name these. */
-const KNOWN_STATE_FIELDS = ["task", "action", "effect", "arguments", "model", "isolation"] as const;
+const KNOWN_STATE_FIELDS = ["task", "action", "effect", "arguments", "model", "isolation", "change"] as const;
+
+/**
+ * The change line (d20) for a `change.applies_to` call whose caller supplied
+ * none. Said, never left out: an absent line would read as "no change".
+ */
+export const CHANGE_NOT_COMPUTED =
+  "the change was not computed for this call: the gate was given no comparison with the current file.";
 
 /** The effect line for a tool gate.json does not describe; the decider is told so rather than left to guess. */
 export const UNDESCRIBED_EFFECT = "the contract does not describe what this tool does.";
@@ -124,6 +143,12 @@ export interface GateInput {
   readonly model: string;
   /** Where the run's writes land (d8): `ASSOCIATE_ISOLATION`. Absent or unknown is in-place. */
   readonly isolation?: string;
+  /**
+   * The change line (d20): the lines this call adds and removes versus the
+   * current file, as the guard rendered it (`lib/diff.ts`). Sent only for
+   * `change.applies_to` tools, redacted here like every other field.
+   */
+  readonly change?: string;
 }
 
 export interface GateRequest extends GateInput {
@@ -197,6 +222,14 @@ export interface GateConfig {
   readonly largeMaxInputTokens: number;
   /** gate.json `large_state.self_fallback` (d19): may the acting model judge its own call. */
   readonly largeSelfFallback: boolean;
+  /** gate.json `large_state.timeout_ms` (d20): how long the large-state evaluator may take. */
+  readonly largeTimeoutMs: number;
+  /** gate.json `change.applies_to` (d20): the tools the change line is sent for. */
+  readonly changeAppliesTo: readonly string[];
+  /** gate.json `change.max_file_bytes` (d20): the most of the current file the guard reads. */
+  readonly changeMaxFileBytes: number;
+  /** gate.json `change.max_render_bytes` (d20): the bound on the rendered hunks. */
+  readonly changeMaxRenderBytes: number;
   readonly redactKeys: readonly string[];
   readonly filter: RedactionFilter;
   readonly models: ContractModels;
@@ -332,6 +365,18 @@ export function compileGate(contract: Pick<Contract, "gate" | "policy" | "models
     if (typeof tool !== "string" || !(tool in effects)) fail(`isolation.applies_to: ${String(tool)} has no effect`);
   }
 
+  const change = gate.change;
+  if (!isRecord(change)) fail("change section missing");
+  const changeAppliesTo = change.applies_to;
+  if (!Array.isArray(changeAppliesTo)) fail("change.applies_to must be a list of tool names");
+  for (const tool of changeAppliesTo) {
+    if (typeof tool !== "string" || !(tool in effects)) fail(`change.applies_to: ${String(tool)} has no effect`);
+  }
+  for (const key of ["max_file_bytes", "max_render_bytes"] as const) {
+    const value = change[key];
+    if (!Number.isInteger(value) || (value as number) <= 0) fail(`change.${key} must be a positive integer`);
+  }
+
   const describe = isRecord(gate.isolation) ? gate.isolation.describe : undefined;
   if (!isRecord(describe)) fail("isolation.describe missing");
   for (const mode of ISOLATION_MODES) {
@@ -421,6 +466,9 @@ export function compileGate(contract: Pick<Contract, "gate" | "policy" | "models
     );
   }
   if (typeof large.self_fallback !== "boolean") fail("large_state.self_fallback must be a boolean");
+  if (!Number.isInteger(large.timeout_ms) || (large.timeout_ms as number) <= 0) {
+    fail("large_state.timeout_ms must be a positive integer (milliseconds)");
+  }
 
   const ro = gate.readonly_fallback;
   if (!isRecord(ro) || ro.when !== "decider_and_super_unreachable" || ro.allow !== "readonly_only") {
@@ -455,6 +503,10 @@ export function compileGate(contract: Pick<Contract, "gate" | "policy" | "models
     largeEvaluators: evaluators as string[],
     largeMaxInputTokens: largeMax as number,
     largeSelfFallback: large.self_fallback as boolean,
+    largeTimeoutMs: large.timeout_ms as number,
+    changeAppliesTo: changeAppliesTo as string[],
+    changeMaxFileBytes: change.max_file_bytes as number,
+    changeMaxRenderBytes: change.max_render_bytes as number,
     redactKeys,
     filter,
     models: contract.models,
@@ -525,11 +577,13 @@ function isolationMode(value: unknown): IsolationMode {
 /**
  * Build the decider state from the permitted fields only.
  *
- * Picks `task`, `action`, `arguments`, `model` and `isolation` by name, and
- * looks the effect up from `action`: any other property on `input` (a tool
- * result passed by mistake, say) is never read. The result
+ * Picks `task`, `action`, `arguments`, `model`, `isolation` and (d20)
+ * `change` by name, and looks the effect up from `action`: any other property
+ * on `input` (a tool result passed by mistake, say) is never read. The result
  * fits `max_input_tokens − questions − template reserve`, counted at one
- * token per UTF-8 byte; arguments are cut first, then the task.
+ * token per UTF-8 byte; arguments and the change line are cut first, then the
+ * task. A cut state is only ever a signal (`truncated`): since d16 the gate
+ * sends the full state to a large-state evaluator instead.
  */
 function pickState(config: GateConfig, input: GateInput) {
   const picked: Record<StateField, string> = {
@@ -541,14 +595,19 @@ function pickState(config: GateConfig, input: GateInput) {
     arguments: JSON.stringify(redactArguments(input.arguments ?? null, config)) ?? "null",
     model: config.filter.apply(String(input.model ?? "")),
     isolation: config.isolation[isolationMode(input.isolation)],
+    // d20: redacted while still multi-line, so a pattern never runs across lines.
+    change: config.filter.apply(typeof input.change === "string" ? input.change : CHANGE_NOT_COMPUTED),
   };
   // Single-line fields keep the labelled layout unambiguous.
   for (const field of KNOWN_STATE_FIELDS) picked[field] = oneLine(picked[field]);
   // d10: the isolation line is about the checkout, so only tools that write
-  // into it get one.
-  const fields = config.isolationAppliesTo.includes(String(input.action))
-    ? config.stateFields
-    : config.stateFields.filter((f) => f !== "isolation");
+  // into it get one. d20: the change line only for change.applies_to.
+  const action = String(input.action);
+  const fields = config.stateFields.filter(
+    (f) =>
+      (f !== "isolation" || config.isolationAppliesTo.includes(action)) &&
+      (f !== "change" || config.changeAppliesTo.includes(action)),
+  );
   const render = (values: Record<StateField, string>) =>
     fields.map((field) => `${field}: ${values[field]}`).join("\n");
   return { picked, fields, render };
@@ -572,19 +631,29 @@ export function buildGateState(config: GateConfig, input: GateInput): { state: s
 
   let truncated = false;
   const values = { ...picked };
-  // Pass 1: hold every field but the arguments to at most half the budget;
-  // only the task is ever cut (effect and isolation are short contract text).
-  const fixedFields = fields.filter((f) => f !== "arguments");
-  const fixedBytes = () => byteLength(render({ ...values, arguments: "" }));
+  // Pass 1: hold every field but the arguments and the change line to at
+  // most half the budget; only the task is ever cut (effect and isolation are
+  // short contract text).
+  const fixedFields = fields.filter((f) => f !== "arguments" && f !== "change");
+  const fixedBytes = () => byteLength(render({ ...values, arguments: "", change: "" }));
   if (fixedBytes() > budget / 2 && fixedFields.includes("task")) {
     const others = fixedBytes() - byteLength(values.task);
     const cut = cutToBytes(values.task, Math.floor(budget / 2) - others, "task");
     values.task = cut.text;
     truncated ||= cut.cut;
   }
-  // Pass 2: arguments get whatever is left.
+  // Pass 2 (d20): the change line, when it does not fit beside the
+  // arguments, gets at most half of what is left. Any cut marks the state
+  // truncated, which sends the FULL state to the large path (d16).
+  const room = budget - fixedBytes();
+  if (fields.includes("change") && byteLength(values.change) + byteLength(values.arguments) > room) {
+    const cut = cutToBytes(values.change, Math.floor(room / 2), "change");
+    values.change = cut.text;
+    truncated ||= cut.cut;
+  }
+  // Pass 3: arguments get whatever is left.
   if (fields.includes("arguments")) {
-    const cut = cutToBytes(values.arguments, budget - fixedBytes(), "arguments");
+    const cut = cutToBytes(values.arguments, budget - byteLength(render({ ...values, arguments: "" })), "arguments");
     values.arguments = cut.text;
     truncated ||= cut.cut;
   }
@@ -1058,7 +1127,8 @@ export function createGate(options: GateOptions): Gate {
     }
     const registry = evalOptions.modelRegistry ?? options.modelRegistry;
     // d16: CLEF would only see a cut state, so it is not asked at all.
-    if (truncated) return decideLarge(config, request, registry, superTimeout, evalOptions.signal);
+    // d20: with its own contract timeout, not the Super tier's.
+    if (truncated) return decideLarge(config, request, registry, config.largeTimeoutMs, evalOptions.signal);
 
     const clef = await askClef(config, state, env, doFetch, clefTimeout, evalOptions.signal);
     if (clef.kind === "answered") {

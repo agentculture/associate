@@ -15,12 +15,13 @@
  * driven by `policy.json`'s read denylist — not by this hook.
  */
 
-import { lstatSync, readlinkSync, realpathSync } from "node:fs";
+import { closeSync, constants as fsConstants, fstatSync, lstatSync, openSync, readSync, readlinkSync, realpathSync, statSync } from "node:fs";
 import { homedir } from "node:os";
 import { basename, dirname, isAbsolute, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import { isInside } from "./session.ts";
 import { buildGateState } from "./gate.ts";
+import { CHANGE_NEW_FILE, renderChange } from "./diff.ts";
 import type { EvaluateOptions, Gate, GateEntry } from "./gate.ts";
 import type { ContractModels, ContractPolicy } from "./contract.ts";
 import { isMutatingCall, type ActiveModel } from "./toolset.ts";
@@ -310,6 +311,104 @@ export function confineWriteToCheckout(options: CheckoutConfineOptions): GuardDe
 }
 
 // ===========================================================================
+// The change line (deviation d20)
+// ===========================================================================
+//
+// A `write` that replaces an existing checkout file is told to the gate as the
+// lines it adds and removes (lib/diff.ts), beside the full content. The file
+// is located exactly as confinement located it (resolveWriteTarget →
+// resolveWriteDestination), read only when it is a regular file inside the
+// checkout, and never past gate.json `change.max_file_bytes`. Every case the
+// guard does not compute says why: the line is never silently absent.
+
+export interface WriteChangeOptions {
+  readonly toolName: string;
+  readonly input: unknown;
+  /** The run's checkout root: only files inside it are read. */
+  readonly checkoutRoot: string;
+  /** Base for relative paths (the checkout pi was started in). */
+  readonly cwd: string;
+  /** Home directory for `~` expansion; defaults to `os.homedir()` as pi's does. */
+  readonly home?: string;
+  /** gate.json `change.max_file_bytes`: the most of the current file read. */
+  readonly maxFileBytes: number;
+  /** gate.json `change.max_render_bytes`: the bound on the rendered hunks. */
+  readonly maxRenderBytes: number;
+}
+
+const notComputed = (why: string) => `the change was not computed: ${why}`;
+
+/** Read at most `max + 1` bytes of a regular file without following a final symlink or blocking. */
+function readBounded(path: string, max: number): { bytes: Buffer; over: boolean } {
+  const fd = openSync(path, fsConstants.O_RDONLY | fsConstants.O_NOFOLLOW | fsConstants.O_NONBLOCK);
+  try {
+    if (!fstatSync(fd).isFile()) throw new Error("the target stopped being a regular file while it was opened");
+    const buffer = Buffer.alloc(max + 1);
+    let used = 0;
+    while (used < buffer.length) {
+      const got = readSync(fd, buffer, used, buffer.length - used, null);
+      if (got === 0) break;
+      used += got;
+    }
+    return { bytes: buffer.subarray(0, used), over: used > max };
+  } finally {
+    closeSync(fd);
+  }
+}
+
+function kindOf(stat: ReturnType<typeof statSync>): string {
+  if (stat.isDirectory()) return "a directory";
+  if (stat.isFIFO()) return "a named pipe";
+  if (stat.isSocket()) return "a socket";
+  if (stat.isCharacterDevice() || stat.isBlockDevice()) return "a device";
+  return "not a regular file";
+}
+
+/**
+ * The change line for one `write` call: what it adds and removes versus the
+ * file at its target, or why that was not computed. Never throws.
+ */
+export function describeWriteChange(options: WriteChangeOptions): string {
+  try {
+    const input = options.input && typeof options.input === "object" ? (options.input as Record<string, unknown>) : {};
+    const targets = collectPathArguments(options.input);
+    if (targets.length !== 1) return notComputed(`the call names ${targets.length} target paths, not one.`);
+    if (typeof input.content !== "string") return notComputed("the content is not text.");
+    const dest = resolveWriteDestination(resolveWriteTarget(targets[0], options.cwd, options.home));
+    if (!isInside(resolveWriteDestination(options.checkoutRoot), dest)) {
+      return notComputed(
+        "the target is outside the checkout (the session scratch directory), so its current content was not read.",
+      );
+    }
+    let stat: ReturnType<typeof statSync>;
+    try {
+      stat = statSync(dest);
+    } catch (error) {
+      if ((error as NodeJS.ErrnoException)?.code === "ENOENT") return CHANGE_NEW_FILE;
+      throw error;
+    }
+    if (!stat.isFile()) return notComputed(`the target exists but is ${kindOf(stat)}, not a regular file.`);
+    const tooBig = (size: number | string) =>
+      `replaces an existing file of ${size} bytes, over gate.json change.max_file_bytes ` +
+      `(${options.maxFileBytes}); the file was not read, so the change was not computed. ` +
+      "The full new content is in arguments.";
+    if (stat.size > options.maxFileBytes) return tooBig(stat.size);
+    const { bytes, over } = readBounded(dest, options.maxFileBytes);
+    if (over) return tooBig(`more than ${options.maxFileBytes}`);
+    if (bytes.includes(0)) return notComputed("the current file is not text (it contains NUL bytes).");
+    let before: string;
+    try {
+      before = new TextDecoder("utf-8", { fatal: true }).decode(bytes);
+    } catch {
+      return notComputed("the current file is not valid UTF-8 text.");
+    }
+    return renderChange(before, input.content, options.maxRenderBytes);
+  } catch (error) {
+    return notComputed(`the current file could not be read (${errorText(error)}).`);
+  }
+}
+
+// ===========================================================================
 // The per-model guard (plan t12)
 // ===========================================================================
 //
@@ -500,12 +599,24 @@ async function decide(options: ModelGuardOptions): Promise<GuardDecision | undef
         "unavailable; the call is refused",
     );
   }
+  // d20: a write that replaces a file is shown to the gate as its change too.
+  const change = options.gate.config.changeAppliesTo.includes(toolName)
+    ? describeWriteChange({
+        toolName,
+        input: options.input,
+        checkoutRoot: options.cwd,
+        cwd: options.cwd,
+        maxFileBytes: options.gate.config.changeMaxFileBytes,
+        maxRenderBytes: options.gate.config.changeMaxRenderBytes,
+      })
+    : undefined;
   const request = {
     task: options.task,
     action: toolName,
     arguments: options.input,
     model: model.key,
     isolation: options.isolation,
+    ...(change !== undefined ? { change } : {}),
     isMutating: true,
   } as const;
   const entry = await options.gate.evaluate(request, options.evaluateOptions ?? {});
