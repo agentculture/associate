@@ -47,9 +47,9 @@ export class FakePi {
   /** Providers registered through `registerProvider`, in registration order. */
   readonly providers: Array<{ id: string; config: Record<string, unknown> }> = [];
   /**
-   * Built-in tools pi has *configured*. Measured against pi 0.84.2:
-   * `getAllTools()` lists these even when `defaultTools: []` leaves them
-   * inactive, so the fake models the same split.
+   * Built-in tools pi has *configured*. Measured against pi 0.84.2 and
+   * re-measured on 1.1.0: `getAllTools()` lists these even when
+   * `defaultTools: []` leaves them inactive, so the fake models the same split.
    */
   builtinTools: string[] = [];
   /** Built-ins pi has *active* — empty under `defaultTools: []`. */

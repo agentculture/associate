@@ -133,9 +133,9 @@ checkout — a fixture repo, an unrelated project — rather than depending on t
 examined checkout carrying its own `.pi/`. `$ASSOCIATE_EXTENSION_PATH` overrides
 which `index.ts` that is.
 
-Measured against pi 0.84.2: the *full* tool list still names `edit` and `write`
-even when they are inactive, so the check is on `active_tools` and
-`writer_tools_active` — never on the full list.
+Measured against pi 0.84.2 and re-measured on the pinned 1.1.0: the *full*
+tool list still names `edit` and `write` even when they are inactive, so the
+check is on `active_tools` and `writer_tools_active` — never on the full list.
 
 ## What it passes pi
 

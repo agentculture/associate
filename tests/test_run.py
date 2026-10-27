@@ -2,8 +2,8 @@
 
 The launcher's whole job is to refuse to serve unless the ``associate`` Pi
 extension actually loaded, and h26 pins *how* it may know: **from the tool list
-Pi reports**, never from the presence of a config file on disk. Pi 0.84.2 has no
-``--list-tools``, and its ``--mode json`` stream carries no startup tool
+Pi reports**, never from the presence of a config file on disk. Pi (0.84.2, and
+the pinned 1.1.0) has no ``--list-tools``, and its ``--mode json`` stream carries no startup tool
 inventory (``docs/json.md``), so the only list Pi reports is the one the
 ``associate_ready`` sentinel returns as a tool result. The launcher therefore
 drives one turn whose prompt is "call associate_ready, then finish" and reads
@@ -32,7 +32,12 @@ import pytest
 from associate.cli import main
 from associate.harness import available_harnesses, get_harness
 from associate.harness.base import ExtensionNotLoadedError, HarnessError
-from associate.harness.pi import PiHarness, resolve_export_root, sanitize_session_id
+from associate.harness.pi import (
+    PINNED_PI_VERSION,
+    PiHarness,
+    resolve_export_root,
+    sanitize_session_id,
+)
 from tests.conftest import require_pi
 from tests.fake_lane import FakeLaneServer
 
@@ -151,7 +156,7 @@ def _install_fake_pi(
     *,
     ready: bool = True,
     writers: list[str] | None = None,
-    version: str = "0.84.2",
+    version: str = "1.1.0",
     task_exit: int = 0,
     artifacts: list[str] | None = None,
 ) -> Path:
@@ -273,7 +278,7 @@ def test_an_active_writer_tool_fails_closed(
 def test_the_full_tool_list_containing_writers_is_not_a_failure(
     fake_pi, checkout: Path, tmp_path: Path, capsys: pytest.CaptureFixture[str]
 ):
-    """r14 (measured under pi 0.84.2): ``getAllTools()`` lists edit/write regardless."""
+    """r14 (measured under pi 0.84.2 and 1.1.0): ``getAllTools()`` lists edit/write regardless."""
     fake_pi(ready=True)
 
     assert _run([], checkout, tmp_path) == 0
@@ -585,18 +590,39 @@ def test_provider_flags_when_a_key_is_set(
     assert "dummy-test-key" not in " ".join(argv)
 
 
+def test_the_tested_pin_is_pi_1_1_0():
+    """c39 / t2: the harness is pinned exactly at the pi it was migrated to."""
+    assert PINNED_PI_VERSION == "1.1.0"
+
+
+@pytest.mark.parametrize("installed", ["0.84.2", "0.99.0", "1.0.4", "1.1.1", "2.0.0"])
 def test_a_version_mismatch_warns_but_still_serves(
-    fake_pi, checkout: Path, tmp_path: Path, capsys: pytest.CaptureFixture[str]
+    fake_pi,
+    checkout: Path,
+    tmp_path: Path,
+    capsys: pytest.CaptureFixture[str],
+    installed: str,
 ):
-    """c39: the launcher warns naming the tested version; it never refuses on it."""
-    fake_pi(version="0.99.0")
+    """c39: any version but the pin warns naming the tested one; it never refuses."""
+    fake_pi(version=installed)
 
     assert _run([], checkout, tmp_path) == 0
 
     captured = capsys.readouterr()
-    assert "0.84.2" in captured.err
-    assert "0.99.0" in captured.err
+    assert f"pi {installed} is installed" in captured.err
+    assert "tested against 1.1.0" in captured.err
     assert "walk.jsonl" in captured.out
+
+
+def test_the_pinned_version_does_not_warn(
+    fake_pi, checkout: Path, tmp_path: Path, capsys: pytest.CaptureFixture[str]
+):
+    """The pin itself runs silently — the warning is reserved for a mismatch."""
+    fake_pi(version="1.1.0")
+
+    assert _run([], checkout, tmp_path) == 0
+
+    assert "tested against" not in capsys.readouterr().err
 
 
 def test_a_missing_pi_binary_is_an_environment_error(
@@ -758,7 +784,7 @@ def test_the_real_pi_writes_both_artifacts_against_the_fake_lane(
 
 
 def test_the_real_pi_help_offers_the_flags_the_launcher_passes():
-    """The launcher's flags are pinned against pi 0.84.2; a rename must fail here."""
+    """The launcher's flags are pinned against pi 1.1.0; a rename must fail here."""
     require_pi()
 
     result = subprocess.run(  # nosec B603 B607 - fixed argv, no shell

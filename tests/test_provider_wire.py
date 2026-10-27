@@ -25,6 +25,7 @@ was never built to produce.
 
 from __future__ import annotations
 
+import json
 import os
 import subprocess
 import time
@@ -189,3 +190,170 @@ def test_reasoning_off_reaches_the_wire(
         assert "reasoning_effort" not in body
     if "chat_template_kwargs" not in expected:
         assert "chat_template_kwargs" not in body
+
+
+# ------------------------------------------------- pi 1.1.0 transcript semantics
+
+#: A second extension, loaded with ``-e`` ahead of the project's own, that
+#: re-enables the built-in writers from *its* ``before_agent_start`` handler and
+#: records the active set it left behind and the one ``agent_start`` sees.
+#: Handlers run in extension load order, so the associate extension's own
+#: ``before_agent_start`` ``dropWriters`` runs after this one — the exact path
+#: ``index.ts`` keeps "in case a later hook re-enabled a writer".
+_REENABLE_WRITERS_EXTENSION = """\
+import { writeFileSync } from "node:fs";
+
+export default async function (pi: any) {
+  const seen: Record<string, string[]> = {};
+  const dump = () => writeFileSync(process.env.ASSOCIATE_TEST_PROBE_OUT!, JSON.stringify(seen));
+  pi.on("before_agent_start", async () => {
+    pi.setActiveTools([...pi.getActiveTools(), "write", "edit"]);
+    seen.after_reenable = pi.getActiveTools();
+    dump();
+  });
+  pi.on("agent_start", async () => {
+    seen.at_agent_start = pi.getActiveTools();
+    dump();
+  });
+}
+"""
+
+
+def _message_text(message: dict[str, object]) -> str:
+    content = message.get("content")
+    if isinstance(content, str):
+        return content
+    if isinstance(content, list):
+        return "".join(str(part.get("text", "")) for part in content if isinstance(part, dict))
+    return ""
+
+
+def _first_request_with_extension(
+    fake_lane: FakeLaneServer, tmp_path: Path, extra_args: list[str], **env_overrides: str
+) -> dict[str, object]:
+    """Run real ``pi`` with the project extension and return its first request body.
+
+    The fake lane answers plain JSON, so pi never finishes the turn; the body
+    is captured the moment it is sent and pi is then killed (see the module
+    docstring).
+    """
+    env = _pi_env(
+        ASSOCIATE_BASE_URL=f"{fake_lane.base_url}/v1",
+        ASSOCIATE_API_KEY=DUMMY_KEY,
+        ASSOCIATE_MODEL="associate",
+        ASSOCIATE_CONTRACT_DIR=str(REPO_ROOT / "associate" / "contract"),
+        ASSOCIATE_EXPORT_ROOT=str(tmp_path / "runs"),
+        **env_overrides,
+    )
+    env.pop("ASSOCIATE_CONTINUE_FROM", None)
+
+    process = subprocess.Popen(  # nosec B603 - fixed argv, no shell
+        [
+            "pi",
+            "-p",
+            "--no-session",
+            "--approve",
+            "--no-context-files",
+            *extra_args,
+            "--provider",
+            PROVIDER_ID,
+            "--model",
+            "associate",
+            "pong",
+        ],
+        stdout=subprocess.PIPE,
+        stderr=subprocess.PIPE,
+        stdin=subprocess.DEVNULL,
+        text=True,
+        env=env,
+        cwd=REPO_ROOT,
+    )
+    try:
+        deadline = time.monotonic() + 120
+        while time.monotonic() < deadline and not fake_lane.requests.chat_completions:
+            time.sleep(0.2)
+    finally:
+        process.kill()
+        _, stderr = process.communicate(timeout=60)
+
+    captured = fake_lane.requests.chat_completions
+    assert captured, f"pi sent no /v1/chat/completions request to the fake lane:\n{stderr}"
+    return captured[0]
+
+
+def _declared_tools(body: dict[str, object]) -> list[str]:
+    return [tool["function"]["name"] for tool in body.get("tools", [])]  # type: ignore[union-attr]
+
+
+def test_transcript_backed_prompt_and_tool_changes_reach_the_first_request(
+    fake_lane: FakeLaneServer, tmp_path: Path
+):
+    """pi 0.86.0 made ``before_agent_start`` prompt and tool changes transcript-backed.
+
+    Measured on the wire rather than inferred from the changelog — the first
+    ``/v1/chat/completions`` body pi sends must show:
+
+    * the system prompt delivered as a leading ``system`` message (the 0.86.0
+      ``TranscriptContext`` conversion, with ``supportsDeveloperRole: false``),
+      carrying no ancestor context file under ``--no-context-files``;
+    * ``lib/prompt.ts``'s ``before_agent_start`` message — the checkout's own
+      ``AGENTS.md`` — in the conversation;
+    * no ``edit``/``write`` declared, although an earlier ``before_agent_start``
+      handler re-enabled both: ``index.ts``'s ``setActiveTools`` from the same
+      event must apply to this very request, not only to a later one.
+    """
+    require_pi()
+
+    helper = tmp_path / "reenable-writers.ts"
+    helper.write_text(_REENABLE_WRITERS_EXTENSION, encoding="utf-8")
+    probe_out = tmp_path / "active-tools.json"
+
+    body = _first_request_with_extension(
+        fake_lane,
+        tmp_path,
+        ["-e", str(helper)],
+        ASSOCIATE_INJECT_PROMPT="1",
+        ASSOCIATE_TEST_PROBE_OUT=str(probe_out),
+    )
+
+    # The helper really did re-enable the writers, and they were gone again by
+    # agent_start — so the removal came from a later before_agent_start handler.
+    seen = json.loads(probe_out.read_text(encoding="utf-8"))
+    assert {"write", "edit"} <= set(seen["after_reenable"]), seen
+    assert not {"write", "edit"} & set(seen["at_agent_start"]), seen
+
+    declared = _declared_tools(body)
+    assert "associate_ready" in declared and "finish" in declared, declared
+    assert not {"write", "edit"} & set(declared), f"a writer reached the wire: {declared}"
+
+    messages = body["messages"]
+    assert messages[0]["role"] == "system", [m["role"] for m in messages]
+    system_text = _message_text(messages[0])
+    assert system_text.strip(), "the system prompt is empty on the wire"
+    assert (
+        "<project_instructions" not in system_text
+    ), "--no-context-files must keep every context file out of the system prompt"
+
+    injected = [m for m in messages[1:] if "this lane's runtime prompt" in _message_text(m)]
+    assert len(injected) == 1, "the AGENTS.md injection must reach the request exactly once"
+    agents_first_line = (REPO_ROOT / "AGENTS.md").read_text(encoding="utf-8").splitlines()[0]
+    assert agents_first_line in _message_text(injected[0])
+
+
+def test_an_operator_added_powershell_never_reaches_the_wire(
+    fake_lane: FakeLaneServer, tmp_path: Path
+):
+    """pi 0.84.3 added a built-in ``powershell``; 1.1.0's ``--tools +name`` adds it.
+
+    Measured on pi 1.1.0 (Linux): ``getAllTools()`` lists ``powershell`` as a
+    configured built-in, and before ``lib/guard.ts`` named it a writer,
+    ``--tools +powershell`` put an unrestricted shell on the wire beside the
+    associate tools. It must be dropped like the built-in ``bash`` is.
+    """
+    require_pi()
+
+    body = _first_request_with_extension(fake_lane, tmp_path, ["--tools", "+powershell"])
+
+    declared = _declared_tools(body)
+    assert "associate_ready" in declared, declared
+    assert "powershell" not in declared, f"powershell reached the wire: {declared}"
