@@ -325,14 +325,24 @@ def _merge_detached(run: RunWorktree, session_id: str, old_main: str) -> bool:
         _git(["worktree", "prune"], run.repo, check=False)
 
 
-def finish(run: RunWorktree, *, clean: bool, session_id: str, outcome: str) -> dict[str, Any]:
+def finish(
+    run: RunWorktree,
+    *,
+    clean: bool,
+    session_id: str,
+    outcome: str,
+    reason: str | None = None,
+) -> dict[str, Any]:
     """Commit and merge a clean run, or keep the run; returns the report fields.
 
     Keys: ``merge`` (``merged`` / ``nothing_to_merge`` / ``kept``), and for a
-    kept run ``merge_reason``, ``worktree`` and ``run_branch``.
+    kept run ``merge_reason``, ``worktree`` and ``run_branch``. *reason* names
+    why a run that is not *clean* was not (e.g. its test commands failed,
+    deviation d12); without one, the run's *outcome* is the reason.
     """
     if not clean:
-        return _kept(run, f"run outcome {outcome!r} is not a clean finish; nothing committed")
+        why = reason or f"run outcome {outcome!r} is not a clean finish"
+        return _kept(run, f"{why}; nothing committed")
 
     _commit_run(run, session_id)
     ahead = int(_out(["rev-list", "--count", f"{run.base}..{run.branch}"], run.repo) or "0")

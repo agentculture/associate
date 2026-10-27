@@ -27,6 +27,17 @@ model runs in place; a mutating run on a non-git directory runs in place with a
 stderr warning. A merge that is refused does not change the exit code — the run
 served — and is reported as ``merge=kept`` with ``merge_reason``.
 
+Operator-named test commands (deviation d12)
+--------------------------------------------
+``--test-command "<command line>"`` (repeatable) names a command the harness
+runs in the run checkout after the model finishes — every one, in order, even
+after a failure — and reports as ``tests``. A worktree run is merged only when
+the outcome is ``ok`` *and* every command exited ``0``; otherwise it is kept
+and ``merge_reason`` names the failing command. Side effects of the commands
+are reverted before any commit. See ``associate.harness.testcmds``. The same
+commands reach the extension as ``ASSOCIATE_TEST_COMMANDS`` for its
+``run_tests`` tool.
+
 Everything the run *produced* goes to stdout; every diagnostic — the version
 warning, the "no lane configured" note — goes to stderr, so a caller can parse
 one without filtering the other.
@@ -44,6 +55,7 @@ from associate.cli._errors import EXIT_ENV_ERROR, EXIT_USER_ERROR, CliError
 from associate.cli._output import emit_diagnostic, emit_result
 from associate.harness import available_harnesses, get_harness
 from associate.harness.base import HarnessError
+from associate.harness.testcmds import TEST_TIMEOUT_SECONDS
 
 #: Keys printed, in this order, when a key is present in the adapter's result.
 _RESULT_KEYS = (
@@ -59,6 +71,7 @@ _RESULT_KEYS = (
     "merge_reason",
     "worktree",
     "run_branch",
+    "tests",
 )
 
 
@@ -121,6 +134,13 @@ def cmd_run(args: argparse.Namespace) -> int:
         ) from err
 
     args.model = _resolve_model(args.model)
+    test_commands = _parse_test_commands(args.test_commands)
+    if args.test_timeout <= 0:
+        raise CliError(
+            code=EXIT_USER_ERROR,
+            message=f"--test-timeout must be positive, got {args.test_timeout}",
+            remediation="pass --test-timeout <seconds greater than 0>",
+        )
 
     checkout = Path(args.checkout).expanduser().resolve() if args.checkout else Path.cwd()
     if not checkout.is_dir():
@@ -154,6 +174,8 @@ def cmd_run(args: argparse.Namespace) -> int:
         # d8: told to the safety gate's decider as the state's isolation line.
         "isolation": "worktree" if run_wt is not None else "in-place",
     }
+    if test_commands:
+        task["test_commands"] = test_commands
     if args.continue_from:
         task["continue_from"] = str(Path(args.continue_from).expanduser().resolve())
 
@@ -179,13 +201,50 @@ def cmd_run(args: argparse.Namespace) -> int:
             remediation=err.remediation,
         ) from err
 
+    tests = _run_tests(test_commands, run_checkout, args.test_timeout)
+    if tests is not None:
+        result = {**result, "tests": tests}
+
     if run_wt is not None:
-        result = {**result, "isolation": "worktree", **_finish(run_wt, result, session_id)}
+        finished = _finish(run_wt, result, session_id, tests)
+        result = {**result, "isolation": "worktree", **finished}
     elif _may_mutate(args.model):
         result = {**result, "isolation": "in-place"}
 
     emit_result(result if json_mode else _render(result), json_mode=json_mode)
     return 0
+
+
+def _parse_test_commands(values: list[str] | None) -> list[list[str]]:
+    """Each ``--test-command`` value as an argv list, in order; exit 1 on a bad one."""
+    from associate.harness.testcmds import parse_test_command
+
+    commands: list[list[str]] = []
+    for value in values or []:
+        try:
+            commands.append(parse_test_command(value))
+        except ValueError as err:
+            raise CliError(
+                code=EXIT_USER_ERROR,
+                message=f"--test-command {value!r} is not a usable command line: {err}",
+                remediation='pass --test-command "<program> <args...>" (split like a shell '
+                "would, but run without one)",
+            ) from err
+    return commands
+
+
+def _run_tests(
+    commands: list[list[str]], run_checkout: Path, timeout: float
+) -> dict[str, Any] | None:
+    """Run the operator's test commands after the model (d12); ``None`` when none given."""
+    if not commands:
+        return None
+    from associate.harness.testcmds import describe_failures, run_test_commands
+
+    tests = run_test_commands(commands, run_checkout, timeout=timeout, warn=emit_diagnostic)
+    if not tests["passed"]:
+        emit_diagnostic(f"associate: tests failed: {describe_failures(tests)}")
+    return tests
 
 
 def _may_mutate(model_key: str) -> bool:
@@ -216,14 +275,28 @@ def _isolate(checkout: Path, session_id: str) -> Any:
     return run_wt
 
 
-def _finish(run_wt: Any, result: dict[str, Any], session_id: str) -> dict[str, Any]:
-    """Commit + merge a clean run, keep anything else; never raises a traceback."""
+def _finish(
+    run_wt: Any, result: dict[str, Any], session_id: str, tests: dict[str, Any] | None
+) -> dict[str, Any]:
+    """Commit + merge a clean run, keep anything else; never raises a traceback.
+
+    Clean means the outcome is ``ok`` and, when test commands were named, every
+    one passed (d12) — a run whose tests failed is kept, never committed.
+    """
     from associate.harness import worktree
+    from associate.harness.testcmds import describe_failures
 
     outcome = str(result.get("outcome"))
+    reason = None
+    if outcome == "ok" and tests is not None and not tests["passed"]:
+        reason = f"tests failed: {describe_failures(tests)}"
     try:
         report = worktree.finish(
-            run_wt, clean=outcome == "ok", session_id=session_id, outcome=outcome
+            run_wt,
+            clean=outcome == "ok" and reason is None,
+            session_id=session_id,
+            outcome=outcome,
+            reason=reason,
         )
     except HarnessError as err:
         raise CliError(
@@ -249,7 +322,23 @@ def _render(result: dict[str, Any]) -> str:
     """``key=value`` lines — the artifact paths first, so a reader sees them."""
     ordered = [key for key in _RESULT_KEYS if key in result]
     ordered += [key for key in result if key not in _RESULT_KEYS and key != "active_tools"]
-    return "\n".join(f"{key}={result[key]}" for key in ordered if result[key] is not None)
+    shown = {**result}
+    if isinstance(result.get("tests"), dict):
+        shown["tests"] = _render_tests(result["tests"])
+    return "\n".join(f"{key}={shown[key]}" for key in ordered if shown[key] is not None)
+
+
+def _render_tests(tests: dict[str, Any]) -> str:
+    """One line: passed/failed, how many, which failed, how many paths reverted."""
+    from associate.harness.testcmds import describe_failures
+
+    count = len(tests.get("commands", []))
+    reverted = len(tests.get("reverted", []))
+    line = f"{'passed' if tests['passed'] else 'failed'} ({count} command(s)"
+    line += f", {reverted} path(s) reverted)" if reverted else ")"
+    if not tests["passed"]:
+        line += f": {describe_failures(tests)}"
+    return line
 
 
 def register(sub: argparse._SubParsersAction) -> None:
@@ -307,6 +396,23 @@ def register(sub: argparse._SubParsersAction) -> None:
         action="store_true",
         help="Ignore the examined checkout's own .pi settings, extensions and MCP "
         "config (pi --no-approve --no-extensions). Off by default.",
+    )
+    p.add_argument(
+        "--test-command",
+        dest="test_commands",
+        action="append",
+        default=None,
+        metavar="COMMAND_LINE",
+        help="A test command the harness runs in the run checkout after the model "
+        "finishes (split like a shell would, run without one). Repeatable; all run, in "
+        "order. A worktree run merges only when every one exits 0; their side effects "
+        "are reverted. Also offered to the model as the run_tests tool.",
+    )
+    p.add_argument(
+        "--test-timeout",
+        type=float,
+        default=TEST_TIMEOUT_SECONDS,
+        help=f"Seconds each --test-command may run (default: {TEST_TIMEOUT_SECONDS:g}).",
     )
     p.add_argument("--json", action="store_true", help="Emit structured JSON.")
     p.set_defaults(func=cmd_run)

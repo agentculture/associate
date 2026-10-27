@@ -12,7 +12,10 @@ network, no model.
 from __future__ import annotations
 
 import json
+import shlex
 import subprocess
+import sys
+import time
 from pathlib import Path
 from typing import Any
 
@@ -95,6 +98,7 @@ class FakeHarness(Harness):
         cls.seen["checkout"] = str(self._checkout)
         cls.seen["task_checkout"] = task["checkout"]
         cls.seen["isolation"] = task.get("isolation")
+        cls.seen["test_commands"] = task.get("test_commands", "absent")
         for rel, text in cls.WRITES.items():
             target = self._checkout / rel
             target.parent.mkdir(parents=True, exist_ok=True)
@@ -477,3 +481,262 @@ def test_without_git_a_plain_directory_is_not_a_repository(tmp_path: Path, monke
     monkeypatch.setattr(wt.shutil, "which", lambda name: None)
     with pytest.raises(wt.NotAGitRepository):
         wt.create_run_worktree(plain, "abc")
+
+
+# ------------------------------------- d12a: operator-named test commands
+
+
+def py(code: str) -> str:
+    """One ``--test-command`` value running *code* with this interpreter."""
+    return shlex.join([sys.executable, "-c", code])
+
+
+PASS = py("print('all good')")
+FAIL = py("import sys; print('it broke'); sys.exit(3)")
+
+
+def payload_of(capsys) -> dict[str, Any]:
+    return json.loads(capsys.readouterr().out)
+
+
+def test_test_commands_are_split_and_reach_the_task_in_order(
+    repo: Path, tmp_path: Path, fake, capsys
+):
+    assert run_cli(repo, tmp_path, "--test-command", PASS, "--test-command", "true -x 'a b'") == 0
+    assert fake.seen["test_commands"] == [
+        [sys.executable, "-c", "print('all good')"],
+        ["true", "-x", "a b"],
+    ]
+
+
+@pytest.mark.parametrize("value", ["", "   ", "pytest 'unclosed"])
+def test_an_empty_or_unsplittable_test_command_exits_1(
+    repo: Path, tmp_path: Path, fake, capsys, value: str
+):
+    assert run_cli(repo, tmp_path, "--test-command", value) == 1
+    err = json.loads(capsys.readouterr().err)
+    assert "test-command" in err["message"]
+    assert "checkout" not in fake.seen, "nothing ran"
+    assert not (root_of(repo) / "run-s1").exists(), "no worktree for a refused run"
+
+
+def test_without_test_commands_the_task_and_result_are_unchanged(
+    repo: Path, tmp_path: Path, fake, capsys
+):
+    assert run_cli(repo, tmp_path) == 0
+    payload = payload_of(capsys)
+    assert "tests" not in payload
+    assert fake.seen["test_commands"] == "absent"
+    assert payload["merge"] == "merged"
+
+
+def test_all_passing_test_commands_merge(repo: Path, tmp_path: Path, fake, capsys):
+    assert run_cli(repo, tmp_path, "--test-command", PASS, "--test-command", PASS) == 0
+    payload = payload_of(capsys)
+    tests = payload["tests"]
+    assert tests["passed"] is True
+    assert [c["exit_code"] for c in tests["commands"]] == [0, 0]
+    assert all(c["timed_out"] is False for c in tests["commands"])
+    assert all(isinstance(c["duration_ms"], int) for c in tests["commands"])
+    assert "all good" in tests["commands"][0]["output_tail"]
+    assert tests["reverted"] == []
+    assert payload["merge"] == "merged"
+    assert (repo / "NEW.md").is_file()
+
+
+def test_tests_run_in_the_run_worktree(repo: Path, tmp_path: Path, fake, capsys):
+    where = tmp_path / "cwd.txt"
+    record = py(f"import os, pathlib; pathlib.Path({str(where)!r}).write_text(os.getcwd())")
+    assert run_cli(repo, tmp_path, "--test-command", record) == 0
+    assert where.read_text() == str(root_of(repo).resolve() / "run-s1")
+
+
+def test_a_failing_test_command_keeps_the_worktree_and_runs_the_rest(
+    repo: Path, tmp_path: Path, fake, capsys
+):
+    marker = tmp_path / "third-ran"
+    third = py(f"import pathlib; pathlib.Path({str(marker)!r}).write_text('x')")
+    before = git(repo, "rev-parse", "main")
+    assert run_cli(repo, tmp_path, "--test-command", PASS, "--test-command", FAIL,
+                   "--test-command", third) == 0  # fmt: skip
+    captured = capsys.readouterr()
+    payload = json.loads(captured.out)
+    tests = payload["tests"]
+    assert tests["passed"] is False
+    assert [c["exit_code"] for c in tests["commands"]] == [0, 3, 0]
+    assert "it broke" in tests["commands"][1]["output_tail"]
+    assert marker.exists(), "a failure does not stop the remaining commands"
+
+    assert payload["merge"] == "kept"
+    assert "test" in payload["merge_reason"]
+    assert "sys.exit(3)" in payload["merge_reason"], "the failing argv is named"
+    assert git(repo, "rev-parse", "main") == before
+    assert git(repo, "rev-parse", "associate-run/s1") == before, "nothing committed"
+    assert (Path(payload["worktree"]) / "NEW.md").is_file(), "the model's work is kept"
+    assert "not merged" in captured.err
+
+
+def test_a_timed_out_test_command_is_reported(repo: Path, tmp_path: Path, fake, capsys):
+    slow = py("import time; print('starting', flush=True); time.sleep(30)")
+    started = time.monotonic()
+    assert run_cli(repo, tmp_path, "--test-timeout", "1", "--test-command", slow) == 0
+    assert time.monotonic() - started < 20
+    payload = payload_of(capsys)
+    command = payload["tests"]["commands"][0]
+    assert command["timed_out"] is True
+    assert command["exit_code"] is None
+    assert "starting" in command["output_tail"]
+    assert payload["tests"]["passed"] is False
+    assert payload["merge"] == "kept"
+    assert "timed out" in payload["merge_reason"]
+
+
+def test_a_missing_test_executable_fails_the_tests_without_a_traceback(
+    repo: Path, tmp_path: Path, fake, capsys
+):
+    assert run_cli(repo, tmp_path, "--test-command", "no-such-binary-d12a --flag") == 0
+    payload = payload_of(capsys)
+    command = payload["tests"]["commands"][0]
+    assert command["exit_code"] is None
+    assert "no-such-binary-d12a" in command["output_tail"]
+    assert payload["merge"] == "kept"
+
+
+def test_test_side_effects_are_reverted_and_the_models_edits_survive(
+    repo: Path, tmp_path: Path, fake, capsys
+):
+    (repo / "extra.txt").write_text("extra\n", encoding="utf-8")
+    git(repo, "add", "extra.txt")
+    git(repo, "commit", "-q", "-m", "extra")
+
+    class Deleting(FakeHarness):
+        def submit(self, task):
+            super().submit(task)
+            (self._checkout / "extra.txt").unlink()  # the model deletes a tracked file
+
+    harness_pkg._REGISTRY["fake"] = lambda: Deleting
+    # the model edits a tracked file and adds a new one
+    fake.WRITES = {"README.md": "# model edit\n", "NEW.md": "written by the run\n"}
+    clobber = py(
+        "import pathlib\n"
+        "pathlib.Path('README.md').write_text('test clobbered README')\n"  # dirty before
+        "pathlib.Path('NEW.md').unlink()\n"  # untracked-before, deleted by test
+        "pathlib.Path('extra.txt').write_text('test resurrected')\n"  # deletion before
+        "pathlib.Path('sub/notes.txt').write_text('test rewrote')\n"  # clean before
+        "pathlib.Path('junk').mkdir()\n"
+        "pathlib.Path('junk/fixture.txt').write_text('junk')\n"  # untracked, new
+    )
+    assert run_cli(repo, tmp_path, "--test-command", clobber) == 0
+    payload = payload_of(capsys)
+    tests = payload["tests"]
+    assert tests["passed"] is True
+    assert sorted(tests["reverted"]) == [
+        "NEW.md",
+        "README.md",
+        "extra.txt",
+        "junk/fixture.txt",
+        "sub/notes.txt",
+    ]
+    assert payload["merge"] == "merged"
+    # what reached main is exactly the model's work
+    assert (repo / "README.md").read_bytes() == b"# model edit\n"
+    assert (repo / "NEW.md").read_bytes() == b"written by the run\n"
+    assert not (repo / "extra.txt").exists()
+    assert (repo / "sub" / "notes.txt").read_bytes() == b"notes\n"
+    assert not (repo / "junk").exists()
+    assert git(repo, "status", "--porcelain") == ""
+
+
+def test_the_lane_key_and_associate_variables_never_reach_a_test_command(
+    repo: Path, tmp_path: Path, fake, capsys, monkeypatch
+):
+    monkeypatch.setenv("ASSOCIATE_API_KEY", "lane-secret-d12a")  # nosec B105
+    monkeypatch.setenv("ASSOCIATE_BASE_URL", "http://lane.invalid/v1")
+    monkeypatch.setenv("D12A_VISIBLE", "yes")
+    dump = tmp_path / "env.json"
+    record = py(f"import json, os; open({str(dump)!r}, 'w').write(json.dumps(dict(os.environ)))")
+    assert run_cli(repo, tmp_path, "--test-command", record) == 0
+    seen = json.loads(dump.read_text())
+    assert not [name for name in seen if name.startswith("ASSOCIATE_")]
+    assert "lane-secret-d12a" not in json.dumps(seen)
+    assert seen["D12A_VISIBLE"] == "yes", "the rest of the operator's environment is kept"
+
+
+def test_the_output_tail_is_bounded_and_redacted(repo: Path, tmp_path: Path, fake, capsys):
+    from associate.harness import testcmds
+
+    noisy = py(
+        "print('x' * 50000)\n"
+        "import sys; print('Authorization: Bearer sk-abcdefghijklmnop1234', file=sys.stderr)"
+    )
+    assert run_cli(repo, tmp_path, "--test-command", noisy) == 0
+    tail = payload_of(capsys)["tests"]["commands"][0]["output_tail"]
+    assert len(tail) <= testcmds.OUTPUT_TAIL_CHARS
+    assert "sk-abcdefghijklmnop1234" not in tail
+    assert "[REDACTED]" in tail
+
+
+def test_a_snapshot_over_the_cap_skips_the_tests_and_fails_them(
+    repo: Path, tmp_path: Path, fake, capsys, monkeypatch
+):
+    from associate.harness import testcmds
+
+    monkeypatch.setattr(testcmds, "MAX_SNAPSHOT_BYTES", 4)
+    marker = tmp_path / "ran"
+    touch = py(f"import pathlib; pathlib.Path({str(marker)!r}).write_text('x')")
+    assert run_cli(repo, tmp_path, "--test-command", touch) == 0
+    payload = payload_of(capsys)
+    assert not marker.exists(), "never run tests unprotected"
+    assert payload["tests"]["passed"] is False
+    assert "MiB" in payload["tests"]["error"] or "bytes" in payload["tests"]["error"]
+    assert payload["merge"] == "kept"
+
+
+def test_a_read_only_in_place_run_reports_tests_and_reverts_their_side_effects(
+    repo: Path, tmp_path: Path, fake, capsys
+):
+    (repo / ".gitignore").write_text("cache/\n", encoding="utf-8")
+    git(repo, "add", ".gitignore")
+    git(repo, "commit", "-q", "-m", "ignore cache")
+    (repo / "README.md").write_text("operator's unsaved edit\n", encoding="utf-8")
+    fake.WRITES = {}
+    effects = py(
+        "import pathlib\n"
+        "pathlib.Path('README.md').write_text('clobbered')\n"
+        "pathlib.Path('cache').mkdir()\n"
+        "pathlib.Path('cache/c.bin').write_text('cached')\n"
+    )
+    assert run_cli(repo, tmp_path, "--model", "senses", "--test-command", effects) == 0
+    payload = payload_of(capsys)
+    assert payload["tests"]["passed"] is True
+    assert payload["tests"]["reverted"] == ["README.md"]
+    assert "merge" not in payload
+    assert (repo / "README.md").read_text(encoding="utf-8") == "operator's unsaved edit\n"
+    assert (repo / "cache" / "c.bin").is_file(), "gitignored files are left alone"
+
+
+def test_a_non_git_in_place_run_runs_tests_unprotected_with_a_warning(tmp_path: Path, fake, capsys):
+    plain = tmp_path / "plain"
+    plain.mkdir()
+    fake.WRITES = {}
+    write = py("import pathlib; pathlib.Path('out.txt').write_text('x')")
+    assert run_cli(plain, tmp_path, "--test-command", write) == 0
+    captured = capsys.readouterr()
+    payload = json.loads(captured.out)
+    assert payload["tests"]["passed"] is True
+    assert payload["tests"]["reverted"] == []
+    assert (plain / "out.txt").is_file()
+    assert "not reverted" in captured.err
+
+
+def test_the_text_output_has_a_tests_line(repo: Path, tmp_path: Path, fake, capsys):
+    argv = ["run", "--harness", "fake", "--checkout", str(repo), "--export-root",
+            str(tmp_path / "runs"), "--session-id", "s1", "--test-command", PASS,
+            "--test-command", FAIL]  # fmt: skip
+    assert main(argv) == 0
+    out = capsys.readouterr().out
+    tests_lines = [line for line in out.splitlines() if line.startswith("tests=")]
+    assert len(tests_lines) == 1
+    assert "failed" in tests_lines[0]
+    assert "sys.exit(3)" in tests_lines[0]
+    assert "{" not in tests_lines[0], "a summary, not a dict dump"

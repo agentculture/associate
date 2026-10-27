@@ -160,11 +160,33 @@ loads, so associate's extension (named with `-e`) is the only one that runs.
 Use it for a repo you do not control, and when associate examines a worktree
 of itself.
 
+## Test commands (deviation d12)
+
+`--test-command "<command line>"` (repeatable, no default) names a command the
+**harness** runs after the model finishes: split like a shell would
+(`shlex.split`) but run without one, in the run checkout, stdin closed, with
+`--test-timeout` seconds each (default 900), and with every `ASSOCIATE_*`
+variable — the lane key included — removed from its environment. All commands
+run, in order, even after a failure. A worktree run is merged only when the
+outcome is `ok` **and** every command exited `0`; otherwise nothing is
+committed, the worktree is kept, and `merge_reason` names the failing command.
+
+Side effects never become the model's work: in a git checkout the harness
+snapshots every uncommitted path before the tests and afterwards restores each
+path that was dirty before or after (pre-test bytes, or `HEAD`); gitignored
+files are left alone. Restored paths are listed in `tests.reverted`. Above a
+64 MiB snapshot the tests are not run and are reported failed. In a non-git
+checkout they run unprotected, with a stderr note. The same commands reach the
+extension as `ASSOCIATE_TEST_COMMANDS` for the model's `run_tests` tool.
+
 ## Output
 
 `walk_path`, `statements_path`, `statements_md_path`, `export_dir`, `outcome`
 and `session_id` on stdout — `key=value` lines, or one JSON object with
-`--json`. Diagnostics (the pi version warning, the no-lane note) go to stderr.
+`--json`. With test commands, `tests` too: `{passed, commands: [{argv,
+exit_code, timed_out, duration_ms, output_tail}], reverted}` in JSON (the
+output tail redacted and bounded), one summary line in text. Diagnostics (the
+pi version warning, the no-lane note) go to stderr.
 
 ## Usage
 
@@ -174,13 +196,14 @@ and `session_id` on stdout — `key=value` lines, or one JSON object with
     associate run --harness stub
     associate run --continue-from <prior export dir>
     associate run --export-root <dir> --session-id <id>
+    associate run "Fix the failing parser test" --test-command "uv run pytest -q"
 
 ## Exit codes
 
 - `0` the run served; both artifact paths are on stdout
 - `1` unknown `--harness` (the error lists the registered adapters), an
-  unknown or pending `--model`, or a
-  `--checkout` that is not a directory
+  unknown or pending `--model`, an empty or unsplittable `--test-command`, a
+  non-positive `--test-timeout`, or a `--checkout` that is not a directory
 - `2` the adapter failed closed (no sentinel, or an active writer tool), pi is
   not on PATH, the run timed out, or the export root is inside the checkout
 """

@@ -389,6 +389,7 @@ plumbing — no committed file names a host, port, or bearer:
 | `ASSOCIATE_SESSION_ID` | generated | Pins the scratch/export directory to one session id (the ACP `session/new` id when running under `culture start associate`, or a generated id headless), so concurrent runs never share a scratch dir. |
 | `ASSOCIATE_EXPORT_ROOT` | — | Where a run's `walk.jsonl` / statements export lands; the Python adapter sets this per run. |
 | `ASSOCIATE_ISOLATION` | absent (read as `in-place`) | Where a run's writes land, `worktree` or `in-place`. Set by `associate run` from the run it started, and never inherited; the safety gate tells CLEF this (deviation d8, `docs/notes/gate-calibration.md`). |
+| `ASSOCIATE_TEST_COMMANDS` | absent | The operator's `--test-command` values as a JSON array of argv lists, for the extension's `run_tests` tool. Set by `associate run` from the task, and never inherited; the harness itself runs the same commands after the model and merges a worktree run only when all pass (deviation d12). |
 
 ## `steward doctor` invariants (build to pass these)
 
