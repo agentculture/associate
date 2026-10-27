@@ -97,7 +97,44 @@ senses statement claimed an action it never took.
   `explain` / `learn` text and the package description now describe the
   multi-model harness.
 
+### Security
+
+The PR #18 code review found ten issues. The nine below were confirmed in the
+code and fixed, test-first. The tenth, large writes always refused, waits on a
+decision.
+
+- A `worker`/`cortex` `write` or `edit` must land inside the run checkout or
+  the session scratch directory. Paths are resolved the way pi does (`~`, `@`,
+  `file://`, symlinks, `..`). The guard refuses anything else before CLEF is
+  asked.
+- Per-model prompts are read only from associate's own install, never from the
+  examined checkout. A checkout that plants its own
+  `prompts/<model>.md` is ignored.
+- Text a `spawn_subagent` child hands back taints memory writes
+  (`untrusted:child`).
+- `run_tests` runs alone (`executionMode: sequential`), and a per-session test
+  window refuses writes and writing-child spawns while tests run. pi 1.1.0 runs
+  a message's tool calls in parallel by default.
+
+### Fixed
+
+- A long-lived session (the mesh resident) no longer refuses every tool call
+  after its first `finish`: per-prompt state resets on `before_agent_start`.
+- Active-model resolution has one rule (`resolveActiveModel`), read once at
+  load. The prompt, image-read and ledger code had their own diverging copies;
+  a pending model no longer gets its prompt injected.
+- A spawned child's wall clock is capped by the parent run's deadline
+  (`ASSOCIATE_RUN_DEADLINE`, set by the harness), counting time spent waiting
+  for the writer lock. A child that could not finish in time is refused.
+- `associate bench`: the upstream runner's output goes to stderr, so `--json`
+  stdout parses. The default endpoint is read from `models.json` here and in
+  the harness's served-model probe.
+- Every SonarCloud issue the d2 gate reported (19, none a behaviour change).
+
 ### Known issues
+
+- `lib/contain.ts` `confine()` (read and shell confinement) does not follow a
+  dangling symlink. Write confinement now handles that case on its own.
 
 - `steward doctor` fails `portability` and `skills-convention` on `main` and
   on this branch alike (42 and 5 findings), and this branch adds none
