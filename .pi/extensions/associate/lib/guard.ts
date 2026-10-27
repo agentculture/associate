@@ -17,6 +17,10 @@
 
 import { isAbsolute, resolve } from "node:path";
 import { isInside } from "./session.ts";
+import { buildGateState } from "./gate.ts";
+import type { EvaluateOptions, Gate, GateEntry } from "./gate.ts";
+import type { ContractModels, ContractPolicy } from "./contract.ts";
+import { isMutatingCall, type ActiveModel } from "./toolset.ts";
 
 /**
  * Pi's built-in tool names that can persist a change to a checkout.
@@ -172,5 +176,148 @@ export function evaluateToolCall(options: GuardOptions): GuardDecision | undefin
     }
   }
 
+  return undefined;
+}
+
+// ===========================================================================
+// The per-model guard (plan t12)
+// ===========================================================================
+//
+// Decision order for every `tool_call`, each step failing closed:
+//
+//   1. no active model resolved           → refuse (nothing is allowed);
+//   2. tool not in the model's tool set   → refuse (risk r8: catches a tool
+//      another extension re-enabled after our setActiveTools, an `mcp__*`
+//      tool, `codemode`, any unknown name);
+//   3. model may not mutate (senses):
+//        mutating call → refuse, BEFORE the gate (the decider is never asked);
+//        otherwise the scratch-dir write confinement above still applies;
+//   4. read-only call                    → proceed, the gate is never asked;
+//   5. mutating call (worker / cortex)   → `gate.evaluate`, entry recorded to
+//      the walk; proceed only on `allow`;
+//   6. truncation (risk r15): a gate state cut to fit the decider means CLEF
+//      scored only part of the call, so the call is refused even on `allow`.
+//
+// Any exception anywhere — the gate, the classifier, the walk write — blocks.
+
+
+/** The truncation marker `lib/gate.ts` appends to a reason when the state was cut. */
+export const GATE_TRUNCATION_MARKER = "state truncated to fit the decider";
+
+export interface ModelGuardOptions {
+  readonly toolName: string;
+  readonly input: unknown;
+  readonly model: ActiveModel;
+  readonly registry: ContractModels;
+  readonly policy: ContractPolicy;
+  /** The session's gate; undefined means the gate could not be built — mutations refuse. */
+  readonly gate: Gate | undefined;
+  /** The run's task text as the extension knows it (the user prompt); never a tool result. */
+  readonly task: string;
+  readonly scratchDir: string;
+  readonly cwd: string;
+  readonly declaredWriters?: Iterable<string>;
+  readonly declaredNonWriters?: Iterable<string>;
+  /** Append the gate entry to the walk. A throw here blocks the call. */
+  readonly recordGate: (entry: GateEntry) => void;
+  readonly evaluateOptions?: EvaluateOptions;
+}
+
+function block(reason: string): GuardDecision {
+  return { block: true, reason };
+}
+
+function errorText(error: unknown): string {
+  return error instanceof Error ? error.message : String(error);
+}
+
+/** Decide one tool call under the active model's guard. Never throws. */
+export async function decideToolCall(options: ModelGuardOptions): Promise<GuardDecision | undefined> {
+  try {
+    return await decide(options);
+  } catch (error) {
+    return block(`associate: the tool_call guard failed (${errorText(error)}); the call is refused`);
+  }
+}
+
+async function decide(options: ModelGuardOptions): Promise<GuardDecision | undefined> {
+  const { toolName, model } = options;
+
+  // 1. No model, no tools.
+  if (!model.entry || model.key === undefined) {
+    return block(model.problem ?? "associate: no active model is selected; every tool call is refused");
+  }
+
+  // 2. The model's own tool set, checked on every call (r8).
+  if (!model.tools.has(toolName)) {
+    return block(
+      `associate: '${toolName}' is not in the tool set of the active model '${model.key}' ` +
+        `(${[...model.tools].join(", ")}); the call is refused`,
+    );
+  }
+
+  const mutating = isMutatingCall(toolName, options.input, options.registry, options.policy);
+
+  // 3. A model that may not mutate: refused before the gate, never asked.
+  if (!model.mayMutate) {
+    if (mutating) {
+      return block(
+        `associate: '${toolName}' can change something and the active model '${model.key}' may ` +
+          "not mutate (models.json may_mutate: false); hand the work back with 'finish' instead",
+      );
+    }
+    return evaluateToolCall({
+      toolName,
+      input: options.input,
+      scratchDir: options.scratchDir,
+      cwd: options.cwd,
+      declaredWriters: options.declaredWriters,
+      declaredNonWriters: options.declaredNonWriters,
+    });
+  }
+
+  // 4. A pure read never reaches the decider.
+  if (!mutating) return undefined;
+
+  // 5. Every mutation goes through the gate.
+  if (!options.gate) {
+    return block(
+      `associate: '${toolName}' is a mutating call and the safety gate is unavailable; the call is refused`,
+    );
+  }
+  const request = {
+    task: options.task,
+    action: toolName,
+    arguments: options.input,
+    model: model.key,
+    isMutating: true,
+  } as const;
+  const entry = await options.gate.evaluate(request, options.evaluateOptions ?? {});
+
+  // 6. r15: a truncated state means the decider scored only part of the call.
+  let truncated: boolean;
+  try {
+    truncated = buildGateState(options.gate.config, request).truncated;
+  } catch {
+    truncated = true;
+  }
+  truncated ||= typeof entry.reason === "string" && entry.reason.includes(GATE_TRUNCATION_MARKER);
+  if (truncated) {
+    const note =
+      "refused by the associate tool_call hook: the gate state was truncated, so the decider " +
+      "scored only part of this mutating call (risk r15)";
+    entry.reason = entry.reason ? `${entry.reason}; ${note}` : note;
+    entry.decision = "refuse";
+  }
+
+  // Recorded before the call runs, whatever the decision; a failed write blocks.
+  options.recordGate(entry);
+
+  if (entry.decision !== "allow") {
+    return block(
+      `associate: the safety gate refused '${toolName}' (${entry.id}, tier ${entry.tier})` +
+        (entry.reason ? `: ${entry.reason}` : ""),
+    );
+  }
   return undefined;
 }

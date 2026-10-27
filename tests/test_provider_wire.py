@@ -260,7 +260,11 @@ def _message_text(message: dict[str, object]) -> str:
 
 
 def _first_request_with_extension(
-    fake_lane: FakeLaneServer, tmp_path: Path, extra_args: list[str], **env_overrides: str
+    fake_lane: FakeLaneServer,
+    tmp_path: Path,
+    extra_args: list[str],
+    model: str = "worker",
+    **env_overrides: str,
 ) -> dict[str, object]:
     """Run real ``pi`` with the project extension and return its first request body.
 
@@ -271,7 +275,7 @@ def _first_request_with_extension(
     env = _pi_env(
         ASSOCIATE_BASE_URL=f"{fake_lane.base_url}/v1",
         ASSOCIATE_API_KEY=DUMMY_KEY,
-        ASSOCIATE_MODEL="worker",
+        ASSOCIATE_MODEL=model,
         ASSOCIATE_CONTRACT_DIR=str(REPO_ROOT / "associate" / "contract"),
         ASSOCIATE_EXPORT_ROOT=str(tmp_path / "runs"),
         **env_overrides,
@@ -289,7 +293,7 @@ def _first_request_with_extension(
             "--provider",
             PROVIDER_ID,
             "--model",
-            "worker",
+            model,
             "pong",
         ],
         stdout=subprocess.PIPE,
@@ -329,9 +333,10 @@ def test_transcript_backed_prompt_and_tool_changes_reach_the_first_request(
       carrying no ancestor context file under ``--no-context-files``;
     * ``lib/prompt.ts``'s ``before_agent_start`` message — the checkout's own
       ``AGENTS.md`` — in the conversation;
-    * no ``edit``/``write`` declared, although an earlier ``before_agent_start``
-      handler re-enabled both: ``index.ts``'s ``setActiveTools`` from the same
-      event must apply to this very request, not only to a later one.
+    * no ``edit``/``write`` declared for ``senses`` (the model that may not
+      mutate, plan t12), although an earlier ``before_agent_start`` handler
+      re-enabled both: ``index.ts``'s ``setActiveTools`` from the same event
+      must apply to this very request, not only to a later one.
     """
     require_pi()
 
@@ -343,6 +348,7 @@ def test_transcript_backed_prompt_and_tool_changes_reach_the_first_request(
         fake_lane,
         tmp_path,
         ["-e", str(helper)],
+        "senses",
         ASSOCIATE_INJECT_PROMPT="1",
         ASSOCIATE_TEST_PROBE_OUT=str(probe_out),
     )
@@ -388,3 +394,33 @@ def test_an_operator_added_powershell_never_reaches_the_wire(
     declared = _declared_tools(body)
     assert "associate_ready" in declared, declared
     assert "powershell" not in declared, f"powershell reached the wire: {declared}"
+
+
+def _tools_declared_for(fake_lane: FakeLaneServer, tmp_path: Path, model: str) -> set[str]:
+    fake_lane.requests.chat_completions.clear()
+    return set(
+        _declared_tools(_first_request_with_extension(fake_lane, tmp_path / model, [], model))
+    )
+
+
+def test_each_model_declares_exactly_its_registry_tool_set_on_the_wire(
+    fake_lane: FakeLaneServer, tmp_path: Path
+):
+    """Plan t12, criterion 1, on the wire: the first request pi sends declares
+    exactly the active model's ``models.json`` tools that this extension and pi
+    provide — ``senses`` no ``write``/``edit``/``bash``, ``worker`` and
+    ``cortex`` their full set including ``write``/``edit``/``bash``. Tools a
+    model's entry names but nothing registers yet (later plan tasks) are
+    absent, and nothing outside the entry is ever declared.
+    """
+    require_pi()
+    models = json.loads((REPO_ROOT / "associate" / "contract" / "models.json").read_text())
+
+    declared = {key: _tools_declared_for(fake_lane, tmp_path, key) for key in ("senses", "worker")}
+
+    assert not {"write", "edit", "bash"} & declared["senses"], declared["senses"]
+    assert {"write", "edit", "bash"} <= declared["worker"], declared["worker"]
+    for key, tools in declared.items():
+        allowed = set(models["models"][key]["tools"])
+        assert {"associate_ready", "finish", "read"} <= tools, (key, tools)
+        assert tools <= allowed, f"{key} declared tools outside its entry: {tools - allowed}"

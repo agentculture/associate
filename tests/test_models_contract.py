@@ -122,3 +122,15 @@ def test_endpoint_default_is_declared_and_required(doc):
     assert doc["endpoint"]["default_base_url"].startswith("http")
     del doc["endpoint"]
     assert validate.validate_models(doc)
+
+
+def test_policy_shell_read_only_subset_excludes_the_writing_subcommands():
+    """Risk r9 (plan t12): the allowlist is a permission list; read_only is the classification."""
+    shell = contract.load_policy()["shell"]
+    allow = {e["command"]: e["subcommands"] for e in shell["allowlist"]}
+    read_only = {e["command"]: e["subcommands"] for e in shell["read_only"]["commands"]}
+    assert read_only["eidetic"] == ["recall"]
+    assert read_only["ledger"] == ["list"]
+    for command, subcommands in read_only.items():
+        assert command in allow, f"{command} is read-only but not allowlisted"
+        assert set(subcommands) <= set(allow[command]), command

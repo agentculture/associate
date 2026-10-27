@@ -12,7 +12,10 @@
  * 3. registers `associate_ready` — the sentinel a launcher uses to prove the
  *    extension actually loaded rather than trusting that the config file is on
  *    disk (spec c34) — and `finish`, whose payload is the hand-back;
- * 4. registers the `tool_call` write guard (spec c4/c5);
+ * 4. registers the `tool_call` guard: the active model's tool set (plan t12),
+ *    senses' no-mutation rule, and the safety gate (`lib/gate.ts`) in front of
+ *    every mutating call of a model that may mutate, each decision appended to
+ *    the walk (spec c4/c5, c13, c35, c38);
  * 5. registers the `associate` provider from the environment, with the hook
  *    that switches reasoning off on the wire (spec c14/c28) — or, with no key
  *    configured, registers nothing and prints one hint;
@@ -28,13 +31,15 @@ import type { ExtensionAPI } from "@earendil-works/pi-coding-agent";
 import { mkdirSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { Type } from "typebox";
-import { evaluateToolCall } from "./lib/guard.ts";
+import { createGate, type Gate } from "./lib/gate.ts";
+import { decideToolCall } from "./lib/guard.ts";
 import { normalizeHandback, unreferencedCount } from "./lib/handback.ts";
 import { installPromptInjection } from "./lib/prompt.ts";
 import { registerAssociateProvider } from "./lib/provider.ts";
 import { createAssociateContext, loadToolModules } from "./lib/runtime.ts";
 import { installStatementsRecorder } from "./lib/statements.ts";
 import { installContinueFrom } from "./lib/torch.ts";
+import { activeToolSet, resolveActiveModel, toolsOutsideContract } from "./lib/toolset.ts";
 import { installWalkRecorder } from "./lib/walk.ts";
 
 /** Registered by this file rather than by a module under `tools/`. */
@@ -53,6 +58,50 @@ export const READY_REPORT_FILENAME = "ready.json";
 export default async function (pi: ExtensionAPI) {
   const ctx = createAssociateContext();
   const { contract, session } = ctx;
+
+  // ------------------------------------------------------------ active model
+  // Resolved once, at load, exactly as the provider resolves it. An unknown or
+  // pending ASSOCIATE_MODEL leaves no tool set: every call is refused.
+  const model = resolveActiveModel(process.env, contract.models);
+  if (model.problem) console.error(model.problem);
+
+  // ------------------------------------------------------------ safety gate
+  // One gate per session so gate ids (g1, g2, …) are unique in the walk. The
+  // environment is snapshotted at load (endpoint + key); `fetch` is looked up
+  // per call. A gate that cannot be built leaves mutations refused.
+  let gate: Gate | undefined;
+  try {
+    gate = createGate({
+      contract,
+      env: { ...process.env },
+      fetch: ((...args: Parameters<typeof fetch>) => globalThis.fetch(...args)) as typeof fetch,
+    });
+  } catch (error) {
+    console.error(
+      `associate: the safety gate could not be built (${error instanceof Error ? error.message : String(error)}); ` +
+        "every mutating tool call will be refused",
+    );
+  }
+
+  // The task text the gate scores a call against: the prompt of the current
+  // agent run, as pi hands it to before_agent_start. Never a tool result.
+  let task = "";
+
+  // Every tool this extension registers is recorded, so it can be checked
+  // against models.json `tool_names` — the contract is the source of truth.
+  const registered = new Set<string>();
+  const host = new Proxy(pi, {
+    get(target, prop) {
+      if (prop === "registerTool") {
+        return (definition: { name?: unknown }) => {
+          if (typeof definition?.name === "string") registered.add(definition.name);
+          return target.registerTool(definition as Parameters<ExtensionAPI["registerTool"]>[0]);
+        };
+      }
+      const value = Reflect.get(target, prop, target);
+      return typeof value === "function" ? value.bind(target) : value;
+    },
+  }) as ExtensionAPI;
 
   // ------------------------------------------------------------ walk record
   // Installed before anything else registers a tool, so the first tool event
@@ -114,12 +163,16 @@ export default async function (pi: ExtensionAPI) {
       // transcript. So the launcher's check is `writer_tools_active` being
       // empty, not `tools`.
       tools: pi.getAllTools().map((tool) => tool.name),
+      model: model.key ?? null,
+      model_may_mutate: model.mayMutate,
+      gate_ready: gate !== undefined,
+      tools_outside_contract: toolsOutsideContract(registered, contract.models),
       active_tools: active,
       writer_tools_active: active.filter((name) => ctx.contain.isWriter(name)),
     };
   };
 
-  pi.registerTool({
+  host.registerTool({
     name: "associate_ready",
     label: "Associate Ready",
     description:
@@ -137,7 +190,7 @@ export default async function (pi: ExtensionAPI) {
   });
 
   // ------------------------------------------------------------------ finish
-  pi.registerTool({
+  host.registerTool({
     name: "finish",
     label: "Finish",
     description:
@@ -212,8 +265,11 @@ export default async function (pi: ExtensionAPI) {
     },
   });
 
-  // -------------------------------------------------------------- write guard
-  pi.on("tool_call", (event) => {
+  // --------------------------------------------------------- tool_call guard
+  // Order (lib/guard.ts decideToolCall): finished → model set → senses refuses
+  // mutations before the gate → pure reads proceed → mutations go through the
+  // gate, its entry appended to the walk → a truncated gate state refuses.
+  pi.on("tool_call", async (event, eventCtx) => {
     if (finished) {
       return {
         block: true,
@@ -222,13 +278,26 @@ export default async function (pi: ExtensionAPI) {
           "with the summary as your final message instead of calling tools",
       };
     }
-    return evaluateToolCall({
+    const piCtx = eventCtx as { modelRegistry?: unknown; signal?: AbortSignal } | undefined;
+    return decideToolCall({
       toolName: event.toolName,
       input: event.input,
+      model,
+      registry: contract.models,
+      policy: contract.policy,
+      gate,
+      task,
       scratchDir: session.scratchDir,
       cwd: ctx.checkoutRoot,
       declaredWriters: ctx.declaredWriters(),
       declaredNonWriters: ctx.declaredNonWriters(),
+      recordGate: (entry) => {
+        walk.recordGate(entry);
+      },
+      evaluateOptions: {
+        modelRegistry: piCtx?.modelRegistry as never,
+        signal: piCtx?.signal,
+      },
     });
   });
 
@@ -240,30 +309,42 @@ export default async function (pi: ExtensionAPI) {
   registerAssociateProvider(pi, process.env, undefined, contract.models);
 
   // ------------------------------------------------------------- tool modules
-  await loadToolModules(pi, ctx);
+  await loadToolModules(host, ctx);
 
-  // ------------------------------------------------- writers off, by contract
-  // Deviation d7 (measured 2026-09-12): `defaultTools: []` lives in the
-  // project's .pi/settings.json and does not travel with a globally installed
-  // package — run in an unrelated directory, pi still offered edit and write.
-  // The restriction has to be the extension's own, so every writer is removed
-  // from the active set here. Declared non-writers (the argv shell) survive.
-  // setActiveTools is an action method and pi refuses those while extensions
-  // are still loading, so it runs on session_start (fired right after load)
-  // and again on before_agent_start in case a later hook re-enabled a writer.
-  // Since pi 0.86.0 a tool change is transcript-backed: pi appends it before
-  // the next model request. Measured on 1.1.0 (tests/test_provider_wire.py):
-  // a writer re-enabled by an earlier before_agent_start handler is gone from
-  // the very first request this handler precedes.
-  const dropWriters = () => {
+  // The contract is the source of truth for tool names: a registered tool it
+  // does not list is reported loudly. It is never active and every call to it
+  // is refused, because no model's tool set can name it.
+  const outside = toolsOutsideContract(registered, contract.models);
+  if (outside.length > 0) {
+    console.error(
+      `associate: CONTRACT MISMATCH — registered tool(s) not in models.json tool_names: ` +
+        `${outside.join(", ")}. They are never activated and every call to them is refused; ` +
+        "add them to the contract or stop registering them.",
+    );
+  }
+
+  // ------------------------------------------------- the model's tool set
+  // The active set is the active model's models.json `tools`, intersected with
+  // what pi has (getAllTools: this extension's tools plus pi's configured
+  // built-ins such as write/edit); for a model that may not mutate every writer
+  // is removed as well. Deviation d7 still holds — `defaultTools: []` does not
+  // travel with a globally installed package — so the restriction is the
+  // extension's own. setActiveTools is an action method pi refuses while
+  // extensions load, so it runs on session_start and again on
+  // before_agent_start in case an earlier hook re-enabled something. Since pi
+  // 0.86.0 a tool change is transcript-backed (measured on 1.1.0,
+  // tests/test_provider_wire.py). A later agent_start handler of another
+  // extension can still re-enable a tool (risk r8): the tool_call guard above
+  // checks the model's set on every call, so such a tool is refused anyway.
+  const applyModelToolSet = () => {
+    const available = pi.getAllTools().map((tool) => tool.name);
+    const wanted = activeToolSet(model, available, (name) => ctx.contain.isWriter(name));
     const active = pi.getActiveTools();
-    const withoutWriters = active.filter((name) => !ctx.contain.isWriter(name));
-    if (withoutWriters.length !== active.length) {
-      pi.setActiveTools(withoutWriters);
-    }
+    const same = active.length === wanted.length && wanted.every((name) => active.includes(name));
+    if (!same) pi.setActiveTools(wanted);
   };
   // ------------------------------------------------- readiness, on disk (d8)
-  // Written after dropWriters so the report can never name a writer the run
+  // Written after applyModelToolSet so the report can never name a writer the run
   // will not actually offer. A failure to write is swallowed on purpose: the
   // launcher fails closed on the *absence* of the file, which is a louder and
   // more honest signal than a crashed session at startup.
@@ -281,8 +362,12 @@ export default async function (pi: ExtensionAPI) {
   };
 
   pi.on("session_start", async () => {
-    dropWriters();
+    applyModelToolSet();
     writeReadyReport();
   });
-  pi.on("before_agent_start", async () => dropWriters());
+  pi.on("before_agent_start", async (event) => {
+    const prompt = (event as { prompt?: unknown } | undefined)?.prompt;
+    if (typeof prompt === "string") task = prompt;
+    applyModelToolSet();
+  });
 }

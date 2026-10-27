@@ -49,7 +49,24 @@
       {"command": "webglass", "subcommands": ["search", "page"]},
       {"command": "eidetic", "subcommands": ["recall", "remember"]},
       {"command": "ledger", "subcommands": ["append", "list"]}
-    ]
+    ],
+    "read_only": {
+      "$comment": "The read-only subset of the allowlist (plan t12, risk r9). The allowlist above is a PERMISSION list and holds commands that write (eidetic remember, ledger append); this list is the CLASSIFICATION the tool_call guard uses for the safety gate's isMutating. A bash call skips the gate only when the allowlist accepts its argv AND it matches an entry here (argv[1] in the entry's subcommands when it names any) AND it carries none of the entry's unsafe_options (a token naming the option, with or without =value, or any abbreviation of it, since git accepts unambiguous long-option prefixes) or unsafe_short_flags (a letter inside a single-dash flag cluster). Everything else is mutating and gated. The unsafe options are the ones that make a reading command run a program or write a file.",
+      "commands": [
+        {"command": "rg", "subcommands": [], "unsafe_options": ["--pre", "--hostname-bin"]},
+        {"command": "fd", "subcommands": [], "unsafe_options": ["--exec", "--exec-batch"], "unsafe_short_flags": ["x", "X"]},
+        {"command": "ls", "subcommands": []},
+        {"command": "cat", "subcommands": []},
+        {"command": "head", "subcommands": []},
+        {"command": "tail", "subcommands": []},
+        {"command": "wc", "subcommands": []},
+        {"command": "git", "subcommands": ["log", "diff", "show", "status", "blame"], "unsafe_options": ["--output", "--ext-diff", "--textconv"]},
+        {"command": "code-lens", "subcommands": []},
+        {"command": "webglass", "subcommands": ["search", "page"]},
+        {"command": "eidetic", "subcommands": ["recall"]},
+        {"command": "ledger", "subcommands": ["list"]}
+      ]
+    }
   },
   "budgets": {
     "read": {
