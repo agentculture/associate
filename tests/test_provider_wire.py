@@ -132,12 +132,16 @@ def _contract_with_reasoning(tmp_path: Path, key: str, reasoning: str) -> Path:
     return dest
 
 
-def _first_chat_body(fake_lane: FakeLaneServer, role: str, **overrides: str) -> dict[str, object]:
+def _first_chat_body(
+    fake_lane: FakeLaneServer, role: str | None, **overrides: str
+) -> dict[str, object]:
+    """The first chat request pi sends; ``role=None`` passes no --provider/--model."""
     env = {
         "ASSOCIATE_BASE_URL": f"{fake_lane.base_url}/v1",
         "ASSOCIATE_API_KEY": DUMMY_KEY,
         **overrides,
     }
+    selection = [] if role is None else ["--provider", PROVIDER_ID, "--model", role]
     process = subprocess.Popen(  # nosec B603 - fixed argv, no shell
         [
             "pi",
@@ -146,10 +150,7 @@ def _first_chat_body(fake_lane: FakeLaneServer, role: str, **overrides: str) -> 
             "--approve",
             "--no-tools",
             "--no-context-files",
-            "--provider",
-            PROVIDER_ID,
-            "--model",
-            role,
+            *selection,
             "pong",
         ],
         stdout=subprocess.PIPE,
@@ -184,6 +185,21 @@ def test_no_enable_thinking_override_when_the_entry_declares_none(
     assert body["model"] == key
     assert "chat_template_kwargs" not in body, body
     assert "reasoning_effort" not in body, body
+
+
+def test_without_model_flags_the_session_runs_the_selected_registry_model(
+    fake_lane: FakeLaneServer,
+):
+    """pi-acp launches pi with no --provider/--model (docs/notes/resident-model-resolution.md).
+
+    The extension must still put the session on the registry model ASSOCIATE_MODEL
+    names, rather than on whatever the operator's user-level pi default is.
+    """
+    require_pi()
+
+    body = _first_chat_body(fake_lane, None, ASSOCIATE_MODEL="senses")
+
+    assert body["model"] == "senses", body
 
 
 def test_reasoning_off_reaches_the_wire_for_that_model_only(

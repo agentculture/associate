@@ -80,6 +80,7 @@ export type ResolveResult =
 export interface ProviderHost {
   registerProvider(id: string, config: Record<string, unknown>): void;
   on(event: string, handler: (event: any, ctx?: any) => unknown): void;
+  setModel(model: unknown): Promise<boolean>;
 }
 
 /** Where the hint goes. Defaults to stderr so it never pollutes a result. */
@@ -219,6 +220,31 @@ export function registerAssociateProvider(
 
   const { settings } = resolved;
   pi.registerProvider(ASSOCIATE_PROVIDER_ID, providerConfig(settings));
+
+  // Pin the session to the selected registry model. pi-acp ignores
+  // session/new's `model` and culture never sends session/set_model
+  // (docs/notes/resident-model-resolution.md), so without this the mesh
+  // resident runs whatever the operator's user-level pi default is.
+  pi.on("session_start", async (_event, ctx) => {
+    const current = ctx?.model;
+    if (current?.provider === ASSOCIATE_PROVIDER_ID && current?.id === settings.selectedModelId) {
+      return;
+    }
+    const model = ctx?.modelRegistry?.find(ASSOCIATE_PROVIDER_ID, settings.selectedModelId);
+    if (!model) {
+      emit(
+        `associate: pi does not list ${ASSOCIATE_PROVIDER_ID}/${settings.selectedModelId}; ` +
+          `the session stays on its current model.`,
+      );
+      return;
+    }
+    if (!(await pi.setModel(model))) {
+      emit(
+        `associate: could not switch the session to ${ASSOCIATE_PROVIDER_ID}/` +
+          `${settings.selectedModelId} (pi reports no auth for the provider).`,
+      );
+    }
+  });
 
   const offIds = reasoningOffModelIds(settings.activeModels);
   if (offIds.size > 0) {

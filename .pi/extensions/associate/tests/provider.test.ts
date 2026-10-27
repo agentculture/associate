@@ -39,11 +39,27 @@ function withReasoning(key: string, reasoning: "model-default" | "on" | "off"): 
 function fakeHost() {
   const providers: Array<{ id: string; config: Record<string, unknown> }> = [];
   const handlers = new Map<string, Array<(event: any, ctx?: any) => unknown>>();
+  const setModelCalls: unknown[] = [];
+  let setModelResult = true;
   return {
     providers,
     handlers,
+    setModelCalls,
+    failSetModel() {
+      setModelResult = false;
+    },
     registerProvider(id: string, config: Record<string, unknown>) {
       providers.push({ id, config });
+    },
+    async setModel(model: unknown) {
+      setModelCalls.push(model);
+      return setModelResult;
+    },
+    /** Run every `session_start` handler against `ctx`, awaiting each. */
+    async fireSessionStart(ctx: unknown) {
+      for (const handler of handlers.get("session_start") ?? []) {
+        await handler({ type: "session_start" }, ctx);
+      }
     },
     on(event: string, handler: (event: any, ctx?: any) => unknown) {
       const list = handlers.get(event) ?? [];
@@ -153,6 +169,7 @@ test("without the key, nothing registers and one hint line is emitted", () => {
   assert.equal(result.registered, false);
   assert.equal(host.providers.length, 0, "no provider registered");
   assert.equal(host.handlers.size, 0, "no hook registered either");
+  assert.equal(host.setModelCalls.length, 0, "no session model is forced either");
   assert.equal(lines.length, 1, "exactly one hint line");
   for (const name of ENV_VARS) assert.match(lines[0], new RegExp(name));
 });
@@ -338,4 +355,78 @@ test("the module names no home-directory config and no credential", async () => 
   assert.equal(/\.pi\/agent/.test(source), false, "no pi config directory");
   assert.equal(/\/home\//.test(source), false, "no absolute home path");
   assert.equal(/Authorization/i.test(source), false, "no auth header built here");
+});
+
+// ------------------------------------------------------------ session model
+//
+// pi-acp ignores session/new's `model` and culture never sends
+// session/set_model (docs/notes/resident-model-resolution.md), so the mesh
+// resident would otherwise start on the operator's user-level pi default.
+// The extension pins the session to the registry's selected model itself.
+
+/** A stand-in for `ctx.modelRegistry` that knows the associate provider's models. */
+function registryCtx(current: { provider: string; id: string } | undefined, known = true) {
+  const finds: Array<[string, string]> = [];
+  return {
+    finds,
+    ctx: {
+      model: current,
+      modelRegistry: {
+        find(provider: string, id: string) {
+          finds.push([provider, id]);
+          return known ? { provider, id } : undefined;
+        },
+      },
+    },
+  };
+}
+
+test("session_start switches a session on another provider to the selected registry model", async () => {
+  const host = fakeHost();
+  registerAssociateProvider(host, { ...KEY, ASSOCIATE_MODEL: "senses" }, () => {}, REGISTRY);
+  const { ctx, finds } = registryCtx({ provider: "some-user-default", id: "whatever" });
+
+  await host.fireSessionStart(ctx);
+
+  const wire = REGISTRY.models.senses.lobes_role;
+  assert.deepEqual(finds, [[ASSOCIATE_PROVIDER_ID, wire]]);
+  assert.deepEqual(host.setModelCalls, [{ provider: ASSOCIATE_PROVIDER_ID, id: wire }]);
+});
+
+test("session_start leaves a session already on the selected model alone", async () => {
+  const host = fakeHost();
+  registerAssociateProvider(host, { ...KEY }, () => {}, REGISTRY);
+  const wire = REGISTRY.models[REGISTRY.default].lobes_role;
+  const { ctx } = registryCtx({ provider: ASSOCIATE_PROVIDER_ID, id: wire });
+
+  await host.fireSessionStart(ctx);
+
+  assert.equal(host.setModelCalls.length, 0, "already right: no switch");
+});
+
+test("session_start says so in one line when pi does not know the selected model", async () => {
+  const host = fakeHost();
+  const lines: string[] = [];
+  registerAssociateProvider(host, { ...KEY }, (l) => lines.push(l), REGISTRY);
+  const { ctx } = registryCtx({ provider: "other", id: "x" }, false);
+
+  await host.fireSessionStart(ctx);
+
+  assert.equal(host.setModelCalls.length, 0);
+  assert.equal(lines.length, 1);
+  assert.match(lines[0], new RegExp(REGISTRY.models[REGISTRY.default].lobes_role));
+});
+
+test("session_start says so in one line when pi refuses the switch", async () => {
+  const host = fakeHost();
+  host.failSetModel();
+  const lines: string[] = [];
+  registerAssociateProvider(host, { ...KEY }, (l) => lines.push(l), REGISTRY);
+  const { ctx } = registryCtx({ provider: "other", id: "x" });
+
+  await host.fireSessionStart(ctx);
+
+  assert.equal(host.setModelCalls.length, 1);
+  assert.equal(lines.length, 1);
+  assert.match(lines[0], /could not switch/);
 });

@@ -28,20 +28,25 @@ Changing `culture.yaml` to `model: worker` (t19) changes nothing on its own.
 The resident only happens to run `worker` because of a per-user setting
 outside the repo.
 
-## Fix (lands after t6)
+## Fix
 
-pi extensions can select the session model themselves: `pi.setModel(model)`
-(`pi-coding-agent/dist/core/extensions/types.d.ts:1274`, used by
-`examples/extensions/preset.ts:136`). The associate extension sets the session
-model on `session_start` from the contract registry's default model
-(overridable by `ASSOCIATE_MODEL`), so the model comes from the contract, not
-from user-level settings, and culture needs no change (spec boundary c18).
+The extension now pins the session model itself. On `session_start`,
+`.pi/extensions/associate/lib/provider.ts` looks up the registry's selected
+model (`ASSOCIATE_MODEL`, else the registry default) with
+`ctx.modelRegistry.find("associate", <lobes_role>)` and calls `pi.setModel`
+when the session is on anything else (`pi-coding-agent/dist/core/extensions/types.d.ts:1274`;
+the pattern `examples/extensions/preset.ts:136` uses). The model therefore
+comes from the contract, not from user-level settings, and culture needs no
+change (spec boundary c18).
 
-That code belongs in `.pi/extensions/associate/lib/provider.ts`, which t6
-rewrites to register one provider per registry model, so the fix and its live
-check follow t6.
+Evidence: `tests/test_provider_wire.py::test_without_model_flags_the_session_runs_the_selected_registry_model`
+runs a real pi with no `--provider`/`--model` — as pi-acp launches it — and
+the first chat request reaches associate's lane as `senses`. With the fix
+reverted the same test fails: the request goes to the user-level default and
+never reaches the lane.
 
 ## Live check (pending)
 
-After the fix: start the resident with `culture start associate` and confirm
-its first pi event reports model `worker`.
+Not yet run: start the resident with `culture start associate` and confirm
+its first pi event reports the registry default model. That needs a live lane
+and a bearer, and runs with t20's live acceptance.
