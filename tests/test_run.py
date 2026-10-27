@@ -808,6 +808,10 @@ def test_the_real_pi_writes_both_artifacts_against_the_fake_lane(
     code = main(
         [
             "run",
+            # senses never mutates, so the run stays in place: a mutating
+            # model would open a worktree of this very repo (t15).
+            "--model",
+            "senses",
             "--checkout",
             str(REPO_ROOT),
             "--export-root",
