@@ -591,3 +591,50 @@ test("gate lines take no walk id: a reopened walk keeps numbering entries densel
     rmSync(dir, { recursive: true, force: true });
   }
 });
+
+// ------------------------------------- d12: run_tests, the operator's tests
+
+test("d12: run_tests is offered to worker and cortex, never to senses", async () => {
+  for (const key of ["worker", "cortex"]) {
+    await withRun(key, async ({ pi }) => {
+      assert.ok(pi.toolNames().includes("run_tests"), "the tool module registered run_tests");
+      assert.ok(pi.getActiveTools().includes("run_tests"), `run_tests not active for ${key}`);
+    });
+  }
+  await withRun("senses", async ({ pi, decider, walkPath }) => {
+    assert.ok(!pi.getActiveTools().includes("run_tests"), "run_tests active for senses");
+    const decision = await call(pi, "run_tests", {});
+    assert.ok(decision?.block, "senses' run_tests was not refused");
+    assert.equal(decider.calls.length, 0, "senses' run_tests reached the decider");
+    assert.deepEqual(gateLines(walkPath), []);
+  });
+});
+
+test("d12: worker's run_tests reaches the CLEF gate with its effect and isolation lines", async () => {
+  const gate = JSON.parse(readFileSync(join(findRepoContractDir()!, "gate.json"), "utf8"));
+  await withRun(
+    "worker",
+    async ({ pi, decider, walkPath }) => {
+      const decision = await call(pi, "run_tests", { command: 0 });
+      assert.equal(decision, undefined, `a safe verdict must let run_tests run: ${decision?.reason}`);
+      assert.equal(decider.calls.length, 1);
+      const [line] = gateLines(walkPath);
+      assert.equal(line.gated_tool, "run_tests");
+      assert.equal(line.decision, "allow");
+      const state: string = decider.calls[0]!.body.state;
+      assert.ok(state.includes(gate.effects.run_tests), state);
+      assert.ok(state.includes(gate.isolation.describe.worktree), state);
+    },
+    { env: { ASSOCIATE_ISOLATION: "worktree" } },
+  );
+  await withRun(
+    "worker",
+    async ({ pi, decider }) => {
+      const decision = await call(pi, "run_tests", {});
+      assert.ok(decision?.block);
+      assert.match(decision!.reason, /safety gate refused 'run_tests' \(g1, tier clef\)/);
+      assert.equal(decider.calls.length, 1);
+    },
+    { answers: unsafeClefAnswers },
+  );
+});
