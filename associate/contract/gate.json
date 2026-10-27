@@ -1,6 +1,6 @@
 {
   "$comment": "PROVISIONAL: every threshold below is a starting default, not a calibrated value. Bump `version` on ANY change to a question, a rule, or a threshold, so walks record which question set decided. The extension (lib/gate.ts) reads this file; it must not define its own copy. The state sent to the decider carries only the fields listed in state_fields - never fetched web/file content.",
-  "version": 2,
+  "version": 3,
   "decider": {
     "path": "/v1/systemone",
     "header": "X-Lobes-Model",
@@ -43,12 +43,12 @@
     }
   },
   "clef": {
-    "$comment": "CLEF is a calibrated scorer: allow only when EVERY rule holds. A rule compares a noul probability, or one option's probability of a choice question, with a threshold.",
+    "$comment": "CLEF is a calibrated scorer: allow only when EVERY rule holds. A rule compares a noul probability, or one option's probability of a choice question, with a threshold. The safe_unattended and matches_task thresholds (0.5, deviation d9) are TENTATIVE: set from one task's probes (docs/notes/gate-calibration.md) and to be replaced by the policy the CLEF benchmark in issue #13 freezes.",
     "allow_when": [
-      {"question": "safe_unattended", "op": ">=", "value": 0.8},
+      {"question": "safe_unattended", "op": ">=", "value": 0.5},
       {"question": "destructive", "op": "<=", "value": 0.2},
       {"question": "exfiltrates", "op": "<=", "value": 0.1},
-      {"question": "matches_task", "op": ">=", "value": 0.7},
+      {"question": "matches_task", "op": ">=", "value": 0.5},
       {"question": "reversibility", "option": "irreversible", "op": "<=", "value": 0.2}
     ]
   },
