@@ -111,7 +111,10 @@ export default async function (pi: ExtensionAPI) {
   // Installed before anything else registers a tool, so the first tool event
   // of the run is already recorded and `walk.jsonl` exists for the sentinel to
   // name. The export is unconditional — there is no flag (spec c23).
-  const walk = installWalkRecorder(pi, ctx);
+  const walk = installWalkRecorder(pi, ctx, {
+    model: model.key,
+    lobes_role: model.entry?.lobes_role,
+  });
 
   // ------------------------------------------------------- statements record
   // Artifact B (spec c25/c31): the model's claims, each carrying the walk ids

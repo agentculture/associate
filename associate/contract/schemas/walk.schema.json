@@ -75,7 +75,15 @@
         "duration_ms": {"type": "integer"},
         "tool_calls": {"type": "integer"},
         "outcome": {"enum": ["ok", "error", "refused", "budget_exceeded"]},
-        "truncated": {"type": "boolean"}
+        "truncated": {"type": "boolean"},
+        "model": {
+          "type": "string",
+          "description": "Registry key of the active model (env ASSOCIATE_MODEL, else the registry default), when one was resolved."
+        },
+        "lobes_role": {
+          "type": "string",
+          "description": "The active model's lobes role (its wire id), when a model was resolved."
+        }
       }
     }
   }

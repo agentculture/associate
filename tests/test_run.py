@@ -342,6 +342,19 @@ def test_json_mode_prints_the_result_object(
     assert payload["outcome"] == "ok"
 
 
+def test_json_mode_prints_the_active_model(
+    fake_pi, checkout: Path, tmp_path: Path, capsys: pytest.CaptureFixture[str]
+):
+    """The --json result names the registry key and the model's lobes role."""
+    fake_pi(ready=True)
+    code = _run(["--model", "cortex", "--json"], checkout, tmp_path)
+    assert code == 0
+
+    payload = json.loads(capsys.readouterr().out)
+    assert payload["model"] == "cortex"
+    assert payload["lobes_role"] == "cortex"
+
+
 # ------------------------------------------------------ a failed task run
 
 # The launcher used to build the result paths from the session id alone, so a
