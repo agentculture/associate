@@ -163,11 +163,16 @@ test("a real pi run blocks a write into the checkout and shows the block in the 
       );
     }
 
-    // The block is visible in the transcript…
+    // The block is visible in the transcript… Two layers can stop it. The
+    // guard refuses a write that reaches the tool_call hook. But `write` is
+    // removed from the active set on session_start (d7), and a model that
+    // calls it anyway never reaches the hook: pi itself answers "Tool write
+    // not found" (measured on pi 1.1.0, Gemma senses). Both are this
+    // extension's refusals; what must never happen is the write itself.
     assert.match(
       run.stdout,
-      /not in the tool set of the active model 'senses'|may not mutate/,
-      "the guard's reason must appear in the transcript",
+      /not in the tool set of the active model 'senses'|may not mutate|Tool write not found/,
+      "the guard's reason, or pi's unknown-tool refusal, must appear in the transcript",
     );
     // …and nothing was written.
     assert.equal(existsSync(probe), false, "the guard must have prevented the write");
