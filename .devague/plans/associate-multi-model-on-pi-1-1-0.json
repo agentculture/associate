@@ -5,7 +5,7 @@
   "schema_version": 5,
   "status": "exported",
   "created": "2026-10-27T09:38:26Z",
-  "updated": "2026-10-27T10:45:11Z",
+  "updated": "2026-10-27T10:58:28Z",
   "targets": [
     {
       "id": "c1",
@@ -1073,6 +1073,14 @@
       "text": "single-source values still outside the contract: associate/harness/pi.py DEFAULT_BASE_URL duplicates models.json endpoint.default_base_url; provider.ts holds contextWindow 131072, maxTokens 16384 and the compat flags as named defaults \u2014 move them into models.json",
       "kind": "follow_up",
       "task_id": "t19",
+      "resolved": false,
+      "resolution": ""
+    },
+    {
+      "id": "r15",
+      "text": "t10's gate truncates over-budget arguments, so CLEF scores only the head of a long mutating call and never sees its tail \u2014 t12 should refuse a truncated mutating call outright (fail closed) rather than gate it on partial state",
+      "kind": "unknown_nonblocking",
+      "task_id": "t12",
       "resolved": false,
       "resolution": ""
     }
