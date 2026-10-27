@@ -222,3 +222,25 @@ test("read-only senses says so; mutating prompts carry the CLEF check", () => {
     assert.ok(text.includes("eidetic_recall") && text.includes("ledger_append"));
   }
 });
+
+test("d6: every prompt says a memory write passes the CLEF check and may be refused", () => {
+  for (const key of Object.keys(REGISTRY.models)) {
+    if (!REGISTRY.models[key]!.tools.includes("eidetic_remember")) continue;
+    const text = promptFile(key);
+    const entry = text.slice(text.indexOf("- `eidetic_remember`"));
+    const bullet = entry.slice(0, entry.search(/\n- `/));
+    assert.match(bullet, /CLEF/, `${key}'s eidetic_remember entry names the CLEF check`);
+    assert.match(bullet, /refuse/, `${key}'s eidetic_remember entry says it may be refused`);
+  }
+});
+
+test("d7: every prompt says the web tools pass the CLEF check and may be refused", () => {
+  for (const key of Object.keys(REGISTRY.models)) {
+    if (!REGISTRY.models[key]!.tools.includes("web_search")) continue;
+    const text = promptFile(key);
+    const entry = text.slice(text.indexOf("- `web_search`, `web_page`"));
+    const bullet = entry.slice(0, entry.search(/\n- `/));
+    assert.match(bullet, /CLEF/, `${key}'s web tools entry names the CLEF check`);
+    assert.match(bullet, /refuse/, `${key}'s web tools entry says it may be refused`);
+  }
+});

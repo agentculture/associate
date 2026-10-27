@@ -209,11 +209,32 @@ def _check_prompt_file(name: str, model: dict[str, Any]) -> list[str]:
     return [] if ok else [f"models.{name}: prompt_file must be {PROMPT_DIR}<name>.md"]
 
 
+def _check_gated_tools(gated: list[str], known: set[str], mutating: set[str]) -> list[str]:
+    """``gated_tools`` (deviation d6): known names, none of them a repo mutation.
+
+    A gated tool passes the CLEF gate for every model, a may_mutate=false model
+    included; a mutating tool is refused for such a model before the gate. A
+    name on both lists would silently take the tool away from senses, so the
+    two lists must be disjoint.
+    """
+    errors: list[str] = []
+    for tool in sorted(set(gated) - known):
+        errors.append(f"gated_tools: {tool!r} is not in tool_names")
+    for tool in sorted(set(gated) & mutating):
+        errors.append(
+            f"gated_tools: {tool!r} is also in mutating_tools; the lists must be disjoint"
+        )
+    if len(set(gated)) != len(gated):
+        errors.append("gated_tools: duplicate tool names")
+    return errors
+
+
 def validate_models(doc: dict[str, Any]) -> list[str]:
     """Cross-field checks for models.json; empty list means valid.
 
     Runs the structural schema first, then: every tool is in the canonical
-    ``tool_names``; a non-mutating model holds no mutating tool; only models
+    ``tool_names``; ``gated_tools`` are known and disjoint from
+    ``mutating_tools``; a non-mutating model holds no mutating tool; only models
     that may spawn hold ``spawn_subagent``; ``may_spawn`` names real models;
     prompt files have the right shape; and the default exists and is active.
     """
@@ -227,6 +248,7 @@ def validate_models(doc: dict[str, Any]) -> list[str]:
     models = doc["models"]
     for tool in sorted(mutating - known):
         errors.append(f"mutating_tools: {tool!r} is not in tool_names")
+    errors.extend(_check_gated_tools(doc["gated_tools"], known, mutating))
     for name, model in models.items():
         errors.extend(_check_model_tools(name, model, known, mutating))
         errors.extend(_check_prompt_file(name, model))

@@ -192,9 +192,13 @@ export function evaluateToolCall(options: GuardOptions): GuardDecision | undefin
 //   3. model may not mutate (senses):
 //        mutating call → refuse, BEFORE the gate (the decider is never asked);
 //        otherwise the scratch-dir write confinement above still applies;
-//   4. read-only call                    → proceed, the gate is never asked;
-//   5. mutating call (worker / cortex)   → `gate.evaluate`, entry recorded to
-//      the walk; proceed only on `allow`;
+//   4. read-only call, not gated         → proceed, the gate is never asked;
+//   5. mutating call (worker / cortex), or a `gated_tools` call from ANY
+//      model (d6/r17: a memory write — `eidetic_remember`; d7: `web_search`
+//      and `web_page`, which can send data off the machine — none a repo
+//      mutation, so senses keeps them, but none a read either) →
+//      `gate.evaluate` with `isMutating: true` (so the read-only fallback
+//      refuses it), entry recorded to the walk; proceed only on `allow`;
 //   6. truncation (risk r15): a gate state cut to fit the decider means CLEF
 //      scored only part of the call, so the call is refused even on `allow`.
 //
@@ -257,8 +261,13 @@ async function decide(options: ModelGuardOptions): Promise<GuardDecision | undef
   }
 
   const mutating = isMutatingCall(toolName, options.input, options.registry, options.policy);
+  // d6 / r17, d7: not a repo mutation, but gated for every model. A registry
+  // without the list (an older contract) gates nothing extra; the Python
+  // validator makes the list required for the shipped contract.
+  const gated = !mutating && (options.registry.gated_tools ?? []).includes(toolName);
 
-  // 3. A model that may not mutate: refused before the gate, never asked.
+  // 3. A model that may not mutate: repo mutations are refused before the
+  //    gate, never asked. A gated tool falls through to the gate below.
   if (!model.mayMutate) {
     if (mutating) {
       return block(
@@ -266,7 +275,7 @@ async function decide(options: ModelGuardOptions): Promise<GuardDecision | undef
           "not mutate (models.json may_mutate: false); hand the work back with 'finish' instead",
       );
     }
-    return evaluateToolCall({
+    const confined = evaluateToolCall({
       toolName,
       input: options.input,
       scratchDir: options.scratchDir,
@@ -274,15 +283,17 @@ async function decide(options: ModelGuardOptions): Promise<GuardDecision | undef
       declaredWriters: options.declaredWriters,
       declaredNonWriters: options.declaredNonWriters,
     });
+    if (confined || !gated) return confined;
   }
 
   // 4. A pure read never reaches the decider.
-  if (!mutating) return undefined;
+  if (!mutating && !gated) return undefined;
 
-  // 5. Every mutation goes through the gate.
+  // 5. Every mutation, and every gated call, goes through the gate.
   if (!options.gate) {
     return block(
-      `associate: '${toolName}' is a mutating call and the safety gate is unavailable; the call is refused`,
+      `associate: '${toolName}' is a ${gated ? "gated" : "mutating"} call and the safety gate is ` +
+        "unavailable; the call is refused",
     );
   }
   const request = {
@@ -305,7 +316,7 @@ async function decide(options: ModelGuardOptions): Promise<GuardDecision | undef
   if (truncated) {
     const note =
       "refused by the associate tool_call hook: the gate state was truncated, so the decider " +
-      "scored only part of this mutating call (risk r15)";
+      `scored only part of this ${gated ? "gated" : "mutating"} call (risk r15)`;
     entry.reason = entry.reason ? `${entry.reason}; ${note}` : note;
     entry.decision = "refuse";
   }

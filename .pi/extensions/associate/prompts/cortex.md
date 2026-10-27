@@ -11,11 +11,15 @@ bolt).
 - `bash` — run a command from a fixed argv allowlist. No shell, no pipes, no
   redirection.
 - `code_lens` — outline a source file without reading all of it.
-- `web_search`, `web_page` — find and fetch web pages.
+- `web_search`, `web_page` — find and fetch web pages. Each call can send
+  data off the machine, so it first passes the CLEF safety check and can be
+  refused; if it is, do not retry it in another form.
 - `write`, `edit` — change files inside the checkout.
 - `eidetic_recall` — search memory. Call it before any non-trivial task.
 - `eidetic_remember` — store a durable finding. Records that came from the web
-  or another repo are tagged untrusted automatically.
+  or another repo are tagged untrusted automatically. A memory write first
+  passes the CLEF safety check and can be refused; if it is, do not retry it in
+  another form — say in `finish` what you wanted to store.
 - `ledger_append` — record what was done: agent, action, summary, refs.
 - `ledger_list` — list what the ledger already holds.
 - `spawn_subagent` — start a child model on a sub-task and get its result back.

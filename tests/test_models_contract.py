@@ -134,3 +134,35 @@ def test_policy_shell_read_only_subset_excludes_the_writing_subcommands():
     for command, subcommands in read_only.items():
         assert command in allow, f"{command} is read-only but not allowlisted"
         assert set(subcommands) <= set(allow[command]), command
+
+
+def test_gated_tools_gate_memory_and_web_without_making_them_mutations():
+    """Deviations d6 (r17) and d7: memory writes and web egress are gated for every model."""
+    doc = contract.load_models()
+    assert doc["gated_tools"] == ["eidetic_remember", "web_search", "web_page"]
+    assert doc["mutating_tools"] == ["write", "edit", "bash", "ledger_append"]
+    for tool in doc["gated_tools"]:
+        assert tool not in doc["mutating_tools"]
+        assert tool in doc["models"]["senses"]["tools"], f"senses keeps {tool}"
+
+
+def test_gated_tools_is_required(doc):
+    del doc["gated_tools"]
+    assert any("gated_tools" in e for e in validate.validate_models(doc))
+
+
+def test_gated_tool_not_in_tool_names_is_rejected(doc):
+    doc["gated_tools"].append("teleport")
+    errors = validate.validate_models(doc)
+    assert any("gated_tools" in e and "teleport" in e for e in errors)
+
+
+def test_gated_tool_also_mutating_is_rejected(doc):
+    doc["gated_tools"].append("write")
+    errors = validate.validate_models(doc)
+    assert any("gated_tools" in e and "'write'" in e and "disjoint" in e for e in errors)
+
+
+def test_gated_tools_duplicate_is_rejected(doc):
+    doc["gated_tools"].append("eidetic_remember")
+    assert any("duplicate" in e for e in validate.validate_models(doc))

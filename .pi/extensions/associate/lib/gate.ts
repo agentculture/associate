@@ -29,7 +29,8 @@
  *      `isMutating === false` (strictly); everything else refuses.
  *
  * Mutating vs read-only is NOT classified here: the caller (t12, from
- * `models.json`'s `mutating_tools`) passes `isMutating`. Anything other than
+ * `models.json`'s `mutating_tools`, plus `gated_tools` — d6/d7 — which it always
+ * passes as mutating) passes `isMutating`. Anything other than
  * the boolean `false` counts as mutating.
  *
  * The state (c54/h36): built from the four `state_fields` — task, action
