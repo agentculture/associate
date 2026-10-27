@@ -486,6 +486,30 @@ def test_the_launcher_passes_the_flags_the_contract_requires(
     assert invocation["stdin_closed"] is True
 
 
+def test_the_default_launch_still_trusts_the_checkout(fake_pi, checkout: Path, tmp_path: Path):
+    """Deviation d5: the hardened launch is opt-in; the default is unchanged."""
+    assert _run(["--session-id", "d5-default"], checkout, tmp_path) == 0
+
+    argv = _invocation(tmp_path)["argv"]
+    assert "--approve" in argv
+    assert "--no-approve" not in argv
+    assert "--no-extensions" not in argv
+
+
+def test_untrusted_checkout_ignores_the_checkouts_pi_files(fake_pi, checkout: Path, tmp_path: Path):
+    """r16 / d5: the examined checkout's .pi settings, extensions and MCP config stay unloaded."""
+    assert _run(["--untrusted-checkout", "--session-id", "d5-untrusted"], checkout, tmp_path) == 0
+
+    for invocation in _invocations(tmp_path):
+        argv = invocation["argv"]
+        assert "--approve" not in argv, argv
+        for flag in ("--no-approve", "--no-extensions", "--no-mcp"):
+            assert flag in argv, f"{flag} missing from {argv}"
+        # Explicit -e paths still load with --no-extensions: associate's own
+        # extension is always named, so it is the only one that runs.
+        assert _extension_flags(argv), f"no -e in {argv}"
+
+
 def test_the_launcher_always_passes_the_extension_explicitly(
     fake_pi, checkout: Path, tmp_path: Path
 ):
@@ -879,6 +903,56 @@ def test_the_real_pi_help_offers_the_flags_the_launcher_passes():
         "--approve",
         "--no-context-files",
         "--no-mcp",
+        "--no-approve",
+        "--no-extensions",
         "--print",
     ):
         assert flag in result.stdout, f"pi --help no longer documents {flag}"
+
+
+def _planted_checkout(root: Path) -> tuple[Path, Path]:
+    """A checkout whose own .pi loads an extension that drops a marker file."""
+    marker = root / "planted-extension-ran"
+    repo = root / "foreign"
+    ext = repo / ".pi" / "extensions" / "planted"
+    ext.mkdir(parents=True)
+    (repo / ".pi" / "settings.json").write_text(
+        json.dumps({"extensions": ["extensions/planted"]}), encoding="utf-8"
+    )
+    (ext / "index.ts").write_text(
+        'import { writeFileSync } from "node:fs";\n'
+        f"writeFileSync({json.dumps(str(marker))}, 'ran');\n"
+        "export default function () {}\n",
+        encoding="utf-8",
+    )
+    return repo, marker
+
+
+@pytest.mark.parametrize(
+    ("flags", "expect_ran"),
+    [(["--approve"], True), (["--no-approve", "--no-extensions"], False)],
+    ids=["default-trusts", "untrusted-checkout"],
+)
+def test_the_real_pi_runs_a_checkouts_planted_extension_only_when_trusted(
+    tmp_path: Path, flags: list[str], expect_ran: bool
+):
+    """r16: a planted .pi extension runs under --approve; the d5 flags keep it out.
+
+    The trusted case is the control that proves the probe can see a planted
+    extension at all, so the untrusted case's silence means something.
+    """
+    require_pi()
+    repo, marker = _planted_checkout(tmp_path)
+
+    subprocess.run(  # nosec B603 B607 - fixed argv, no shell
+        ["pi", *flags, "--no-mcp", "--list-models", "nothing-matches-this"],
+        cwd=repo,
+        capture_output=True,
+        text=True,
+        stdin=subprocess.DEVNULL,
+        timeout=120,
+        check=False,
+        env={**os.environ, "PI_OFFLINE": "1"},
+    )
+
+    assert marker.exists() is expect_ran

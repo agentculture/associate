@@ -74,6 +74,7 @@ def _build(harness_cls: type, args: argparse.Namespace) -> Any:
         "continue_from": args.continue_from,
         "timeout": args.timeout,
         "model": args.model,
+        "untrusted_checkout": args.untrusted_checkout,
     }
     try:
         parameters = inspect.signature(harness_cls).parameters
@@ -298,6 +299,12 @@ def register(sub: argparse._SubParsersAction) -> None:
         default=None,
         help="Registry model to run (from the contract's models.json; default: the "
         "registry's default). Unknown or pending models exit 1.",
+    )
+    p.add_argument(
+        "--untrusted-checkout",
+        action="store_true",
+        help="Ignore the examined checkout's own .pi settings, extensions and MCP "
+        "config (pi --no-approve --no-extensions). Off by default.",
     )
     p.add_argument("--json", action="store_true", help="Emit structured JSON.")
     p.set_defaults(func=cmd_run)
