@@ -55,8 +55,11 @@ Pi loads ``AGENTS.md``/``CLAUDE.md`` from every ancestor directory, so a
 workspace-level ``CLAUDE.md`` one level above a checkout would leak into the
 system prompt of a run examining that checkout. The launcher passes
 ``--no-context-files`` and sets ``ASSOCIATE_INJECT_PROMPT=1``, which the
-extension's ``lib/prompt.ts`` answers by injecting the checkout's own
-``AGENTS.md`` — the runtime prompt for this lane — and nothing else.
+extension's ``lib/prompt.ts`` answers by injecting associate's own
+``AGENTS.md`` (from its install, never the checkout) as the runtime prompt for
+this lane. The examined checkout's ``AGENTS.md`` is skipped under
+``--untrusted-checkout`` and, for a trusted checkout, injected labelled as
+repository context rather than as the runtime prompt (deviation d17).
 
 Version pin (c39)
 -----------------
@@ -795,8 +798,10 @@ class PiHarness(Harness):
         env["ASSOCIATE_CONTRACT_DIR"] = str(self._contract_dir)
         env["ASSOCIATE_SESSION_ID"] = self._session_id
         env["ASSOCIATE_EXPORT_ROOT"] = str(self._export_root)
-        # r16: context-file discovery is off, so the runtime prompt is injected
-        # by the extension from the checkout's own AGENTS.md instead.
+        # r16: context-file discovery is off, so the extension injects the
+        # runtime prompt itself — associate's own AGENTS.md — and, only when
+        # ASSOCIATE_PI_TRUST below is "approve" (d17), the examined checkout's
+        # AGENTS.md labelled as repository context.
         env["ASSOCIATE_INJECT_PROMPT"] = "1"
         # The REGISTRY KEY (not the wire id) tells the extension which
         # models.json entry is active.

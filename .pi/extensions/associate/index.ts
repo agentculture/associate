@@ -128,9 +128,11 @@ export default async function (pi: ExtensionAPI) {
   // ----------------------------------------------------------- runtime prompt
   // The launcher passes `--no-context-files` because pi loads AGENTS.md /
   // CLAUDE.md from every ANCESTOR directory, and a workspace-level file above
-  // the checkout would re-task this lane. With discovery off, this puts the
-  // checkout's own AGENTS.md back — and only that file. Registers nothing
-  // unless `$ASSOCIATE_INJECT_PROMPT` is set.
+  // the checkout would re-task this lane. With discovery off, this injects
+  // associate's OWN AGENTS.md as the runtime prompt and, only for a trusted
+  // checkout (`$ASSOCIATE_PI_TRUST=approve`, d17), the examined checkout's
+  // AGENTS.md labelled as repository context. Registers nothing unless
+  // `$ASSOCIATE_INJECT_PROMPT` is set.
   // The model prompt follows the model resolved above — one rule, one snapshot.
   installPromptInjection(pi, ctx, process.env, model);
 
