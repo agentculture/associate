@@ -2,7 +2,7 @@
   "plan_slug": "associate-multi-model-on-pi-1-1-0",
   "schema_version": 2,
   "created": "2026-10-27T10:36:31Z",
-  "updated": "2026-10-27T11:09:08Z",
+  "updated": "2026-10-27T11:09:39Z",
   "deviations": [
     {
       "id": "d1",
@@ -58,6 +58,19 @@
       "status": "approved",
       "classification": "acceptable",
       "seq": 4
+    },
+    {
+      "id": "d5",
+      "what": "add an opt-in launcher option (off by default) that starts pi with --no-approve --no-extensions --no-mcp, so the examined checkout's .pi settings, extensions and mcp.json are ignored; default launch keeps --approve",
+      "task_ref": "t12",
+      "reason": "user decision on risk r16: 'R16 as optional, yes (no default)'; built by the main agent after t12 merges because both touch associate/harness/pi.py",
+      "affects": [
+        "t20"
+      ],
+      "origin": "user",
+      "status": "approved",
+      "classification": "acceptable",
+      "seq": 5
     }
   ],
   "evidence": [],

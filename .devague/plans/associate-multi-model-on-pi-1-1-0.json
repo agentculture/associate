@@ -5,7 +5,7 @@
   "schema_version": 5,
   "status": "exported",
   "created": "2026-10-27T09:38:26Z",
-  "updated": "2026-10-27T11:07:39Z",
+  "updated": "2026-10-27T11:09:40Z",
   "targets": [
     {
       "id": "c1",
@@ -1089,8 +1089,8 @@
       "text": "associate/harness/pi.py:670 launches pi with --approve ('Trust project-local files for this run'), so every examined checkout's .pi settings, extensions and mcp.json are trusted and loaded \u2014 an examined repo can run its own code in the session before any gate; r13's duplicate-extension conflict is the symptom. Proposed fix: --no-approve --no-extensions --no-mcp (explicit -e still loads associate's extension)",
       "kind": "unknown_blocking",
       "task_id": "t12",
-      "resolved": false,
-      "resolution": ""
+      "resolved": true,
+      "resolution": "user: opt-in option, not the default (deviation d5); default launch still trusts the examined checkout's .pi files \u2014 use the option for untrusted repos and for associate examining itself"
     }
   ],
   "obligations": []
