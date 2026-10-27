@@ -17,6 +17,10 @@
       "type": "string",
       "description": "Directory the run's walk.jsonl and statements.json are written to. Outside the examined checkout."
     },
+    "isolation": {
+      "enum": ["worktree", "in-place"],
+      "description": "Where the run's writes land (deviation d8): its own run worktree, or the checkout itself. Told to the safety gate's decider."
+    },
     "continue_from": {
       "type": "string",
       "description": "Optional export dir of a prior run whose walk is loaded as given context instead of re-walking."

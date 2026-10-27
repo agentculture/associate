@@ -82,7 +82,12 @@ interface Run {
 
 async function start(
   model: string,
-  options: { answers?: () => Record<string, unknown>; key?: boolean; contractDir?: string } = {},
+  options: {
+    answers?: () => Record<string, unknown>;
+    key?: boolean;
+    contractDir?: string;
+    env?: Record<string, string>;
+  } = {},
 ): Promise<Run> {
   const root = mkdtempSync(join(tmpdir(), "associate-t12-runs-"));
   const checkout = mkdtempSync(join(tmpdir(), "associate-t12-checkout-"));
@@ -96,6 +101,7 @@ async function start(
       ASSOCIATE_API_KEY: options.key === false ? undefined : "dummy-t12-key",
       ASSOCIATE_BASE_URL: "http://decider.invalid:9/v1",
       ASSOCIATE_CONTRACT_DIR: options.contractDir ?? findRepoContractDir(),
+      ...options.env,
     },
     (fake) => {
       fake.builtinTools = [...PI_BUILTINS];
@@ -297,6 +303,23 @@ test("criterion 2: with the decider unreachable a mutation is refused by the rea
     },
     { key: false },
   );
+});
+
+test("d8: the decider state carries the run's isolation from ASSOCIATE_ISOLATION", async () => {
+  const gate = JSON.parse(readFileSync(join(findRepoContractDir()!, "gate.json"), "utf8"));
+  await withRun(
+    "worker",
+    async ({ pi, decider }) => {
+      await call(pi, "write", { path: "README.md", content: "x" });
+      assert.equal(decider.calls.length, 1);
+      assert.ok(decider.calls[0].body.state.includes(gate.isolation.describe.worktree));
+    },
+    { env: { ASSOCIATE_ISOLATION: "worktree" } },
+  );
+  await withRun("worker", async ({ pi, decider }) => {
+    await call(pi, "write", { path: "README.md", content: "x" });
+    assert.ok(decider.calls[0].body.state.includes(gate.isolation.describe["in-place"]));
+  });
 });
 
 test("r9: bash eidetic remember and ledger append go through the gate", async () => {

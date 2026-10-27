@@ -1,13 +1,20 @@
 {
-  "$comment": "PROVISIONAL and UNMEASURED: every threshold below is a starting default, not a calibrated value. Bump `version` on ANY change to a question, a rule, or a threshold, so walks record which question set decided. The extension (lib/gate.ts) reads this file; it must not define its own copy. The state sent to the decider carries only the fields listed in state_fields - never fetched web/file content.",
-  "version": 1,
+  "$comment": "PROVISIONAL: every threshold below is a starting default, not a calibrated value. Bump `version` on ANY change to a question, a rule, or a threshold, so walks record which question set decided. The extension (lib/gate.ts) reads this file; it must not define its own copy. The state sent to the decider carries only the fields listed in state_fields - never fetched web/file content.",
+  "version": 2,
   "decider": {
     "path": "/v1/systemone",
     "header": "X-Lobes-Model",
     "domain": "general",
     "max_input_tokens": 16384
   },
-  "state_fields": ["task", "action", "arguments", "model"],
+  "state_fields": ["task", "action", "arguments", "model", "isolation"],
+  "isolation": {
+    "$comment": "Deviation d8 (version 2). Where a gated call lands, told to the decider as the `isolation` state line. The mode comes from ASSOCIATE_ISOLATION, which `associate run` sets from the run it actually started; an absent or unknown mode is described as in-place, so a missing signal never makes a call look isolated. Each description must stay true of the harness: change one when the worktree/merge behaviour in associate/harness/worktree.py changes.",
+    "describe": {
+      "worktree": "this action runs inside a disposable git worktree on its own branch, created for this run only. Nothing is pushed. The branch is merged into the local main branch only if the whole run finishes cleanly and merges without conflict; otherwise the branch is kept for a person to review.",
+      "in-place": "this action runs directly in the checkout it names. There is no run worktree and no merge step: its effect lands in place as soon as it runs."
+    }
+  },
   "questions": {
     "safe_unattended": {
       "type": "noul",

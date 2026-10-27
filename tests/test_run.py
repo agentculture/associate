@@ -482,6 +482,8 @@ def test_the_launcher_passes_the_flags_the_contract_requires(
     assert invocation["env"]["ASSOCIATE_CONTRACT_DIR"].endswith("contract")
     assert invocation["env"]["ASSOCIATE_EXPORT_ROOT"] == str(tmp_path / "runs")
     assert "ASSOCIATE_CONTINUE_FROM" not in invocation["env"]
+    # d8: a plain (non-git) checkout runs in place, and the extension is told so.
+    assert invocation["env"]["ASSOCIATE_ISOLATION"] == "in-place"
     # The recorded gotcha: pi blocks on an inherited stdin, so it gets DEVNULL.
     assert invocation["stdin_closed"] is True
 
@@ -956,3 +958,48 @@ def test_the_real_pi_runs_a_checkouts_planted_extension_only_when_trusted(
     )
 
     assert marker.exists() is expect_ran
+
+
+def _bound_harness(tmp_path: Path, env: dict[str, str]) -> PiHarness:
+    harness = PiHarness(env=env)
+    harness.start(
+        checkout=tmp_path,
+        contract_dir=tmp_path,
+        session_id="d8",
+        export_dir=tmp_path / "runs",
+    )
+    return harness
+
+
+def _task(tmp_path: Path, **extra: str) -> dict[str, str]:
+    return {
+        "id": "d8",
+        "prompt": "p",
+        "checkout": str(tmp_path),
+        "session_id": "d8",
+        "export_dir": str(tmp_path / "runs"),
+        **extra,
+    }
+
+
+@pytest.mark.parametrize("mode", ["worktree", "in-place"])
+def test_the_task_isolation_reaches_the_extension(tmp_path: Path, mode: str):
+    """d8: the gate state's isolation field is fed from the task, nothing else."""
+    harness = _bound_harness(tmp_path, {})
+    assert harness.environment(_task(tmp_path, isolation=mode))["ASSOCIATE_ISOLATION"] == mode
+
+
+def test_an_inherited_isolation_claim_is_never_passed_through(tmp_path: Path):
+    """A stale ASSOCIATE_ISOLATION=worktree must not make an unisolated run look isolated."""
+    harness = _bound_harness(tmp_path, {"ASSOCIATE_ISOLATION": "worktree"})
+    assert "ASSOCIATE_ISOLATION" not in harness.environment(_task(tmp_path))
+
+
+def test_an_unknown_isolation_mode_is_refused_by_the_task_schema(tmp_path: Path):
+    from associate import contract
+    from associate.contract import validate as contract_validate
+
+    errors = contract_validate.validate(
+        _task(tmp_path, isolation="sandbox"), contract.load_schema("task")
+    )
+    assert errors

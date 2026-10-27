@@ -5,7 +5,7 @@
   "description": "The pre-mutation safety-gate question set (gate.json). Structural shape only; cross-field rules (thresholds in [0,1], every rule names an existing question and option) live in validate.validate_gate.",
   "type": "object",
   "additionalProperties": false,
-  "required": ["version", "decider", "state_fields", "questions", "clef", "super", "readonly_fallback", "redaction"],
+  "required": ["version", "decider", "state_fields", "isolation", "questions", "clef", "super", "readonly_fallback", "redaction"],
   "properties": {
     "$comment": {"type": "string"},
     "version": {"type": "integer"},
@@ -20,7 +20,24 @@
         "max_input_tokens": {"type": "integer"}
       }
     },
-    "state_fields": {"type": "array", "items": {"enum": ["task", "action", "arguments", "model"]}},
+    "state_fields": {"type": "array", "items": {"enum": ["task", "action", "arguments", "model", "isolation"]}},
+    "isolation": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["describe"],
+      "properties": {
+        "$comment": {"type": "string"},
+        "describe": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["worktree", "in-place"],
+          "properties": {
+            "worktree": {"type": "string", "pattern": "\\S"},
+            "in-place": {"type": "string", "pattern": "\\S"}
+          }
+        }
+      }
+    },
     "questions": {"type": "object", "additionalProperties": {"$ref": "#/$defs/question"}},
     "clef": {
       "type": "object",

@@ -388,6 +388,7 @@ plumbing — no committed file names a host, port, or bearer:
 | `ASSOCIATE_CONTRACT_DIR` | repo-relative `associate/contract/` | Where the Pi extension and the Python adapter both load `role.json` / `policy.json` / the walk and statements schemas from — set by the Python adapter when it knows better than the repo-relative fallback. |
 | `ASSOCIATE_SESSION_ID` | generated | Pins the scratch/export directory to one session id (the ACP `session/new` id when running under `culture start associate`, or a generated id headless), so concurrent runs never share a scratch dir. |
 | `ASSOCIATE_EXPORT_ROOT` | — | Where a run's `walk.jsonl` / statements export lands; the Python adapter sets this per run. |
+| `ASSOCIATE_ISOLATION` | absent (read as `in-place`) | Where a run's writes land, `worktree` or `in-place`. Set by `associate run` from the run it started, and never inherited; the safety gate tells CLEF this (deviation d8, `docs/notes/gate-calibration.md`). |
 
 ## `steward doctor` invariants (build to pass these)
 
