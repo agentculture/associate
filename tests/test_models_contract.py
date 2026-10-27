@@ -12,7 +12,7 @@ from associate import contract
 from associate.contract import validate
 
 
-@pytest.fixture()
+@pytest.fixture
 def doc():
     return copy.deepcopy(contract.load_models())
 
@@ -97,12 +97,14 @@ def test_prompt_file_shape_is_checked_but_existence_is_not(doc):
 
 def test_lobes_role_is_never_a_checkpoint_id(doc):
     for m in doc["models"].values():
-        assert "/" not in m["lobes_role"] and "NVIDIA" not in m["lobes_role"]
+        assert "/" not in m["lobes_role"]
+        assert "NVIDIA" not in m["lobes_role"]
 
 
 def test_reasoning_never_reintroduces_nemotron_switch():
     text = (contract.contract_dir() / "models.json").read_text(encoding="utf-8")
-    assert "enable_thinking" not in text and "nemotron" not in text.lower()
+    assert "enable_thinking" not in text
+    assert "nemotron" not in text.lower()
 
 
 def test_role_json_no_longer_claims_text_only():
@@ -115,7 +117,8 @@ def test_policy_shell_allows_eidetic_and_ledger_argv():
     allow = {e["command"]: e["subcommands"] for e in contract.load_policy()["shell"]["allowlist"]}
     assert allow["eidetic"] == ["recall", "remember"]
     assert allow["ledger"] == ["append", "list"]
-    assert allow["rg"] == [] and "git" in allow
+    assert allow["rg"] == []
+    assert "git" in allow
 
 
 def test_endpoint_default_is_declared_and_required(doc):

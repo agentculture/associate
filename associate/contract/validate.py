@@ -125,16 +125,26 @@ def _check_object(
     for key, subschema in schema.get("properties", {}).items():
         if key in instance:
             errors.extend(_check(instance[key], subschema, root, f"{path}.{key}"))
+    errors.extend(_check_additional(instance, schema, root, path))
+    return errors
+
+
+def _check_additional(
+    instance: dict[str, Any], schema: dict[str, Any], root: dict[str, Any], path: str
+) -> list[str]:
+    """``additionalProperties``: refuse (``false``) or validate (a schema) unknown keys."""
     extra = schema.get("additionalProperties")
-    if extra is not None:
-        known = schema.get("properties", {})
-        for key in instance:
-            if key in known:
-                continue
-            if extra is False:
-                errors.append(f"{path}: unknown property {key!r}")
-            elif isinstance(extra, dict):
-                errors.extend(_check(instance[key], extra, root, f"{path}.{key}"))
+    if extra is None or extra is True:
+        return []
+    known = schema.get("properties", {})
+    errors: list[str] = []
+    for key in instance:
+        if key in known:
+            continue
+        if extra is False:
+            errors.append(f"{path}: unknown property {key!r}")
+        elif isinstance(extra, dict):
+            errors.extend(_check(instance[key], extra, root, f"{path}.{key}"))
     return errors
 
 

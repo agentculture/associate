@@ -283,7 +283,8 @@ def test_a_failed_run_is_not_merged_or_committed_and_is_kept(
 
     assert git(repo, "rev-parse", "main") == before
     assert not (repo / "NEW.md").exists()
-    assert path.is_dir() and (path / "NEW.md").is_file()
+    assert path.is_dir()
+    assert (path / "NEW.md").is_file()
     assert git(repo, "rev-parse", "associate-run/s1") == before, "never commit a failed run"
 
 

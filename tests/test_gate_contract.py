@@ -12,7 +12,7 @@ from associate import contract
 from associate.contract import validate
 
 
-@pytest.fixture()
+@pytest.fixture
 def doc():
     return copy.deepcopy(contract.load_gate())
 
