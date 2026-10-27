@@ -43,7 +43,9 @@ still lists ``read``/``bash``/``edit``/``write``/``grep``/``find``/``ls`` (and,
 on 1.1.0, ``powershell``/``codemode``/``tool_search`` too). So the gate is
 
 * ``associate_ready`` present in ``active_tools`` — the extension loaded;
-* ``writer_tools_active`` empty — no write path was offered.
+* ``writer_tools_active`` empty — no write path was offered — unless the
+  run's registry model is ``may_mutate`` (worker/cortex, plan t12), whose
+  mutating calls the extension sends through the safety gate instead.
 
 The full ``tools`` list is reported for the record and is never a failure.
 
@@ -662,12 +664,24 @@ class PiHarness(Harness):
           exact fail-open c34 exists to close.
         * ``--no-context-files`` — risk r16: ancestor ``CLAUDE.md``/``AGENTS.md``
           files would leak into the system prompt.
+        * ``--no-mcp`` — risk r7: pi 1.1.0's built-in MCP support would connect
+          the operator's MCP servers and offer their ``mcp__*`` tools. The
+          extension's ``tool_call`` guard already refuses any tool outside the
+          active model's ``models.json`` set; this keeps them off the wire too.
         * ``-e <index.ts>`` — deviation d8: the extension is named explicitly
           so it loads in **any** checkout, not only one that happens to carry
           its own ``.pi/``. ``--approve`` stays: the examined checkout may
           still carry project files pi needs to trust.
         """
-        args = ["-p", "--mode", "json", "--no-session", "--approve", "--no-context-files"]
+        args = [
+            "-p",
+            "--mode",
+            "json",
+            "--no-session",
+            "--approve",
+            "--no-context-files",
+            "--no-mcp",
+        ]
         args.extend(["-e", str(resolve_extension_path(self._base_env))])
         provider = self._provider_arguments()
         if provider:
@@ -826,8 +840,22 @@ class PiHarness(Harness):
                 remediation="check the extension's defaultTools and any --tools/-t filter",
             )
 
+        # The extension resolves its active model from ASSOCIATE_MODEL, which
+        # this launcher sets; a report naming another model is not evidence
+        # about the run being served (plan t12).
+        reported_model = report.get("model")
+        if reported_model is not None and reported_model != self.model_key():
+            raise ExtensionNotLoadedError(
+                f"the extension reported model {reported_model!r}, not {self.model_key()!r}",
+                remediation="check ASSOCIATE_MODEL reaches pi unchanged",
+            )
+
+        # Plan t12 (user decision q17/q21): only a model the registry marks
+        # may_mutate — worker/cortex, run in their own worktree (t15) with the
+        # safety gate in front of every mutating call — may be offered writers.
+        # For any other model an active writer still fails closed.
         writers = [str(name) for name in report.get("writer_tools_active") or []]
-        if writers:
+        if writers and self.model_entry().get("may_mutate") is not True:
             raise ExtensionNotLoadedError(
                 "pi reported active writer tools, which the associate role forbids: "
                 + ", ".join(writers),
