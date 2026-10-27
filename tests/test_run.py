@@ -1055,3 +1055,32 @@ def test_the_task_schema_refuses_malformed_test_commands(tmp_path: Path, bad):
 
     task = {**_task(tmp_path), "test_commands": bad}
     assert contract_validate.validate(task, contract.load_schema("task"))
+
+
+# ------------------------------------- t16: the trust mode reaches the extension
+
+
+def test_the_trust_mode_reaches_the_extension(tmp_path: Path):
+    """t16: spawn_subagent launches a child no more trusting than its parent."""
+    trusted = _bound_harness(tmp_path, {})
+    assert trusted.environment(_task(tmp_path))["ASSOCIATE_PI_TRUST"] == "approve"
+
+    untrusted = PiHarness(env={}, untrusted_checkout=True)
+    untrusted.start(
+        checkout=tmp_path, contract_dir=tmp_path, session_id="t16", export_dir=tmp_path / "runs"
+    )
+    assert untrusted.environment(_task(tmp_path))["ASSOCIATE_PI_TRUST"] == "untrusted"
+
+
+def test_an_inherited_trust_claim_is_never_passed_through(tmp_path: Path):
+    """A stale ASSOCIATE_PI_TRUST=approve must not make an untrusted run's children trusting."""
+    harness = PiHarness(env={"ASSOCIATE_PI_TRUST": "approve"}, untrusted_checkout=True)
+    harness.start(
+        checkout=tmp_path, contract_dir=tmp_path, session_id="t16", export_dir=tmp_path / "runs"
+    )
+    assert harness.environment(_task(tmp_path))["ASSOCIATE_PI_TRUST"] == "untrusted"
+
+
+def test_the_launcher_hands_the_trust_mode_to_pi(fake_pi, checkout: Path, tmp_path: Path):
+    assert _run(["--untrusted-checkout", "--session-id", "t16-untrusted"], checkout, tmp_path) == 0
+    assert _invocation(tmp_path)["env"]["ASSOCIATE_PI_TRUST"] == "untrusted"

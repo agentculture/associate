@@ -130,6 +130,13 @@ def test_policy_carries_the_containment_values():
     assert policy["redaction"]["patterns"], "walk export needs redaction patterns"
 
 
+def test_policy_budgets_the_spawn_tool():
+    """t16: spawn_subagent's hand-back cap and child wall clock are contract values."""
+    spawn = contract.load_policy()["budgets"]["spawn"]
+    assert isinstance(spawn["max_output_chars"], int) and spawn["max_output_chars"] > 0
+    assert isinstance(spawn["timeout_ms"], int) and spawn["timeout_ms"] > 0
+
+
 def test_policy_shell_allowlist_has_no_mutating_command():
     policy = contract.load_policy()
     names = {entry["command"] for entry in policy["shell"]["allowlist"]}

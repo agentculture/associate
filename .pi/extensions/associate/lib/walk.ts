@@ -28,7 +28,8 @@
  * an absent run record is the honest signal that the run did not finish.
  *
  * On-disk shape, matching `associate/contract/schemas/walk.schema.json`:
- * one `$defs/entry` per line, then a final `{"run": <$defs/run>}` line.
+ * one `$defs/entry` per line, interleaved `{"gate": <$defs/gate>}` and
+ * `{"child": <$defs/child>}` lines, then a final `{"run": <$defs/run>}` line.
  */
 
 import { appendFileSync, existsSync, readFileSync } from "node:fs";
@@ -85,6 +86,21 @@ export interface WalkRun {
   model?: string;
   /** The active model's lobes role (its wire id), when a model was resolved. */
   lobes_role?: string;
+}
+
+/** What a parent knows about a child it spawned (plan t16): `$defs/child` minus id and ts. */
+export interface ChildLink {
+  child_model: string;
+  /** Path of the child's own `walk.jsonl`. */
+  child_walk: string;
+  child_session_id: string;
+}
+
+/** One `{"child": …}` line of the walk, as written. */
+export interface ChildEntry extends ChildLink {
+  /** `c1`, `c2`, … — its own sequence, never a walk (`w`) id. */
+  id: string;
+  ts: string;
 }
 
 // ----------------------------------------------------------------- redaction
@@ -243,6 +259,7 @@ export class WalkRecorder {
   private readonly pending = new Map<string, { toolName: string; args: unknown }>();
 
   private nextId: number;
+  private nextChildId: number;
   private toolCalls = 0;
   private anyTruncated = false;
   private unresolved = 0;
@@ -262,6 +279,7 @@ export class WalkRecorder {
     this.model = options.model;
     this.lobes_role = options.lobes_role;
     this.nextId = countExistingEntries(this.walkPath) + 1;
+    this.nextChildId = countExistingChildren(this.walkPath) + 1;
 
     // A headless `pi -p` may exit without a `session_shutdown`; without this
     // the run record — the only place reliability is recorded (c36) — would be
@@ -364,6 +382,36 @@ export class WalkRecorder {
     const redacted = redactValue(entry, this.filter);
     appendFileSync(this.walkPath, `${JSON.stringify({ gate: redacted })}\n`, "utf8");
     return redacted;
+  }
+
+  /**
+   * Append one child-walk link as its own `{"child": <$defs/child>}` line
+   * (plan t16: the parent walk references every child walk by path).
+   *
+   * Like a gate line, a child line is not a tool event: it takes no walk id
+   * and does not count toward `tool_calls`. Child ids are their own sequence,
+   * `c1`, `c2`, …, continued from any child lines already in the file. The
+   * line passes through the redaction filter like every other line. Throws
+   * when the line cannot be written — the spawn tool then launches nothing,
+   * so no child ever runs without its link on disk.
+   */
+  recordChild(link: ChildLink): ChildEntry {
+    if (this.finalized) {
+      throw new Error("the walk is already finalized; a child walk can no longer be linked");
+    }
+    const entry: ChildEntry = redactValue(
+      {
+        id: `c${this.nextChildId}`,
+        ts: this.now().toISOString(),
+        child_model: link.child_model,
+        child_walk: link.child_walk,
+        child_session_id: link.child_session_id,
+      },
+      this.filter,
+    );
+    appendFileSync(this.walkPath, `${JSON.stringify({ child: entry })}\n`, "utf8");
+    this.nextChildId += 1;
+    return entry;
   }
 
   /**
@@ -474,6 +522,22 @@ function countExistingEntries(walkPath: string): number {
       // A torn line still occupied an id when it was written.
     }
     count += 1;
+  }
+  return count;
+}
+
+/** Child lines already in a walk file, so a second recorder never re-issues `c1`. */
+function countExistingChildren(walkPath: string): number {
+  if (!existsSync(walkPath)) return 0;
+  let count = 0;
+  for (const line of readFileSync(walkPath, "utf8").split("\n")) {
+    if (!line.trim()) continue;
+    try {
+      const record = JSON.parse(line) as Record<string, unknown>;
+      if (record && typeof record === "object" && "child" in record) count += 1;
+    } catch {
+      // A torn line is counted as a walk entry by countExistingEntries, not here.
+    }
   }
   return count;
 }

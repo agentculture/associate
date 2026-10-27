@@ -436,3 +436,41 @@ test("appending to an existing walk keeps ids monotonic across recorders", () =>
     );
   });
 });
+
+// --------------------------------------------------- child-walk links (t16)
+
+test("recordChild appends {child} lines c1, c2, … that take no walk id and are not tool calls", () => {
+  withDir((dir) => {
+    const recorder = recorderIn(dir);
+    callAndResult(recorder, "ls", { path: "." }, "a\nb");
+    const first = recorder.recordChild({ child_model: "senses", child_walk: "/r/s-1/export/walk.jsonl", child_session_id: "s-1" });
+    const second = recorder.recordChild({ child_model: "worker", child_walk: "/r/s-2/export/walk.jsonl", child_session_id: "s-2" });
+    callAndResult(recorder, "ls", { path: "." }, "c");
+    assert.equal(first.id, "c1");
+    assert.equal(second.id, "c2");
+    assert.equal(typeof first.ts, "string");
+    const run = recorder.finalize()!;
+    assert.equal(run.tool_calls, 2);
+    assert.deepEqual(recorder.entryIds(), ["w1", "w2"]);
+    const children = readLines(dir).filter((line) => "child" in line).map((line) => line.child as Record<string, unknown>);
+    assert.deepEqual(children, [first, second]);
+  });
+});
+
+test("a second recorder on the same walk continues child ids instead of re-issuing c1", () => {
+  withDir((dir) => {
+    const one = recorderIn(dir);
+    one.recordChild({ child_model: "senses", child_walk: "/a", child_session_id: "a" });
+    const two = recorderIn(dir);
+    assert.equal(two.recordChild({ child_model: "senses", child_walk: "/b", child_session_id: "b" }).id, "c2");
+    assert.equal(two.entryCount, 0, "a child line never occupies a walk id");
+  });
+});
+
+test("recordChild refuses once the walk is finalized", () => {
+  withDir((dir) => {
+    const recorder = recorderIn(dir);
+    recorder.finalize();
+    assert.throws(() => recorder.recordChild({ child_model: "senses", child_walk: "/a", child_session_id: "a" }), /finalized/);
+  });
+});

@@ -11,6 +11,17 @@
 
 import type { Contract, ContractPolicy, ContractSchemas } from "./contract.ts";
 import type { SessionDirs } from "./session.ts";
+import type { ChildEntry, ChildLink } from "./walk.ts";
+
+/**
+ * The part of the session's walk recorder a tool module may use: linking a
+ * child walk (plan t16). Tool calls themselves are recorded from pi events,
+ * never by a tool, so nothing else of the recorder is exposed.
+ */
+export interface ChildWalkLinker {
+  readonly walkPath: string;
+  recordChild(link: ChildLink): ChildEntry;
+}
 
 /**
  * Containment helpers shared by every tool.
@@ -63,6 +74,13 @@ export interface AssociateContext {
   declareNonWriter(toolName: string): void;
   /** Tool names declared through {@link declareNonWriter}, for the guard. */
   declaredNonWriters(): readonly string[];
+  /**
+   * Attach the session's walk recorder. `index.ts` does this once, after
+   * installing the recorder and before any tool module registers.
+   */
+  attachWalk(walk: ChildWalkLinker): void;
+  /** The attached walk recorder, or undefined when none was attached (tests). */
+  walk(): ChildWalkLinker | undefined;
 }
 
 /**
