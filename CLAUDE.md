@@ -169,6 +169,14 @@ The decider (CLEF) is the lobes `decider` role (`typed_decision`,
 registry entry. "bolt" is not a lobes role: it is the Pi provider label for the
 `worker` role.
 
+What serves a role is measured, not assumed. On 2026-10-27, every reply in a
+live pi run on the `worker` role reported `responseModel`
+`nvidia/NVIDIA-Nemotron-3.5-Bolt-74B-A9B-24GB` in pi's JSON event stream (24
+of 24 assistant messages). That is an observation of the gateway on that
+date, not a pin. Re-read `responseModel` rather than trusting this line, and
+never copy a checkpoint id into the contract. The other roles' serving
+checkpoints have not been read from a live run.
+
 The earlier lane — the lobes `associate` role, Nemotron 3.5 Lightning on the
 Jetson AGX Orin, `worker` MINUS `repo_action` — is **out** (spec claim c30);
 `worker` replaces it as the default. The lobes `associate` role itself is
