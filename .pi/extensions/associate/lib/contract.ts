@@ -62,6 +62,13 @@ export interface ContractModels {
   /** The canonical tool-name set (checked against registration by another task). */
   readonly tool_names: readonly string[];
   readonly mutating_tools: readonly string[];
+  /**
+   * Tools that are not repo mutations but pass the safety gate for every
+   * model, senses included (d6/r17: `eidetic_remember`; d7: `web_search`,
+   * `web_page`).
+   * Disjoint from `mutating_tools` — the Python validator enforces it.
+   */
+  readonly gated_tools: readonly string[];
   readonly models: Readonly<Record<string, ModelEntry>>;
 }
 

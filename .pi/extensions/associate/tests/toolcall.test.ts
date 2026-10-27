@@ -327,9 +327,188 @@ test("r15: a mutating call whose gate state was truncated is refused even on a s
   });
 });
 
+// ------------- d6 / r17, d7: gated_tools (memory writes, web egress)
+
+test("d6/d7: gated_tools lists the memory write and both web tools, none a repo mutation", () => {
+  assert.deepEqual([...CONTRACT.models.gated_tools], ["eidetic_remember", "web_search", "web_page"]);
+  for (const name of CONTRACT.models.gated_tools) {
+    assert.ok(!CONTRACT.models.mutating_tools.includes(name), `${name} must not be a repo mutation`);
+    assert.ok(CONTRACT.models.models.senses!.tools.includes(name), `senses keeps ${name} (c35, d7)`);
+  }
+});
+
+/** One sample call per gated tool (d6: memory write; d7: the web tools send data off the machine). */
+const GATED_CALLS: ReadonlyArray<readonly [string, Record<string, unknown>]> = [
+  ["eidetic_remember", { text: "the gate wiring landed" }],
+  ["web_search", { query: "pi coding agent" }],
+  ["web_page", { url: "https://example.invalid/page" }],
+];
+
+for (const key of ["senses", "worker"]) {
+  for (const [tool, input] of GATED_CALLS) {
+    test(`d6/d7: ${key}'s ${tool} passes the gate and runs on allow, with a gate line`, async () => {
+      await withRun(key, async ({ pi, decider, walkPath }) => {
+        const decision = await call(pi, tool, input);
+        assert.equal(decision, undefined, `a safe verdict must let ${key}'s ${tool} run: ${decision?.reason}`);
+        assert.equal(decider.calls.length, 1, `the decider was asked about ${tool}`);
+        const [gate] = gateLines(walkPath);
+        assert.equal(gate.decision, "allow");
+        assert.equal(gate.tier, "clef");
+        assert.equal(gate.gated_tool, tool);
+        const state: string = decider.calls[0]!.body.state;
+        assert.ok(state.includes(`model: ${key}`), state);
+      });
+    });
+
+    test(`d6/d7: ${key}'s ${tool} is refused on an unsafe verdict, with a gate line`, async () => {
+      await withRun(
+        key,
+        async ({ pi, decider, walkPath }) => {
+          const decision = await call(pi, tool, input);
+          assert.ok(decision?.block, `${key}'s ${tool} ran on an unsafe verdict`);
+          assert.match(decision!.reason, new RegExp(`safety gate refused '${tool}' \\(g1, tier clef\\)`));
+          assert.equal(decider.calls.length, 1);
+          const [gate] = gateLines(walkPath);
+          assert.equal(gate.decision, "refuse");
+          assert.equal(gate.gated_tool, tool);
+        },
+        { answers: unsafeClefAnswers },
+      );
+    });
+
+    test(`d6/d7: ${key}, decider unreachable and Super pending: ${tool} is refused (fail closed)`, async () => {
+      await withRun(
+        key,
+        async ({ pi, decider, walkPath }) => {
+          const decision = await call(pi, tool, input);
+          assert.ok(decision?.block, `${tool} is not a read: the read-only fallback must refuse it`);
+          assert.equal(decider.calls.length, 0, "no key: CLEF is never contacted");
+          const lines = gateLines(walkPath);
+          assert.equal(lines.length, 1);
+          assert.equal(lines[0].tier, "readonly");
+          assert.equal(lines[0].decision, "refuse");
+          assert.equal(lines[0].gated_tool, tool);
+        },
+        { key: false },
+      );
+    });
+  }
+}
+
+for (const key of ["senses", "worker"]) {
+  test(`d6/d7: ${key}, decider unreachable: eidetic_recall and read/grep/find/ls still run, never asking`, async () => {
+    await withRun(
+      key,
+      async ({ pi, decider, walkPath }) => {
+        for (const [name, input] of [
+          ["eidetic_recall", { query: "gate" }],
+          ["read", { path: "README.md" }],
+          ["grep", { pattern: "x" }],
+          ["find", { pattern: "*.ts" }],
+          ["ls", { path: "." }],
+        ] as const) {
+          const decision = await call(pi, name, input);
+          assert.equal(decision, undefined, `${key} ${name} was blocked: ${decision?.reason}`);
+        }
+        assert.equal(decider.calls.length, 0);
+        assert.deepEqual(gateLines(walkPath), []);
+      },
+      { key: false },
+    );
+  });
+}
+
+
+for (const key of ["senses", "worker"]) {
+  test(`d6 / r15: ${key}'s truncated eidetic_remember is refused even on a safe verdict`, async () => {
+    await withRun(key, async ({ pi, decider, walkPath }) => {
+      const budget = (GATE.decider.max_input_tokens as number) * 2;
+      const decision = await call(pi, "eidetic_remember", { text: "x".repeat(budget) });
+      assert.ok(decision?.block, "a truncated memory write must be refused");
+      assert.match(decision!.reason, /truncated/);
+      assert.equal(decider.calls.length, 1);
+      const [gate] = gateLines(walkPath);
+      assert.equal(gate.decision, "refuse");
+      assert.match(gate.reason, /r15/);
+    });
+  });
+}
+
+test("d6: senses' write/edit/bash stay refused before the gate while eidetic_remember is gated", async () => {
+  // Shipped contract: refused at the tool-set check, the decider never asked.
+  await withRun("senses", async ({ pi, decider, walkPath }) => {
+    pi.setActiveTools([...pi.getActiveTools(), "write", "edit", "bash"]);
+    for (const name of ["write", "edit", "bash"]) {
+      const decision = await call(pi, name, { path: "README.md", content: "x", argv: ["eidetic", "remember", "{}"] });
+      assert.ok(decision?.block, `${name} was not refused for senses`);
+    }
+    assert.equal(decider.calls.length, 0, "a senses repo mutation reached the decider");
+    assert.deepEqual(gateLines(walkPath), []);
+    assert.equal(await call(pi, "eidetic_remember", { text: "x" }), undefined);
+    assert.equal(decider.calls.length, 1);
+    assert.equal(gateLines(walkPath).length, 1);
+  });
+  // A contract copy whose senses entry lists the writers: the may_mutate rule
+  // (not the set check) refuses them before the gate, while the gated memory
+  // write still reaches it.
+  const dir = mkdtempSync(join(tmpdir(), "associate-d6-senses-"));
+  try {
+    cpSync(findRepoContractDir(), dir, { recursive: true });
+    const modelsPath = join(dir, "models.json");
+    const doc = JSON.parse(readFileSync(modelsPath, "utf8"));
+    doc.models.senses.tools.push("write", "edit", "bash");
+    writeFileSync(modelsPath, JSON.stringify(doc));
+    await withRun(
+      "senses",
+      async ({ pi, decider, walkPath }) => {
+        for (const [name, input] of [
+          ["write", { path: "README.md", content: "x" }],
+          ["edit", { path: "README.md", edits: [] }],
+          ["bash", { argv: ["eidetic", "remember", "{}"] }],
+        ] as const) {
+          const decision = await call(pi, name, input);
+          assert.ok(decision?.block, `${name} was not refused for senses`);
+          assert.match(decision!.reason, /may not mutate/, `${name} refused for the wrong reason`);
+        }
+        assert.equal(decider.calls.length, 0, "a senses repo mutation reached the decider");
+        assert.deepEqual(gateLines(walkPath), []);
+        assert.equal(await call(pi, "eidetic_remember", { text: "x" }), undefined);
+        assert.equal(decider.calls.length, 1);
+        assert.deepEqual(gateLines(walkPath).map((g) => g.gated_tool), ["eidetic_remember"]);
+      },
+      { contractDir: dir },
+    );
+  } finally {
+    rmSync(dir, { recursive: true, force: true });
+  }
+});
+
+test("d6: a gated_tools-only contract change gates the named tool for senses (contract-driven)", async () => {
+  // Remove eidetic_remember from gated_tools: senses' memory write goes back to
+  // ungated — proving the guard reads the list, not a hard-coded name.
+  const dir = mkdtempSync(join(tmpdir(), "associate-d6-contract-"));
+  try {
+    cpSync(findRepoContractDir(), dir, { recursive: true });
+    const modelsPath = join(dir, "models.json");
+    const doc = JSON.parse(readFileSync(modelsPath, "utf8"));
+    doc.gated_tools = [];
+    writeFileSync(modelsPath, JSON.stringify(doc));
+    await withRun(
+      "senses",
+      async ({ pi, decider }) => {
+        assert.equal(await call(pi, "eidetic_remember", { text: "x" }), undefined);
+        assert.equal(decider.calls.length, 0);
+      },
+      { contractDir: dir },
+    );
+  } finally {
+    rmSync(dir, { recursive: true, force: true });
+  }
+});
+
 // ------------------------------------------ criterion 3: reads skip it
 
-test("criterion 3: pure reads never call the decider and write no gate line", async () => {
+test("criterion 3: pure reads never call the decider and write no gate line (web tools are gated since d7)", async () => {
   for (const key of ["worker", "cortex", "senses"]) {
     await withRun(key, async ({ pi, decider, walkPath }) => {
       const reads: Array<[string, unknown]> = [
@@ -337,8 +516,6 @@ test("criterion 3: pure reads never call the decider and write no gate line", as
         ["grep", { pattern: "x" }],
         ["find", { pattern: "*.ts" }],
         ["ls", { path: "." }],
-        ["web_search", { query: "pi" }],
-        ["web_page", { url: "https://example.invalid" }],
         ["eidetic_recall", { query: "gate" }],
         ["associate_ready", {}],
       ];

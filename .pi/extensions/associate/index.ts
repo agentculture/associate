@@ -267,7 +267,8 @@ export default async function (pi: ExtensionAPI) {
 
   // --------------------------------------------------------- tool_call guard
   // Order (lib/guard.ts decideToolCall): finished → model set → senses refuses
-  // mutations before the gate → pure reads proceed → mutations go through the
+  // repo mutations before the gate → pure reads proceed → mutations, and
+  // `gated_tools` calls from any model (d6/d7: memory write, web), go through the
   // gate, its entry appended to the walk → a truncated gate state refuses.
   pi.on("tool_call", async (event, eventCtx) => {
     if (finished) {
