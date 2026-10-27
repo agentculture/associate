@@ -580,14 +580,61 @@ def test_provider_flags_when_a_key_is_set(
     fake_pi, checkout: Path, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ):
     monkeypatch.setenv("ASSOCIATE_API_KEY", "dummy-test-key")  # nosec B105
-    monkeypatch.setenv("ASSOCIATE_MODEL", "associate")
 
     assert _run([], checkout, tmp_path) == 0
 
-    argv = _invocation(tmp_path)["argv"]
+    invocation = _invocation(tmp_path)
+    argv = invocation["argv"]
     assert argv[argv.index("--provider") + 1] == "associate"
-    assert argv[argv.index("--model") + 1] == "associate"
+    assert argv[argv.index("--model") + 1] == "worker"
+    assert invocation["env"]["ASSOCIATE_MODEL"] == "worker"
     assert "dummy-test-key" not in " ".join(argv)
+
+
+@pytest.mark.parametrize("model", ["worker", "senses", "cortex"])
+def test_model_flag_passes_the_registry_entry_to_pi(
+    fake_pi, checkout: Path, tmp_path: Path, monkeypatch: pytest.MonkeyPatch, model: str
+):
+    monkeypatch.setenv("ASSOCIATE_API_KEY", "dummy-test-key")  # nosec B105
+    monkeypatch.setenv("ASSOCIATE_MODEL", "stale-inherited")
+
+    assert _run(["--model", model], checkout, tmp_path) == 0
+
+    for invocation in _invocations(tmp_path):
+        argv = invocation["argv"]
+        assert argv[argv.index("--provider") + 1] == "associate"
+        assert argv[argv.index("--model") + 1] == model
+        assert invocation["env"]["ASSOCIATE_MODEL"] == model
+
+
+def test_model_flag_without_a_key_still_tells_the_extension(
+    fake_pi, checkout: Path, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+):
+    monkeypatch.delenv("ASSOCIATE_API_KEY", raising=False)
+
+    assert _run(["--model", "senses"], checkout, tmp_path) == 0
+
+    invocation = _invocation(tmp_path)
+    assert "--provider" not in invocation["argv"]
+    assert invocation["env"]["ASSOCIATE_MODEL"] == "senses"
+
+
+def test_unknown_model_exits_1_naming_the_registry(
+    fake_pi, checkout: Path, tmp_path: Path, capsys: pytest.CaptureFixture[str]
+):
+    assert _run(["--model", "nope"], checkout, tmp_path) == 1
+    err = capsys.readouterr().err
+    assert "unknown model 'nope'" in err
+    for name in ("worker", "senses", "cortex", "super-vl"):
+        assert name in err
+
+
+def test_pending_model_is_refused_with_exit_1(
+    fake_pi, checkout: Path, tmp_path: Path, capsys: pytest.CaptureFixture[str]
+):
+    assert _run(["--model", "super-vl"], checkout, tmp_path) == 1
+    assert "pending" in capsys.readouterr().err
+    assert not (tmp_path / "runs" / "invocation.json").exists()
 
 
 def test_the_tested_pin_is_pi_1_1_0():

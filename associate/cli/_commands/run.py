@@ -57,6 +57,7 @@ def _build(harness_cls: type, args: argparse.Namespace) -> Any:
         "prompt": args.prompt,
         "continue_from": args.continue_from,
         "timeout": args.timeout,
+        "model": args.model,
     }
     try:
         parameters = inspect.signature(harness_cls).parameters
@@ -64,6 +65,28 @@ def _build(harness_cls: type, args: argparse.Namespace) -> Any:
         parameters = {}
     kwargs = {key: value for key, value in candidates.items() if key in parameters}
     return harness_cls(**kwargs)
+
+
+def _resolve_model(requested: str | None) -> str:
+    """Return the registry key to run, or refuse (exit 1) an unknown/pending one."""
+    registry = contract.load_models()
+    models = registry["models"]
+    key = requested or str(registry["default"])
+    entry = models.get(key)
+    names = ", ".join(models)
+    if entry is None:
+        raise CliError(
+            code=EXIT_USER_ERROR,
+            message=f"unknown model {key!r}",
+            remediation=f"registry models: {names}",
+        )
+    if entry.get("status") == "pending":
+        raise CliError(
+            code=EXIT_USER_ERROR,
+            message=f"model {key!r} is pending (no lobes role yet) and cannot be run",
+            remediation=f"registry models: {names}",
+        )
+    return key
 
 
 def cmd_run(args: argparse.Namespace) -> int:
@@ -79,6 +102,8 @@ def cmd_run(args: argparse.Namespace) -> int:
             message=f"unknown harness {args.harness!r}",
             remediation=f"available adapters: {', '.join(available_harnesses())}",
         ) from err
+
+    args.model = _resolve_model(args.model)
 
     checkout = Path(args.checkout).expanduser().resolve() if args.checkout else Path.cwd()
     if not checkout.is_dir():
@@ -186,6 +211,12 @@ def register(sub: argparse._SubParsersAction) -> None:
         type=float,
         default=900.0,
         help="Seconds to wait for the harness (default: 900).",
+    )
+    p.add_argument(
+        "--model",
+        default=None,
+        help="Registry model to run (from the contract's models.json; default: the "
+        "registry's default). Unknown or pending models exit 1.",
     )
     p.add_argument("--json", action="store_true", help="Emit structured JSON.")
     p.set_defaults(func=cmd_run)

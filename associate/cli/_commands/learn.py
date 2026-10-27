@@ -28,7 +28,7 @@ Commands
   associate explain <path>...  Markdown docs for any noun/verb path.
   associate overview           Descriptive snapshot of the agent.
   associate doctor             Check the agent-identity invariants.
-  associate run [prompt]       Run one task on a harness adapter, or fail closed.
+  associate run [prompt]       Run one task on a harness adapter (--model), or fail closed.
   associate bench              Run public benchmark suites (none configured yet).
   associate cli overview       Describe the CLI surface itself.
 
@@ -64,8 +64,9 @@ def _as_json_payload() -> dict[str, object]:
             {
                 "path": ["run"],
                 "summary": (
-                    "Run one task on a harness adapter; exits 2 without serving when the "
-                    "adapter cannot prove its extension loaded."
+                    "Run one task on a harness adapter (--model picks a registry model); "
+                    "exits 2 without serving when the adapter cannot prove its "
+                    "extension loaded."
                 ),
             },
             {
