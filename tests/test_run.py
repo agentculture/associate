@@ -1084,3 +1084,61 @@ def test_an_inherited_trust_claim_is_never_passed_through(tmp_path: Path):
 def test_the_launcher_hands_the_trust_mode_to_pi(fake_pi, checkout: Path, tmp_path: Path):
     assert _run(["--untrusted-checkout", "--session-id", "t16-untrusted"], checkout, tmp_path) == 0
     assert _invocation(tmp_path)["env"]["ASSOCIATE_PI_TRUST"] == "untrusted"
+
+
+# ------------------------------------------ how a run ended (live finding)
+
+
+def _assistant_end(text: str, stop: str = "stop", **extra: object) -> dict:
+    return {
+        "type": "message_end",
+        "message": {
+            "role": "assistant",
+            "content": [{"type": "thinking", "thinking": "hidden"}, {"type": "text", "text": text}],
+            "stopReason": stop,
+            **extra,
+        },
+    }
+
+
+def test_final_turn_keeps_the_last_assistant_reply_and_stop_reason():
+    from associate.harness.pi import final_turn
+
+    events = [
+        _assistant_end("first reply", stop="toolUse"),
+        {"type": "message_end", "message": {"role": "toolResult", "content": []}},
+        _assistant_end("I could not run id -u, so I stopped."),
+        {"type": "agent_end", "messages": []},
+    ]
+    assert final_turn(events) == {
+        "final_reply": "I could not run id -u, so I stopped.",
+        "stop_reason": "stop",
+    }
+
+
+def test_final_turn_reports_a_lane_error_and_redacts_and_bounds_the_reply():
+    from associate.harness.pi import FINAL_REPLY_CHARS, final_turn
+
+    secret = "Authorization: Bearer sk-abcdefghijklmnop1234"
+    events = [_assistant_end("x" * 5000 + " " + secret, stop="error", errorMessage="503 " + secret)]
+    turn = final_turn(events)
+    assert turn["stop_reason"] == "error"
+    assert "sk-abcdefghijklmnop1234" not in turn["final_reply"]
+    assert "sk-abcdefghijklmnop1234" not in turn["lane_error"]
+    assert len(turn["final_reply"]) <= FINAL_REPLY_CHARS
+    assert turn["lane_error"].startswith("503")
+
+
+def test_final_turn_is_empty_when_no_assistant_message_arrived():
+    from associate.harness.pi import final_turn
+
+    assert final_turn([]) == {"final_reply": "", "stop_reason": None}
+
+
+def test_the_run_result_says_how_the_run_ended(
+    fake_pi, checkout: Path, tmp_path: Path, capsys: pytest.CaptureFixture[str]
+):
+    assert _run(["--session-id", "final-turn", "--json"], checkout, tmp_path) == 0
+    payload = json.loads(capsys.readouterr().out)
+    assert payload["final_reply"] == ""
+    assert payload["stop_reason"] is None

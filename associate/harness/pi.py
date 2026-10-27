@@ -363,6 +363,44 @@ def parse_events(stdout: str) -> list[dict[str, Any]]:
     return events
 
 
+#: How much of the model's last reply the run result keeps (redacted).
+FINAL_REPLY_CHARS = 2000
+
+
+def final_turn(events: list[dict[str, Any]]) -> dict[str, Any]:
+    """How the task turn ended: the last assistant reply, its stop reason, any lane error.
+
+    A run that ends without ``finish`` otherwise leaves no trace of why (live
+    runs live-bolt-tests-gaps/-gaps2): the walk holds tool calls only. Text
+    blocks are kept (thinking is not), redacted and bounded; ``lane_error`` is
+    present only when pi reported one.
+    """
+    last: dict[str, Any] | None = None
+    for event in events:
+        message = event.get("message")
+        if (
+            event.get("type") == "message_end"
+            and isinstance(message, dict)
+            and message.get("role") == "assistant"
+        ):
+            last = message
+    if last is None:
+        return {"final_reply": "", "stop_reason": None}
+    blocks = last.get("content") if isinstance(last.get("content"), list) else []
+    text = "\n".join(
+        str(block.get("text", ""))
+        for block in blocks
+        if isinstance(block, dict) and block.get("type") == "text"
+    ).strip()
+    turn: dict[str, Any] = {
+        "final_reply": output_tail(text, FINAL_REPLY_CHARS),
+        "stop_reason": last.get("stopReason") if isinstance(last.get("stopReason"), str) else None,
+    }
+    if last.get("errorMessage"):
+        turn["lane_error"] = output_tail(str(last["errorMessage"]), FINAL_REPLY_CHARS)
+    return turn
+
+
 def _is_sentinel_end(event: dict[str, Any]) -> bool:
     """Whether *event* is the ``tool_execution_end`` of the sentinel tool."""
     return event.get("type") == "tool_execution_end" and event.get("toolName") == SENTINEL_TOOL
@@ -488,13 +526,10 @@ class PiHarness(Harness):
         # The task run's own session_start rewrites ready.json; the sentinel
         # event is only a fallback for a pi that somehow wrote no file, and the
         # preflight's report is the last resort.
-        report = (
-            self._read_ready_report(export_dir)
-            or sentinel_report(parse_events(completed.stdout))
-            or report
-        )
+        events = parse_events(completed.stdout)
+        report = self._read_ready_report(export_dir) or sentinel_report(events) or report
 
-        self._result = self._assemble_result(export_dir, report)
+        self._result = {**self._assemble_result(export_dir, report), **final_turn(events)}
 
     def _run_preflight(
         self,
