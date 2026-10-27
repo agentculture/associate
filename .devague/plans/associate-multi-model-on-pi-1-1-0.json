@@ -5,7 +5,7 @@
   "schema_version": 5,
   "status": "exported",
   "created": "2026-10-27T09:38:26Z",
-  "updated": "2026-10-27T10:58:28Z",
+  "updated": "2026-10-27T11:07:39Z",
   "targets": [
     {
       "id": "c1",
@@ -1080,6 +1080,14 @@
       "id": "r15",
       "text": "t10's gate truncates over-budget arguments, so CLEF scores only the head of a long mutating call and never sees its tail \u2014 t12 should refuse a truncated mutating call outright (fail closed) rather than gate it on partial state",
       "kind": "unknown_nonblocking",
+      "task_id": "t12",
+      "resolved": false,
+      "resolution": ""
+    },
+    {
+      "id": "r16",
+      "text": "associate/harness/pi.py:670 launches pi with --approve ('Trust project-local files for this run'), so every examined checkout's .pi settings, extensions and mcp.json are trusted and loaded \u2014 an examined repo can run its own code in the session before any gate; r13's duplicate-extension conflict is the symptom. Proposed fix: --no-approve --no-extensions --no-mcp (explicit -e still loads associate's extension)",
+      "kind": "unknown_blocking",
       "task_id": "t12",
       "resolved": false,
       "resolution": ""
