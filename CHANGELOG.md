@@ -97,7 +97,7 @@ senses statement claimed an action it never took.
   `explain` / `learn` text and the package description now describe the
   multi-model harness.
 
-### Security
+### Security (PR #18 code review)
 
 The PR #18 code review found ten issues. The nine below were confirmed in the
 code and fixed, test-first. The tenth, large writes always refused, waits on a
