@@ -113,7 +113,9 @@ def test_row_carries_suite_version_scorer_and_config_stamp(tmp_path, monkeypatch
         "bfcl-1.2",
         "fake-scorer",
     )
-    assert row["score"] == 42.5 and row["model"] == "senses" and row["lobes_role"] == "senses"
+    assert row["score"] == 42.5
+    assert row["model"] == "senses"
+    assert row["lobes_role"] == "senses"
     assert row["configuration"]["provider"] == "http://gw.invalid:8001/v1"
     assert "pi_version" in row["configuration"]
     assert "sk-thisisaverysecretkey" not in captured.out + captured.err
@@ -169,7 +171,8 @@ def test_missing_upstream_binary_is_exit_two_without_traceback(tmp_path, monkeyp
     path.write_text(json.dumps(data))
     assert main(["bench", "--suite", "bfcl", "--model", "worker"]) == 2
     err = capsys.readouterr().err
-    assert "pip install the-thing" in err and "Traceback" not in err
+    assert "pip install the-thing" in err
+    assert "Traceback" not in err
 
 
 def test_malformed_suites_file_is_exit_two(tmp_path, monkeypatch, capsys):
@@ -191,7 +194,8 @@ def test_csv_score_parsing(tmp_path):
 def test_explain_and_learn_describe_the_new_bench(capsys):
     assert main(["explain", "bench"]) == 0
     out = capsys.readouterr().out
-    assert "--suite" in out and "BFCL" in out
+    assert "--suite" in out
+    assert "BFCL" in out
     main(["learn", "--json"])
     payload = json.loads(capsys.readouterr().out)
     entry = next(e for e in payload["commands"] if e["path"] == ["bench"])
@@ -216,8 +220,10 @@ def test_run_task_drives_the_stub_adapter(tmp_path):
         "session_id": "bench-t-1",
         "export_dir": str(tmp_path / "export"),
     }
-    harness, result, duration_ms, error = run_task(get_harness("stub"), task, tmp_path)
-    assert error is None and result and duration_ms >= 0
+    harness, result, duration_ms, error = run_task(get_harness("stub"), task)
+    assert error is None
+    assert result
+    assert duration_ms >= 0
     config = bench_config.describe("stub", harness, result)
     assert config["harness"] == "stub"
     assert config["plumbing_only"] is True

@@ -87,7 +87,7 @@ class SuiteResult:
 
 
 def run_task(
-    harness_cls: type, task: dict[str, Any], workdir: Path
+    harness_cls: type, task: dict[str, Any]
 ) -> tuple[Any, dict[str, Any], int, str | None]:
     """Run one task through an adapter; return (harness, result, duration_ms, error).
 

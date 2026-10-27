@@ -249,9 +249,9 @@ class GateStats:
     """
 
     gated: int = 0
-    tiers: dict[str, int] = field(default_factory=lambda: {tier: 0 for tier in GATE_TIERS})
+    tiers: dict[str, int] = field(default_factory=lambda: dict.fromkeys(GATE_TIERS, 0))
     decisions: dict[str, dict[str, int]] = field(
-        default_factory=lambda: {tier: {name: 0 for name in GATE_DECISIONS} for tier in GATE_TIERS}
+        default_factory=lambda: {tier: dict.fromkeys(GATE_DECISIONS, 0) for tier in GATE_TIERS}
     )
 
     @property
