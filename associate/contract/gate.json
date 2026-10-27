@@ -46,7 +46,8 @@
     ]
   },
   "super": {
-    "$comment": "Super is a chat model, a generator and not a calibrated scorer: it is asked the same questions but must answer in this fixed JSON shape, and its rule is a plain verdict match, not a probability threshold. Any answer that does not parse into the shape is a refusal.",
+    "$comment": "Super is a chat model, a generator and not a calibrated scorer: it is asked the same questions but must answer in this fixed JSON shape, and its rule is a plain verdict match, not a probability threshold. Any answer that does not parse into the shape is a refusal. `model` is the models.json registry key of the Super model; while that entry is pending (or pi has not registered it) the Super tier counts as unreachable.",
+    "model": "super-vl",
     "answer_shape": {
       "verdicts": "object keyed by question key: a boolean for a noul question, one criteria option name for a choice question"
     },

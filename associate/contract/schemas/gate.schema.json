@@ -34,9 +34,10 @@
     "super": {
       "type": "object",
       "additionalProperties": false,
-      "required": ["answer_shape", "allow_when"],
+      "required": ["model", "answer_shape", "allow_when"],
       "properties": {
         "$comment": {"type": "string"},
+        "model": {"type": "string", "description": "models.json registry key of the Super-tier model."},
         "answer_shape": {"type": "object"},
         "allow_when": {"type": "object"}
       }

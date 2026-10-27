@@ -170,3 +170,19 @@ def test_walk_document_accepts_gates_and_children():
         "run": {"duration_ms": 1, "tool_calls": 0, "outcome": "ok", "truncated": False},
     }
     assert validate.validate(document, contract.load_schema("walk")) == []
+
+
+def test_super_tier_names_its_model_by_registry_key(doc):
+    """t10: the gate library locates Super through a models.json key, not a literal."""
+    key = doc["super"]["model"]
+    assert key in contract.load_models()["models"]
+
+
+def test_super_model_must_be_a_registry_key(doc):
+    doc["super"]["model"] = "no-such-model"
+    assert any("no-such-model" in e for e in validate.validate_gate(doc))
+
+
+def test_super_model_is_required(doc):
+    doc["super"].pop("model")
+    assert validate.validate_gate(doc)
