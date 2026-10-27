@@ -4,7 +4,7 @@
   "schema_version": 6,
   "status": "exported",
   "created": "2026-10-27T08:43:47Z",
-  "updated": "2026-10-27T09:37:57Z",
+  "updated": "2026-10-27T09:38:18Z",
   "claims": [
     {
       "id": "c1",
@@ -1628,6 +1628,18 @@
       ],
       "origin": "llm",
       "status": "approved"
+    },
+    {
+      "id": "l2",
+      "code": "control-absent",
+      "what": "two spec commits (4493e18, 67dc0ba) landed with MD033 lint errors: the lint step was piped through tail, so its failure never stopped the commit chain",
+      "skipped_check": "gate git commit on markdownlint-cli2's exit code",
+      "refs": [
+        "4493e18",
+        "67dc0ba"
+      ],
+      "origin": "llm",
+      "status": "proposed"
     }
   ],
   "obligations": []
