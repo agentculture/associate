@@ -2,7 +2,7 @@
   "plan_slug": "associate-multi-model-on-pi-1-1-0",
   "schema_version": 2,
   "created": "2026-10-27T10:36:31Z",
-  "updated": "2026-10-27T20:46:33Z",
+  "updated": "2026-10-27T22:54:15Z",
   "deviations": [
     {
       "id": "d1",
@@ -209,6 +209,47 @@
       "status": "approved",
       "classification": "acceptable",
       "seq": 15
+    },
+    {
+      "id": "d16",
+      "what": "oversized gate states (over the decider's input budget) are no longer cut and refused: they are judged by a different, large-context registry model (gate.json large_state.evaluators, default [cortex, worker]; the first active entry that is not the acting model), asked the same questions with the full state through the Super-style JSON verdict; no evaluator reachable, or a state too large even for it, is still refused",
+      "task_ref": "t10",
+      "reason": "PR #18 review finding 4: any write or task over about 7-14 KB was always refused because CLEF's 16k-token input forced truncation (r15). User declined a summarised state and chose a different model as evaluator for large inputs; the actor never judges its own call",
+      "affects": [
+        "t5",
+        "t12"
+      ],
+      "origin": "user",
+      "status": "approved",
+      "classification": "needs-follow-up",
+      "seq": 16
+    },
+    {
+      "id": "d17",
+      "what": "the examined checkout's AGENTS.md is skipped under --untrusted-checkout and, for a trusted checkout, injected labelled as repository context rather than as this lane's runtime prompt",
+      "task_ref": "t11",
+      "reason": "PR #18 review follow-up: a hostile checkout's AGENTS.md was injected as the runtime prompt even under --untrusted-checkout; user accepted skipping it there and relabelling it otherwise",
+      "affects": [
+        "t2"
+      ],
+      "origin": "user",
+      "status": "approved",
+      "classification": "acceptable",
+      "seq": 17
+    },
+    {
+      "id": "d18",
+      "what": "design D (O3): the mesh resident stays read-only and hands any task that writes to 'associate run' (a per-run worktree, the operator test check and the clean-only merge) through a new gated tool, instead of writing in its own long-lived session",
+      "task_ref": "t16",
+      "reason": "culture's ACP runner keeps one long-lived pi session in the registered directory, so a mesh request cannot get its own worktree inside that session; O3 reuses the one isolation path measured live. User accepted O3",
+      "affects": [
+        "t15",
+        "t20"
+      ],
+      "origin": "user",
+      "status": "approved",
+      "classification": "needs-follow-up",
+      "seq": 18
     }
   ],
   "evidence": [],
