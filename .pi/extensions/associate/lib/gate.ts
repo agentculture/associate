@@ -34,12 +34,15 @@
  * the boolean `false` counts as mutating.
  *
  * The state (c54/h36): built from the `state_fields` — task, action (tool
- * name), arguments, model id and (d8) isolation — and nothing else. The request type
+ * name), (d10) effect, arguments, model id and (d8) isolation — and nothing
+ * else. The request type
  * has no field for a tool result, and the builder picks those four fields by
  * name, so a result object a caller passes by mistake never reaches the
  * decider. Arguments are redacted (gate.json `redaction.keys` by key, then the
  * `policy.json` patterns `redaction.policy_ref` points at) before the state is
  * built, and the state is cut to fit `decider.max_input_tokens`. The
+ * effect line is gate.json's own description of what the tool does
+ * (`effects`), so the decider never judges a bare tool name. The
  * isolation line is gate.json's own description of the run's mode
  * (`isolation.describe`), never caller text: an absent or unknown mode is
  * described as in-place, so a missing signal never makes a call look isolated.
@@ -77,7 +80,10 @@ export const DEFAULT_SUPER_TIMEOUT_MS = 120_000;
 export const TEMPLATE_RESERVE_TOKENS = 1024;
 
 /** The state fields this library knows how to fill. `state_fields` may only name these. */
-const KNOWN_STATE_FIELDS = ["task", "action", "arguments", "model", "isolation"] as const;
+const KNOWN_STATE_FIELDS = ["task", "action", "effect", "arguments", "model", "isolation"] as const;
+
+/** The effect line for a tool gate.json does not describe; the decider is told so rather than left to guess. */
+export const UNDESCRIBED_EFFECT = "the contract does not describe what this tool does.";
 type StateField = (typeof KNOWN_STATE_FIELDS)[number];
 
 /** The isolation modes gate.json describes (d8). Anything else reads as in-place. */
@@ -151,6 +157,10 @@ export interface GateConfig {
   readonly deciderDomain: string;
   readonly maxInputTokens: number;
   readonly stateFields: readonly StateField[];
+  /** gate.json `effects`: tool name → what it does (d10). */
+  readonly effects: Readonly<Record<string, string>>;
+  /** gate.json `isolation.applies_to`: the tools the isolation line is sent for (d10). */
+  readonly isolationAppliesTo: readonly string[];
   /** gate.json `isolation.describe`: the state line for each mode (d8). */
   readonly isolation: Readonly<Record<IsolationMode, string>>;
   /** `gate.json` questions, verbatim — sent to CLEF as-is. */
@@ -275,6 +285,27 @@ export function compileGate(contract: Pick<Contract, "gate" | "policy" | "models
     }
   }
 
+  if (!isRecord(gate.effects)) fail("effects missing");
+  const effects: Record<string, string> = {};
+  for (const [tool, text] of Object.entries(gate.effects as Record<string, unknown>)) {
+    if (tool === "$comment") continue;
+    if (typeof text !== "string" || text.trim() === "") fail(`effects.${tool} must be a non-empty string`);
+    effects[tool] = text;
+  }
+  const reachable = [...contract.models.mutating_tools, ...(contract.models.gated_tools ?? [])];
+  for (const tool of reachable) {
+    if (!(tool in effects)) fail(`effects: ${tool} can reach the gate but has no effect`);
+  }
+  for (const tool of Object.keys(effects)) {
+    if (!reachable.includes(tool)) fail(`effects: ${tool} never reaches the gate`);
+  }
+
+  const appliesTo = isRecord(gate.isolation) ? gate.isolation.applies_to : undefined;
+  if (!Array.isArray(appliesTo)) fail("isolation.applies_to missing");
+  for (const tool of appliesTo) {
+    if (typeof tool !== "string" || !(tool in effects)) fail(`isolation.applies_to: ${String(tool)} has no effect`);
+  }
+
   const describe = isRecord(gate.isolation) ? gate.isolation.describe : undefined;
   if (!isRecord(describe)) fail("isolation.describe missing");
   for (const mode of ISOLATION_MODES) {
@@ -360,6 +391,8 @@ export function compileGate(contract: Pick<Contract, "gate" | "policy" | "models
     deciderDomain: domain as string,
     maxInputTokens: maxInputTokens as number,
     stateFields: gate.state_fields as StateField[],
+    effects,
+    isolationAppliesTo: appliesTo as string[],
     isolation: describe as Record<IsolationMode, string>,
     questions: qs,
     clefRules: rules as ClefRule[],
@@ -437,9 +470,9 @@ function isolationMode(value: unknown): IsolationMode {
 /**
  * Build the decider state from the permitted fields only.
  *
- * Picks `task`, `action`, `arguments`, `model` and `isolation` by name: any
- * other property on `input` (a tool result passed by mistake, say) is never
- * read. The result
+ * Picks `task`, `action`, `arguments`, `model` and `isolation` by name, and
+ * looks the effect up from `action`: any other property on `input` (a tool
+ * result passed by mistake, say) is never read. The result
  * fits `max_input_tokens − questions − template reserve`, counted at one
  * token per UTF-8 byte; arguments are cut first, then the task.
  */
@@ -447,6 +480,9 @@ export function buildGateState(config: GateConfig, input: GateInput): { state: s
   const picked: Record<StateField, string> = {
     task: config.filter.apply(String(input.task ?? "")),
     action: config.filter.apply(String(input.action ?? "")),
+    effect: Object.hasOwn(config.effects, String(input.action))
+      ? config.effects[String(input.action)]
+      : UNDESCRIBED_EFFECT,
     arguments: JSON.stringify(redactArguments(input.arguments ?? null, config)) ?? "null",
     model: config.filter.apply(String(input.model ?? "")),
     isolation: config.isolation[isolationMode(input.isolation)],
@@ -458,13 +494,19 @@ export function buildGateState(config: GateConfig, input: GateInput): { state: s
     config.maxInputTokens - byteLength(JSON.stringify(config.questions)) - TEMPLATE_RESERVE_TOKENS;
   if (budget <= 0) fail("max_input_tokens leaves no room for the state");
 
+  // d10: the isolation line is about the checkout, so only tools that write
+  // into it get one.
+  const fields = config.isolationAppliesTo.includes(String(input.action))
+    ? config.stateFields
+    : config.stateFields.filter((f) => f !== "isolation");
   const render = (values: Record<StateField, string>) =>
-    config.stateFields.map((field) => `${field}: ${values[field]}`).join("\n");
+    fields.map((field) => `${field}: ${values[field]}`).join("\n");
 
   let truncated = false;
   const values = { ...picked };
-  // Pass 1: hold the task, action and model to at most half the budget.
-  const fixedFields = config.stateFields.filter((f) => f !== "arguments");
+  // Pass 1: hold every field but the arguments to at most half the budget;
+  // only the task is ever cut (effect and isolation are short contract text).
+  const fixedFields = fields.filter((f) => f !== "arguments");
   const fixedBytes = () => byteLength(render({ ...values, arguments: "" }));
   if (fixedBytes() > budget / 2 && fixedFields.includes("task")) {
     const others = fixedBytes() - byteLength(values.task);
@@ -473,7 +515,7 @@ export function buildGateState(config: GateConfig, input: GateInput): { state: s
     truncated ||= cut.cut;
   }
   // Pass 2: arguments get whatever is left.
-  if (config.stateFields.includes("arguments")) {
+  if (fields.includes("arguments")) {
     const cut = cutToBytes(values.arguments, budget - fixedBytes(), "arguments");
     values.arguments = cut.text;
     truncated ||= cut.cut;
