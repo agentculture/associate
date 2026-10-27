@@ -4,7 +4,7 @@
   "schema_version": 6,
   "status": "exported",
   "created": "2026-10-27T08:43:47Z",
-  "updated": "2026-10-27T10:12:10Z",
+  "updated": "2026-10-27T10:33:37Z",
   "claims": [
     {
       "id": "c1",
@@ -1648,6 +1648,17 @@
       "skipped_check": "measure the pi event stream before documenting it",
       "refs": [
         "t2 / associate/harness/pi.py"
+      ],
+      "origin": "llm",
+      "status": "proposed"
+    },
+    {
+      "id": "l4",
+      "code": "provenance-missing",
+      "what": "the main agent's subagent briefs told every task agent to sign 'Co-Authored-By: Claude Opus 5.5' regardless of the model it ran on \u2014 t3 (pushed in workledger-cli#5), t4, t5, t7, t8, t9 (Sonnet) and t17 (Haiku) carry a wrong model trailer",
+      "skipped_check": "set the trailer per the approved model in the split artifact when writing each brief",
+      "refs": [
+        "split: docs/plans/2026-10-27-associate-multi-model-on-pi-1-1-0-split.md"
       ],
       "origin": "llm",
       "status": "proposed"
