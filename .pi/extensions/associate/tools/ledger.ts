@@ -35,7 +35,7 @@ import { homedir } from "node:os";
 import { dirname, isAbsolute, join, resolve } from "node:path";
 import { boundOutput, validateArgs, type Budget } from "../lib/contain.ts";
 import type { AssociateContext } from "../lib/context.ts";
-import { activeModelKey } from "../lib/prompt.ts";
+import { resolveActiveModel } from "../lib/toolset.ts";
 import {
   engineForToolName,
   firstLine,
@@ -173,6 +173,10 @@ export function createLedgerTools(ctx: AssociateContext, deps: LedgerDeps = {}):
   const env = deps.env ?? process.env;
   const which = deps.which ?? ((name: string) => whichOnPath(name, env));
   const spawn = deps.spawn ?? spawnArgv;
+  // The ledger identity is the active model, resolved once here (load time) by
+  // the same rule index.ts's tool_call guard enforces. A pending or unknown key
+  // resolves to none — and the guard refuses every tool call in that case.
+  const modelKey = resolveActiveModel({ ...env }, ctx.contract.models).key ?? "unresolved";
 
   function prepare(toolName: string, verb: string) {
     const engine = engineForToolName(ctx.policy, "ledger");
@@ -267,7 +271,7 @@ export function createLedgerTools(ctx: AssociateContext, deps: LedgerDeps = {}):
 
       // Identity comes from the active model, never from the arguments.
       const entry: Record<string, unknown> = {
-        agent: `${AGENT_PREFIX}${activeModelKey(ctx.contract.models, env)}`,
+        agent: `${AGENT_PREFIX}${modelKey}`,
         action: params.action,
         summary: params.summary,
       };

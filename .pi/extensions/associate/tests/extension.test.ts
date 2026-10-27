@@ -208,6 +208,43 @@ test("finish returns the hand-back as its payload and leaves one text reply (d9)
   }
 });
 
+test("a new prompt in the same session is not blocked by the previous prompt's finish", async () => {
+  // The mesh resident runs ONE long-lived `pi --mode rpc` session (via pi-acp)
+  // and sends one prompt per mesh request. `finish` closes the current task
+  // only; the next before_agent_start starts a fresh one.
+  const s = scratch();
+  try {
+    await withExtension(s.env, async ({ pi }) => {
+      const startPrompt = async (prompt: string) => {
+        for (const handler of pi.handlers.get("before_agent_start") ?? []) {
+          await handler({ type: "before_agent_start", prompt, systemPrompt: "" }, {});
+        }
+      };
+      await pi.fireSessionStart();
+      await startPrompt("first task: read server.py");
+      await pi.tool("finish").execute("call-1", { summary: "Done with the first task." });
+      const blocked = (await pi.fireToolCall({
+        toolCallId: "tc-1",
+        toolName: "read",
+        input: { path: "server.py" },
+      })) as any;
+      assert.equal(blocked?.block, true, "within the finished prompt, tools stay blocked");
+      assert.match(String(blocked?.reason), /handed back/);
+
+      await startPrompt("second task: read client.py");
+      const next = (await pi.fireToolCall({
+        toolCallId: "tc-2",
+        toolName: "read",
+        input: { path: "client.py" },
+      })) as any;
+      assert.doesNotMatch(String(next?.reason ?? ""), /handed back/, "prompt 2 must not inherit prompt 1's finish");
+      assert.notEqual(next?.block, true, JSON.stringify(next));
+    });
+  } finally {
+    s.dispose();
+  }
+});
+
 test("the tool_call hook is registered and blocks a write into the checkout", async () => {
   // Pinned to senses, the model that may not mutate (t12): `write` is not in
   // its tool set, so the call is refused before anything else is asked. The

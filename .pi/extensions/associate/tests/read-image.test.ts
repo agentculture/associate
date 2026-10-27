@@ -25,7 +25,14 @@ const JPEG = Buffer.concat([Buffer.from("ffd8ffe0", "hex"), Buffer.alloc(32, 2)]
 const GIF = Buffer.concat([Buffer.from("GIF89a"), Buffer.alloc(32, 3)]);
 const WEBP = Buffer.concat([Buffer.from("RIFF"), Buffer.from([0x20, 0, 0, 0]), Buffer.from("WEBPVP8 "), Buffer.alloc(32, 4)]);
 
-async function harness(opts: { textOnly?: string[] } = {}) {
+/**
+ * Register `read` with ASSOCIATE_MODEL set to `opts.model` (unset when
+ * omitted). The active model is snapshotted at register time — load time in
+ * pi — exactly as index.ts resolves it, so the variable must be set first.
+ */
+async function harness(opts: { textOnly?: string[]; model?: string } = {}) {
+  if (opts.model === undefined) delete process.env.ASSOCIATE_MODEL;
+  else process.env.ASSOCIATE_MODEL = opts.model;
   const runsRoot = mkdtempSync(join(tmpdir(), "associate-runs-"));
   const checkout = mkdtempSync(join(tmpdir(), "associate-checkout-"));
   const env = { ASSOCIATE_EXPORT_ROOT: runsRoot, ASSOCIATE_SESSION_ID: "read-image-test" };
@@ -51,9 +58,8 @@ async function harness(opts: { textOnly?: string[] } = {}) {
 
 for (const model of ["senses", "worker", "cortex"]) {
   test(`${model}: a PNG reaches the model as an image block`, async () => {
-    const h = await harness();
+    const h = await harness({ model });
     try {
-      process.env.ASSOCIATE_MODEL = model;
       writeFileSync(join(h.checkout, "pic.png"), PNG);
       const r = await h.read("pic.png");
       const image = r.content.find((b) => b.type === "image");
@@ -71,7 +77,6 @@ for (const model of ["senses", "worker", "cortex"]) {
 test("the default model (ASSOCIATE_MODEL unset) is resolved from the registry", async () => {
   const h = await harness();
   try {
-    delete process.env.ASSOCIATE_MODEL;
     writeFileSync(join(h.checkout, "pic.png"), PNG);
     assert.ok((await h.read("pic.png")).content.some((b) => b.type === "image"));
   } finally {
@@ -80,9 +85,8 @@ test("the default model (ASSOCIATE_MODEL unset) is resolved from the registry", 
 });
 
 test("detection is by magic bytes: jpeg, gif, webp, and a PNG with a wrong extension", async () => {
-  const h = await harness();
+  const h = await harness({ model: "worker" });
   try {
-    process.env.ASSOCIATE_MODEL = "worker";
     const cases: Array<[string, Buffer, string]> = [
       ["a.jpg", JPEG, "image/jpeg"],
       ["b.gif", GIF, "image/gif"],
@@ -100,9 +104,8 @@ test("detection is by magic bytes: jpeg, gif, webp, and a PNG with a wrong exten
 });
 
 test("a .png file that is really text is read as text", async () => {
-  const h = await harness();
+  const h = await harness({ model: "worker" });
   try {
-    process.env.ASSOCIATE_MODEL = "worker";
     writeFileSync(join(h.checkout, "fake.png"), "not an image\n");
     const r = await h.read("fake.png");
     assert.equal(r.content.length, 1);
@@ -114,9 +117,8 @@ test("a .png file that is really text is read as text", async () => {
 });
 
 test("a text-only entry is refused with a typed error and no image block", async () => {
-  const h = await harness({ textOnly: ["worker"] });
+  const h = await harness({ textOnly: ["worker"], model: "worker" });
   try {
-    process.env.ASSOCIATE_MODEL = "worker";
     writeFileSync(join(h.checkout, "pic.png"), PNG);
     const r = await h.read("pic.png");
     assert.equal(r.content.some((b) => b.type === "image"), false);
@@ -130,22 +132,53 @@ test("a text-only entry is refused with a typed error and no image block", async
 });
 
 test("the refusal follows the ACTIVE entry: text-only senses refused, worker still served", async () => {
-  const h = await harness({ textOnly: ["senses"] });
+  const senses = await harness({ textOnly: ["senses"], model: "senses" });
+  try {
+    writeFileSync(join(senses.checkout, "pic.png"), PNG);
+    assert.equal((await senses.read("pic.png")).details.code, "image_input_unsupported");
+  } finally {
+    senses.dispose();
+  }
+  const worker = await harness({ textOnly: ["senses"], model: "worker" });
+  try {
+    writeFileSync(join(worker.checkout, "pic.png"), PNG);
+    assert.ok((await worker.read("pic.png")).content.some((b) => b.type === "image"));
+  } finally {
+    worker.dispose();
+  }
+});
+
+test("the active model is the load-time snapshot: changing ASSOCIATE_MODEL later changes nothing", async () => {
+  // index.ts resolves the model once at load (lib/toolset.ts resolveActiveModel)
+  // and the tool_call guard enforces THAT model's set; read must agree with it,
+  // not re-read process.env on every call.
+  const h = await harness({ textOnly: ["senses"], model: "senses" });
   try {
     writeFileSync(join(h.checkout, "pic.png"), PNG);
-    process.env.ASSOCIATE_MODEL = "senses";
-    assert.equal((await h.read("pic.png")).details.code, "image_input_unsupported");
     process.env.ASSOCIATE_MODEL = "worker";
-    assert.ok((await h.read("pic.png")).content.some((b) => b.type === "image"));
+    const r = await h.read("pic.png");
+    assert.equal(r.details.code, "image_input_unsupported");
+    assert.match(String(r.details.message), /'senses'/);
+  } finally {
+    h.dispose();
+  }
+});
+
+test("a pending model (super-vl) is refused image input, like every other tool", async () => {
+  const h = await harness({ model: "super-vl" });
+  try {
+    writeFileSync(join(h.checkout, "pic.png"), PNG);
+    const r = await h.read("pic.png");
+    assert.equal(r.details.code, "image_input_unsupported");
+    assert.match(String(r.details.message), /super-vl/);
   } finally {
     h.dispose();
   }
 });
 
 test("an unknown ASSOCIATE_MODEL is refused (no image input can be assumed)", async () => {
-  const h = await harness();
+  const h = await harness({ model: "nonesuch" });
   try {
-    process.env.ASSOCIATE_MODEL = "nonesuch";
     writeFileSync(join(h.checkout, "pic.png"), PNG);
     assert.equal((await h.read("pic.png")).details.code, "image_input_unsupported");
   } finally {
@@ -154,9 +187,8 @@ test("an unknown ASSOCIATE_MODEL is refused (no image input can be assumed)", as
 });
 
 test("an oversize image is refused with image_too_large", async () => {
-  const h = await harness();
+  const h = await harness({ model: "worker" });
   try {
-    process.env.ASSOCIATE_MODEL = "worker";
     writeFileSync(join(h.checkout, "big.png"), Buffer.concat([PNG, Buffer.alloc(IMAGE_MAX_BYTES)]));
     const r = await h.read("big.png");
     assert.equal(r.details.code, "image_too_large");
@@ -167,9 +199,8 @@ test("an oversize image is refused with image_too_large", async () => {
 });
 
 test("containment and denylist still apply to images", async () => {
-  const h = await harness();
+  const h = await harness({ model: "worker" });
   try {
-    process.env.ASSOCIATE_MODEL = "worker";
     const outside = mkdtempSync(join(tmpdir(), "associate-outside-"));
     writeFileSync(join(outside, "x.png"), PNG);
     assert.equal((await h.read(join(outside, "x.png"))).details.code, "path_escapes_root");
