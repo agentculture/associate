@@ -173,3 +173,71 @@ test("r2/2: confineWriteToCheckout passes non-writers and refuses a pathless wri
   assert.equal(confineWriteToCheckout({ ...base, toolName: "write", input: { path: join(scratchDir, "d.md") } }), undefined);
   assert.match(confineWriteToCheckout({ ...base, toolName: "write", input: { path: "/etc/x" } })!.reason, /outside the run's checkout/);
 });
+
+// ------------------------------------------------ r15 still fires on any cut state (d16)
+
+import { decideToolCall } from "../lib/guard.ts";
+import { compileGate } from "../lib/gate.ts";
+import type { Gate, GateEntry } from "../lib/gate.ts";
+import { loadContract } from "../lib/contract.ts";
+import { resolveActiveModel } from "../lib/toolset.ts";
+
+function fakeGate(entry: Partial<GateEntry>): Gate {
+  const contract = loadContract({});
+  const config = compileGate(contract);
+  return {
+    config,
+    evaluate: async () => ({
+      id: "g1",
+      ts: "2026-10-28T00:00:00.000Z",
+      question_set_version: config.version,
+      gated_tool: "write",
+      tier: "clef",
+      decision: "allow",
+      ...entry,
+    }),
+  };
+}
+
+async function guardWrite(entry: Partial<GateEntry>, content: string) {
+  const contract = loadContract({});
+  const recorded: GateEntry[] = [];
+  const decision = await decideToolCall({
+    toolName: "write",
+    input: { path: "f.txt", content },
+    model: resolveActiveModel({ ASSOCIATE_MODEL: "worker" }, contract.models),
+    registry: contract.models,
+    policy: contract.policy,
+    gate: fakeGate(entry),
+    task: "t",
+    scratchDir,
+    cwd,
+    recordGate: (e) => recorded.push(e),
+  });
+  return { decision, recorded };
+}
+
+test("r15: an allow from a tier that saw a cut state (clef/super) is still refused", async () => {
+  const contract = loadContract({});
+  const big = "x".repeat((contract.gate as any).decider.max_input_tokens * 2);
+  for (const tier of ["clef", "super"] as const) {
+    const { decision, recorded } = await guardWrite({ tier }, big);
+    assert.ok(decision?.block, tier);
+    assert.match(decision!.reason, /r15/);
+    assert.equal(recorded[0]!.decision, "refuse");
+  }
+  // The gate's own truncation marker refuses too, whatever the size.
+  const marked = await guardWrite({ tier: "clef", reason: "clef: ok (state truncated to fit the decider)" }, "small");
+  assert.ok(marked.decision?.block);
+});
+
+test("d16: a large-tier allow on the full state is not a truncation, and is not refused by r15", async () => {
+  const contract = loadContract({});
+  const big = "x".repeat((contract.gate as any).decider.max_input_tokens * 2);
+  const { decision, recorded } = await guardWrite({ tier: "large", evaluator: "cortex", verdict: {} }, big);
+  assert.equal(decision, undefined, decision?.reason);
+  assert.equal(recorded[0]!.decision, "allow");
+  // Fitting states at clef are unaffected.
+  const small = await guardWrite({ tier: "clef" }, "small");
+  assert.equal(small.decision, undefined);
+});

@@ -61,9 +61,10 @@ OUTCOMES: tuple[str, ...] = ("ok", "error", "refused", "budget_exceeded", "incom
 FAILURE_OUTCOMES = frozenset(OUTCOMES) - {"ok"}
 
 #: The safety-gate tiers ``gate.json`` names, in the order the report prints them.
+#: ``large`` (d16) is a state over CLEF's budget, judged whole by a registry evaluator.
 #: ``readonly`` is the read-only fallback: the gate could not clear the call and
 #: the run continued with mutating tools withheld.
-GATE_TIERS: tuple[str, ...] = ("clef", "super", "readonly")
+GATE_TIERS: tuple[str, ...] = ("clef", "super", "large", "readonly")
 
 #: The decisions a gate line can record.
 GATE_DECISIONS: tuple[str, ...] = ("allow", "refuse")

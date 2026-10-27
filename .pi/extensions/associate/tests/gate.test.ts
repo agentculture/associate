@@ -20,11 +20,13 @@ import { extensionDir } from "../lib/paths.ts";
 import { ASSOCIATE_PROVIDER_ID } from "../lib/provider.ts";
 import {
   buildClefRequest,
+  buildFullGateState,
   buildGateState,
   compileGate,
   createGate,
   judgeClefAnswers,
   judgeSuperAnswer,
+  largeGateTokens,
   superContext,
 } from "../lib/gate.ts";
 import type { GateEntry, GateRequest } from "../lib/gate.ts";
@@ -759,6 +761,275 @@ test("a refusal reason is redacted before it reaches the entry", async () => {
   const gate = createGate({ contract: CONTRACT, env: ENV, fetch: leaky.fn });
   const entry = await gate.evaluate(request());
   assert.ok(!(entry.reason ?? "").includes("supersecretvalue123"));
+});
+
+// ------------------------------------------------ d16: large-state evaluator
+
+/** A registry that knows only `roles` (lobes role ids) and replies with `reply`. */
+function roleRegistry(roles: readonly string[], reply: (call: StreamCall) => any) {
+  const calls: StreamCall[] = [];
+  const finds: Array<[string, string]> = [];
+  return {
+    calls,
+    finds,
+    find(provider: string, id: string) {
+      finds.push([provider, id]);
+      return provider === ASSOCIATE_PROVIDER_ID && roles.includes(id) ? { provider, id } : undefined;
+    },
+    streamSimple(model: unknown, context: any, options?: any) {
+      const call = { model, context, options };
+      calls.push(call);
+      const message = reply(call);
+      return { result: async () => message };
+    },
+  };
+}
+
+const BOTH_ROLES = ["cortex", "worker"];
+/** Content that is over CLEF's budget but well inside large_state's. */
+const OVERSIZED = "y".repeat(GATE.decider.max_input_tokens * 2) + "-END-OF-CONTENT";
+
+function oversized(overrides: Partial<GateRequest> = {}): GateRequest {
+  return request({ action: "write", arguments: { path: "big.txt", content: OVERSIZED }, ...overrides });
+}
+
+test("d16: the shipped gate names cortex then worker as large-state evaluators", () => {
+  const config = compileGate(CONTRACT);
+  assert.deepEqual([...config.largeEvaluators], ["cortex", "worker"]);
+  assert.equal(config.largeMaxInputTokens, GATE.large_state.max_input_tokens);
+  assert.equal(config.largeSelfFallback, true);
+  assert.ok(config.largeMaxInputTokens > config.maxInputTokens);
+});
+
+test("d16: a state that fits still goes to CLEF, never to the evaluator", async () => {
+  const clef = clefUp(safeClefAnswers());
+  const registry = roleRegistry(BOTH_ROLES, () => assistant(superText(safeVerdicts())));
+  const gate = createGate({ contract: CONTRACT, env: ENV, fetch: clef.fn, modelRegistry: registry });
+  const entry = keep(await gate.evaluate(request({ action: "write", arguments: { path: "a", content: "small" } })));
+  assert.equal(entry.tier, "clef");
+  assert.equal(entry.decision, "allow");
+  assert.equal(clef.calls.length, 1);
+  assert.equal(registry.calls.length, 0);
+  assert.equal(entry.evaluator, undefined);
+});
+
+test("d16: an oversized write goes to the evaluator with the full, untruncated state; CLEF is not asked", async () => {
+  const clef = clefUp(safeClefAnswers());
+  const registry = roleRegistry(BOTH_ROLES, () => assistant(superText(safeVerdicts())));
+  const gate = createGate({ contract: CONTRACT, env: ENV, fetch: clef.fn, modelRegistry: registry });
+  const entry = keep(await gate.evaluate(oversized({ model: "worker" })));
+  assert.equal(clef.calls.length, 0, "CLEF would only see a cut state");
+  assert.equal(registry.calls.length, 1);
+  assert.deepEqual(registry.calls[0].model, { provider: ASSOCIATE_PROVIDER_ID, id: "cortex" });
+  const user = registry.calls[0].context.messages[0].content as string;
+  assert.ok(user.includes(OVERSIZED), "the evaluator saw every byte of the content");
+  assert.doesNotMatch(user, /truncated by the associate gate/);
+  assert.equal(user, `STATE:\n${buildFullGateState(compileGate(CONTRACT), oversized({ model: "worker" }))}`);
+  assert.equal(registry.calls[0].context.messages.length, 1);
+  // Same questions as Super, same answer shape.
+  assert.equal(registry.calls[0].context.systemPrompt, superContext(compileGate(CONTRACT), "x").systemPrompt);
+  assert.equal(entry.tier, "large");
+  assert.equal(entry.evaluator, "cortex");
+  assert.equal(entry.decision, "allow");
+  assert.ok(entry.verdict && Object.keys(entry.verdict).length > 0);
+  assert.equal(entry.probabilities, undefined);
+  assert.doesNotMatch(entry.reason ?? "", /state truncated to fit the decider/);
+});
+
+test("d16: the evaluator's verdict is judged by super.allow_when (an unsafe verdict refuses)", async () => {
+  const unsafe = { ...safeVerdicts(), destructive: true };
+  const registry = roleRegistry(BOTH_ROLES, () => assistant(superText(unsafe)));
+  const gate = createGate({ contract: CONTRACT, env: ENV, fetch: clefUp(safeClefAnswers()).fn, modelRegistry: registry });
+  const entry = keep(await gate.evaluate(oversized()));
+  assert.equal(entry.tier, "large");
+  assert.equal(entry.evaluator, "cortex");
+  assert.equal(entry.decision, "refuse");
+  assert.match(entry.reason ?? "", /destructive=true/);
+});
+
+test("d16: a malformed evaluator answer refuses at tier large, never allows", async () => {
+  for (const text of ["looks fine to me", "{}", superText({ safe_unattended: true })]) {
+    const registry = roleRegistry(BOTH_ROLES, () => assistant(text));
+    const gate = createGate({ contract: CONTRACT, env: ENV, modelRegistry: registry });
+    const entry = keep(await gate.evaluate(oversized()));
+    assert.equal(entry.tier, "large", text);
+    assert.equal(entry.decision, "refuse", text);
+  }
+});
+
+test("d16: the evaluator reads only text blocks, never thinking", async () => {
+  const registry = roleRegistry(BOTH_ROLES, () => ({
+    role: "assistant",
+    content: [
+      { type: "thinking", thinking: superText(safeVerdicts()) },
+      { type: "text", text: "probably fine" },
+    ],
+    stopReason: "stop",
+  }));
+  const gate = createGate({ contract: CONTRACT, env: ENV, modelRegistry: registry });
+  const entry = keep(await gate.evaluate(oversized()));
+  assert.equal(entry.tier, "large");
+  assert.equal(entry.decision, "refuse");
+});
+
+test("d16: the acting model never judges its own call (cortex acting → worker evaluates)", async () => {
+  const registry = roleRegistry(BOTH_ROLES, () => assistant(superText(safeVerdicts())));
+  const gate = createGate({ contract: CONTRACT, env: ENV, modelRegistry: registry });
+  const entry = keep(await gate.evaluate(oversized({ model: "cortex" })));
+  assert.equal(entry.evaluator, "worker");
+  assert.deepEqual(registry.calls[0].model, { provider: ASSOCIATE_PROVIDER_ID, id: "worker" });
+  assert.ok(!registry.finds.some(([, id]) => id === "cortex"), "the acting model is not even looked up");
+  // Named by its lobes role (a wire id) instead of its key: still excluded.
+  assert.equal(entry.self_evaluated, undefined, "an independent evaluator is never marked self");
+  // Named by its lobes role (a wire id) instead of its key: still excluded.
+  const byRole = keep(await gate.evaluate(oversized({ model: CONTRACT.models.models.cortex!.lobes_role })));
+  assert.equal(byRole.evaluator, "worker");
+});
+
+test("d16: a pending or unregistered evaluator is skipped for the next one", async () => {
+  const copy = structuredClone(CONTRACT) as any;
+  copy.models.models.cortex.status = "pending";
+  const registry = roleRegistry(BOTH_ROLES, () => assistant(superText(safeVerdicts())));
+  const pending = keep(await createGate({ contract: copy, env: ENV, modelRegistry: registry }).evaluate(oversized({ model: "senses" })));
+  assert.equal(pending.evaluator, "worker");
+  const onlyWorker = roleRegistry(["worker"], () => assistant(superText(safeVerdicts())));
+  const unregistered = keep(
+    await createGate({ contract: CONTRACT, env: ENV, modelRegistry: onlyWorker }).evaluate(oversized({ model: "senses" })),
+  );
+  assert.equal(unregistered.evaluator, "worker");
+});
+
+test("d16: no evaluator reachable → refused at the read-only tier with a clear reason, even for a read", async () => {
+  const cases: Array<[string, GateRequest, any]> = [
+    ["no registry", oversized(), undefined],
+    ["nothing registered", oversized(), roleRegistry([], () => assistant(superText(safeVerdicts())))],
+    ["read-only call", oversized({ isMutating: false }), undefined],
+  ];
+  for (const [label, req, registry] of cases) {
+    const clef = clefUp(safeClefAnswers());
+    const gate = createGate({ contract: CONTRACT, env: ENV, fetch: clef.fn, modelRegistry: registry });
+    const entry = keep(await gate.evaluate(req));
+    assert.equal(entry.tier, "readonly", label);
+    assert.equal(entry.decision, "refuse", label);
+    assert.match(entry.reason ?? "", /no large-state evaluator is reachable/, label);
+    assert.equal(clef.calls.length, 0, label);
+    assert.equal(entry.evaluator, undefined, label);
+  }
+});
+
+test("d19: no other evaluator → the acting model judges its own call, history-free, and the walk says self", async () => {
+  // worker acts and cortex is not registered: the only candidate left is the actor.
+  const registry = roleRegistry(["worker"], () => assistant(superText(safeVerdicts())));
+  const gate = createGate({ contract: CONTRACT, env: ENV, modelRegistry: registry });
+  const entry = keep(await gate.evaluate(oversized({ model: "worker" })));
+  assert.equal(entry.tier, "large");
+  assert.equal(entry.evaluator, "worker");
+  assert.equal(entry.self_evaluated, true);
+  assert.equal(entry.decision, "allow");
+  assert.match(entry.reason ?? "", /self-evaluated/);
+  assert.match(entry.reason ?? "", /cortex: is not registered with pi/);
+  assert.equal(registry.calls.length, 1);
+  const ctx = registry.calls[0].context;
+  assert.deepEqual(registry.calls[0].model, { provider: ASSOCIATE_PROVIDER_ID, id: "worker" });
+  // A fresh request: the focused gate prompt and one user message holding the state, no transcript.
+  assert.equal(ctx.messages.length, 1);
+  assert.equal(ctx.messages[0].role, "user");
+  assert.ok((ctx.messages[0].content as string).includes(OVERSIZED));
+  // Exactly the complete CLEF state (task, action, effect, arguments, model, isolation), nothing else.
+  const fullState = buildFullGateState(compileGate(CONTRACT), oversized({ model: "worker" }));
+  assert.equal(ctx.messages[0].content, `STATE:\n${fullState}`);
+  assert.deepEqual(Object.keys(ctx).sort(), ["messages", "systemPrompt"]);
+  assert.equal(ctx.systemPrompt, superContext(compileGate(CONTRACT), "x").systemPrompt);
+  // Same judgement: an unsafe self-verdict refuses, a malformed one refuses.
+  const unsafe = roleRegistry(["worker"], () => assistant(superText({ ...safeVerdicts(), exfiltrates: true })));
+  const refused = keep(await createGate({ contract: CONTRACT, env: ENV, modelRegistry: unsafe }).evaluate(oversized()));
+  assert.equal(refused.tier, "large");
+  assert.equal(refused.self_evaluated, true);
+  assert.equal(refused.decision, "refuse");
+  const garbled = roleRegistry(["worker"], () => assistant("sure, go ahead"));
+  const bad = keep(await createGate({ contract: CONTRACT, env: ENV, modelRegistry: garbled }).evaluate(oversized()));
+  assert.equal(bad.decision, "refuse");
+});
+
+test("d19: with large_state.self_fallback off, no other evaluator → refused, the actor is never asked", async () => {
+  const copy = structuredClone(CONTRACT) as any;
+  copy.gate.large_state.self_fallback = false;
+  const registry = roleRegistry(["worker"], () => assistant(superText(safeVerdicts())));
+  const entry = keep(await createGate({ contract: copy, env: ENV, modelRegistry: registry }).evaluate(oversized({ model: "worker" })));
+  assert.equal(entry.tier, "readonly");
+  assert.equal(entry.decision, "refuse");
+  assert.match(entry.reason ?? "", /worker: is the acting model/);
+  assert.match(entry.reason ?? "", /self_fallback is off/);
+  assert.equal(registry.calls.length, 0);
+});
+
+test("d19: the self fallback still fails closed (actor unknown, actor unreachable)", async () => {
+  // An acting model the registry does not know cannot evaluate.
+  const none = roleRegistry([], () => assistant(superText(safeVerdicts())));
+  const unknown = keep(await createGate({ contract: CONTRACT, env: ENV, modelRegistry: none }).evaluate(oversized({ model: "mystery" })));
+  assert.equal(unknown.decision, "refuse");
+  assert.equal(unknown.tier, "readonly");
+  // The actor's own stream fails: refused, naming it.
+  const broken = roleRegistry(["worker"], () => assistant("", { stopReason: "error", errorMessage: "boom" }));
+  const failed = keep(await createGate({ contract: CONTRACT, env: ENV, modelRegistry: broken }).evaluate(oversized({ model: "worker" })));
+  assert.equal(failed.tier, "readonly");
+  assert.equal(failed.decision, "refuse");
+  assert.match(failed.reason ?? "", /worker/);
+});
+
+test("d16: an evaluator that is asked but fails to answer refuses (fail closed), naming it", async () => {
+  const registry = roleRegistry(BOTH_ROLES, () => assistant("", { stopReason: "error", errorMessage: "ECONNRESET" }));
+  const gate = createGate({ contract: CONTRACT, env: ENV, modelRegistry: registry });
+  const entry = keep(await gate.evaluate(oversized()));
+  assert.equal(entry.tier, "readonly");
+  assert.equal(entry.decision, "refuse");
+  assert.match(entry.reason ?? "", /cortex/);
+  assert.equal(registry.calls.length, 1, "the first eligible evaluator is the one asked");
+});
+
+test("d16: a state too large even for the evaluator is refused and nobody is asked", async () => {
+  const clef = clefUp(safeClefAnswers());
+  const registry = roleRegistry(BOTH_ROLES, () => assistant(superText(safeVerdicts())));
+  const gate = createGate({ contract: CONTRACT, env: ENV, fetch: clef.fn, modelRegistry: registry });
+  const huge = "z".repeat(GATE.large_state.max_input_tokens + 1);
+  const entry = keep(await gate.evaluate(request({ action: "write", arguments: { path: "h", content: huge } })));
+  assert.equal(entry.tier, "readonly");
+  assert.equal(entry.decision, "refuse");
+  assert.match(entry.reason ?? "", /large_state\.max_input_tokens/);
+  assert.equal(registry.calls.length, 0);
+  assert.equal(clef.calls.length, 0);
+});
+
+test("d16: the full state is exactly the CLEF state, only never cut", () => {
+  const config = compileGate(CONTRACT);
+  const small = request({ action: "write", arguments: { path: "a", content: "small" }, isolation: "worktree" });
+  assert.equal(buildFullGateState(config, small), buildGateState(config, small).state);
+  for (const field of GATE.state_fields) assert.match(buildFullGateState(config, small), new RegExp(`^${field}: `, "m"));
+});
+
+test("d16: largeGateTokens counts the evaluator's whole prompt, at one token per byte", () => {
+  const config = compileGate(CONTRACT);
+  const state = buildFullGateState(config, oversized());
+  const ctx = superContext(config, state);
+  const bytes = Buffer.byteLength(ctx.systemPrompt, "utf8") + Buffer.byteLength(ctx.messages[0].content, "utf8");
+  assert.ok(largeGateTokens(config, state) >= bytes);
+  assert.ok(state.includes(OVERSIZED));
+});
+
+test("d16: compileGate refuses a large_state it cannot use (loud, at load)", () => {
+  const mutate = (fn: (g: any) => void) => {
+    const copy = structuredClone(CONTRACT) as any;
+    fn(copy.gate);
+    return () => compileGate(copy);
+  };
+  assert.throws(mutate((g) => delete g.large_state), /large_state/);
+  assert.throws(mutate((g) => (g.large_state.evaluators = [])), /large_state\.evaluators/);
+  assert.throws(mutate((g) => (g.large_state.evaluators = ["cortex", "ghost"])), /ghost/);
+  assert.throws(mutate((g) => (g.large_state.evaluators = ["cortex", "cortex"])), /large_state\.evaluators/);
+  assert.throws(mutate((g) => (g.large_state.max_input_tokens = g.decider.max_input_tokens)), /large_state\.max_input_tokens/);
+  // The bound must leave the registered context window room for the answer.
+  assert.throws(mutate((g) => (g.large_state.max_input_tokens = 10_000_000)), /context window/);
+  assert.throws(mutate((g) => (g.large_state.self_fallback = "yes")), /large_state\.self_fallback/);
 });
 
 test("every entry produced above validates against the contract's walk $defs.gate", () => {

@@ -337,6 +337,8 @@ export function confineWriteToCheckout(options: CheckoutConfineOptions): GuardDe
 //      refuses it), entry recorded to the walk; proceed only on `allow`;
 //   6. truncation (risk r15): a gate state cut to fit the decider means CLEF
 //      scored only part of the call, so the call is refused even on `allow`.
+//      Since d16 the gate never cuts: an oversized state is judged whole by a
+//      large-state evaluator (tier `large`, exempt here) or refused.
 //
 // Any exception anywhere — the gate, the classifier, the walk write — blocks.
 
@@ -346,7 +348,10 @@ export const RUN_TESTS_TOOL = "run_tests";
 /** The contract's child-spawning tool (plan t16). */
 export const SPAWN_TOOL = "spawn_subagent";
 
-/** The truncation marker `lib/gate.ts` appends to a reason when the state was cut. */
+/**
+ * The truncation marker a gate reason carries when a model scored a cut state. Since d16
+ * `lib/gate.ts` never sends a cut state, so it no longer writes this; the guard still honours it.
+ */
 export const GATE_TRUNCATION_MARKER = "state truncated to fit the decider";
 
 export interface ModelGuardOptions {
@@ -505,15 +510,22 @@ async function decide(options: ModelGuardOptions): Promise<GuardDecision | undef
   } as const;
   const entry = await options.gate.evaluate(request, options.evaluateOptions ?? {});
 
-  // 6. r15: a truncated state means the decider scored only part of the call.
-  let truncated: boolean;
-  try {
-    truncated = buildGateState(options.gate.config, request).truncated;
-  } catch {
-    truncated = true;
+  // 6. r15: a model that scored a cut state scored only part of the call. Since
+  //    d16 an oversized state is never cut: the gate sends it whole to a
+  //    large-state evaluator (tier `large`) or refuses it. This check stays as
+  //    defence in depth for any allow from a tier that could have seen a cut
+  //    state (clef/super), and for the gate's own truncation marker.
+  let truncated = false;
+  if (entry.tier !== "large") {
+    try {
+      truncated = buildGateState(options.gate.config, request).truncated;
+    } catch {
+      truncated = true;
+    }
   }
   truncated ||= typeof entry.reason === "string" && entry.reason.includes(GATE_TRUNCATION_MARKER);
-  if (truncated) {
+  // A refusal at the read-only tier asked nobody, so there is no partial score to note.
+  if (truncated && (entry.decision === "allow" || entry.tier !== "readonly")) {
     const note =
       "refused by the associate tool_call hook: the gate state was truncated, so the decider " +
       `scored only part of this ${gated ? "gated" : "mutating"} call (risk r15)`;

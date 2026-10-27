@@ -28,6 +28,21 @@
  *   3. **Read-only** — both unreachable: allow only when the caller passed
  *      `isMutating === false` (strictly); everything else refuses.
  *
+ * Large states (deviations d16, d19). A state that does not fit CLEF's budget
+ * is never cut and sent to CLEF: CLEF is not asked at all. The FULL state —
+ * exactly what CLEF would have been sent with a bigger input, uncut — goes to
+ * a large-context registry model instead, asked the same questions through the
+ * Super mechanism (`superContext`, judged by `super.allow_when`). The evaluator
+ * is the first `large_state.evaluators` entry that is active in models.json,
+ * registered with pi and NOT the acting model. When none is, and
+ * `large_state.self_fallback` is true, the acting model judges its own call
+ * from a fresh, history-free request (the focused gate prompt plus the state,
+ * no transcript) and the walk line says `self_evaluated: true`. Every other
+ * outcome fails closed: nobody to ask, the evaluator unreachable, or a prompt
+ * over `large_state.max_input_tokens` is refused at tier `readonly` whatever
+ * `isMutating` says (the read-only fallback does not apply — nobody judged the
+ * call); a malformed or unsafe answer refuses at tier `large`.
+ *
  * Mutating vs read-only is NOT classified here: the caller (t12, from
  * `models.json`'s `mutating_tools`, plus `gated_tools` — d6/d7 — which it always
  * passes as mutating) passes `isMutating`. Anything other than
@@ -40,7 +55,8 @@
  * name, so a result object a caller passes by mistake never reaches the
  * decider. Arguments are redacted (gate.json `redaction.keys` by key, then the
  * `policy.json` patterns `redaction.policy_ref` points at) before the state is
- * built, and the state is cut to fit `decider.max_input_tokens`. The
+ * built; a state over `decider.max_input_tokens` is not cut for CLEF but sent
+ * whole to a large-state evaluator (d16, above). The
  * effect line is gate.json's own description of what the tool does
  * (`effects`), so the decider never judges a bare tool name. The
  * isolation line is gate.json's own description of the run's mode
@@ -56,7 +72,7 @@
  */
 
 import type { Contract, ContractModels, ContractPolicy } from "./contract.ts";
-import { ASSOCIATE_PROVIDER_ID } from "./provider.ts";
+import { ASSOCIATE_PROVIDER_ID, DEFAULT_CONTEXT_WINDOW, DEFAULT_MAX_TOKENS } from "./provider.ts";
 import { compileRedaction } from "./walk.ts";
 import type { RedactionFilter } from "./walk.ts";
 
@@ -93,7 +109,7 @@ export type IsolationMode = (typeof ISOLATION_MODES)[number];
 // ---------------------------------------------------------------------- types
 
 export type Env = Record<string, string | undefined>;
-export type GateTier = "clef" | "super" | "readonly";
+export type GateTier = "clef" | "super" | "large" | "readonly";
 export type GateDecision = "allow" | "refuse";
 
 /** Exactly what the state may be built from — no tool result, by construction. */
@@ -130,8 +146,12 @@ export interface GateEntry {
   gated_id?: string;
   /** clef tier only: question → P(yes), or question → {option: p}. */
   probabilities?: Record<string, number | Record<string, number>>;
-  /** super tier only: the parsed JSON answer (empty when it did not parse). */
+  /** super and large tiers: the parsed JSON answer (empty when it did not parse). */
   verdict?: Record<string, unknown>;
+  /** large tier only (d16): the models.json key of the model that judged the full state. */
+  evaluator?: string;
+  /** large tier only (d19): present and true when the evaluator was the acting model itself. */
+  self_evaluated?: true;
   decision: GateDecision;
   reason?: string;
 }
@@ -171,6 +191,12 @@ export interface GateConfig {
   /** The single key of `answer_shape` that holds the verdicts. */
   readonly superContainer: string;
   readonly superAllow: Readonly<Record<string, boolean | readonly string[]>>;
+  /** gate.json `large_state.evaluators` (d16): models.json keys, in preference order. */
+  readonly largeEvaluators: readonly string[];
+  /** gate.json `large_state.max_input_tokens` (d16): the evaluator prompt's bound. */
+  readonly largeMaxInputTokens: number;
+  /** gate.json `large_state.self_fallback` (d19): may the acting model judge its own call. */
+  readonly largeSelfFallback: boolean;
   readonly redactKeys: readonly string[];
   readonly filter: RedactionFilter;
   readonly models: ContractModels;
@@ -370,6 +396,32 @@ export function compileGate(contract: Pick<Contract, "gate" | "policy" | "models
     }
   }
 
+  const large = gate.large_state;
+  if (!isRecord(large)) fail("large_state section missing");
+  const evaluators = large.evaluators;
+  if (
+    !Array.isArray(evaluators) ||
+    evaluators.length === 0 ||
+    new Set(evaluators).size !== evaluators.length ||
+    !evaluators.every((k) => typeof k === "string")
+  ) {
+    fail("large_state.evaluators must be a non-empty list of distinct models.json keys");
+  }
+  for (const key of evaluators as string[]) {
+    if (!Object.hasOwn(contract.models.models, key)) fail(`large_state.evaluators: ${key} is not a models.json key`);
+  }
+  const largeMax = large.max_input_tokens;
+  if (!Number.isInteger(largeMax) || (largeMax as number) <= (maxInputTokens as number)) {
+    fail("large_state.max_input_tokens must be an integer above decider.max_input_tokens");
+  }
+  if ((largeMax as number) + DEFAULT_MAX_TOKENS > DEFAULT_CONTEXT_WINDOW) {
+    fail(
+      `large_state.max_input_tokens ${largeMax} leaves no room for the answer in the registered context window ` +
+        `(${DEFAULT_CONTEXT_WINDOW} tokens, ${DEFAULT_MAX_TOKENS} held for output)`,
+    );
+  }
+  if (typeof large.self_fallback !== "boolean") fail("large_state.self_fallback must be a boolean");
+
   const ro = gate.readonly_fallback;
   if (!isRecord(ro) || ro.when !== "decider_and_super_unreachable" || ro.allow !== "readonly_only") {
     fail("readonly_fallback must be decider_and_super_unreachable / readonly_only");
@@ -400,6 +452,9 @@ export function compileGate(contract: Pick<Contract, "gate" | "policy" | "models
     superAnswerShape: sup.answer_shape as Record<string, unknown>,
     superContainer: Object.keys(sup.answer_shape as object)[0],
     superAllow: allow as Record<string, boolean | string[]>,
+    largeEvaluators: evaluators as string[],
+    largeMaxInputTokens: largeMax as number,
+    largeSelfFallback: large.self_fallback as boolean,
     redactKeys,
     filter,
     models: contract.models,
@@ -476,7 +531,7 @@ function isolationMode(value: unknown): IsolationMode {
  * fits `max_input_tokens − questions − template reserve`, counted at one
  * token per UTF-8 byte; arguments are cut first, then the task.
  */
-export function buildGateState(config: GateConfig, input: GateInput): { state: string; truncated: boolean } {
+function pickState(config: GateConfig, input: GateInput) {
   const picked: Record<StateField, string> = {
     task: config.filter.apply(String(input.task ?? "")),
     action: config.filter.apply(String(input.action ?? "")),
@@ -489,11 +544,6 @@ export function buildGateState(config: GateConfig, input: GateInput): { state: s
   };
   // Single-line fields keep the labelled layout unambiguous.
   for (const field of KNOWN_STATE_FIELDS) picked[field] = oneLine(picked[field]);
-
-  const budget =
-    config.maxInputTokens - byteLength(JSON.stringify(config.questions)) - TEMPLATE_RESERVE_TOKENS;
-  if (budget <= 0) fail("max_input_tokens leaves no room for the state");
-
   // d10: the isolation line is about the checkout, so only tools that write
   // into it get one.
   const fields = config.isolationAppliesTo.includes(String(input.action))
@@ -501,6 +551,24 @@ export function buildGateState(config: GateConfig, input: GateInput): { state: s
     : config.stateFields.filter((f) => f !== "isolation");
   const render = (values: Record<StateField, string>) =>
     fields.map((field) => `${field}: ${values[field]}`).join("\n");
+  return { picked, fields, render };
+}
+
+/**
+ * The FULL decider state (d16): exactly what {@link buildGateState} builds —
+ * the same fields, redaction and layout — but never cut. Sent only to a
+ * large-state evaluator, never to CLEF.
+ */
+export function buildFullGateState(config: GateConfig, input: GateInput): string {
+  const { picked, render } = pickState(config, input);
+  return render(picked);
+}
+
+export function buildGateState(config: GateConfig, input: GateInput): { state: string; truncated: boolean } {
+  const { picked, fields, render } = pickState(config, input);
+  const budget =
+    config.maxInputTokens - byteLength(JSON.stringify(config.questions)) - TEMPLATE_RESERVE_TOKENS;
+  if (budget <= 0) fail("max_input_tokens leaves no room for the state");
 
   let truncated = false;
   const values = { ...picked };
@@ -739,7 +807,7 @@ export interface SuperJudgement {
  * has exactly the question keys: a boolean per noul question, one criteria
  * option per choice question. Then every `super.allow_when` must match.
  */
-export function judgeSuperAnswer(config: GateConfig, text: string): SuperJudgement {
+export function judgeSuperAnswer(config: GateConfig, text: string, label = "super"): SuperJudgement {
   const refuse = (reason: string, verdict: Record<string, unknown> = {}): SuperJudgement => ({
     allow: false,
     verdict,
@@ -752,34 +820,34 @@ export function judgeSuperAnswer(config: GateConfig, text: string): SuperJudgeme
   try {
     parsed = JSON.parse(body);
   } catch {
-    return refuse("super: answer is not a JSON object");
+    return refuse(`${label}: answer is not a JSON object`);
   }
-  if (!isRecord(parsed)) return refuse("super: answer is not a JSON object");
+  if (!isRecord(parsed)) return refuse(`${label}: answer is not a JSON object`);
   const top = Object.keys(parsed);
   if (top.length !== 1 || top[0] !== config.superContainer) {
-    return refuse(`super: answer must have exactly the key "${config.superContainer}"`);
+    return refuse(`${label}: answer must have exactly the key "${config.superContainer}"`);
   }
   const verdicts = parsed[config.superContainer];
-  if (!isRecord(verdicts)) return refuse(`super: "${config.superContainer}" is not an object`);
+  if (!isRecord(verdicts)) return refuse(`${label}: "${config.superContainer}" is not an object`);
   for (const key of Object.keys(verdicts)) {
-    if (!(key in config.questions)) return refuse(`super: unknown verdict key ${key}`);
+    if (!(key in config.questions)) return refuse(`${label}: unknown verdict key ${key}`);
   }
   const failed: string[] = [];
   for (const [key, q] of Object.entries(config.questions)) {
-    if (!(key in verdicts)) return refuse(`super: no verdict for ${key}`);
+    if (!(key in verdicts)) return refuse(`${label}: no verdict for ${key}`);
     const got = verdicts[key];
     const want = config.superAllow[key];
     if (q.type === "noul") {
-      if (typeof got !== "boolean") return refuse(`super: ${key} is not a boolean`);
+      if (typeof got !== "boolean") return refuse(`${label}: ${key} is not a boolean`);
       if (got !== want) failed.push(`${key}=${got}`);
     } else {
       if (typeof got !== "string" || !(got in q.criteria!)) {
-        return refuse(`super: ${key} is not one of the criteria options`);
+        return refuse(`${label}: ${key} is not one of the criteria options`);
       }
       if (!(want as readonly string[]).includes(got)) failed.push(`${key}=${got}`);
     }
   }
-  if (failed.length > 0) return refuse(`super: ${failed.join("; ")}`, parsed);
+  if (failed.length > 0) return refuse(`${label}: ${failed.join("; ")}`, parsed);
   return { allow: true, verdict: parsed };
 }
 
@@ -795,30 +863,41 @@ function assistantText(message: unknown): string {
     .join("");
 }
 
-async function askSuper(
-  config: GateConfig,
-  state: string,
-  registry: ModelRegistryLike | undefined,
-  timeoutMs: number,
-  outer?: AbortSignal,
-): Promise<SuperOutcome> {
-  const key = config.superModelKey;
-  const entry = config.models.models[key];
-  if (!entry) return { kind: "unreachable", reason: `super unreachable: ${key} is not in models.json` };
-  if (entry.status !== "active") {
-    return { kind: "unreachable", reason: `super unreachable: ${key} is ${entry.status} in models.json` };
-  }
-  if (!registry) return { kind: "unreachable", reason: "super unreachable: no model registry available" };
+/** A registry model the gate can ask, or why it cannot be asked (no call is made here). */
+type Located =
+  | { readonly kind: "found"; readonly model: ModelLike }
+  | { readonly kind: "missing"; readonly reason: string };
+
+/** Find models.json `key` with pi: active in the registry and registered with pi, or say why not. */
+function locateModel(config: GateConfig, key: string, registry: ModelRegistryLike | undefined): Located {
+  const entry = Object.hasOwn(config.models.models, key) ? config.models.models[key] : undefined;
+  if (!entry) return { kind: "missing", reason: `${key} is not in models.json` };
+  if (entry.status !== "active") return { kind: "missing", reason: `${key} is ${entry.status} in models.json` };
+  if (!registry) return { kind: "missing", reason: "no model registry available" };
   let model: ModelLike | undefined;
   try {
     model = registry.find(ASSOCIATE_PROVIDER_ID, entry.lobes_role);
   } catch (error) {
-    return { kind: "unreachable", reason: `super unreachable: ${errorText(error)}` };
+    return { kind: "missing", reason: `${key}: ${errorText(error)}` };
   }
-  if (!model) {
-    return { kind: "unreachable", reason: `super unreachable: ${key} is not registered with pi` };
-  }
+  if (!model) return { kind: "missing", reason: `${key} is not registered with pi` };
+  return { kind: "found", model };
+}
 
+/**
+ * Ask one located model the gate questions about `state`: a fresh request
+ * holding only the focused gate prompt and the state (`superContext`), never
+ * a session transcript. Judged by `super.allow_when`, reasons prefixed `label`.
+ */
+async function askForVerdict(
+  config: GateConfig,
+  model: ModelLike,
+  label: string,
+  state: string,
+  registry: ModelRegistryLike,
+  timeoutMs: number,
+  outer?: AbortSignal,
+): Promise<SuperOutcome> {
   const { signal, done } = withTimeout(timeoutMs, outer);
   try {
     let message: unknown;
@@ -829,17 +908,128 @@ async function askSuper(
       );
     } catch (error) {
       const why = signal.aborted ? errorText(signal.reason) : errorText(error);
-      return { kind: "unreachable", reason: `super unreachable: ${why}` };
+      return { kind: "unreachable", reason: `${label} unreachable: ${why}` };
     }
     const stop = isRecord(message) ? message.stopReason : undefined;
     if (stop === "error" || stop === "aborted") {
       const detail = isRecord(message) && typeof message.errorMessage === "string" ? `: ${message.errorMessage}` : "";
-      return { kind: "unreachable", reason: `super unreachable: stream ${String(stop)}${detail}` };
+      return { kind: "unreachable", reason: `${label} unreachable: stream ${String(stop)}${detail}` };
     }
-    return { kind: "answered", judgement: judgeSuperAnswer(config, assistantText(message)) };
+    return { kind: "answered", judgement: judgeSuperAnswer(config, assistantText(message), label) };
   } finally {
     done();
   }
+}
+
+async function askSuper(
+  config: GateConfig,
+  state: string,
+  registry: ModelRegistryLike | undefined,
+  timeoutMs: number,
+  outer?: AbortSignal,
+): Promise<SuperOutcome> {
+  const located = locateModel(config, config.superModelKey, registry);
+  if (located.kind === "missing") return { kind: "unreachable", reason: `super unreachable: ${located.reason}` };
+  return askForVerdict(config, located.model, "super", state, registry!, timeoutMs, outer);
+}
+
+// -------------------------------------------------------------- large states
+
+/**
+ * The evaluator prompt's size, at one token per UTF-8 byte (as the CLEF
+ * budget is counted): the focused gate prompt, the state message and the
+ * template reserve.
+ */
+export function largeGateTokens(config: GateConfig, state: string): number {
+  const ctx = superContext(config, state);
+  return byteLength(ctx.systemPrompt) + byteLength(ctx.messages[0].content) + TEMPLATE_RESERVE_TOKENS;
+}
+
+/** The models.json key the caller's `model` names: a key, or a unique lobes role. */
+function actingKey(config: GateConfig, model: string): string | undefined {
+  if (Object.hasOwn(config.models.models, model)) return model;
+  const byRole = Object.entries(config.models.models).filter(([, e]) => e.lobes_role === model);
+  return byRole.length === 1 ? byRole[0][0] : undefined;
+}
+
+type LargeDecision = Omit<GateEntry, "id" | "ts" | "question_set_version" | "gated_tool" | "gated_id">;
+
+async function decideLarge(
+  config: GateConfig,
+  request: GateRequest,
+  registry: ModelRegistryLike | undefined,
+  timeoutMs: number,
+  outer?: AbortSignal,
+): Promise<LargeDecision> {
+  const refuse = (reason: string): LargeDecision => ({
+    tier: "readonly",
+    decision: "refuse",
+    reason: `large state: ${reason}; the call is refused`,
+  });
+  const state = buildFullGateState(config, request);
+  const tokens = largeGateTokens(config, state);
+  if (tokens > config.largeMaxInputTokens) {
+    return refuse(
+      `the full state needs ${tokens} tokens, over large_state.max_input_tokens ${config.largeMaxInputTokens}; ` +
+        "nobody was asked",
+    );
+  }
+  const head = `large state (${tokens} tokens, over the decider's ${config.maxInputTokens}; CLEF not asked)`;
+
+  // The acting model, matched by key or by its lobes role.
+  const actor = actingKey(config, String(request.model ?? ""));
+  const isActor = (key: string) => key === actor || key === request.model;
+
+  const skipped: string[] = [];
+  let chosen: { key: string; model: ModelLike; self: boolean } | undefined;
+  for (const key of config.largeEvaluators) {
+    if (isActor(key)) {
+      skipped.push(`${key}: is the acting model`);
+      continue;
+    }
+    const located = locateModel(config, key, registry);
+    if (located.kind === "missing") {
+      const why = located.reason.startsWith(`${key} `) ? located.reason.slice(key.length + 1) : located.reason;
+      skipped.push(`${key}: ${why}`);
+      continue;
+    }
+    chosen = { key, model: located.model, self: false };
+    break;
+  }
+  if (!chosen) {
+    // d19: no independent evaluator — the actor may judge its own call.
+    if (!config.largeSelfFallback) {
+      return refuse(`no large-state evaluator is reachable (${skipped.join("; ")}); large_state.self_fallback is off`);
+    }
+    if (actor === undefined) {
+      return refuse(
+        `no large-state evaluator is reachable (${skipped.join("; ")}); the acting model ` +
+          `${JSON.stringify(String(request.model ?? ""))} is not a models.json model, so it cannot self-evaluate`,
+      );
+    }
+    const located = locateModel(config, actor, registry);
+    if (located.kind === "missing") {
+      return refuse(
+        `no large-state evaluator is reachable (${skipped.join("; ")}); self-evaluation by ${actor} ` +
+          `is unavailable too (${located.reason})`,
+      );
+    }
+    chosen = { key: actor, model: located.model, self: true };
+  }
+
+  const label = chosen.self ? `large(${chosen.key}, self-evaluated)` : `large(${chosen.key})`;
+  const asked = await askForVerdict(config, chosen.model, label, state, registry!, timeoutMs, outer);
+  const why = skipped.length > 0 ? ` after ${skipped.join("; ")}` : "";
+  if (asked.kind === "unreachable") return refuse(`${head}${why}: ${asked.reason}`);
+  const j = asked.judgement;
+  return {
+    tier: "large",
+    evaluator: chosen.key,
+    ...(chosen.self ? { self_evaluated: true as const } : {}),
+    verdict: j.verdict,
+    decision: j.allow ? "allow" : "refuse",
+    reason: `${head}${why}: ${j.reason ?? `${label}: every verdict matches`}`,
+  };
 }
 
 // --------------------------------------------------------------------- gate
@@ -866,7 +1056,9 @@ export function createGate(options: GateOptions): Gate {
       // Nothing was asked: record it at the last-resort tier, refusing.
       return { tier: "readonly", decision: "refuse", reason: `gate state could not be built: ${errorText(error)}` };
     }
-    const note = truncated ? " (state truncated to fit the decider)" : "";
+    const registry = evalOptions.modelRegistry ?? options.modelRegistry;
+    // d16: CLEF would only see a cut state, so it is not asked at all.
+    if (truncated) return decideLarge(config, request, registry, superTimeout, evalOptions.signal);
 
     const clef = await askClef(config, state, env, doFetch, clefTimeout, evalOptions.signal);
     if (clef.kind === "answered") {
@@ -875,11 +1067,10 @@ export function createGate(options: GateOptions): Gate {
         tier: "clef",
         probabilities: j.probabilities,
         decision: j.allow ? "allow" : "refuse",
-        ...(j.reason || note ? { reason: `${j.reason ?? "clef: every rule holds"}${note}` } : {}),
+        ...(j.reason ? { reason: j.reason } : {}),
       };
     }
 
-    const registry = evalOptions.modelRegistry ?? options.modelRegistry;
     const sup = await askSuper(config, state, registry, superTimeout, evalOptions.signal);
     if (sup.kind === "answered") {
       const j = sup.judgement;
@@ -887,7 +1078,7 @@ export function createGate(options: GateOptions): Gate {
         tier: "super",
         verdict: j.verdict,
         decision: j.allow ? "allow" : "refuse",
-        reason: `${clef.reason}; ${j.reason ?? "super: every verdict matches"}${note}`,
+        reason: `${clef.reason}; ${j.reason ?? "super: every verdict matches"}`,
       };
     }
 

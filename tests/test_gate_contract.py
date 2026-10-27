@@ -304,3 +304,67 @@ def test_run_tests_has_a_truthful_effect_and_the_isolation_line(doc):
         assert fact in effect, fact
     assert "run_tests" in doc["isolation"]["applies_to"]
     assert "d12" in doc["effects"]["$comment"]
+
+
+# ------------------- d16: oversized states go to a large-context evaluator
+
+LARGE_GATE = {
+    "id": "g4",
+    "ts": "2026-10-28T10:00:00+00:00",
+    "tier": "large",
+    "question_set_version": 7,
+    "gated_tool": "write",
+    "evaluator": "cortex",
+    "verdict": {"verdicts": {"safe_unattended": True}},
+    "decision": "allow",
+}
+
+
+def test_large_state_names_registry_evaluators_and_a_bigger_budget(doc):
+    """d16: a state over CLEF's budget is judged by a large-context registry
+    model, in contract order, within the contract's own token bound."""
+    assert doc["version"] >= 7
+    large = doc["large_state"]
+    assert large["evaluators"] == ["cortex", "worker"]
+    models = contract.load_models()["models"]
+    assert all(key in models for key in large["evaluators"])
+    assert large["max_input_tokens"] > doc["decider"]["max_input_tokens"]
+    assert "d16" in large["$comment"]
+
+
+def test_large_state_is_required(doc):
+    del doc["large_state"]
+    assert validate.validate_gate(doc)
+
+
+def test_large_state_evaluator_must_be_a_registry_key(doc):
+    doc["large_state"]["evaluators"] = ["cortex", "nope"]
+    assert any("nope" in e for e in validate.validate_gate(doc))
+
+
+@pytest.mark.parametrize("evaluators", [[], ["cortex", "cortex"]])
+def test_large_state_evaluators_must_be_non_empty_and_unique(doc, evaluators):
+    doc["large_state"]["evaluators"] = evaluators
+    assert any("large_state.evaluators" in e for e in validate.validate_gate(doc))
+
+
+def test_large_state_budget_must_exceed_the_deciders(doc):
+    doc["large_state"]["max_input_tokens"] = doc["decider"]["max_input_tokens"]
+    assert any("large_state.max_input_tokens" in e for e in validate.validate_gate(doc))
+
+
+def test_large_gate_line_validates_and_names_its_evaluator():
+    assert validate.validate_walk_gate(LARGE_GATE) == []
+    assert validate.validate(LARGE_GATE, contract.walk_gate_schema()) == []
+    no_evaluator = {k: v for k, v in LARGE_GATE.items() if k != "evaluator"}
+    assert any("evaluator" in e for e in validate.validate_walk_gate(no_evaluator))
+    no_verdict = {k: v for k, v in LARGE_GATE.items() if k != "verdict"}
+    assert validate.validate_walk_gate(no_verdict)
+
+
+def test_evaluator_belongs_to_the_large_tier_only():
+    assert any(
+        "evaluator" in e for e in validate.validate_walk_gate({**SUPER_GATE, "evaluator": "cortex"})
+    )
+    assert validate.validate_walk_gate({**CLEF_GATE, "evaluator": "cortex"})
+    assert validate.validate_walk_gate({**READONLY_GATE, "evaluator": "worker"})
