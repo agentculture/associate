@@ -36,6 +36,7 @@ import { createHash } from "node:crypto";
 import { join } from "node:path";
 import { policySection, type ContractPolicy } from "./contract.ts";
 import type { AssociateContext } from "./context.ts";
+import type { GateEntry } from "./gate.ts";
 
 /** The walk's file name inside the session export directory. */
 export const WALK_FILENAME = "walk.jsonl";
@@ -335,6 +336,25 @@ export class WalkRecorder {
   }
 
   /**
+   * Append one safety-gate decision as its own `{"gate": <$defs/gate>}` line.
+   *
+   * The entry comes from `lib/gate.ts`, which already redacted its reason; it
+   * passes through this recorder's filter again anyway so no line of the walk
+   * is written unfiltered. Gate lines are not tool events: they take no walk
+   * id and do not count toward the run record's `tool_calls`. Throws when the
+   * line cannot be written — the caller (the `tool_call` guard) refuses the
+   * call rather than run a mutation whose decision went unrecorded.
+   */
+  recordGate(entry: GateEntry): GateEntry {
+    if (this.finalized) {
+      throw new Error("the walk is already finalized; a gate decision can no longer be recorded");
+    }
+    const redacted = redactValue(entry, this.filter);
+    appendFileSync(this.walkPath, `${JSON.stringify({ gate: redacted })}\n`, "utf8");
+    return redacted;
+  }
+
+  /**
    * Write the run record and close the walk. Idempotent: the session can end
    * through `session_shutdown` and through process exit, and one run record is
    * what the schema describes.
@@ -425,9 +445,21 @@ export class WalkRecorder {
 /** Entries already in a walk file, so a second recorder never re-issues `w1`. */
 function countExistingEntries(walkPath: string): number {
   if (!existsSync(walkPath)) return 0;
-  return readFileSync(walkPath, "utf8")
-    .split("\n")
-    .filter((line) => line.trim() && !line.includes('"run"')).length;
+  let count = 0;
+  for (const line of readFileSync(walkPath, "utf8").split("\n")) {
+    if (!line.trim()) continue;
+    try {
+      const record = JSON.parse(line) as Record<string, unknown>;
+      // Run, gate and child lines are not tool entries and take no walk id.
+      if (record && typeof record === "object" && ("run" in record || "gate" in record || "child" in record)) {
+        continue;
+      }
+    } catch {
+      // A torn line still occupied an id when it was written.
+    }
+    count += 1;
+  }
+  return count;
 }
 
 /**

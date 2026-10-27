@@ -264,15 +264,40 @@ def test_unknown_harness_in_json_mode_emits_the_error_object(
 def test_an_active_writer_tool_fails_closed(
     fake_pi, checkout: Path, tmp_path: Path, capsys: pytest.CaptureFixture[str]
 ):
-    """r14: the check is on ``writer_tools_active``, never on the full tool list."""
+    """r14: the check is on ``writer_tools_active``, never on the full tool list.
+
+    Plan t12: for ``senses`` — the model that may not mutate.
+    """
     fake_pi(ready=True, writers=["write"])
 
-    code = _run([], checkout, tmp_path)
+    code = _run(["--model", "senses"], checkout, tmp_path)
     assert code == 2
 
     captured = capsys.readouterr()
     assert captured.out == ""
     assert "write" in captured.err
+
+
+@pytest.mark.parametrize("model", ["worker", "cortex"])
+def test_a_may_mutate_model_is_served_with_its_writers_active(
+    fake_pi, checkout: Path, tmp_path: Path, model: str
+):
+    """Plan t12: worker/cortex may write (each mutating call goes through the gate)."""
+    fake_pi(ready=True, writers=["write", "edit"])
+
+    assert _run(["--model", model], checkout, tmp_path) == 0
+
+
+def test_a_ready_report_for_another_model_fails_closed():
+    """Plan t12: writers are allowed per model, so the report must be about THIS model."""
+    harness = PiHarness(model="senses")
+    with pytest.raises(ExtensionNotLoadedError, match="worker"):
+        harness._assert_ready(
+            {"active_tools": ["associate_ready"], "writer_tools_active": [], "model": "worker"}
+        )
+    harness._assert_ready(
+        {"active_tools": ["associate_ready"], "writer_tools_active": [], "model": "senses"}
+    )
 
 
 def test_the_full_tool_list_containing_writers_is_not_a_failure(
@@ -448,6 +473,8 @@ def test_the_launcher_passes_the_flags_the_contract_requires(
     argv = invocation["argv"]
     for flag in ("-p", "--mode", "json", "--no-session", "--approve", "--no-context-files"):
         assert flag in argv, f"{flag} missing from {argv}"
+    # r7 (plan t12): pi 1.1.0's built-in MCP tools never reach the lane.
+    assert "--no-mcp" in argv, f"--no-mcp missing from {argv}"
     assert invocation["cwd"] == str(checkout.resolve())
     # r16: with ancestor context files disabled, AGENTS.md is injected instead.
     assert invocation["env"]["ASSOCIATE_INJECT_PROMPT"] == "1"
@@ -846,5 +873,12 @@ def test_the_real_pi_help_offers_the_flags_the_launcher_passes():
         timeout=60,
         check=False,
     )
-    for flag in ("--mode", "--no-session", "--approve", "--no-context-files", "--print"):
+    for flag in (
+        "--mode",
+        "--no-session",
+        "--approve",
+        "--no-context-files",
+        "--no-mcp",
+        "--print",
+    ):
         assert flag in result.stdout, f"pi --help no longer documents {flag}"
