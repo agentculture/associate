@@ -8,14 +8,27 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 ## [0.10.0] - 2026-10-27
 
 The multi-model associate on Pi 1.1.0 (plan
-`docs/plans/2026-10-27-associate-multi-model-on-pi-1-1-0.md`, tasks t1–t19 and
-deviations d1–d12). **Measured live:** worker (bolt) runs on this repo under the
-gate — the bug-F2 fix and three `run_tests` tests, each reviewed and fixed
-before merge. **Not measured yet:** recorded live walks for worker, senses and
-cortex on pi 1.1.0, the `culture start associate` session through pi-acp, a
-run with the decider and Super unreachable, a cortex run that spawns children
-(t20), and every public-benchmark score (t21). Those paths are built and
-unit-tested, not shown to work.
+`docs/plans/2026-10-27-associate-multi-model-on-pi-1-1-0.md`, tasks t1–t20 and
+deviations d1–d15).
+
+**Measured live, single runs** (`docs/notes/t20-live-acceptance.md`):
+
+- worker, senses and cortex walks on pi 1.1.0;
+- every worker and cortex mutating call carried a gate verdict;
+- with the decider unreachable, writes fell to the read-only fallback while
+  reads still ran;
+- a cortex run linked a senses child walk and a worker child walk;
+- worker (bolt) changes on this repo under the gate, each reviewed and fixed
+  before merge;
+- the mesh resident starts through pi-acp.
+
+**Not measured yet:**
+
+- the resident's first reply (it paused under the mesh sleep schedule);
+- every public-benchmark score (t21).
+
+Live findings that remain open: worker sometimes ends without `finish`, and a
+senses statement claimed an action it never took.
 
 ### Added
 
@@ -74,11 +87,22 @@ unit-tested, not shown to work.
   that counts prompt-mandated duties (d11), and `run_tests` (d12).
 - **`culture.yaml`** `model: associate` → `model: worker` (a registry key).
   On its own this does not select the resident's model; the extension pins it.
+- **`role.json` is the harness-wide bound** (deviation d13): no model makes a
+  `final_decision` or `security_decision`. Per-model write rights live in
+  `models.json`. It no longer copies the retired lobes `associate` role.
+- **`super-vl` holds `run_tests`**, like cortex (deviation d15).
 - **Docs and identity:** `CLAUDE.md` (current state, measured vs. not measured,
   runtime lanes by lobes role with `roles.py` citations, Pi and contract pins,
   a full `ASSOCIATE_*` table tied to the code), `README.md`, `AGENTS.md`, the
   `explain` / `learn` text and the package description now describe the
   multi-model harness.
+
+### Known issues
+
+- `steward doctor` fails `portability` and `skills-convention` on `main` and
+  on this branch alike (42 and 5 findings), and this branch adds none
+  (deviation d14). The findings are in devague records from PR #6 and in
+  vendored method-only skills. The rule question is open in steward#86.
 
 ### Removed
 

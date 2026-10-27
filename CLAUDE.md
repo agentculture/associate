@@ -118,18 +118,31 @@ reviewed and fixed before merge — `live-bolt-fix-f2c` drafted the bug-F2 fix
 (commit `ceb5a7e`; it hit its timeout, and one defect the suite found was fixed
 in `1669af3`), and `live-bolt-tests-gaps2` wrote three `run_tests` tests, ran
 them with `run_tests`, and was kept out of `main` by the harness test check
-(commit `50c7630`, fixed in review). Those runs, plus the probe bench in
-`docs/notes/gate-calibration.md`, are the whole of the live evidence.
+(commit `50c7630`, fixed in review). Plan task t20 then recorded single live
+runs on pi 1.1.0 (`docs/notes/t20-live-acceptance.md`):
 
-**Not measured yet — do not describe any of it as working:** a recorded live
-walk for each of `worker`, `senses` and `cortex` on pi 1.1.0; the
-`culture start associate` mesh session through pi-acp (including whether the
-resident actually runs the registry model — see
-`docs/notes/resident-model-resolution.md`); a fault-injected run with the
-decider and Super unreachable; a cortex run spawning a worker and a senses child
-(all plan task t20); and **any** benchmark score — no row of the 8-row matrix
-has been run (t21). Until t20 and t21 land, say "built and unit-tested", never
-"works", for each of these.
+- a walk each for `worker`, `senses` and `cortex`;
+- every worker and cortex mutating call carried a gate verdict;
+- a fault-injected run, with the decider unreachable, fell back to read-only
+  while reads still ran;
+- a cortex run linked one `senses` and one `worker` child walk;
+- the `culture start associate` resident starts through pi-acp.
+
+It runs as a systemd user unit that passes only the gateway key, with
+`ASSOCIATE_MODEL=senses` (no checkout writes). Together with the probe bench
+in `docs/notes/gate-calibration.md`, that is the whole of the live evidence.
+Each item is one run, not a rate.
+
+**Not measured yet. Do not describe any of it as working:**
+
+- the resident's first reply on the mesh: it paused under the 23:00–08:00
+  sleep schedule before answering;
+- a writing model on the mesh: mesh sessions get no run worktree;
+- **any** benchmark score: no row of the 8-row matrix has run (t21).
+
+Say "built and unit-tested", never "works", for these. Two live findings
+remain open: worker sometimes ends without `finish`, and a senses statement
+claimed an action it never took.
 
 **One known inconsistency in the inherited scaffold** — don't "fix" it by
 guessing which side is right; ask. The `remember` skill's `SKILL.md` frontmatter

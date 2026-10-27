@@ -57,20 +57,28 @@ eidetic memory (`eidetic_recall` / `eidetic_remember`) and a workledger ledger
 
 ## What is measured, and what is not
 
-**Measured live:** worker (bolt) runs on this repository, under the gate, that
-drafted the fix for bug F2, and that wrote three tests and ran them with
-`run_tests`. Each was reviewed, and fixed where needed, before merge (see
-`git log` for "drafted by associate worker" / "drafted by bolt"). Everything
-else is covered by unit tests and the extension's test suite against fakes.
+**Measured live, one run each:**
 
-**Not measured yet:** a recorded live run of `senses` and `cortex` (and a
-recorded acceptance walk of `worker`) on pi 1.1.0; the `culture start associate`
-mesh session through `pi-acp`; a run with the decider and Super unreachable; a
-`cortex` run that spawns sub-agents; and **every** benchmark. The public suites
-— BFCL, MMMU, LiveCodeBench, in
-[`associate/bench/suites.json`](associate/bench/suites.json) — are wired but
-unverified and have produced no score. Until those runs are recorded, treat
-those paths as built and unit-tested, not as working.
+- worker (bolt) runs on this repository under the gate: one drafted the fix for
+  bug F2, another wrote three tests and ran them with `run_tests`. Each was
+  reviewed, and fixed where needed, before merge;
+- the plan's acceptance runs on pi 1.1.0
+  ([`docs/notes/t20-live-acceptance.md`](docs/notes/t20-live-acceptance.md)):
+  a walk each for `worker`, `senses` and `cortex`, a gate verdict on every
+  write, the read-only fallback with the decider unreachable, a `cortex` run
+  that spawned a `senses` and a `worker` child, and the mesh resident starting
+  through `pi-acp`.
+
+**Not measured yet:**
+
+- the resident's first reply on the mesh;
+- a writing model on the mesh (mesh sessions get no run worktree, so the
+  resident runs `senses`);
+- **every** benchmark. The public suites (BFCL, MMMU, LiveCodeBench, in
+  [`associate/bench/suites.json`](associate/bench/suites.json)) are wired but
+  unverified and have produced no score.
+
+Treat these as built and unit-tested, not as working.
 
 ## Quickstart
 
