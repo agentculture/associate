@@ -140,6 +140,9 @@ export default async function (pi: ExtensionAPI) {
   installContinueFrom(pi, ctx);
 
   // Set by finish (d9): after the hand-back only a text reply is allowed.
+  // Per PROMPT, not per session: the mesh resident runs one long-lived
+  // `pi --mode rpc` session (pi-acp) and sends one prompt per mesh request, so
+  // before_agent_start below clears it when the next task begins.
   let finished = false;
 
   // ---------------------------------------------------------------- sentinel
@@ -378,9 +381,15 @@ export default async function (pi: ExtensionAPI) {
     applyModelToolSet();
     writeReadyReport();
   });
+  // A new prompt is a new task. Only what belongs to ONE task is reset here:
+  // the gate's task text and the post-finish block. The walk, the statements
+  // artifact and the gate's id counter stay session-scoped on purpose — they
+  // describe the whole session (one export dir per session id), and the
+  // transcript the model sees is session-scoped too.
   pi.on("before_agent_start", async (event) => {
     const prompt = (event as { prompt?: unknown } | undefined)?.prompt;
     if (typeof prompt === "string") task = prompt;
+    finished = false;
     applyModelToolSet();
   });
 }
