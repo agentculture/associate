@@ -214,11 +214,13 @@ pi version warning, the no-lane note) go to stderr.
 
 ## How the turn ended
 
-The task turn ends with three fields reported on stdout (and in JSON with
-`--json`): `final_reply` is the model's last assistant reply, redacted and
-bounded to 2000 characters; `stop_reason` is why pi stopped the model
-(e.g. `stop`, `length`), or `None` when the turn ends without `finish`; and
-`lane_error` is present only when pi reported an error ending the turn.
+With `--json`, the result also says how the task turn ended: `final_reply`
+is the model's last assistant reply (text only, redacted, at most 2000
+characters); `stop_reason` is pi's stop reason for that reply (for example
+`stop` or `length`), or null when no assistant reply arrived; and
+`lane_error` is present only when pi reported an error from the model lane.
+A run that ended without `finish` is visible here: the reply says why, or
+is empty.
 
 ## Usage
 
