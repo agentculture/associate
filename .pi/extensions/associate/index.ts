@@ -83,6 +83,10 @@ export default async function (pi: ExtensionAPI) {
     );
   }
 
+  // Where this run's writes land (d8), snapshotted at load like the gate's
+  // environment; `associate run` sets it from the run it actually started.
+  const isolation = process.env.ASSOCIATE_ISOLATION;
+
   // The task text the gate scores a call against: the prompt of the current
   // agent run, as pi hands it to before_agent_start. Never a tool result.
   let task = "";
@@ -288,6 +292,7 @@ export default async function (pi: ExtensionAPI) {
       policy: contract.policy,
       gate,
       task,
+      isolation,
       scratchDir: session.scratchDir,
       cwd: ctx.checkoutRoot,
       declaredWriters: ctx.declaredWriters(),

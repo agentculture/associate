@@ -218,6 +218,8 @@ export interface ModelGuardOptions {
   readonly gate: Gate | undefined;
   /** The run's task text as the extension knows it (the user prompt); never a tool result. */
   readonly task: string;
+  /** Where the run's writes land (d8, `ASSOCIATE_ISOLATION`); absent reads as in-place. */
+  readonly isolation?: string;
   readonly scratchDir: string;
   readonly cwd: string;
   readonly declaredWriters?: Iterable<string>;
@@ -301,6 +303,7 @@ async function decide(options: ModelGuardOptions): Promise<GuardDecision | undef
     action: toolName,
     arguments: options.input,
     model: model.key,
+    isolation: options.isolation,
     isMutating: true,
   } as const;
   const entry = await options.gate.evaluate(request, options.evaluateOptions ?? {});

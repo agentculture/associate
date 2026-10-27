@@ -151,6 +151,8 @@ def cmd_run(args: argparse.Namespace) -> int:
         "checkout": str(run_checkout),
         "session_id": session_id,
         "export_dir": str(export_root),
+        # d8: told to the safety gate's decider as the state's isolation line.
+        "isolation": "worktree" if run_wt is not None else "in-place",
     }
     if args.continue_from:
         task["continue_from"] = str(Path(args.continue_from).expanduser().resolve())

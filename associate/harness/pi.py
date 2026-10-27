@@ -752,6 +752,14 @@ class PiHarness(Harness):
         # models.json entry is active.
         env["ASSOCIATE_MODEL"] = self.model_key()
 
+        # d8: the gate tells the decider where writes land. Only the task —
+        # which ``associate run`` builds from the run it actually started —
+        # may claim isolation; an inherited value is never passed through.
+        if task.get("isolation"):
+            env["ASSOCIATE_ISOLATION"] = str(task["isolation"])
+        else:
+            env.pop("ASSOCIATE_ISOLATION", None)
+
         continue_from = self._continue_from or task.get("continue_from")
         if continue_from:
             env["ASSOCIATE_CONTINUE_FROM"] = str(continue_from)

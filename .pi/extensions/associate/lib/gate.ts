@@ -33,13 +33,16 @@
  * passes as mutating) passes `isMutating`. Anything other than
  * the boolean `false` counts as mutating.
  *
- * The state (c54/h36): built from the four `state_fields` — task, action
- * (tool name), arguments and model id — and nothing else. The request type
+ * The state (c54/h36): built from the `state_fields` — task, action (tool
+ * name), arguments, model id and (d8) isolation — and nothing else. The request type
  * has no field for a tool result, and the builder picks those four fields by
  * name, so a result object a caller passes by mistake never reaches the
  * decider. Arguments are redacted (gate.json `redaction.keys` by key, then the
  * `policy.json` patterns `redaction.policy_ref` points at) before the state is
- * built, and the state is cut to fit `decider.max_input_tokens`.
+ * built, and the state is cut to fit `decider.max_input_tokens`. The
+ * isolation line is gate.json's own description of the run's mode
+ * (`isolation.describe`), never caller text: an absent or unknown mode is
+ * described as in-place, so a missing signal never makes a call look isolated.
  *
  * Every value comes from the contract (`gate.json`, `policy.json`,
  * `models.json`); the named defaults below are wire/timing constants the
@@ -74,8 +77,12 @@ export const DEFAULT_SUPER_TIMEOUT_MS = 120_000;
 export const TEMPLATE_RESERVE_TOKENS = 1024;
 
 /** The state fields this library knows how to fill. `state_fields` may only name these. */
-const KNOWN_STATE_FIELDS = ["task", "action", "arguments", "model"] as const;
+const KNOWN_STATE_FIELDS = ["task", "action", "arguments", "model", "isolation"] as const;
 type StateField = (typeof KNOWN_STATE_FIELDS)[number];
+
+/** The isolation modes gate.json describes (d8). Anything else reads as in-place. */
+export const ISOLATION_MODES = ["worktree", "in-place"] as const;
+export type IsolationMode = (typeof ISOLATION_MODES)[number];
 
 // ---------------------------------------------------------------------- types
 
@@ -93,6 +100,8 @@ export interface GateInput {
   readonly arguments: unknown;
   /** The active model id (registry key or wire id; the caller's choice). */
   readonly model: string;
+  /** Where the run's writes land (d8): `ASSOCIATE_ISOLATION`. Absent or unknown is in-place. */
+  readonly isolation?: string;
 }
 
 export interface GateRequest extends GateInput {
@@ -142,6 +151,8 @@ export interface GateConfig {
   readonly deciderDomain: string;
   readonly maxInputTokens: number;
   readonly stateFields: readonly StateField[];
+  /** gate.json `isolation.describe`: the state line for each mode (d8). */
+  readonly isolation: Readonly<Record<IsolationMode, string>>;
   /** `gate.json` questions, verbatim — sent to CLEF as-is. */
   readonly questions: Readonly<Record<string, Question>>;
   readonly clefRules: readonly ClefRule[];
@@ -264,6 +275,13 @@ export function compileGate(contract: Pick<Contract, "gate" | "policy" | "models
     }
   }
 
+  const describe = isRecord(gate.isolation) ? gate.isolation.describe : undefined;
+  if (!isRecord(describe)) fail("isolation.describe missing");
+  for (const mode of ISOLATION_MODES) {
+    const text = (describe as Record<string, unknown>)[mode];
+    if (typeof text !== "string" || text.trim() === "") fail(`isolation.describe.${mode} missing`);
+  }
+
   const questions = gate.questions;
   if (!isRecord(questions) || Object.keys(questions).length === 0) fail("questions missing");
   for (const [key, q] of Object.entries(questions)) {
@@ -342,6 +360,7 @@ export function compileGate(contract: Pick<Contract, "gate" | "policy" | "models
     deciderDomain: domain as string,
     maxInputTokens: maxInputTokens as number,
     stateFields: gate.state_fields as StateField[],
+    isolation: describe as Record<IsolationMode, string>,
     questions: qs,
     clefRules: rules as ClefRule[],
     superModelKey: sup.model as string,
@@ -410,11 +429,17 @@ function oneLine(text: string): string {
   return text.replace(/\r?\n/g, "\\n");
 }
 
+/** gate.json describes `worktree` and `in-place`; anything else is in-place (d8). */
+function isolationMode(value: unknown): IsolationMode {
+  return (ISOLATION_MODES as readonly unknown[]).includes(value) ? (value as IsolationMode) : "in-place";
+}
+
 /**
- * Build the decider state from the four permitted fields only.
+ * Build the decider state from the permitted fields only.
  *
- * Picks `task`, `action`, `arguments` and `model` by name: any other property
- * on `input` (a tool result passed by mistake, say) is never read. The result
+ * Picks `task`, `action`, `arguments`, `model` and `isolation` by name: any
+ * other property on `input` (a tool result passed by mistake, say) is never
+ * read. The result
  * fits `max_input_tokens − questions − template reserve`, counted at one
  * token per UTF-8 byte; arguments are cut first, then the task.
  */
@@ -424,6 +449,7 @@ export function buildGateState(config: GateConfig, input: GateInput): { state: s
     action: config.filter.apply(String(input.action ?? "")),
     arguments: JSON.stringify(redactArguments(input.arguments ?? null, config)) ?? "null",
     model: config.filter.apply(String(input.model ?? "")),
+    isolation: config.isolation[isolationMode(input.isolation)],
   };
   // Single-line fields keep the labelled layout unambiguous.
   for (const field of KNOWN_STATE_FIELDS) picked[field] = oneLine(picked[field]);

@@ -186,3 +186,26 @@ def test_super_model_must_be_a_registry_key(doc):
 def test_super_model_is_required(doc):
     doc["super"].pop("model")
     assert validate.validate_gate(doc)
+
+
+# ------------------------------------------- d8: the isolation state field
+
+
+def test_the_decider_state_says_where_a_call_lands(doc):
+    """d8: CLEF is told whether a call runs in a disposable run worktree."""
+    assert doc["version"] >= 2
+    assert "isolation" in doc["state_fields"]
+    describe = doc["isolation"]["describe"]
+    assert set(describe) == {"worktree", "in-place"}
+    assert all(isinstance(text, str) and text.strip() for text in describe.values())
+
+
+@pytest.mark.parametrize("mode", ["worktree", "in-place"])
+def test_an_isolation_mode_without_a_description_is_rejected(doc, mode):
+    del doc["isolation"]["describe"][mode]
+    assert validate.validate_gate(doc)
+
+
+def test_the_isolation_section_is_required_when_the_state_names_it(doc):
+    del doc["isolation"]
+    assert validate.validate_gate(doc)

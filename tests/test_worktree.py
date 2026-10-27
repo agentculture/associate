@@ -94,6 +94,7 @@ class FakeHarness(Harness):
         cls = type(self)
         cls.seen["checkout"] = str(self._checkout)
         cls.seen["task_checkout"] = task["checkout"]
+        cls.seen["isolation"] = task.get("isolation")
         for rel, text in cls.WRITES.items():
             target = self._checkout / rel
             target.parent.mkdir(parents=True, exist_ok=True)
@@ -447,6 +448,20 @@ def test_a_mutating_run_on_a_non_git_checkout_runs_in_place_with_a_warning(
     assert fake.seen["checkout"] == str(plain.resolve())
     assert "not a git" in captured.err
     assert json.loads(captured.out)["isolation"] == "in-place"
+    # d8: the gate is told the truth — this run writes in place.
+    assert fake.seen["isolation"] == "in-place"
+
+
+def test_a_worktree_run_tells_the_harness_it_is_isolated(repo: Path, tmp_path: Path, fake):
+    """d8: the task names the isolation the gate state reports to CLEF."""
+    assert run_cli(repo, tmp_path) == 0
+    assert fake.seen["isolation"] == "worktree"
+
+
+def test_a_read_only_run_is_reported_in_place(repo: Path, tmp_path: Path, fake):
+    fake.WRITES = {}
+    assert run_cli(repo, tmp_path, "--model", "senses") == 0
+    assert fake.seen["isolation"] == "in-place"
 
 
 def test_without_git_a_git_checkout_is_refused(repo: Path, monkeypatch):
