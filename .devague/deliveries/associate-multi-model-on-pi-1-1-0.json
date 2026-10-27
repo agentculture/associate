@@ -2,7 +2,7 @@
   "plan_slug": "associate-multi-model-on-pi-1-1-0",
   "schema_version": 2,
   "created": "2026-10-27T10:36:31Z",
-  "updated": "2026-10-27T17:08:59Z",
+  "updated": "2026-10-27T18:10:29Z",
   "deviations": [
     {
       "id": "d1",
@@ -156,6 +156,21 @@
       "status": "approved",
       "classification": "needs-follow-up",
       "seq": 11
+    },
+    {
+      "id": "d12",
+      "what": "models that may change code can run tests (option 3): the operator names exact test commands with 'associate run --test-command' (repeatable, no default); worker and cortex get a dedicated run_tests tool that runs exactly those commands behind the CLEF gate, and the harness runs them itself after the model finishes and merges only if all pass; test-run side effects on the worktree are reverted so they are never committed as the model's work",
+      "task_ref": "t15",
+      "reason": "live F2 run: bolt edited code it could not verify (node/uv/pytest are not on the bash allowlist), shipped one defect the suite then caught, and timed out; user accepted option 3 (harness check is the final word, models may also run the fixed commands)",
+      "affects": [
+        "t12",
+        "t5",
+        "t20"
+      ],
+      "origin": "user",
+      "status": "approved",
+      "classification": "needs-follow-up",
+      "seq": 12
     }
   ],
   "evidence": [],
