@@ -268,7 +268,7 @@ def test_an_effect_for_a_tool_the_gate_never_sees_is_rejected(doc):
 def test_the_isolation_line_is_only_sent_for_tools_that_write_into_the_checkout(doc):
     """d10: ledger/memory/web calls write elsewhere or off the machine, so the
     worktree line says nothing true about them and is left out."""
-    assert set(doc["isolation"]["applies_to"]) == {"write", "edit", "bash"}
+    assert set(doc["isolation"]["applies_to"]) == {"write", "edit", "bash", "run_tests"}
     assert set(doc["isolation"]["applies_to"]) <= _gate_reachable_tools()
 
 
@@ -290,3 +290,17 @@ def test_matches_task_counts_the_duties_the_runtime_prompt_assigns(doc):
     for duty in ("evidence-logging", "memory", "research", "runtime prompt"):
         assert duty in wording
     assert "nothing beyond" in wording
+
+
+# ----------------------- d12: run_tests runs the operator's test commands
+
+
+def test_run_tests_has_a_truthful_effect_and_the_isolation_line(doc):
+    """d12: run_tests executes the checkout's own code in the checkout, so the
+    decider is told so, and the run's isolation line is sent with it."""
+    assert doc["version"] >= 6
+    effect = doc["effects"]["run_tests"]
+    for fact in ("operator", "checkout", "reverted", "lane key"):
+        assert fact in effect, fact
+    assert "run_tests" in doc["isolation"]["applies_to"]
+    assert "d12" in doc["effects"]["$comment"]

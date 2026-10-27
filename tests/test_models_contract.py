@@ -140,7 +140,7 @@ def test_gated_tools_gate_memory_and_web_without_making_them_mutations():
     """Deviations d6 (r17) and d7: memory writes and web egress are gated for every model."""
     doc = contract.load_models()
     assert doc["gated_tools"] == ["eidetic_remember", "web_search", "web_page"]
-    assert doc["mutating_tools"] == ["write", "edit", "bash", "ledger_append"]
+    assert doc["mutating_tools"] == ["write", "edit", "bash", "ledger_append", "run_tests"]
     for tool in doc["gated_tools"]:
         assert tool not in doc["mutating_tools"]
         assert tool in doc["models"]["senses"]["tools"], f"senses keeps {tool}"
@@ -166,3 +166,17 @@ def test_gated_tool_also_mutating_is_rejected(doc):
 def test_gated_tools_duplicate_is_rejected(doc):
     doc["gated_tools"].append("eidetic_remember")
     assert any("duplicate" in e for e in validate.validate_models(doc))
+
+
+def test_run_tests_is_a_mutation_held_only_by_models_that_may_change_code():
+    """Deviation d12: run_tests executes repository code, so it is a mutation
+    (gated by CLEF) and senses never holds it."""
+    doc = contract.load_models()
+    assert "run_tests" in doc["tool_names"]
+    assert "run_tests" in doc["mutating_tools"]
+    assert "run_tests" not in doc["gated_tools"]
+    holders = {name for name, m in doc["models"].items() if "run_tests" in m["tools"]}
+    assert {"worker", "cortex"} <= holders
+    assert "senses" not in holders
+    for name in holders:
+        assert doc["models"][name]["may_mutate"] is True, name
