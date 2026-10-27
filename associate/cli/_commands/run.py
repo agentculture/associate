@@ -124,14 +124,7 @@ def cmd_run(args: argparse.Namespace) -> int:
 
     json_mode = bool(getattr(args, "json", False))
 
-    try:
-        harness_cls = get_harness(args.harness)
-    except KeyError as err:
-        raise CliError(
-            code=EXIT_USER_ERROR,
-            message=f"unknown harness {args.harness!r}",
-            remediation=f"available adapters: {', '.join(available_harnesses())}",
-        ) from err
+    harness_cls = _harness_class(args.harness)
 
     args.model = _resolve_model(args.model)
     test_commands = _parse_test_commands(args.test_commands)
@@ -142,24 +135,9 @@ def cmd_run(args: argparse.Namespace) -> int:
             remediation="pass --test-timeout <seconds greater than 0>",
         )
 
-    checkout = Path(args.checkout).expanduser().resolve() if args.checkout else Path.cwd()
-    if not checkout.is_dir():
-        raise CliError(
-            code=EXIT_USER_ERROR,
-            message=f"checkout {checkout} is not a directory",
-            remediation="pass --checkout <path to an existing checkout>",
-        )
-
+    checkout = _checkout_dir(args.checkout)
     session_id = sanitize_session_id(args.session_id) if args.session_id else generate_session_id()
-
-    try:
-        export_root = resolve_export_root(checkout, args.export_root)
-    except ValueError as err:
-        raise CliError(
-            code=EXIT_ENV_ERROR,
-            message=str(err),
-            remediation="pass --export-root <dir> outside the examined checkout",
-        ) from err
+    export_root = _export_root(resolve_export_root, checkout, args.export_root)
 
     harness = _build(harness_cls, args)
     run_wt = _isolate(checkout, session_id) if _may_mutate(args.model) else None
@@ -179,27 +157,7 @@ def cmd_run(args: argparse.Namespace) -> int:
     if args.continue_from:
         task["continue_from"] = str(Path(args.continue_from).expanduser().resolve())
 
-    try:
-        harness.start(
-            checkout=run_checkout,
-            contract_dir=contract.contract_dir(),
-            session_id=session_id,
-            export_dir=export_root,
-        )
-        harness.submit(task)
-        result = harness.collect()
-    except HarnessError as err:
-        kept = (
-            f" (nothing was merged; the run worktree is kept at {run_wt.path} on branch "
-            f"{run_wt.branch})"
-            if run_wt is not None
-            else ""
-        )
-        raise CliError(
-            code=EXIT_ENV_ERROR,
-            message=str(err) + kept,
-            remediation=err.remediation,
-        ) from err
+    result = _drive(harness, task, run_checkout, session_id, export_root, run_wt)
 
     tests = _run_tests(test_commands, run_checkout, args.test_timeout)
     if tests is not None:
@@ -213,6 +171,74 @@ def cmd_run(args: argparse.Namespace) -> int:
 
     emit_result(result if json_mode else _render(result), json_mode=json_mode)
     return 0
+
+
+def _harness_class(name: str) -> Any:
+    """The registered adapter class for *name*; exit 1 naming the known ones."""
+    try:
+        return get_harness(name)
+    except KeyError as err:
+        raise CliError(
+            code=EXIT_USER_ERROR,
+            message=f"unknown harness {name!r}",
+            remediation=f"available adapters: {', '.join(available_harnesses())}",
+        ) from err
+
+
+def _checkout_dir(value: str | None) -> Path:
+    """The checkout to examine (default: the current directory); exit 1 if not a dir."""
+    checkout = Path(value).expanduser().resolve() if value else Path.cwd()
+    if not checkout.is_dir():
+        raise CliError(
+            code=EXIT_USER_ERROR,
+            message=f"checkout {checkout} is not a directory",
+            remediation="pass --checkout <path to an existing checkout>",
+        )
+    return checkout
+
+
+def _export_root(resolve: Any, checkout: Path, value: str | None) -> Path:
+    """Where the run's artifacts land; exit 2 when that would be inside the checkout."""
+    try:
+        return resolve(checkout, value)
+    except ValueError as err:
+        raise CliError(
+            code=EXIT_ENV_ERROR,
+            message=str(err),
+            remediation="pass --export-root <dir> outside the examined checkout",
+        ) from err
+
+
+def _drive(
+    harness: Any,
+    task: dict[str, Any],
+    run_checkout: Path,
+    session_id: str,
+    export_root: Path,
+    run_wt: Any,
+) -> dict[str, Any]:
+    """Start, submit and collect; a harness failure exits 2, naming a kept worktree."""
+    try:
+        harness.start(
+            checkout=run_checkout,
+            contract_dir=contract.contract_dir(),
+            session_id=session_id,
+            export_dir=export_root,
+        )
+        harness.submit(task)
+        return harness.collect()
+    except HarnessError as err:
+        kept = (
+            f" (nothing was merged; the run worktree is kept at {run_wt.path} on branch "
+            f"{run_wt.branch})"
+            if run_wt is not None
+            else ""
+        )
+        raise CliError(
+            code=EXIT_ENV_ERROR,
+            message=str(err) + kept,
+            remediation=err.remediation,
+        ) from err
 
 
 def _parse_test_commands(values: list[str] | None) -> list[list[str]]:

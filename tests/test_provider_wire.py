@@ -360,7 +360,8 @@ def test_transcript_backed_prompt_and_tool_changes_reach_the_first_request(
     assert not {"write", "edit"} & set(seen["at_agent_start"]), seen
 
     declared = _declared_tools(body)
-    assert "associate_ready" in declared and "finish" in declared, declared
+    assert "associate_ready" in declared, declared
+    assert "finish" in declared, declared
     assert not {"write", "edit"} & set(declared), f"a writer reached the wire: {declared}"
 
     messages = body["messages"]
