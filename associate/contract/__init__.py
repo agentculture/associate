@@ -7,6 +7,8 @@ same whichever harness runs the lane:
   lobes' role registry;
 * ``policy.json`` — the permission boundary (read denylist, shell allowlist,
   per-tool budgets, result/fetch caps, walk redaction patterns);
+* ``models.json`` — the per-model registry (lobes role, input modalities,
+  reasoning mode, allowed tools, prompt file, may_mutate, may_spawn);
 * ``schemas/``    — JSON Schema documents for the task input, the walk, and the
   statements/hand-back.
 
@@ -31,13 +33,14 @@ __all__ = [
     "schemas_dir",
     "load_role",
     "load_policy",
+    "load_models",
     "load_schema",
     "SCHEMA_NAMES",
     "walk_entry_schema",
     "walk_run_schema",
 ]
 
-SCHEMA_NAMES: tuple[str, ...] = ("task", "walk", "statements")
+SCHEMA_NAMES: tuple[str, ...] = ("task", "walk", "statements", "models")
 
 #: Key under which a schema keeps its local subschema definitions.
 DEFS_KEY = "$defs"
@@ -70,6 +73,11 @@ def load_role() -> dict[str, Any]:
 def load_policy() -> dict[str, Any]:
     """The permission boundary (``policy.json``)."""
     return _cached(str(contract_dir() / "policy.json"))
+
+
+def load_models() -> dict[str, Any]:
+    """The per-model registry (``models.json``)."""
+    return _cached(str(contract_dir() / "models.json"))
 
 
 def load_schema(name: str) -> dict[str, Any]:

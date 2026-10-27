@@ -5,8 +5,9 @@ available. This module implements exactly the draft 2020-12 subset the
 contract's own schemas use and nothing more:
 
 ``type`` (object/array/string/integer/number/boolean/null, and a list of
-those), ``required``, ``properties``, ``items``, ``enum``, ``pattern``, and
-local ``$ref`` pointers of the form ``#/$defs/<name>``.
+those), ``required``, ``properties``, ``additionalProperties`` (``false`` or a
+subschema), ``items``, ``enum``, ``pattern``, and local
+``$ref`` pointers of the form ``#/$defs/<name>``.
 
 Anything else in a schema is ignored rather than guessed at — if a schema
 starts needing a keyword that is not listed above, add it here *with a test*
@@ -33,7 +34,7 @@ def compile_pattern(pattern: str) -> re.Pattern[str]:
     return re.compile(pattern)
 
 
-__all__ = ["ValidationError", "validate", "assert_valid"]
+__all__ = ["ValidationError", "validate", "assert_valid", "validate_models"]
 
 
 class ValidationError(ValueError):
@@ -117,6 +118,16 @@ def _check_object(
     for key, subschema in schema.get("properties", {}).items():
         if key in instance:
             errors.extend(_check(instance[key], subschema, root, f"{path}.{key}"))
+    extra = schema.get("additionalProperties")
+    if extra is not None:
+        known = schema.get("properties", {})
+        for key in instance:
+            if key in known:
+                continue
+            if extra is False:
+                errors.append(f"{path}: unknown property {key!r}")
+            elif isinstance(extra, dict):
+                errors.extend(_check(instance[key], extra, root, f"{path}.{key}"))
     return errors
 
 
@@ -156,3 +167,70 @@ def assert_valid(instance: Any, schema: dict[str, Any]) -> None:
     errors = validate(instance, schema)
     if errors:
         raise ValidationError(errors)
+
+
+#: Where a model's prompt file must live (checked for shape, not existence).
+PROMPT_DIR = ".pi/extensions/associate/prompts/"
+
+
+def _check_model_tools(name: str, model: dict[str, Any], known: set[str], mutating: set[str]):
+    errors: list[str] = []
+    tools = model.get("tools", [])
+    for tool in tools:
+        if tool not in known:
+            errors.append(f"models.{name}: tool {tool!r} is not in tool_names")
+    if len(set(tools)) != len(tools):
+        errors.append(f"models.{name}: duplicate tool names")
+    if not model.get("may_mutate") and mutating.intersection(tools):
+        held = sorted(mutating.intersection(tools))
+        errors.append(f"models.{name}: may_mutate is false but holds {held}")
+    if ("spawn_subagent" in tools) != bool(model.get("may_spawn")):
+        errors.append(f"models.{name}: spawn_subagent and may_spawn must go together")
+    return errors
+
+
+def _check_prompt_file(name: str, model: dict[str, Any]) -> list[str]:
+    prompt = model.get("prompt_file", "")
+    parts = prompt.split("/")
+    ok = (
+        isinstance(prompt, str)
+        and prompt.startswith(PROMPT_DIR)
+        and prompt.endswith(".md")
+        and ".." not in parts
+        and not prompt.startswith("/")
+    )
+    return [] if ok else [f"models.{name}: prompt_file must be {PROMPT_DIR}<name>.md"]
+
+
+def validate_models(doc: dict[str, Any]) -> list[str]:
+    """Cross-field checks for models.json; empty list means valid.
+
+    Runs the structural schema first, then: every tool is in the canonical
+    ``tool_names``; a non-mutating model holds no mutating tool; only models
+    that may spawn hold ``spawn_subagent``; ``may_spawn`` names real models;
+    prompt files have the right shape; and the default exists and is active.
+    """
+    from associate.contract import load_schema  # noqa: PLC0415 - avoid import cycle
+
+    errors = validate(doc, load_schema("models"))
+    if errors:
+        return errors
+    known = set(doc["tool_names"])
+    mutating = set(doc["mutating_tools"])
+    models = doc["models"]
+    for tool in sorted(mutating - known):
+        errors.append(f"mutating_tools: {tool!r} is not in tool_names")
+    for name, model in models.items():
+        errors.extend(_check_model_tools(name, model, known, mutating))
+        errors.extend(_check_prompt_file(name, model))
+        for target in model["may_spawn"]:
+            if target not in models:
+                errors.append(f"models.{name}: may_spawn names unknown model {target!r}")
+            elif target == name:
+                errors.append(f"models.{name}: may_spawn names itself")
+    default = doc["default"]
+    if default not in models:
+        errors.append(f"default {default!r} is not a model")
+    elif models[default]["status"] == "pending":
+        errors.append(f"default {default!r} is pending and cannot be the default")
+    return errors

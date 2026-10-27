@@ -1,0 +1,86 @@
+{
+  "$comment": "The per-model registry. Data only: the Pi extension and the Python adapter read this; neither defines its own copy. `tool_names` is the canonical set of tool names the extension may register - the contract is the source of truth, and the extension checks its registered tools against it. `lobes_role` is a lobes role name, never a checkpoint id. `reasoning` is interpreted by the provider layer. `prompt_file` is checked for shape only; the files land with the prompts task.",
+  "version": 1,
+  "default": "worker",
+  "tool_names": [
+    "read",
+    "find",
+    "grep",
+    "ls",
+    "bash",
+    "code_lens",
+    "web_search",
+    "web_page",
+    "write",
+    "edit",
+    "eidetic_recall",
+    "eidetic_remember",
+    "ledger_append",
+    "ledger_list",
+    "spawn_subagent",
+    "associate_ready",
+    "finish"
+  ],
+  "mutating_tools": ["write", "edit", "bash", "ledger_append"],
+  "models": {
+    "worker": {
+      "status": "active",
+      "label": "bolt",
+      "lobes_role": "worker",
+      "input": ["text", "image"],
+      "reasoning": "on",
+      "tools": [
+        "read", "find", "grep", "ls", "bash", "code_lens", "web_search", "web_page",
+        "write", "edit", "eidetic_recall", "eidetic_remember", "ledger_append",
+        "ledger_list", "associate_ready", "finish"
+      ],
+      "prompt_file": ".pi/extensions/associate/prompts/worker.md",
+      "may_mutate": true,
+      "may_spawn": []
+    },
+    "senses": {
+      "status": "active",
+      "label": "senses",
+      "lobes_role": "senses",
+      "input": ["text", "image"],
+      "reasoning": "model-default",
+      "tools": [
+        "read", "find", "grep", "ls", "web_search", "web_page",
+        "eidetic_recall", "eidetic_remember", "associate_ready", "finish"
+      ],
+      "prompt_file": ".pi/extensions/associate/prompts/senses.md",
+      "may_mutate": false,
+      "may_spawn": []
+    },
+    "cortex": {
+      "status": "active",
+      "label": "cortex",
+      "lobes_role": "cortex",
+      "input": ["text", "image"],
+      "reasoning": "on",
+      "tools": [
+        "read", "find", "grep", "ls", "bash", "code_lens", "web_search", "web_page",
+        "write", "edit", "eidetic_recall", "eidetic_remember", "ledger_append",
+        "ledger_list", "spawn_subagent", "associate_ready", "finish"
+      ],
+      "prompt_file": ".pi/extensions/associate/prompts/cortex.md",
+      "may_mutate": true,
+      "may_spawn": ["worker", "senses"]
+    },
+    "super-vl": {
+      "status": "pending",
+      "label": "super-vl",
+      "lobes_role": "PENDING-no-lobes-role-yet",
+      "input": ["text", "image"],
+      "reasoning": "model-default",
+      "tools": [
+        "read", "find", "grep", "ls", "bash", "code_lens", "web_search", "web_page",
+        "write", "edit", "eidetic_recall", "eidetic_remember", "ledger_append",
+        "ledger_list", "spawn_subagent", "associate_ready", "finish"
+      ],
+      "prompt_file": ".pi/extensions/associate/prompts/super-vl.md",
+      "may_mutate": true,
+      "may_spawn": ["worker", "senses"]
+    }
+  }
+}

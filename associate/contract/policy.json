@@ -46,7 +46,9 @@
       {"command": "wc", "subcommands": []},
       {"command": "git", "subcommands": ["log", "diff", "show", "status", "blame"]},
       {"command": "code-lens", "subcommands": []},
-      {"command": "webglass", "subcommands": ["search", "page"]}
+      {"command": "webglass", "subcommands": ["search", "page"]},
+      {"command": "eidetic", "subcommands": ["recall", "remember"]},
+      {"command": "ledger", "subcommands": ["append", "list"]}
     ]
   },
   "budgets": {
