@@ -37,6 +37,7 @@ __all__ = [
     "load_role",
     "load_policy",
     "load_models",
+    "default_base_url",
     "load_gate",
     "load_schema",
     "SCHEMA_NAMES",
@@ -84,6 +85,15 @@ def load_policy() -> dict[str, Any]:
 def load_models() -> dict[str, Any]:
     """The per-model registry (``models.json``)."""
     return _cached(str(contract_dir() / "models.json"))
+
+
+def default_base_url() -> str:
+    """The base URL used when ``ASSOCIATE_BASE_URL`` is unset.
+
+    ``models.json`` ``endpoint.default_base_url`` owns it; the provider and the
+    CLEF gate read the same value, so no adapter carries its own constant.
+    """
+    return str(load_models()["endpoint"]["default_base_url"])
 
 
 def load_gate() -> dict[str, Any]:

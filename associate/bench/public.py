@@ -21,10 +21,10 @@ from typing import Any
 from associate import contract
 from associate.bench import config as bench_config
 from associate.cli._errors import EXIT_ENV_ERROR, EXIT_USER_ERROR, CliError
+from associate.cli._output import diagnostic_fd
 
 __all__ = ["suites_path", "load_suites", "run_suite", "render"]
 
-DEFAULT_BASE_URL = "http://localhost:8001/v1"
 _REQUIRED = ("name", "version", "homepage", "runner", "scorer", "models")
 
 
@@ -113,14 +113,17 @@ def _exec(argv: list[str], env_extra: dict[str, str], what: str, hint: str) -> N
             remediation=hint,
         )
     env = {**os.environ, **env_extra}
+    # CLI invariant 1: the upstream's progress is a diagnostic. Both of its
+    # streams go to associate's stderr, live, so stdout carries only the row.
+    fd = diagnostic_fd()
     completed = subprocess.run(  # nosec B603 - argv list from reviewed data, shell=False
-        argv, env=env, check=False
+        argv, env=env, check=False, stdout=fd, stderr=fd
     )
     if completed.returncode != 0:
         raise CliError(
             code=EXIT_ENV_ERROR,
             message=f"upstream {what} exited {completed.returncode}",
-            remediation="see the upstream output above (on stderr of the child)",
+            remediation="see the upstream output above (on stderr)",
         )
 
 
@@ -151,7 +154,7 @@ def run_suite(name: str, model_key: str, output_dir: str | None = None) -> dict[
     role = entry["lobes_role"]
     out = output_dir or tempfile.mkdtemp(prefix=f"associate-bench-{name}-")
     values = {
-        "base_url": os.environ.get("ASSOCIATE_BASE_URL") or DEFAULT_BASE_URL,
+        "base_url": os.environ.get("ASSOCIATE_BASE_URL") or contract.default_base_url(),
         "api_key": os.environ.get("ASSOCIATE_API_KEY", ""),
         "model": role,
         "output_dir": out,

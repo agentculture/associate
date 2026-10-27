@@ -33,6 +33,8 @@ def _fake_suites(tmp_path, monkeypatch, extra=()):
     fake.write_text(
         "#!/usr/bin/env python3\nimport sys, json, os\n"
         "out, model = sys.argv[1], sys.argv[2]\n"
+        "print('upstream progress: 1/1 done', flush=True)\n"
+        "print('upstream warning', file=sys.stderr, flush=True)\n"
         "os.makedirs(out, exist_ok=True)\n"
         "json.dump({'acc': 42.5, 'seen': [model, os.environ.get('FAKE_BASE')]},"
         " open(os.path.join(out, 'res.json'), 'w'))\n"
@@ -117,6 +119,36 @@ def test_row_carries_suite_version_scorer_and_config_stamp(tmp_path, monkeypatch
     assert "sk-thisisaverysecretkey" not in captured.out + captured.err
     assert main(["bench", "--suite", "bfcl", "--model", "worker"]) == 0
     assert "bfcl-1.2" in capsys.readouterr().out
+
+
+def test_upstream_stdout_goes_to_stderr_and_json_stdout_parses(tmp_path, monkeypatch, capfd):
+    """CLI invariant 1: the child's progress is a diagnostic, never a result."""
+    _fake_suites(tmp_path, monkeypatch)
+    rc = main(["bench", "--suite", "bfcl", "--model", "worker", "--json"])
+    captured = capfd.readouterr()
+    assert rc == 0
+    assert captured.out.count("\n") == 1
+    assert json.loads(captured.out)["suite"] == "bfcl"
+    assert "upstream progress: 1/1 done" in captured.err
+    assert "upstream warning" in captured.err
+
+
+def test_bench_base_url_default_comes_from_the_contract(tmp_path, monkeypatch, capsys):
+    from associate import contract
+
+    _fake_suites(tmp_path, monkeypatch)
+    monkeypatch.delenv("ASSOCIATE_BASE_URL", raising=False)
+    registry = json.loads(json.dumps(contract.load_models()))
+    registry["endpoint"]["default_base_url"] = "http://moved.invalid:9/v1"
+    monkeypatch.setattr(contract, "load_models", lambda: registry)
+    out = tmp_path / "out"
+    assert (
+        main(["bench", "--suite", "bfcl", "--model", "worker", "--json", "--output-dir", str(out)])
+        == 0
+    )
+    capsys.readouterr()
+    seen = json.loads((out / "res.json").read_text())["seen"]
+    assert seen[1] == "http://moved.invalid:9/v1"
 
 
 def test_user_errors_name_valid_choices(tmp_path, monkeypatch, capsys):

@@ -51,3 +51,25 @@ def emit_diagnostic(message: str, *, stream: TextIO | None = None) -> None:
     """Write a human diagnostic (progress, summary) to stderr."""
     s = stream if stream is not None else sys.stderr
     s.write(message if message.endswith("\n") else message + "\n")
+
+
+#: The file descriptor diagnostics go to when no Python stream can be named.
+STDERR_FD = 2
+
+
+def diagnostic_fd() -> int:
+    """The descriptor a child process writes its output to: associate's stderr.
+
+    A subprocess (an upstream benchmark runner) cannot write through
+    :func:`emit_diagnostic`, so it is handed this descriptor for both of its
+    streams. Pending Python-level output is flushed first so ordering holds.
+    """
+    for stream in (sys.stdout, sys.stderr):
+        try:
+            stream.flush()
+        except (OSError, ValueError):
+            pass
+    try:
+        return sys.stderr.fileno()
+    except (AttributeError, OSError, ValueError):
+        return STDERR_FD
