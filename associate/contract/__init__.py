@@ -9,6 +9,8 @@ same whichever harness runs the lane:
   per-tool budgets, result/fetch caps, walk redaction patterns);
 * ``models.json`` — the per-model registry (lobes role, input modalities,
   reasoning mode, allowed tools, prompt file, may_mutate, may_spawn);
+* ``gate.json``   — the pre-mutation safety-gate question set, thresholds and
+  fallback rules;
 * ``schemas/``    — JSON Schema documents for the task input, the walk, and the
   statements/hand-back.
 
@@ -34,13 +36,16 @@ __all__ = [
     "load_role",
     "load_policy",
     "load_models",
+    "load_gate",
     "load_schema",
     "SCHEMA_NAMES",
     "walk_entry_schema",
     "walk_run_schema",
+    "walk_gate_schema",
+    "walk_child_schema",
 ]
 
-SCHEMA_NAMES: tuple[str, ...] = ("task", "walk", "statements", "models")
+SCHEMA_NAMES: tuple[str, ...] = ("task", "walk", "statements", "models", "gate")
 
 #: Key under which a schema keeps its local subschema definitions.
 DEFS_KEY = "$defs"
@@ -80,6 +85,11 @@ def load_models() -> dict[str, Any]:
     return _cached(str(contract_dir() / "models.json"))
 
 
+def load_gate() -> dict[str, Any]:
+    """The safety-gate question set (``gate.json``)."""
+    return _cached(str(contract_dir() / "gate.json"))
+
+
 def load_schema(name: str) -> dict[str, Any]:
     """Load one contract schema by short name (``task``/``walk``/``statements``)."""
     if name not in SCHEMA_NAMES:
@@ -108,3 +118,13 @@ def walk_entry_schema() -> dict[str, Any]:
 def walk_run_schema() -> dict[str, Any]:
     """Schema for the walk's final run record."""
     return _walk_def("run")
+
+
+def walk_gate_schema() -> dict[str, Any]:
+    """Schema for one walk.jsonl safety-gate line."""
+    return _walk_def("gate")
+
+
+def walk_child_schema() -> dict[str, Any]:
+    """Schema for one walk.jsonl child-walk link line."""
+    return _walk_def("child")

@@ -1,0 +1,88 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://github.com/agentculture/associate/contract/gate.schema.json",
+  "title": "associate safety gate",
+  "description": "The pre-mutation safety-gate question set (gate.json). Structural shape only; cross-field rules (thresholds in [0,1], every rule names an existing question and option) live in validate.validate_gate.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["version", "decider", "state_fields", "questions", "clef", "super", "readonly_fallback", "redaction"],
+  "properties": {
+    "$comment": {"type": "string"},
+    "version": {"type": "integer"},
+    "decider": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["path", "header", "domain", "max_input_tokens"],
+      "properties": {
+        "path": {"type": "string", "pattern": "^/"},
+        "header": {"type": "string"},
+        "domain": {"type": "string", "pattern": "^[a-z][a-z0-9_-]*$"},
+        "max_input_tokens": {"type": "integer"}
+      }
+    },
+    "state_fields": {"type": "array", "items": {"enum": ["task", "action", "arguments", "model"]}},
+    "questions": {"type": "object", "additionalProperties": {"$ref": "#/$defs/question"}},
+    "clef": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["allow_when"],
+      "properties": {
+        "$comment": {"type": "string"},
+        "allow_when": {"type": "array", "items": {"$ref": "#/$defs/rule"}}
+      }
+    },
+    "super": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["answer_shape", "allow_when"],
+      "properties": {
+        "$comment": {"type": "string"},
+        "answer_shape": {"type": "object"},
+        "allow_when": {"type": "object"}
+      }
+    },
+    "readonly_fallback": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["when", "allow"],
+      "properties": {
+        "$comment": {"type": "string"},
+        "when": {"enum": ["decider_and_super_unreachable"]},
+        "allow": {"enum": ["readonly_only"]}
+      }
+    },
+    "redaction": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["policy_ref", "keys"],
+      "properties": {
+        "$comment": {"type": "string"},
+        "policy_ref": {"type": "string"},
+        "keys": {"type": "array", "items": {"type": "string"}}
+      }
+    }
+  },
+  "$defs": {
+    "question": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["type", "instructions"],
+      "properties": {
+        "type": {"enum": ["noul", "choice"]},
+        "instructions": {"type": "string"},
+        "criteria": {"type": "object", "additionalProperties": {"type": "string"}}
+      }
+    },
+    "rule": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["question", "op", "value"],
+      "properties": {
+        "question": {"type": "string"},
+        "option": {"type": "string"},
+        "op": {"enum": [">=", "<="]},
+        "value": {"type": "number"}
+      }
+    }
+  }
+}

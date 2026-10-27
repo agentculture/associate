@@ -34,7 +34,14 @@ def compile_pattern(pattern: str) -> re.Pattern[str]:
     return re.compile(pattern)
 
 
-__all__ = ["ValidationError", "validate", "assert_valid", "validate_models"]
+__all__ = [
+    "ValidationError",
+    "validate",
+    "assert_valid",
+    "validate_models",
+    "validate_gate",
+    "validate_walk_gate",
+]
 
 
 class ValidationError(ValueError):
@@ -233,4 +240,100 @@ def validate_models(doc: dict[str, Any]) -> list[str]:
         errors.append(f"default {default!r} is not a model")
     elif models[default]["status"] == "pending":
         errors.append(f"default {default!r} is pending and cannot be the default")
+    return errors
+
+
+def _check_unit(label: str, value: Any) -> list[str]:
+    ok = isinstance(value, (int, float)) and not isinstance(value, bool) and 0 <= value <= 1
+    return [] if ok else [f"{label}: {value!r} must be a number in [0, 1]"]
+
+
+def _gate_question_errors(questions: dict[str, Any]) -> list[str]:
+    errors: list[str] = []
+    for key, question in questions.items():
+        criteria = question.get("criteria")
+        if question["type"] == "choice" and not criteria:
+            errors.append(f"questions.{key}: a choice question needs criteria")
+        if question["type"] == "noul" and criteria is not None:
+            errors.append(f"questions.{key}: a noul question takes no criteria")
+    return errors
+
+
+def _gate_rule_errors(rules: list[dict[str, Any]], questions: dict[str, Any]) -> list[str]:
+    errors: list[str] = []
+    for index, rule in enumerate(rules):
+        label = f"clef.allow_when[{index}]"
+        question = questions.get(rule["question"])
+        if question is None:
+            errors.append(f"{label}: unknown question {rule['question']!r}")
+            continue
+        errors.extend(_check_unit(f"{label}.value", rule["value"]))
+        option = rule.get("option")
+        if question["type"] == "noul" and option is not None:
+            errors.append(f"{label}: a noul question has no option")
+        if question["type"] == "choice" and option not in question.get("criteria", {}):
+            errors.append(f"{label}: unknown option {option!r} for {rule['question']!r}")
+    ruled = {rule["question"] for rule in rules}
+    for key in sorted(set(questions) - ruled):
+        errors.append(f"clef.allow_when: question {key!r} has no rule")
+    return errors
+
+
+def _gate_super_errors(allow: dict[str, Any], questions: dict[str, Any]) -> list[str]:
+    errors: list[str] = []
+    for key in allow:
+        if key not in questions:
+            errors.append(f"super.allow_when: unknown question {key!r}")
+    for key, question in questions.items():
+        if key not in allow:
+            errors.append(f"super.allow_when: question {key!r} has no rule")
+            continue
+        want = allow[key]
+        if question["type"] == "noul" and not isinstance(want, bool):
+            errors.append(f"super.allow_when.{key}: must be a boolean")
+        if question["type"] == "choice":
+            options = set(question.get("criteria", {}))
+            if not (isinstance(want, list) and want and set(want) <= options):
+                errors.append(
+                    f"super.allow_when.{key}: must be a non-empty subset of {sorted(options)}"
+                )
+    return errors
+
+
+def validate_gate(doc: dict[str, Any]) -> list[str]:
+    """Cross-field checks for gate.json; empty list means valid.
+
+    Runs the structural schema first, then: choice questions carry criteria;
+    every CLEF rule names an existing question (and, for a choice, a real
+    option) with a threshold in [0, 1]; both tiers rule on every question; and
+    Super's verdict rule matches each question's type.
+    """
+    from associate.contract import load_schema  # noqa: PLC0415 - avoid import cycle
+
+    errors = validate(doc, load_schema("gate"))
+    if errors:
+        return errors
+    questions = doc["questions"]
+    errors.extend(_gate_question_errors(questions))
+    errors.extend(_gate_rule_errors(doc["clef"]["allow_when"], questions))
+    errors.extend(_gate_super_errors(doc["super"]["allow_when"], questions))
+    return errors
+
+
+def validate_walk_gate(line: dict[str, Any]) -> list[str]:
+    """Structural plus tier-specific checks for one walk gate line."""
+    from associate.contract import walk_gate_schema  # noqa: PLC0415 - avoid import cycle
+
+    errors = validate(line, walk_gate_schema())
+    if errors:
+        return errors
+    tier = line["tier"]
+    if tier == "clef" and "probabilities" not in line:
+        errors.append("$: a clef gate line needs probabilities")
+    if tier == "super" and "verdict" not in line:
+        errors.append("$: a super gate line needs a verdict")
+    if tier != "clef" and "probabilities" in line:
+        errors.append("$: probabilities belong to the clef tier only")
+    if tier != "super" and "verdict" in line:
+        errors.append("$: verdict belongs to the super tier only")
     return errors

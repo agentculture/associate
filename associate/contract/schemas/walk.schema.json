@@ -2,11 +2,13 @@
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "$id": "https://github.com/agentculture/associate/contract/walk.schema.json",
   "title": "associate walk",
-  "description": "Artifact A of a run (issue #4): an ordered log of every tool call and its result, written by the harness from tool events and never editable by the model. On disk it is walk.jsonl — one $defs/entry per line, then a final line {\"run\": <$defs/run>}. This top-level document schema describes the same walk assembled in memory.",
+  "description": "Artifact A of a run (issue #4): an ordered log of every tool call and its result, written by the harness from tool events and never editable by the model. On disk it is walk.jsonl — one $defs/entry per line, interleaved {\"gate\": <$defs/gate>} and {\"child\": <$defs/child>} lines, then a final line {\"run\": <$defs/run>}. This top-level document schema describes the same walk assembled in memory.",
   "type": "object",
   "required": ["entries", "run"],
   "properties": {
     "entries": {"type": "array", "items": {"$ref": "#/$defs/entry"}},
+    "gates": {"type": "array", "items": {"$ref": "#/$defs/gate"}},
+    "children": {"type": "array", "items": {"$ref": "#/$defs/child"}},
     "run": {"$ref": "#/$defs/run"}
   },
   "$defs": {
@@ -25,6 +27,35 @@
         "result": {"$ref": "#/$defs/result"},
         "truncated": {"type": "boolean"},
         "error": {"type": "string", "description": "Present only when the call failed."}
+      }
+    },
+    "gate": {
+      "description": "One safety-gate decision taken before a mutating tool call (gate.json). Decisions are recorded, never silent.",
+      "type": "object",
+      "required": ["id", "ts", "tier", "question_set_version", "gated_tool", "decision"],
+      "properties": {
+        "id": {"type": "string", "pattern": "^g[1-9][0-9]*$"},
+        "ts": {"type": "string"},
+        "tier": {"enum": ["clef", "super", "readonly"]},
+        "question_set_version": {"type": "integer"},
+        "gated_tool": {"type": "string", "description": "The mutating tool the gate was asked about."},
+        "gated_id": {"type": "string", "pattern": "^w[1-9][0-9]*$", "description": "Walk id of the gated call, when it was recorded."},
+        "probabilities": {"type": "object", "description": "clef tier only: question key to P(yes), or option to probability for a choice question."},
+        "verdict": {"type": "object", "description": "super tier only: the parsed JSON answer."},
+        "decision": {"enum": ["allow", "refuse"]},
+        "reason": {"type": "string"}
+      }
+    },
+    "child": {
+      "description": "A link from a parent walk to the walk of a subagent it spawned.",
+      "type": "object",
+      "required": ["id", "ts", "child_model", "child_walk", "child_session_id"],
+      "properties": {
+        "id": {"type": "string", "pattern": "^c[1-9][0-9]*$"},
+        "ts": {"type": "string"},
+        "child_model": {"type": "string"},
+        "child_walk": {"type": "string", "description": "Path of the child's walk.jsonl."},
+        "child_session_id": {"type": "string"}
       }
     },
     "result": {
