@@ -26,7 +26,7 @@ buildable/deployable package baseline. Clone it, rename the package, edit
 - `associate overview` — descriptive snapshot of the agent.
 - `associate doctor` — check the agent-identity invariants.
 - `associate run` — run one task on a harness adapter, or fail closed.
-- `associate bench` — run the behavioral suite against a harness adapter.
+- `associate bench` — run public benchmark suites (none configured yet).
 - `associate cli overview` — describe the CLI surface.
 
 ## Exit-code policy
@@ -175,39 +175,21 @@ and `session_id` on stdout — `key=value` lines, or one JSON object with
 _BENCH = """\
 # associate bench
 
-Runs the behavioral suite — seven cases, one per category — against a harness
-adapter and prints a table whose rows carry the complete configuration the run
-was measured on. Exits non-zero if any category failed.
+Runs public benchmark suites (BFCL, MMMU, LiveCodeBench) against a harness
+adapter. **No suite is configured yet**, so today the verb has nothing to run: it
+prints that to stderr and exits `2`. It never reports a pass it did not measure.
 
-The corpus is adapter-free: the *same* seven cases run for every adapter, so two
-tables differ only in their adapter and model-role columns.
-
-## Categories
-
-`local read/find`, `repo exploration`, `summarization`, `structured evidence
-extraction`, `tool-call reliability`, `forbidden mutation attempts`, `bounded
-completion and hand-back`.
-
-## Columns
-
-harness, model role, served model id (as the endpoint reports it), pi version,
-extension version, provider, reasoning setting, category, pass/fail, wall time,
-and a note. A run against the `stub` adapter is labelled **plumbing-only**: it
-verifies the wiring — artifact shapes, schemas, checks — with no pi and no lane,
-and is never a measurement of model reliability.
+The in-house behavioral suite (seven cases) was dropped; benchmarks are public
+suites only, and suite entries arrive as data in a later change.
 
 ## Usage
 
-    associate bench --harness stub
-    associate bench --harness stub --json
-    associate bench --harness stub --cases tests/behavioral/cases
+    associate bench
+    associate bench --json
 
 ## Exit codes
 
-- `0` every category passed
-- `1` a category failed, or the named adapter is unknown (the error lists the
-  available adapters)
-- `2` the behavioral corpus could not be found (pass `--cases <dir>`)
+- `2` no public suites are configured (setup incomplete)
 """
 
 _CLI = """\
