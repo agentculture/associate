@@ -10,9 +10,12 @@ How readiness is decided (c34, honesty condition h26, deviation d8)
 -------------------------------------------------------------------
 h26 pins the mechanism: the check is made **from the tool list Pi reports**,
 never from trusting that ``.pi/settings.json`` or the extension directory
-exists on disk. Pi 0.84.2 offers no ``--list-tools``, and its JSON event stream
-carries no startup tool inventory — the session header is
-``{"type":"session",…}`` and nothing else precedes the first turn.
+exists on disk. Pi offers no ``--list-tools`` (measured on 0.84.2 and again
+on the pinned 1.1.0), and its JSON event stream carries no startup tool
+inventory — the session header is ``{"type":"session",…}`` and nothing else
+precedes the first turn. (1.1.0's transcript-backed leading ``system`` message
+does carry ``toolsAdded``, but it is emitted inside the run, after
+``before_agent_start`` — where the preflight below has already exited.)
 
 The first implementation read that list off an ``associate_ready`` tool result
 in the task's own turn, which made the proof depend on the *model* choosing to
@@ -34,9 +37,10 @@ the lane travels with the launcher instead of depending on the examined
 checkout carrying its own ``.pi/`` — the second half of d8.
 
 Two things are checked on that report, and the distinction is measured, not
-guessed (risk r14, against pi 0.84.2): ``defaultTools: []`` narrows the
-**active** tool set while ``pi.getAllTools()`` still lists
-``read``/``bash``/``edit``/``write``/``grep``/``find``/``ls``. So the gate is
+guessed (risk r14, measured on pi 0.84.2 and re-measured on 1.1.0):
+``defaultTools: []`` narrows the **active** tool set while ``pi.getAllTools()``
+still lists ``read``/``bash``/``edit``/``write``/``grep``/``find``/``ls`` (and,
+on 1.1.0, ``powershell``/``codemode``/``tool_search`` too). So the gate is
 
 * ``associate_ready`` present in ``active_tools`` — the extension loaded;
 * ``writer_tools_active`` empty — no write path was offered.
@@ -54,7 +58,7 @@ extension's ``lib/prompt.ts`` answers by injecting the checkout's own
 
 Version pin (c39)
 -----------------
-``pi`` is pinned exactly at the tested 0.84.2. A different version **warns on
+``pi`` is pinned exactly at the tested 1.1.0. A different version **warns on
 stderr naming the tested one and still runs**: refusing on a version number
 alone would make the harness unusable the day pi ships a patch, and the
 behavioural evidence is what the bench is for.
@@ -97,7 +101,7 @@ __all__ = [
 ]
 
 #: The tested pi version (CLAUDE.md, "The Pi harness floors"; spec c39).
-PINNED_PI_VERSION = "0.84.2"
+PINNED_PI_VERSION = "1.1.0"
 
 #: The tool whose presence in the reported active tool list proves the load.
 SENTINEL_TOOL = "associate_ready"

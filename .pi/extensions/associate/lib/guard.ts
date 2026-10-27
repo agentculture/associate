@@ -26,7 +26,9 @@ import { isInside } from "./session.ts";
  * `read`, `bash`, `edit`, `write`, `grep`, `find`, `ls`). `bash` is included
  * because pi's built-in bash is an unrestricted write path (spec c35); the
  * extension's own allowlisted shell registers under a different contract and
- * declares itself a non-writer.
+ * declares itself a non-writer. `powershell` is the optional Windows shell pi
+ * 0.84.3 added as a built-in (pi docs/windows.md) — as unrestricted as bash,
+ * and no safe override is registered under its name.
  */
 export const BUILTIN_WRITER_TOOLS: readonly string[] = [
   "write",
@@ -36,6 +38,7 @@ export const BUILTIN_WRITER_TOOLS: readonly string[] = [
   "apply_patch",
   "notebook_edit",
   "bash",
+  "powershell",
 ];
 
 /**

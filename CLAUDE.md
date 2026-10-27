@@ -354,7 +354,9 @@ The four things a Pi-driven run of the associate lane depends on, pinned
 exactly because they were the versions actually tested (spec claim c39, see
 `docs/specs/2026-09-12-associate-on-pi-with-opinionated-tools.md`):
 
-- **`pi`** (`@earendil-works/pi-coding-agent`) — **0.84.2**, tested.
+- **`pi`** (`@earendil-works/pi-coding-agent`) — **1.1.0**, tested. Migrated
+  from 0.84.2; every breaking change in between has a verdict in
+  `docs/notes/pi-1.1.0-migration.md`.
 - **`pi-acp`** — **0.0.33**, tested. Bridges ACP JSON-RPC over stdio to
   `pi --mode rpc`; MVP-grade and Zed-centred per its own README.
 - **Node** — **>=22** (pi-acp's floor).

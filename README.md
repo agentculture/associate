@@ -218,7 +218,7 @@ variable is unset.
 | `ASSOCIATE_INJECT_PROMPT` | — | Set to `1` by `associate run`: with pi's ancestor context-file discovery turned off, the extension injects the checkout's own `AGENTS.md` and nothing above it. |
 | `ASSOCIATE_EXTENSION_PATH` | the `.pi/extensions/associate/index.ts` above the installed package | The extension entry point `associate run` hands pi with `-e`, in both the preflight and the task turn. |
 
-The launcher checks the installed `pi` against the tested pin (**0.84.2**) and
+The launcher checks the installed `pi` against the tested pin (**1.1.0**) and
 warns on stderr naming that version — it never refuses on a version number
 alone.
 

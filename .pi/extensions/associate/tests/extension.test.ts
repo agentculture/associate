@@ -125,8 +125,9 @@ test("associate_ready reports the extension version, the contract version and th
 });
 
 test("associate_ready reports no active writer under defaultTools: []", async () => {
-  // Measured against pi 0.84.2: getAllTools() lists the built-ins even when
-  // defaultTools: [] leaves them inactive, so the launcher's check (spec c34)
+  // Measured against pi 0.84.2, re-measured on 1.1.0: getAllTools() lists
+  // the built-ins even when defaultTools: [] leaves them inactive, so the
+  // launcher's check (spec c34)
   // is writer_tools_active, and the sentinel must not hide a writer that *is*
   // active.
   const s = scratch();
@@ -350,6 +351,57 @@ test("session_start writes ready.json carrying the sentinel's report (deviation 
     } finally {
       cleanup();
     }
+  } finally {
+    s.dispose();
+  }
+});
+
+/**
+ * pi 0.86.0 restricted `ToolResultMessage.details` (and `ToolCall.arguments`)
+ * to JSON-compatible values. The restriction is a type, not a runtime check —
+ * pi loads this extension with types stripped — so the only proof is the value
+ * itself: anything that does not survive `JSON.stringify` unchanged (an
+ * `undefined` field, a function, `NaN`, a `Date`, a `Map`) is named here.
+ */
+function nonJsonPaths(value: unknown, path = "details"): string[] {
+  if (value === null || typeof value === "string" || typeof value === "boolean") return [];
+  if (typeof value === "number") return Number.isFinite(value) ? [] : [path];
+  if (Array.isArray(value)) return value.flatMap((item, i) => nonJsonPaths(item, `${path}[${i}]`));
+  if (typeof value === "object" && Object.getPrototypeOf(value) === Object.prototype) {
+    return Object.entries(value as Record<string, unknown>).flatMap(([key, item]) =>
+      nonJsonPaths(item, `${path}.${key}`),
+    );
+  }
+  return [path];
+}
+
+test("core tool results carry JSON-compatible details (pi 0.86.0)", async () => {
+  const s = scratch();
+  try {
+    writeFileSync(join(s.checkout, "server.py"), "print('hi')\n");
+    await withExtension(s.env, async ({ pi }) => {
+      const results: Array<[string, { details?: unknown }]> = [
+        ["associate_ready", await pi.tool("associate_ready").execute("call-1", {})],
+        ["read", await pi.tool("read").execute("call-2", { path: join(s.checkout, "server.py") })],
+      ];
+      await pi.fireToolResult({
+        toolCallId: "call-2",
+        toolName: "read",
+        input: { path: join(s.checkout, "server.py") },
+        content: [{ type: "text", text: "1\tprint('hi')" }],
+      });
+      results.push([
+        "finish",
+        await pi.tool("finish").execute("call-3", {
+          summary: "One file.",
+          statements: [{ text: "server.py prints hi.", evidence: ["w1"] }, { text: "No evidence." }],
+          citations: [{ path: "server.py", line: 1 }],
+        }),
+      ]);
+      for (const [name, result] of results) {
+        assert.deepEqual(nonJsonPaths(result.details), [], `${name} details must be JSON-compatible`);
+      }
+    });
   } finally {
     s.dispose();
   }

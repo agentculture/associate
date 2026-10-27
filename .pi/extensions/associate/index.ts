@@ -106,11 +106,13 @@ export default async function (pi: ExtensionAPI) {
         export_dir: session.exportDir,
         walk_path: walk.walkPath,
       },
-      // What a launcher checks (spec c34). Measured against pi 0.84.2:
-      // `getAllTools()` lists every *configured* tool, built-ins included,
-      // while `defaultTools: []` narrows the *active* set — the tools the
-      // model is actually offered. So the launcher's check is
-      // `writer_tools_active` being empty, not `tools`.
+      // What a launcher checks (spec c34). Measured against pi 0.84.2 and
+      // re-measured on the pinned 1.1.0: `getAllTools()` lists every
+      // *configured* tool, built-ins included (on 1.1.0 also `powershell`,
+      // `codemode` and `tool_search`), while `defaultTools: []` narrows the
+      // *active* set — since pi 0.86.0 the set declared to the model in the
+      // transcript. So the launcher's check is `writer_tools_active` being
+      // empty, not `tools`.
       tools: pi.getAllTools().map((tool) => tool.name),
       active_tools: active,
       writer_tools_active: active.filter((name) => ctx.contain.isWriter(name)),
@@ -249,6 +251,10 @@ export default async function (pi: ExtensionAPI) {
   // setActiveTools is an action method and pi refuses those while extensions
   // are still loading, so it runs on session_start (fired right after load)
   // and again on before_agent_start in case a later hook re-enabled a writer.
+  // Since pi 0.86.0 a tool change is transcript-backed: pi appends it before
+  // the next model request. Measured on 1.1.0 (tests/test_provider_wire.py):
+  // a writer re-enabled by an earlier before_agent_start handler is gone from
+  // the very first request this handler precedes.
   const dropWriters = () => {
     const active = pi.getActiveTools();
     const withoutWriters = active.filter((name) => !ctx.contain.isWriter(name));

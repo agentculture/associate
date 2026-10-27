@@ -132,6 +132,15 @@ test("a real pi run blocks a write into the checkout and shows the block in the 
   // defaultTools: [] leaves no writer to attempt, so the built-in write is
   // re-enabled for this run only, with --tools. That is the point of the
   // guard: it holds even when the structural restriction is overridden.
+  //
+  // This test normally SKIPS, and that is structural, not a pi 1.1.0 change:
+  // since deviation d7 the extension's own dropWriters removes `write` from
+  // the active set on session_start, so --tools no longer gets a writer onto
+  // the wire (re-measured on 1.1.0: the leading system message's toolsAdded
+  // names only associate_ready and finish) and the model has nothing to
+  // attempt. The guard's decision is covered by guard.test.ts and
+  // extension.test.ts; the wire-level absence of writers by
+  // tests/test_provider_wire.py.
   const probe = join(REPO_ROOT, "GUARD_PROBE.txt");
   rmSync(probe, { force: true });
 

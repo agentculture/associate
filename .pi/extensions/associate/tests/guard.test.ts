@@ -105,6 +105,21 @@ test("pi's built-in writers are all recognised", () => {
   assert.equal(isWriterTool("read"), false);
 });
 
+test("pi 0.84.3's built-in powershell is a writer, blocked like bash", () => {
+  // pi 0.84.3 added an optional `powershell` built-in (docs/windows.md): an
+  // unrestricted shell exactly like the built-in bash, configurable through
+  // defaultTools/--tools. The extension never registers a safe override under
+  // that name, so it must be judged a writer and dropped from the active set.
+  assert.equal(isWriterTool("powershell"), true);
+  const decision = evaluateToolCall({
+    toolName: "powershell",
+    input: { command: "Set-Content -Path hello.txt -Value hi" },
+    scratchDir,
+    cwd: "/repo",
+  });
+  assert.equal(decision?.block, true);
+});
+
 test("every path-shaped argument is collected, including arrays", () => {
   const paths = collectPathArguments({
     path: "a.txt",
