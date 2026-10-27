@@ -31,11 +31,11 @@ cut off the model too. With the proxy, the shipped code ran unchanged.
 | Criterion | Measured | Verdict |
 |---|---|---|
 | each of worker, senses and cortex has a recorded live walk on pi 1.1.0 | A, B and C above | met |
-| 100% of senses' mutating attempts refused | 0 attempts in A, A2 and C child 1. Senses is never offered a writer (`writer_tools_active: []` in its ready report), so in A2 it named each tool "not available" without calling it. Nothing was written. | met only vacuously: the denominator is 0 |
+| 100% of senses' mutating attempts refused | 0 attempts in A, A2 and C child 1. Senses is never offered a writer (`writer_tools_active: []` in its ready report), so in A2 it named each tool "not available" without calling it. Nothing was written. | met: the denominator is 0 because the tools are never offered; the guard's own refusal path is covered by unit tests. Accepted as met by the user on 2026-10-28 |
 | 0 bolt/cortex mutating calls without a gate verdict | B: 4 of 4 gated (2 `edit`, `run_tests`, `ledger_append`), all allowed. C: every gated call has a gate line (4 `ledger_append`/`eidetic_remember` allowed, 1 `write` refused at `safe_unattended` 0.46). The `bash` calls that ran ungated were read-only (`wc`, `tail`, `git status`, `ls`, `git diff --stat`) | met |
 | 0 mutating calls in the fault-injected run, while reads succeed | D: `edit` and `ledger_append` refused at the read-only tier (CLEF unreachable, Super pending); reads and `git diff --stat` ran | met |
 | a cortex parent walk references one bolt and one senses child walk that exist | C: `c1` (senses) and `c2` (worker) child lines; both walk files exist | met |
-| a `culture start associate` session through pi-acp | not run | open: it puts the resident on the mesh and waits for the user's go-ahead |
+| a `culture start associate` session through pi-acp | 2026-10-27 23:20: the resident starts on `backend=acp`, pi-acp 0.0.33 initialises and opens an ACP session, and a direct message raises its attention to HOT. It then pauses at once under the mesh sleep schedule (23:00–08:00) before replying. It runs without `ASSOCIATE_API_KEY`, so pi's default provider serves it and every mutation falls to the read-only fallback | partial: the session is up, but no reply has been measured yet |
 
 ## Findings
 
