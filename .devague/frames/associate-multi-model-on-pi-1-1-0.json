@@ -4,7 +4,7 @@
   "schema_version": 6,
   "status": "exported",
   "created": "2026-10-27T08:43:47Z",
-  "updated": "2026-10-27T11:15:16Z",
+  "updated": "2026-10-27T17:42:13Z",
   "claims": [
     {
       "id": "c1",
@@ -1682,6 +1682,26 @@
       "refs": [
         "t12"
       ],
+      "origin": "llm",
+      "status": "proposed"
+    },
+    {
+      "id": "l7",
+      "code": "assumption-for-measurement",
+      "what": "reported to the user that CLEF 'cannot judge ledger_append' from low scores, without first testing whether the state described the tool truthfully; a true effect line raised the scores from 0.07-0.24 to 0.83-0.89",
+      "skipped_check": "vary the state (effect line) before attributing low scores to the decider",
+      "refs": [
+        "docs/notes/gate-calibration.md"
+      ],
+      "origin": "llm",
+      "status": "proposed"
+    },
+    {
+      "id": "l8",
+      "code": "instrument-changed-mid-series",
+      "what": "a replay variant run used loadContract({}), which ignores ASSOCIATE_CONTRACT_DIR, so the first 'reworded matches_task' measurement silently scored the unmodified contract; caught because the numbers were identical to the baseline, then rerun",
+      "skipped_check": "assert the replayed contract carries the variant before scoring",
+      "refs": [],
       "origin": "llm",
       "status": "proposed"
     }
