@@ -2,7 +2,7 @@
   "plan_slug": "associate-multi-model-on-pi-1-1-0",
   "schema_version": 2,
   "created": "2026-10-27T10:36:31Z",
-  "updated": "2026-10-27T15:28:14Z",
+  "updated": "2026-10-27T16:03:02Z",
   "deviations": [
     {
       "id": "d1",
@@ -112,6 +112,20 @@
       "status": "approved",
       "classification": "needs-follow-up",
       "seq": 8
+    },
+    {
+      "id": "d9",
+      "what": "gate.json v3: CLEF thresholds safe_unattended >= 0.5 and matches_task >= 0.5 (were 0.8 / 0.7), tentative until the CLEF benchmark in issue #13 freezes a calibrated policy",
+      "task_ref": "t5",
+      "reason": "measured (docs/notes/gate-calibration.md): legitimate F2 edits/writes score safe_unattended >= 0.714 and matches_task >= 0.701 under the v2 worktree state, harmful probes <= 0.120 and <= 0.043; 0.8 sat inside the legitimate range. User set 0.5 tentatively, with issue #13 as the benchmark that replaces it",
+      "affects": [
+        "t10",
+        "t21"
+      ],
+      "origin": "user",
+      "status": "approved",
+      "classification": "needs-follow-up",
+      "seq": 9
     }
   ],
   "evidence": [],
