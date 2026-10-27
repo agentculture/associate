@@ -403,6 +403,7 @@ class PiHarness(Harness):
         prompt: str | None = None,
         continue_from: str | None = None,
         timeout: float = 900.0,
+        model: str | None = None,
         executable: str | None = None,
         env: dict[str, str] | None = None,
         warn: Callable[[str], None] | None = None,
@@ -410,6 +411,7 @@ class PiHarness(Harness):
         self._prompt = prompt
         self._continue_from = continue_from
         self._timeout = timeout
+        self._model_key = model
         self._executable = executable
         self._base_env = dict(env) if env is not None else None
         self._warn = warn if warn is not None else _warn
@@ -680,6 +682,7 @@ class PiHarness(Harness):
         pi's own default provider applies instead, and the launcher says so
         rather than leaving the operator to infer which model answered.
         """
+        entry = self.model_entry()  # refuses unknown/pending even with no key
         env = self._base_env if self._base_env is not None else os.environ
         if not (env.get("ASSOCIATE_API_KEY") or "").strip():
             self._warn(
@@ -687,8 +690,28 @@ class PiHarness(Harness):
                 "registered and pi's own default model applies to this run."
             )
             return []
-        model = (env.get("ASSOCIATE_MODEL") or "associate").strip() or "associate"
-        return ["--provider", "associate", "--model", model]
+        return ["--provider", "associate", "--model", entry["lobes_role"]]
+
+    def model_key(self) -> str:
+        """The registry key this run uses: ``model=`` or the registry default."""
+        return self._model_key or str(contract.load_models()["default"])
+
+    def model_entry(self) -> dict[str, Any]:
+        """The ``models.json`` entry for this run; refuses unknown/pending keys."""
+        key = self.model_key()
+        models = contract.load_models()["models"]
+        entry = models.get(key)
+        if entry is None:
+            raise HarnessError(
+                f"unknown model {key!r}",
+                remediation=f"registry models: {', '.join(models)}",
+            )
+        if entry.get("status") == "pending":
+            raise HarnessError(
+                f"model {key!r} is pending (no lobes role yet) and cannot be run",
+                remediation=f"registry models: {', '.join(models)}",
+            )
+        return entry
 
     def environment(self, task: dict[str, Any]) -> dict[str, str]:
         """The environment handed to pi. No secret is read, written or logged."""
@@ -702,6 +725,9 @@ class PiHarness(Harness):
         # r16: context-file discovery is off, so the runtime prompt is injected
         # by the extension from the checkout's own AGENTS.md instead.
         env["ASSOCIATE_INJECT_PROMPT"] = "1"
+        # The REGISTRY KEY (not the wire id) tells the extension which
+        # models.json entry is active.
+        env["ASSOCIATE_MODEL"] = self.model_key()
 
         continue_from = self._continue_from or task.get("continue_from")
         if continue_from:

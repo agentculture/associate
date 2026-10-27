@@ -145,9 +145,13 @@ from every *ancestor* directory — a workspace-level file one level above the
 checkout would leak into the system prompt. The checkout's own `AGENTS.md` is
 injected by the extension instead (`ASSOCIATE_INJECT_PROMPT=1`).
 
-`--provider associate --model $ASSOCIATE_MODEL` are passed only when
-`ASSOCIATE_API_KEY` is set; with no key the extension registers no provider, so
-pi's own default model applies and the launcher says so on stderr.
+`--model <key>` picks an entry of the contract's `models.json` registry
+(default: the registry's `default`). With `ASSOCIATE_API_KEY` set the launcher
+passes `--provider associate --model <lobes_role>`; either way it sets
+`ASSOCIATE_MODEL=<key>` so the extension knows the active registry entry. With
+no key the extension registers no provider, so pi's own default model applies
+and the launcher says so on stderr. An unknown `--model` (the error lists the
+registry's models) or a `pending` one exits `1`.
 
 ## Output
 
@@ -159,6 +163,7 @@ and `session_id` on stdout — `key=value` lines, or one JSON object with
 
     associate run
     associate run "Find every caller of load_policy" --json
+    associate run --model senses
     associate run --harness stub
     associate run --continue-from <prior export dir>
     associate run --export-root <dir> --session-id <id>
@@ -166,7 +171,8 @@ and `session_id` on stdout — `key=value` lines, or one JSON object with
 ## Exit codes
 
 - `0` the run served; both artifact paths are on stdout
-- `1` unknown `--harness` (the error lists the registered adapters), or a
+- `1` unknown `--harness` (the error lists the registered adapters), an
+  unknown or pending `--model`, or a
   `--checkout` that is not a directory
 - `2` the adapter failed closed (no sentinel, or an active writer tool), pi is
   not on PATH, the run timed out, or the export root is inside the checkout
