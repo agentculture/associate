@@ -148,8 +148,10 @@ check is on `active_tools` and `writer_tools_active` — never on the full list.
 `-p --mode json --no-session --approve --no-context-files -e <index.ts>`, with
 `--no-context-files` there because pi otherwise loads `AGENTS.md`/`CLAUDE.md`
 from every *ancestor* directory — a workspace-level file one level above the
-checkout would leak into the system prompt. The checkout's own `AGENTS.md` is
-injected by the extension instead (`ASSOCIATE_INJECT_PROMPT=1`).
+checkout would leak into the system prompt. The extension injects associate's
+own `AGENTS.md` as the runtime prompt instead (`ASSOCIATE_INJECT_PROMPT=1`);
+the examined checkout's `AGENTS.md` is skipped under `--untrusted-checkout` and
+otherwise injected labelled as repository context, never as the runtime prompt.
 
 `--model <key>` picks an entry of the contract's `models.json` registry
 (default: the registry's `default`). With `ASSOCIATE_API_KEY` set the launcher

@@ -18,11 +18,14 @@ import { resolveActiveModel } from "../lib/toolset.ts";
 import {
   INJECT_PROMPT_ENV,
   PROMPT_MESSAGE_TYPE,
+  REPOSITORY_CONTEXT_HEADING,
+  RUNTIME_PROMPT_HEADING,
   installPromptInjection,
   readRuntimePrompt,
   renderRuntimePrompt,
   shouldInjectPrompt,
 } from "../lib/prompt.ts";
+import { PI_TRUST_ENV, isCheckoutTrusted } from "../lib/trust.ts";
 
 const ANCESTOR_MARKER = "WORKSPACE-LEVEL-INSTRUCTIONS-THAT-MUST-NOT-LEAK";
 const CHECKOUT_MARKER = "THE-CHECKOUTS-OWN-RUNTIME-PROMPT";
@@ -62,7 +65,7 @@ test("the env flag gates the injection", () => {
   assert.equal(shouldInjectPrompt({ [INJECT_PROMPT_ENV]: "1" }), true);
 });
 
-test("only the checkout's own AGENTS.md is read", () => {
+test("readRuntimePrompt reads only <root>/AGENTS.md, never an ancestor", () => {
   const { checkout, cleanup } = fixture();
   try {
     const text = readRuntimePrompt(checkout)!;
@@ -76,12 +79,15 @@ test("only the checkout's own AGENTS.md is read", () => {
   }
 });
 
-test("a checkout without AGENTS.md, and no resolvable model, registers no handler", () => {
+test("no associate AGENTS.md, no checkout AGENTS.md and no resolvable model registers no handler", () => {
+  // `root` stands in for associate's own install: an empty one has neither the
+  // runtime prompt nor any model prompt.
   const empty = mkdtempSync(join(tmpdir(), "associate-prompt-empty-"));
   try {
     const pi = fakePi();
+    const env = { [INJECT_PROMPT_ENV]: "1", [PI_TRUST_ENV]: "approve" };
     assert.equal(
-      installPromptInjection(pi, fakeCtx(empty), { [INJECT_PROMPT_ENV]: "1", ASSOCIATE_MODEL: "no-such-model" }),
+      installPromptInjection(pi, fakeCtx(empty), env, resolveActiveModel(env, REGISTRY), empty),
       false,
     );
     assert.equal(pi.handlers.length, 0);
@@ -90,16 +96,21 @@ test("a checkout without AGENTS.md, and no resolvable model, registers no handle
   }
 });
 
-test("a checkout without AGENTS.md still gets the model prompt, and nothing labelled AGENTS.md", () => {
-  // The model prompt is associate's own file, so it does not depend on what
-  // the examined checkout carries.
+test("a checkout without AGENTS.md gets associate's runtime prompt and the model prompt, no repository context", () => {
+  // Both prompts are associate's own files, so neither depends on what the
+  // examined checkout carries.
   const empty = mkdtempSync(join(tmpdir(), "associate-prompt-empty-"));
   try {
     const pi = fakePi();
-    assert.equal(installPromptInjection(pi, fakeCtx(empty), { [INJECT_PROMPT_ENV]: "1" }), true);
+    assert.equal(
+      installPromptInjection(pi, fakeCtx(empty), { [INJECT_PROMPT_ENV]: "1", [PI_TRUST_ENV]: "approve" }),
+      true,
+    );
     const content = (pi.handlers[0]!.handler({}) as { message: { content: string } }).message.content;
+    assert.ok(content.includes(RUNTIME_PROMPT_HEADING));
+    assert.ok(content.includes("associate — the runtime prompt"));
     assert.ok(content.includes(`# Model prompt — ${REGISTRY.default}`));
-    assert.ok(!content.includes("# AGENTS.md"));
+    assert.ok(!content.includes(REPOSITORY_CONTEXT_HEADING));
   } finally {
     rmSync(empty, { recursive: true, force: true });
   }
@@ -116,11 +127,12 @@ test("without the flag nothing is registered at all", () => {
   }
 });
 
-test("the injected message carries AGENTS.md once, and nothing from above it", () => {
+test("the injected message is one before_agent_start message, sent once, with nothing from above the checkout", () => {
   const { checkout, cleanup } = fixture();
   try {
     const pi = fakePi();
-    assert.equal(installPromptInjection(pi, fakeCtx(checkout), { [INJECT_PROMPT_ENV]: "1" }), true);
+    const env = { [INJECT_PROMPT_ENV]: "1", [PI_TRUST_ENV]: "approve" };
+    assert.equal(installPromptInjection(pi, fakeCtx(checkout), env), true);
     assert.deepEqual(
       pi.handlers.map((entry) => entry.event),
       ["before_agent_start"],
@@ -128,7 +140,6 @@ test("the injected message carries AGENTS.md once, and nothing from above it", (
 
     const first = pi.handlers[0]!.handler({}) as { message: { customType: string; content: string } };
     assert.equal(first.message.customType, PROMPT_MESSAGE_TYPE);
-    assert.ok(first.message.content.includes(CHECKOUT_MARKER));
     assert.ok(!first.message.content.includes(ANCESTOR_MARKER));
     assert.equal(first.message.content.split(CHECKOUT_MARKER).length - 1, 1);
 
@@ -139,11 +150,128 @@ test("the injected message carries AGENTS.md once, and nothing from above it", (
   }
 });
 
+// ------------------------------- d17: the examined checkout's AGENTS.md and trust
+
+/** Inject against the foreign fixture checkout with `extra` env and return the text. */
+function injectedForeign(extra: Record<string, string | undefined>): string {
+  const { checkout, cleanup } = fixture();
+  try {
+    const pi = fakePi();
+    const env = { [INJECT_PROMPT_ENV]: "1", ASSOCIATE_MODEL: "worker", ...extra };
+    assert.equal(installPromptInjection(pi, fakeCtx(checkout), env), true);
+    return (pi.handlers[0]!.handler({}) as { message: { content: string } }).message.content;
+  } finally {
+    cleanup();
+  }
+}
+
+test("d17: only the exact value `approve` trusts the checkout, as spawn_subagent reads it", () => {
+  assert.equal(isCheckoutTrusted({ [PI_TRUST_ENV]: "approve" }), true);
+  for (const value of [undefined, "", "untrusted", "APPROVE", " approve", "1", "yes", "true"]) {
+    assert.equal(isCheckoutTrusted({ [PI_TRUST_ENV]: value }), false, String(value));
+  }
+});
+
+for (const [label, extra] of [
+  ["untrusted", { [PI_TRUST_ENV]: "untrusted" }],
+  ["absent trust", {}],
+  ["unknown trust value", { [PI_TRUST_ENV]: "yes" }],
+] as const) {
+  test(`d17: ${label} — a foreign checkout's AGENTS.md is not injected at all`, () => {
+    const content = injectedForeign(extra);
+    assert.ok(!content.includes(CHECKOUT_MARKER), "the examined checkout's AGENTS.md must be skipped");
+    assert.ok(!content.includes(REPOSITORY_CONTEXT_HEADING));
+    assert.ok(!content.includes(ANCESTOR_MARKER));
+    // associate's own runtime prompt and the model prompt are still there.
+    assert.ok(content.includes(RUNTIME_PROMPT_HEADING));
+    assert.ok(content.includes("associate — the runtime prompt"));
+    assert.ok(content.includes(promptFile("worker").trimEnd()));
+  });
+}
+
+test("d17: trusted — a foreign AGENTS.md is labelled repository context, after the runtime prompt and before the model prompt", () => {
+  const content = injectedForeign({ [PI_TRUST_ENV]: "approve" });
+  assert.equal(content.split(CHECKOUT_MARKER).length - 1, 1);
+
+  const runtimeAt = content.indexOf(RUNTIME_PROMPT_HEADING);
+  const ownPromptAt = content.indexOf("associate — the runtime prompt");
+  const contextAt = content.indexOf(REPOSITORY_CONTEXT_HEADING);
+  const markerAt = content.indexOf(CHECKOUT_MARKER);
+  const modelAt = content.indexOf("# Model prompt — worker");
+  assert.ok(runtimeAt >= 0 && ownPromptAt > runtimeAt, "associate's own AGENTS.md is the runtime prompt");
+  assert.ok(contextAt > ownPromptAt, "the repository context follows the runtime prompt");
+  assert.ok(markerAt > contextAt, "the checkout's text sits under the repository-context heading");
+  assert.ok(modelAt > markerAt, "the repository context comes before the model prompt");
+
+  // Never under the runtime-prompt heading: the only runtime-prompt heading is
+  // associate's own, and the checkout's section does not call itself that.
+  assert.equal(content.split(RUNTIME_PROMPT_HEADING).length - 1, 1);
+  const section = content.slice(contextAt, modelAt);
+  assert.ok(!section.toLowerCase().includes("runtime prompt"), section);
+  assert.match(section, /not (your|this lane's) instructions/);
+});
+
+test("d17: the runtime prompt is read from associate's install, never from the checkout", () => {
+  const content = injectedForeign({ [PI_TRUST_ENV]: "approve" });
+  const runtime = content.slice(0, content.indexOf(REPOSITORY_CONTEXT_HEADING));
+  assert.ok(runtime.includes(join(REPO_ROOT, "AGENTS.md")));
+  assert.ok(!runtime.includes(CHECKOUT_MARKER));
+});
+
+test("d17: a trusted foreign checkout without AGENTS.md gets no repository-context section", () => {
+  const empty = mkdtempSync(join(tmpdir(), "associate-prompt-empty-"));
+  try {
+    const pi = fakePi();
+    installPromptInjection(pi, fakeCtx(empty), { [INJECT_PROMPT_ENV]: "1", [PI_TRUST_ENV]: "approve" });
+    const content = (pi.handlers[0]!.handler({}) as { message: { content: string } }).message.content;
+    assert.ok(!content.includes(REPOSITORY_CONTEXT_HEADING));
+  } finally {
+    rmSync(empty, { recursive: true, force: true });
+  }
+});
+
+for (const [label, extra] of [
+  ["no ASSOCIATE_PI_TRUST (the mesh resident)", {}],
+  ["trusted", { [PI_TRUST_ENV]: "approve" }],
+  ["untrusted", { [PI_TRUST_ENV]: "untrusted" }],
+] as const) {
+  test(`d17: checkout = associate's own repo, ${label} — its AGENTS.md is the runtime prompt, once`, () => {
+    const pi = fakePi();
+    const env = { [INJECT_PROMPT_ENV]: "1", ...extra };
+    assert.equal(installPromptInjection(pi, fakeCtx(REPO_ROOT), env), true);
+    const content = (pi.handlers[0]!.handler({}) as { message: { content: string } }).message.content;
+    assert.ok(content.includes(RUNTIME_PROMPT_HEADING));
+    assert.equal(content.split("associate — the runtime prompt").length - 1, 1);
+    assert.ok(!content.includes(REPOSITORY_CONTEXT_HEADING));
+  });
+}
+
+test("d17: the mesh resident (pi-acp: no inject flag, no trust) registers nothing — pi loads context files itself", () => {
+  const pi = fakePi();
+  assert.equal(installPromptInjection(pi, fakeCtx(REPO_ROOT), {}), false);
+  assert.equal(pi.handlers.length, 0);
+});
+
+test("d17: trust is snapshotted at install — a later environment change does not re-trust the checkout", () => {
+  const { checkout, cleanup } = fixture();
+  try {
+    const pi = fakePi();
+    const env: Record<string, string | undefined> = { [INJECT_PROMPT_ENV]: "1", [PI_TRUST_ENV]: "untrusted" };
+    assert.equal(installPromptInjection(pi, fakeCtx(checkout), env), true);
+    env[PI_TRUST_ENV] = "approve";
+    const content = (pi.handlers[0]!.handler({}) as { message: { content: string } }).message.content;
+    assert.ok(!content.includes(CHECKOUT_MARKER));
+  } finally {
+    cleanup();
+  }
+});
+
 test("the rendered prompt says the ancestor files were left out on purpose", () => {
   const rendered = renderRuntimePrompt("body", "/somewhere/AGENTS.md");
   assert.ok(rendered.includes("/somewhere/AGENTS.md"));
   assert.ok(rendered.toLowerCase().includes("ancestor"));
   assert.ok(rendered.includes("body"));
+  assert.ok(rendered.startsWith(RUNTIME_PROMPT_HEADING));
 });
 
 // ----------------------------------------------------------- per-model prompts

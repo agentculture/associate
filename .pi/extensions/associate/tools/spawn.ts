@@ -76,6 +76,7 @@ import type { ModelEntry } from "../lib/contract.ts";
 import { extensionDir } from "../lib/paths.ts";
 import { ASSOCIATE_PROVIDER_ID } from "../lib/provider.ts";
 import { resolveSessionDirs, sanitizeSessionId } from "../lib/session.ts";
+import { PI_TRUST_ENV, PI_TRUSTED, isCheckoutTrusted } from "../lib/trust.ts";
 import { resolveActiveModel } from "../lib/toolset.ts";
 import {
   compileRedaction,
@@ -91,11 +92,11 @@ import { toolError, toolResult, whichOnPath, type ToolError } from "./_procs.ts"
 /** The registered name; `models.json` `tool_names` lists it. */
 export const SPAWN_TOOL_NAME = "spawn_subagent";
 
-/** The parent's trust mode, set by the Python launcher (see the header). */
-export const PI_TRUST_ENV = "ASSOCIATE_PI_TRUST";
+/** The parent's trust mode, set by the Python launcher (see the header; read in `lib/trust.ts`). */
+export { PI_TRUST_ENV };
 
 /** The only value of {@link PI_TRUST_ENV} that lets a child trust the checkout. */
-const TRUSTED = "approve";
+const TRUSTED = PI_TRUSTED;
 
 /** The binary a child is launched as, found on `$PATH` exactly as the Python harness finds it. */
 const PI_BINARY = "pi";
@@ -282,7 +283,7 @@ function withWriterLock<T>(checkoutRoot: string, body: () => Promise<T>): Promis
 
 /** The trust flags for a child of a parent whose environment is `env`. */
 export function piTrustFlags(env: Env): string[] {
-  return env[PI_TRUST_ENV] === TRUSTED ? ["--approve"] : ["--no-approve", "--no-extensions"];
+  return isCheckoutTrusted(env) ? ["--approve"] : ["--no-approve", "--no-extensions"];
 }
 
 /** The argv after `pi` for one child. The task is last and prefixed so it can never parse as a flag. */
@@ -516,7 +517,7 @@ export function createSpawnTool(ctx: AssociateContext, deps: SpawnDeps = {}) {
       ASSOCIATE_CONTRACT_DIR: ctx.contract.dir,
       ASSOCIATE_CHECKOUT_ROOT: ctx.checkoutRoot,
       ASSOCIATE_INJECT_PROMPT: "1",
-      [PI_TRUST_ENV]: env[PI_TRUST_ENV] === TRUSTED ? TRUSTED : "untrusted",
+      [PI_TRUST_ENV]: isCheckoutTrusted(env) ? TRUSTED : "untrusted",
     });
 
     // The child's walk path, by the function the child itself will run.

@@ -110,6 +110,11 @@ decision.
 - Per-model prompts are read only from associate's own install, never from the
   examined checkout. A checkout that plants its own
   `prompts/<model>.md` is ignored.
+- The runtime prompt is associate's own `AGENTS.md`, from its install. The
+  examined checkout's `AGENTS.md` is skipped under `--untrusted-checkout` (and
+  whenever `ASSOCIATE_PI_TRUST` is not exactly `approve`). For a trusted
+  checkout it is injected labelled as repository context, not as the runtime
+  prompt (deviation d17).
 - Text a `spawn_subagent` child hands back taints memory writes
   (`untrusted:child`).
 - `run_tests` runs alone (`executionMode: sequential`), and a per-session test
