@@ -38,6 +38,36 @@ export type ContractPolicy = {
   [key: string]: unknown;
 };
 
+export type ReasoningSetting = "model-default" | "on" | "off";
+
+/** One `models.json` entry. Field names are the contract's, not ours. */
+export interface ModelEntry {
+  readonly status: "active" | "pending";
+  readonly label: string;
+  readonly lobes_role: string;
+  readonly input: readonly ("text" | "image")[];
+  readonly reasoning: ReasoningSetting;
+  readonly tools: readonly string[];
+  readonly prompt_file: string;
+  readonly may_mutate: boolean;
+  readonly may_spawn: readonly string[];
+}
+
+/** The parsed `models.json`. */
+export interface ContractModels {
+  readonly version: number;
+  /** Registry key used when `ASSOCIATE_MODEL` is unset. */
+  readonly default: string;
+  readonly endpoint: { readonly default_base_url: string };
+  /** The canonical tool-name set (checked against registration by another task). */
+  readonly tool_names: readonly string[];
+  readonly mutating_tools: readonly string[];
+  readonly models: Readonly<Record<string, ModelEntry>>;
+}
+
+/** The parsed `gate.json`; open record, the gate library owns its shape. */
+export type ContractGate = { version?: number; [key: string]: unknown };
+
 export type ContractSchemas = Readonly<Record<SchemaName, unknown>>;
 
 export interface Contract {
@@ -47,6 +77,8 @@ export interface Contract {
   readonly source: "env" | "repo";
   readonly policy: ContractPolicy;
   readonly schemas: ContractSchemas;
+  readonly models: ContractModels;
+  readonly gate: ContractGate;
   /** `policy.json`'s `version`, or 0 when it declares none. */
   readonly version: number;
 }
@@ -109,7 +141,7 @@ export function resolveContractDir(
   return { dir, source: "repo" };
 }
 
-/** Load `policy.json` and every schema from the resolved contract directory. */
+/** Load `policy.json`, `models.json`, `gate.json` and every schema from the resolved contract directory. */
 export function loadContract(
   env: Record<string, string | undefined> = process.env,
   start: string = extensionDir,
@@ -126,10 +158,20 @@ export function loadContract(
     schemas[name] = readJson(path);
   }
 
+  const requireFile = (name: string): unknown => {
+    const path = join(dir, name);
+    if (!existsSync(path)) throw new Error(`contract at ${dir} is missing ${name}`);
+    return readJson(path);
+  };
+  const models = requireFile("models.json") as ContractModels;
+  const gate = requireFile("gate.json") as ContractGate;
+
   return {
     dir,
     source,
     policy,
+    models,
+    gate,
     schemas: Object.freeze(schemas),
     version: typeof policy.version === "number" ? policy.version : 0,
   };

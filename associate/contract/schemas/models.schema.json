@@ -5,11 +5,17 @@
   "description": "The per-model registry (models.json). Structural shape only; cross-field rules (tool names in the canonical set, one active default, spawn targets exist) live in validate.validate_models.",
   "type": "object",
   "additionalProperties": false,
-  "required": ["version", "default", "tool_names", "mutating_tools", "models"],
+  "required": ["version", "default", "endpoint", "tool_names", "mutating_tools", "models"],
   "properties": {
     "$comment": {"type": "string"},
     "version": {"type": "integer"},
     "default": {"type": "string"},
+    "endpoint": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["default_base_url"],
+      "properties": {"default_base_url": {"type": "string", "pattern": "^https?://"}}
+    },
     "tool_names": {"type": "array", "items": {"type": "string", "pattern": "^[a-z][a-z0-9_]*$"}},
     "mutating_tools": {"type": "array", "items": {"type": "string"}},
     "models": {"type": "object", "additionalProperties": {"$ref": "#/$defs/model"}}

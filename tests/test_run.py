@@ -801,7 +801,7 @@ def test_the_real_pi_writes_both_artifacts_against_the_fake_lane(
 
     monkeypatch.setenv("ASSOCIATE_BASE_URL", f"{fake_lane.base_url}/v1")
     monkeypatch.setenv("ASSOCIATE_API_KEY", "dummy-test-key")  # nosec B105
-    monkeypatch.setenv("ASSOCIATE_MODEL", "associate")
+    monkeypatch.setenv("ASSOCIATE_MODEL", "worker")
     monkeypatch.setenv("PI_OFFLINE", "1")
 
     export_root = tmp_path / "runs"

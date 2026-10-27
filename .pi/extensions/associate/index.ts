@@ -237,7 +237,7 @@ export default async function (pi: ExtensionAPI) {
   // reasoning is switched off in the request payload, not assumed from a
   // compat flag (spec c28/h8). With no key set this registers nothing and
   // prints one hint naming the variables — a clone still starts.
-  registerAssociateProvider(pi);
+  registerAssociateProvider(pi, process.env, undefined, contract.models);
 
   // ------------------------------------------------------------- tool modules
   await loadToolModules(pi, ctx);

@@ -1,7 +1,8 @@
 {
-  "$comment": "The per-model registry. Data only: the Pi extension and the Python adapter read this; neither defines its own copy. `tool_names` is the canonical set of tool names the extension may register - the contract is the source of truth, and the extension checks its registered tools against it. `lobes_role` is a lobes role name, never a checkpoint id. `reasoning` is interpreted by the provider layer. `prompt_file` is checked for shape only; the files land with the prompts task.",
+  "$comment": "The per-model registry. Data only: the Pi extension and the Python adapter read this; neither defines its own copy. `tool_names` is the canonical set of tool names the extension may register - the contract is the source of truth, and the extension checks its registered tools against it. `lobes_role` is a lobes role name, never a checkpoint id. `endpoint.default_base_url` is the OpenAI-compatible base URL used when ASSOCIATE_BASE_URL is unset (the local lobes gateway). `reasoning` is interpreted by the provider layer: model-default sends no override, on marks the model reasoning-capable, off sends the off switch for that model only. `prompt_file` is checked for shape only; the files land with the prompts task.",
   "version": 1,
   "default": "worker",
+  "endpoint": {"default_base_url": "http://localhost:8001/v1"},
   "tool_names": [
     "read",
     "find",
