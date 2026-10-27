@@ -79,7 +79,7 @@
       "tools": [
         "read", "find", "grep", "ls", "bash", "code_lens", "web_search", "web_page",
         "write", "edit", "eidetic_recall", "eidetic_remember", "ledger_append",
-        "ledger_list", "spawn_subagent", "associate_ready", "finish"
+        "ledger_list", "run_tests", "spawn_subagent", "associate_ready", "finish"
       ],
       "prompt_file": ".pi/extensions/associate/prompts/super-vl.md",
       "may_mutate": true,

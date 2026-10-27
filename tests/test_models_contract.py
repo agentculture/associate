@@ -176,7 +176,7 @@ def test_run_tests_is_a_mutation_held_only_by_models_that_may_change_code():
     assert "run_tests" in doc["mutating_tools"]
     assert "run_tests" not in doc["gated_tools"]
     holders = {name for name, m in doc["models"].items() if "run_tests" in m["tools"]}
-    assert {"worker", "cortex"} <= holders
+    assert {"worker", "cortex", "super-vl"} <= holders  # super-vl: d15
     assert "senses" not in holders
     for name in holders:
         assert doc["models"][name]["may_mutate"] is True, name
