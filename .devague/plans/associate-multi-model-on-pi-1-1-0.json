@@ -5,7 +5,7 @@
   "schema_version": 5,
   "status": "exported",
   "created": "2026-10-27T09:38:26Z",
-  "updated": "2026-10-27T11:09:40Z",
+  "updated": "2026-10-27T11:15:17Z",
   "targets": [
     {
       "id": "c1",
@@ -1091,6 +1091,22 @@
       "task_id": "t12",
       "resolved": true,
       "resolution": "user: opt-in option, not the default (deviation d5); default launch still trusts the examined checkout's .pi files \u2014 use the option for untrusted repos and for associate examining itself"
+    },
+    {
+      "id": "r17",
+      "text": "the eidetic_remember TOOL is not gated (not in models.json mutating_tools; senses holds it per c35) while 'bash eidetic remember' IS gated \u2014 inconsistent; it writes the memory store. web_search/web_page are ungated reads that can send data off the machine. Needs a user decision on whether either should pass the CLEF gate",
+      "kind": "unknown_nonblocking",
+      "task_id": "t16",
+      "resolved": false,
+      "resolution": ""
+    },
+    {
+      "id": "r18",
+      "text": "tools/shell.ts still executes fd -x/-X, rg --pre and git --output for worker/cortex \u2014 now gated by CLEF, but the shell itself does not refuse them; and t12 relaxed pi.py _assert_ready to refuse active writers only for non-may_mutate models (necessary for c38)",
+      "kind": "follow_up",
+      "task_id": "t19",
+      "resolved": false,
+      "resolution": ""
     }
   ],
   "obligations": []
