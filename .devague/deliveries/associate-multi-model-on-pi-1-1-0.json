@@ -2,7 +2,7 @@
   "plan_slug": "associate-multi-model-on-pi-1-1-0",
   "schema_version": 2,
   "created": "2026-10-27T10:36:31Z",
-  "updated": "2026-10-27T19:51:40Z",
+  "updated": "2026-10-27T20:46:33Z",
   "deviations": [
     {
       "id": "d1",
@@ -185,6 +185,30 @@
       "status": "approved",
       "classification": "acceptable",
       "seq": 13
+    },
+    {
+      "id": "d14",
+      "what": "t19's 'steward doctor passes' criterion is read as 'steward doctor adds no findings compared with main': measured 0 new (42 portability lines and 5 skills-convention findings on both main dfae5dd and this branch); the existing findings are fixed upstream (devague evidence records, steward rules) and steward doctor is added to CI once they land",
+      "task_ref": "t19",
+      "reason": "every finding is in files this branch did not create and repo rules forbid editing: the September plan's .devague records and their exports (PR #6) and vendored skills; the five method-only devague skills are scriptless by design. User confirmed option 1",
+      "affects": [],
+      "origin": "user",
+      "status": "approved",
+      "classification": "needs-follow-up",
+      "seq": 14
+    },
+    {
+      "id": "d15",
+      "what": "super-vl gets the run_tests tool (models.json tools and prompts/super-vl.md), like cortex, for when the model arrives",
+      "task_ref": "t16",
+      "reason": "d12 briefed run_tests for worker and cortex only; super-vl mirrors cortex's tool set and may mutate. User confirmed",
+      "affects": [
+        "t11"
+      ],
+      "origin": "user",
+      "status": "approved",
+      "classification": "acceptable",
+      "seq": 15
     }
   ],
   "evidence": [],
