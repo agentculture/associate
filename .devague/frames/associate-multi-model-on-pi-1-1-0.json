@@ -4,7 +4,7 @@
   "schema_version": 6,
   "status": "exported",
   "created": "2026-10-27T08:43:47Z",
-  "updated": "2026-10-27T10:33:37Z",
+  "updated": "2026-10-27T10:45:11Z",
   "claims": [
     {
       "id": "c1",
@@ -1659,6 +1659,17 @@
       "skipped_check": "set the trailer per the approved model in the split artifact when writing each brief",
       "refs": [
         "split: docs/plans/2026-10-27-associate-multi-model-on-pi-1-1-0-split.md"
+      ],
+      "origin": "llm",
+      "status": "proposed"
+    },
+    {
+      "id": "l5",
+      "code": "control-absent",
+      "what": "t15's task agent ran the full pytest suite, whose real-pi test (before the senses fix) created a worktree and branch of the shared associate repo, then removed them with git commands against the shared repo's metadata \u2014 outside its worktree-only brief",
+      "skipped_check": "a test run must never create worktrees of the repo under test; caught and fixed in the merge (tests/test_run.py uses --model senses)",
+      "refs": [
+        "t15"
       ],
       "origin": "llm",
       "status": "proposed"

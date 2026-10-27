@@ -1,0 +1,38 @@
+{
+  "plan_slug": "associate-multi-model-on-pi-1-1-0",
+  "schema_version": 2,
+  "created": "2026-10-27T10:36:31Z",
+  "updated": "2026-10-27T10:37:46Z",
+  "deviations": [
+    {
+      "id": "d1",
+      "what": "t1 gains a dependency on t6: its investigation note merges now, its fix (the extension sets the session model on session_start via pi.setModel from the registry default) and live check move after t6, into wave 5",
+      "task_ref": "t1",
+      "reason": "pi-acp ignores session/new params.model and culture never sends session/set_model (docs/notes/resident-model-resolution.md), so the fix must live in the extension's lib/provider.ts, which t6 rewrites",
+      "affects": [
+        "t6",
+        "t19"
+      ],
+      "origin": "user",
+      "status": "approved",
+      "classification": "acceptable",
+      "seq": 1
+    },
+    {
+      "id": "d2",
+      "what": "add a CI gate that fails when SonarCloud reports new issues (accepted issues are fine), modelled on ../culture-library, to workledger-cli#5 (t3) and to associate's integration branch",
+      "task_ref": "t3",
+      "reason": "user instruction mid-run: SonarCloud new issues must fail CI, not just be visible; accepted issues stay allowed",
+      "affects": [
+        "t19"
+      ],
+      "origin": "user",
+      "status": "approved",
+      "classification": "acceptable",
+      "seq": 2
+    }
+  ],
+  "evidence": [],
+  "deltas": [],
+  "supersessions": []
+}

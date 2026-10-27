@@ -5,7 +5,7 @@
   "schema_version": 5,
   "status": "exported",
   "created": "2026-10-27T09:38:26Z",
-  "updated": "2026-10-27T10:36:31Z",
+  "updated": "2026-10-27T10:45:11Z",
   "targets": [
     {
       "id": "c1",
@@ -1057,6 +1057,22 @@
       "text": "t18's three suite entries are all verified:false: BFCL's custom-endpoint --model value and score column, MMMU's (lmms-eval) base-URL env var / model_args / results path, and LiveCodeBench's OpenAI-compatible endpoint support and eval-file key are unconfirmed, and every suite version is a placeholder \u2014 t21 must pin real versions and confirm each entry on a first operator run before any score is reported",
       "kind": "unknown_nonblocking",
       "task_id": "t21",
+      "resolved": false,
+      "resolution": ""
+    },
+    {
+      "id": "r13",
+      "text": "associate examining its own checkout with a mutating model fails: the worktree carries .pi/extensions/associate and pi also loads the -e copy, so pi reports 'Tool web_search conflicts'. t20's live runs must examine another repo, or the launcher must stop double-loading the extension inside a worktree of associate",
+      "kind": "unknown_nonblocking",
+      "task_id": "t20",
+      "resolved": false,
+      "resolution": ""
+    },
+    {
+      "id": "r14",
+      "text": "single-source values still outside the contract: associate/harness/pi.py DEFAULT_BASE_URL duplicates models.json endpoint.default_base_url; provider.ts holds contextWindow 131072, maxTokens 16384 and the compat flags as named defaults \u2014 move them into models.json",
+      "kind": "follow_up",
+      "task_id": "t19",
       "resolved": false,
       "resolution": ""
     }
