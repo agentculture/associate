@@ -16,6 +16,17 @@ Exit codes
 ``2`` the adapter failed closed, or its environment is not usable — pi absent,
       a timeout, an export root inside the examined checkout.
 
+Worktree isolation (spec c51, t15)
+----------------------------------
+A model the registry marks ``may_mutate`` runs in its own git worktree under
+``dirname(repo)/.worktrees.<name>/run-<session>`` on branch
+``associate-run/<session>``; a clean run (outcome ``ok``) is committed there and
+merged to ``main`` locally, anything else is kept and its location printed. See
+``associate.harness.worktree`` for every branch of that decision. A read-only
+model runs in place; a mutating run on a non-git directory runs in place with a
+stderr warning. A merge that is refused does not change the exit code — the run
+served — and is reported as ``merge=kept`` with ``merge_reason``.
+
 Everything the run *produced* goes to stdout; every diagnostic — the version
 warning, the "no lane configured" note — goes to stderr, so a caller can parse
 one without filtering the other.
@@ -30,7 +41,7 @@ from typing import Any
 
 from associate import contract
 from associate.cli._errors import EXIT_ENV_ERROR, EXIT_USER_ERROR, CliError
-from associate.cli._output import emit_result
+from associate.cli._output import emit_diagnostic, emit_result
 from associate.harness import available_harnesses, get_harness
 from associate.harness.base import HarnessError
 
@@ -43,6 +54,11 @@ _RESULT_KEYS = (
     "outcome",
     "session_id",
     "plumbing_only",
+    "isolation",
+    "merge",
+    "merge_reason",
+    "worktree",
+    "run_branch",
 )
 
 
@@ -124,20 +140,23 @@ def cmd_run(args: argparse.Namespace) -> int:
             remediation="pass --export-root <dir> outside the examined checkout",
         ) from err
 
+    harness = _build(harness_cls, args)
+    run_wt = _isolate(checkout, session_id) if _may_mutate(args.model) else None
+    run_checkout = run_wt.run_checkout if run_wt is not None else checkout
+
     task = {
         "id": args.task_id or session_id,
         "prompt": args.prompt or _default_prompt(),
-        "checkout": str(checkout),
+        "checkout": str(run_checkout),
         "session_id": session_id,
         "export_dir": str(export_root),
     }
     if args.continue_from:
         task["continue_from"] = str(Path(args.continue_from).expanduser().resolve())
 
-    harness = _build(harness_cls, args)
     try:
         harness.start(
-            checkout=checkout,
+            checkout=run_checkout,
             contract_dir=contract.contract_dir(),
             session_id=session_id,
             export_dir=export_root,
@@ -145,14 +164,76 @@ def cmd_run(args: argparse.Namespace) -> int:
         harness.submit(task)
         result = harness.collect()
     except HarnessError as err:
+        kept = (
+            f" (nothing was merged; the run worktree is kept at {run_wt.path} on branch "
+            f"{run_wt.branch})"
+            if run_wt is not None
+            else ""
+        )
         raise CliError(
             code=EXIT_ENV_ERROR,
-            message=str(err),
+            message=str(err) + kept,
             remediation=err.remediation,
         ) from err
 
+    if run_wt is not None:
+        result = {**result, "isolation": "worktree", **_finish(run_wt, result, session_id)}
+    elif _may_mutate(args.model):
+        result = {**result, "isolation": "in-place"}
+
     emit_result(result if json_mode else _render(result), json_mode=json_mode)
     return 0
+
+
+def _may_mutate(model_key: str) -> bool:
+    """The registry's ``may_mutate`` for the resolved model (spec c51)."""
+    return contract.load_models()["models"][model_key].get("may_mutate") is True
+
+
+def _isolate(checkout: Path, session_id: str) -> Any:
+    """Give a mutating run its own worktree; ``None`` when the checkout is not git.
+
+    A non-git checkout has no ``main`` and no worktree to give, so the run goes
+    ahead in place with a stderr warning — there is nothing a merge could
+    protect, and refusing would make every plain directory unexaminable.
+    """
+    from associate.harness import worktree
+
+    try:
+        run_wt = worktree.create_run_worktree(checkout, session_id)
+    except worktree.NotAGitRepository:
+        emit_diagnostic(
+            f"associate: {checkout} is not a git work tree; this mutating run is not "
+            "isolated in a worktree and writes in place"
+        )
+        return None
+    except HarnessError as err:
+        raise CliError(code=EXIT_ENV_ERROR, message=str(err), remediation=err.remediation) from err
+    emit_diagnostic(f"associate: run worktree {run_wt.path} on branch {run_wt.branch}")
+    return run_wt
+
+
+def _finish(run_wt: Any, result: dict[str, Any], session_id: str) -> dict[str, Any]:
+    """Commit + merge a clean run, keep anything else; never raises a traceback."""
+    from associate.harness import worktree
+
+    outcome = str(result.get("outcome"))
+    try:
+        report = worktree.finish(
+            run_wt, clean=outcome == "ok", session_id=session_id, outcome=outcome
+        )
+    except HarnessError as err:
+        raise CliError(
+            code=EXIT_ENV_ERROR,
+            message=f"{err} (the run worktree is kept at {run_wt.path} on branch {run_wt.branch})",
+            remediation=err.remediation,
+        ) from err
+    if report["merge"] == "kept":
+        emit_diagnostic(
+            f"associate: not merged ({report['merge_reason']}); worktree kept at "
+            f"{report['worktree']} on branch {report['run_branch']}"
+        )
+    return report
 
 
 def _default_prompt() -> str:
