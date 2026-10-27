@@ -139,12 +139,12 @@ says records default to the home-dir store (`$HOME/.eidetic/memory`) at
 (This concerns the Claude Code skill only; the extension's `eidetic_remember`
 tool always pins its own destination.)
 
-**One contract gap to know about:** `associate/contract/role.json` is still a
-copy of lobes' `associate` role (forbidden `code_authoring` and
-`repo_action`), while `models.json` gives `worker` and `cortex`
-`may_mutate: true`. In practice `may_mutate` decides; `AGENTS.md` states the
-per-model bound. Reconciling the two is open work, not something to patch in
-passing.
+**The bound is split in two (deviation d13).** `associate/contract/role.json`
+is the harness-wide bound every model shares: none may take a
+`final_decision` or a `security_decision`. What each model may change is
+owned by `models.json` (`may_mutate`, tools, `may_spawn`). `worker` and
+`cortex` hold `repo_action` and `code_authoring`; `senses` does not.
+`AGENTS.md` states the same per-model bound to the model.
 
 ## The runtime lanes: models addressed by lobes role
 

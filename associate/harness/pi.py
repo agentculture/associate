@@ -940,11 +940,11 @@ class PiHarness(Harness):
         writers = [str(name) for name in report.get("writer_tools_active") or []]
         if writers and self.model_entry().get("may_mutate") is not True:
             raise ExtensionNotLoadedError(
-                "pi reported active writer tools, which the associate role forbids: "
-                + ", ".join(writers),
+                "pi reported active writer tools for a model that may not change the "
+                "checkout (models.json may_mutate: false): " + ", ".join(writers),
                 remediation=(
-                    "the lane is read-only (lobes `worker` minus `repo_action`); remove the "
-                    "write tools from the extension's active set before serving"
+                    "this model is read-only; remove the write tools from the extension's "
+                    "active set before serving"
                 ),
             )
 

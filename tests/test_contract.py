@@ -16,17 +16,7 @@ from associate.contract import validate
 REPO_ROOT = Path(__file__).resolve().parent.parent
 
 # lobes/roles.py ROLE_FORBIDDEN["associate"], copied (never imported).
-LOBES_FORBIDDEN = ["final_decision", "security_decision", "code_authoring", "repo_action"]
 # lobes/roles.py ROLE_RESPONSIBILITIES["associate"].
-LOBES_ALLOWED = [
-    "execution",
-    "ground_work",
-    "bulk_transform",
-    "drafting",
-    "repo_inspection",
-    "run_authorized_commands",
-    "tool_use",
-]
 
 
 # ---------------------------------------------------------------------------
@@ -77,15 +67,23 @@ def test_contract_files_are_tracked_in_git():
 # ---------------------------------------------------------------------------
 
 
-def test_role_forbidden_equals_lobes_exactly():
+def test_role_forbids_only_the_bound_every_model_shares():
+    """d13: role.json is associate's harness-wide bound, not a copy of the
+    retired lobes `associate` role; per-model write rights live in models.json."""
     role = contract.load_role()
     assert role["role"] == "associate"
-    assert role["forbidden"] == LOBES_FORBIDDEN
+    assert role["forbidden"] == ["final_decision", "security_decision"]
+    assert "lobes-cli" not in role["source"]
 
 
-def test_role_allowed_equals_lobes_exactly():
+def test_role_never_forbids_what_the_registry_grants():
     role = contract.load_role()
-    assert role["capabilities"] == LOBES_ALLOWED
+    for key, entry in contract.load_models()["models"].items():
+        if entry.get("may_mutate") is True:
+            for token in ("repo_action", "code_authoring"):
+                assert (
+                    token not in role["forbidden"]
+                ), f"{key} may mutate but role.json forbids {token}"
 
 
 def test_role_does_not_name_a_checkpoint():
