@@ -5,7 +5,7 @@
   "schema_version": 5,
   "status": "exported",
   "created": "2026-10-27T09:38:26Z",
-  "updated": "2026-10-27T10:19:14Z",
+  "updated": "2026-10-27T10:30:10Z",
   "targets": [
     {
       "id": "c1",
@@ -1031,6 +1031,14 @@
       "text": "t4 put 'eidetic remember' and 'ledger append' on policy.json's shell allowlist, which until now was read-only \u2014 t12's mutating-call classifier must treat those subcommands as mutating (gate them) instead of trusting 'on the allowlist' to mean read-only",
       "kind": "unknown_nonblocking",
       "task_id": "t12",
+      "resolved": false,
+      "resolution": ""
+    },
+    {
+      "id": "r10",
+      "text": "t8 left eidetic caps (top-k 10, depth 1, max-nodes 25, record 4000 chars), the taint tool lists, and a dedicated policy.budgets.eidetic as commented constants in tools/eidetic.ts because the contract was being edited concurrently; they belong in associate/contract/ (CLAUDE.md: don't hand-roll a policy value the contract owns), and the new ASSOCIATE_EIDETIC_DIR variable must join CLAUDE.md's ASSOCIATE_* table \u2014 t19",
+      "kind": "follow_up",
+      "task_id": "t19",
       "resolved": false,
       "resolution": ""
     }
