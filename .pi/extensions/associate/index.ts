@@ -281,15 +281,14 @@ export default async function (pi: ExtensionAPI) {
   // gate, its entry appended to the walk → a truncated gate state refuses.
   pi.on("tool_call", async (event, eventCtx) => {
     if (finished) {
-      return {
-        block: true,
-        reason:
-          "the task was already handed back with finish; reply to the requester " +
-          "with the summary as your final message instead of calling tools",
-      };
+      const reason =
+        "the task was already handed back with finish; reply to the requester " +
+        "with the summary as your final message instead of calling tools";
+      walk.recordBlocked(event.toolCallId, reason);
+      return { block: true, reason };
     }
     const piCtx = eventCtx as { modelRegistry?: unknown; signal?: AbortSignal } | undefined;
-    return decideToolCall({
+    const decision = await decideToolCall({
       toolName: event.toolName,
       input: event.input,
       model,
@@ -310,6 +309,9 @@ export default async function (pi: ExtensionAPI) {
         signal: piCtx?.signal,
       },
     });
+    // L4: pi sends no tool_result for a blocked call; record the refusal now.
+    if (decision?.block) walk.recordBlocked(event.toolCallId, decision.reason);
+    return decision;
   });
 
   // ---------------------------------------------------------------- provider

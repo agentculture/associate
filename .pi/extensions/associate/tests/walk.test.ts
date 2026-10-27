@@ -319,6 +319,46 @@ test("the run record omits model and lobes_role when no model resolved", () => {
   });
 });
 
+test("L4: a call the guard blocked is recorded with its refusal and does not make the run an error", () => {
+  withDir((dir) => {
+    const recorder = recorderIn(dir);
+    recorder.noteToolCall({ toolCallId: "tc-1", toolName: "bash", input: { argv: ["id", "-u"] } });
+    recorder.recordBlocked("tc-1", "associate: 'id' is not on the allowlist");
+    const run = recorder.finalize()!;
+
+    const lines = readLines(dir);
+    const entry = lines[0] as Record<string, any>;
+    assert.equal(entry.id, "w1");
+    assert.equal(entry.tool, "bash");
+    assert.deepEqual(entry.args, { argv: ["id", "-u"] });
+    assert.match(entry.error, /^refused: associate: 'id' is not on the allowlist/);
+    assert.equal(run.tool_calls, 1);
+    assert.equal(run.outcome, "ok", "a refusal is the guard working, not a run error");
+  });
+});
+
+test("L4: a tool_result pi sends anyway for a blocked call is not recorded twice", () => {
+  withDir((dir) => {
+    const recorder = recorderIn(dir);
+    recorder.noteToolCall({ toolCallId: "tc-1", toolName: "write", input: { path: "x" } });
+    recorder.recordBlocked("tc-1", "blocked");
+    recorder.recordToolResult({ toolCallId: "tc-1", toolName: "write", content: "blocked", isError: true });
+    recorder.finalize();
+    assert.equal(readLines(dir).filter((line) => "id" in line).length, 1);
+  });
+});
+
+test("L4: a call whose result never arrives and was not blocked still makes the run an error", () => {
+  withDir((dir) => {
+    const recorder = recorderIn(dir);
+    recorder.recordBlocked("tc-unknown", "nothing pending under this id");
+    recorder.noteToolCall({ toolCallId: "tc-2", toolName: "read", input: { path: "a" } });
+    const run = recorder.finalize()!;
+    assert.equal(run.outcome, "error");
+    assert.equal(readLines(dir).filter((line) => "id" in line).length, 1);
+  });
+});
+
 test("finalize is idempotent: two shutdown paths write one run record", () => {
   withDir((dir) => {
     const recorder = recorderIn(dir);

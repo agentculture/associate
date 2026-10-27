@@ -257,6 +257,8 @@ export class WalkRecorder {
   private readonly inlineLimit: number;
   private readonly startedAt: number;
   private readonly pending = new Map<string, { toolName: string; args: unknown }>();
+  /** Calls the guard refused (L4): recorded at refusal, never again from a late tool_result. */
+  private readonly blocked = new Set<string>();
 
   private nextId: number;
   private nextChildId: number;
@@ -324,8 +326,9 @@ export class WalkRecorder {
    *
    * No entry is written here: an entry needs the result, and writing a second
    * line per call would break the 1:1 event mapping c43 requires. A call whose
-   * result never arrives — blocked by the write guard, or cut short — is
-   * flushed as its own entry by {@link finalize}, carrying the reason.
+   * result never arrives is flushed as its own entry by {@link finalize},
+   * carrying the reason; a call the guard refused is recorded at refusal by
+   * {@link recordBlocked} instead.
    */
   noteToolCall(event: ToolCallEventLike): void {
     const toolCallId = typeof event.toolCallId === "string" ? event.toolCallId : undefined;
@@ -336,9 +339,36 @@ export class WalkRecorder {
     });
   }
 
+  /**
+   * Record a call the `tool_call` guard refused, with the refusal as its
+   * error (L4). Pi sends no `tool_result` for a blocked call, so without this
+   * it would be flushed at finalize as unresolved and turn the run outcome
+   * into "error"; a refusal is the guard working, not a failed run. A call id
+   * that is not pending is ignored. Returns the entry written, if any.
+   */
+  recordBlocked(toolCallId: string | undefined, reason: string): WalkEntry | undefined {
+    if (!toolCallId) return undefined;
+    const pendingCall = this.pending.get(toolCallId);
+    if (!pendingCall) return undefined;
+    this.pending.delete(toolCallId);
+    this.blocked.add(toolCallId);
+    this.toolCalls += 1;
+    return this.append(
+      this.buildEntry({
+        tool: pendingCall.toolName,
+        args: pendingCall.args ?? {},
+        text: "",
+        truncated: false,
+        error: `refused: ${reason}`,
+      }),
+    );
+  }
+
   /** Append one entry for a finished tool event. Returns what was written. */
-  recordToolResult(event: ToolResultEventLike): WalkEntry {
+  recordToolResult(event: ToolResultEventLike): WalkEntry | undefined {
     const toolCallId = typeof event.toolCallId === "string" ? event.toolCallId : undefined;
+    // Already recorded at refusal (L4): one entry per call, never two.
+    if (toolCallId && this.blocked.has(toolCallId)) return undefined;
     const remembered = toolCallId ? this.pending.get(toolCallId) : undefined;
     if (toolCallId) this.pending.delete(toolCallId);
 
@@ -434,7 +464,7 @@ export class WalkRecorder {
           text: "",
           truncated: false,
           error:
-            "no tool_result was received for this tool call: it was blocked or the run ended first",
+            "no tool_result was received for this tool call: the run ended first",
         }),
       );
     }

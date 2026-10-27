@@ -322,6 +322,23 @@ test("d8: the decider state carries the run's isolation from ASSOCIATE_ISOLATION
   });
 });
 
+test("L4: a guard refusal lands in the walk with its reason and the run outcome stays ok", async () => {
+  await withRun("senses", async ({ pi, walkPath }) => {
+    const decision = await call(pi, "write", { path: "README.md", content: "x" });
+    assert.ok(decision?.block);
+    for (const handler of pi.handlers.get("session_shutdown") ?? []) {
+      await handler({ type: "session_shutdown" }, {});
+    }
+    const lines = readFileSync(walkPath, "utf8").split("\n").filter(Boolean).map((l) => JSON.parse(l));
+    const entry = lines.find((l) => l.tool === "write");
+    assert.ok(entry, "the refused call is in the walk");
+    assert.match(entry.error, /^refused: /);
+    assert.ok(entry.error.includes(decision!.reason.slice(0, 40)));
+    const run = lines.find((l) => "run" in l)?.run;
+    assert.equal(run?.outcome, "ok");
+  });
+});
+
 test("r9: bash eidetic remember and ledger append go through the gate", async () => {
   await withRun("worker", async ({ pi, decider, walkPath }) => {
     assert.equal(await call(pi, "bash", { argv: ["eidetic", "remember", "{}"] }), undefined);
