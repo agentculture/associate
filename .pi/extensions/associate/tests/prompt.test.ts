@@ -10,12 +10,14 @@
 
 import test from "node:test";
 import assert from "node:assert/strict";
-import { mkdtempSync, mkdirSync, rmSync, writeFileSync } from "node:fs";
+import { mkdtempSync, mkdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
-import { join } from "node:path";
+import { join, resolve } from "node:path";
+import { loadContract } from "../lib/contract.ts";
 import {
   INJECT_PROMPT_ENV,
   PROMPT_MESSAGE_TYPE,
+  activeModel,
   installPromptInjection,
   readRuntimePrompt,
   renderRuntimePrompt,
@@ -45,8 +47,11 @@ function fakePi() {
   };
 }
 
+const REPO_ROOT = resolve(import.meta.dirname, "..", "..", "..", "..");
+const contract = loadContract({});
+
 function fakeCtx(checkoutRoot: string) {
-  return { checkoutRoot } as unknown as Parameters<typeof installPromptInjection>[1];
+  return { checkoutRoot, contract } as unknown as Parameters<typeof installPromptInjection>[1];
 }
 
 test("the env flag gates the injection", () => {
@@ -124,4 +129,96 @@ test("the rendered prompt says the ancestor files were left out on purpose", () 
   assert.ok(rendered.includes("/somewhere/AGENTS.md"));
   assert.ok(rendered.toLowerCase().includes("ancestor"));
   assert.ok(rendered.includes("body"));
+});
+
+// ----------------------------------------------------------- per-model prompts
+
+const REGISTRY = contract.models;
+const TOOL_NAMES = new Set(REGISTRY.tool_names);
+
+/** Inject for one model against the real checkout and return the message text. */
+function injectedFor(key: string | undefined): string {
+  const pi = fakePi();
+  const env: Record<string, string | undefined> = { [INJECT_PROMPT_ENV]: "1" };
+  if (key !== undefined) env.ASSOCIATE_MODEL = key;
+  assert.equal(installPromptInjection(pi, fakeCtx(REPO_ROOT), env), true);
+  const out = pi.handlers[0]!.handler({}) as { message: { content: string } };
+  return out.message.content;
+}
+
+function promptFile(key: string): string {
+  return readFileSync(join(REPO_ROOT, REGISTRY.models[key]!.prompt_file), "utf8");
+}
+
+/** Every registry tool name that appears in backticks in the text. */
+function toolsNamed(text: string): Set<string> {
+  const found = new Set<string>();
+  for (const match of text.matchAll(/`([a-z_]+)`/g)) {
+    if (TOOL_NAMES.has(match[1]!)) found.add(match[1]!);
+  }
+  return found;
+}
+
+for (const key of Object.keys(REGISTRY.models)) {
+  test(`${key}: the injected prompt is that model's file, and no other model's`, () => {
+    const injected = injectedFor(key);
+    assert.ok(injected.includes(promptFile(key).trimEnd()));
+    for (const other of Object.keys(REGISTRY.models)) {
+      if (other === key) continue;
+      assert.ok(
+        !injected.includes(promptFile(other).trimEnd()),
+        `${other}'s prompt leaked into ${key}'s`,
+      );
+    }
+    assert.ok(injected.includes(`# ${key} `), "the model's own heading is present");
+  });
+
+  test(`${key}: the prompt names exactly the model's tools`, () => {
+    const named = toolsNamed(promptFile(key));
+    const listed = new Set(REGISTRY.models[key]!.tools);
+    assert.deepEqual([...named].sort(), [...listed].sort());
+  });
+}
+
+test("the model prompt rides alongside AGENTS.md, once, in one message", () => {
+  const injected = injectedFor("senses");
+  assert.ok(injected.includes("associate — the runtime prompt"));
+  assert.ok(injected.indexOf("associate — the runtime prompt") < injected.indexOf("# senses "));
+  const pi = fakePi();
+  installPromptInjection(pi, fakeCtx(REPO_ROOT), { [INJECT_PROMPT_ENV]: "1" });
+  assert.notEqual(pi.handlers[0]!.handler({}), undefined);
+  assert.equal(pi.handlers[0]!.handler({}), undefined);
+});
+
+test("with ASSOCIATE_MODEL unset the registry default's prompt is injected", () => {
+  assert.equal(activeModel(REGISTRY, {})!.key, REGISTRY.default);
+  assert.ok(injectedFor(undefined).includes(promptFile(REGISTRY.default).trimEnd()));
+});
+
+test("an unknown model key injects AGENTS.md only", () => {
+  const injected = injectedFor("no-such-model");
+  assert.ok(injected.includes("associate — the runtime prompt"));
+  assert.ok(!injected.includes("# Model prompt"));
+});
+
+test("the cortex prompt names the spawn tool and both child models", () => {
+  const text = promptFile("cortex");
+  assert.ok(text.includes("`spawn_subagent`"));
+  assert.ok(text.includes("`senses`"));
+  assert.ok(text.includes("`worker`"));
+  assert.deepEqual(REGISTRY.models.cortex!.may_spawn, ["worker", "senses"]);
+});
+
+test("the super-vl prompt is marked pending and the registry agrees", () => {
+  assert.equal(REGISTRY.models["super-vl"]!.status, "pending");
+  assert.match(promptFile("super-vl"), /^# super-vl[^\n]*\n\s*\n\*\*PENDING\.\*\*/);
+});
+
+test("read-only senses says so; mutating prompts carry the CLEF check", () => {
+  assert.match(promptFile("senses"), /Nothing\./);
+  for (const key of ["worker", "cortex", "super-vl"]) {
+    const text = promptFile(key);
+    assert.ok(text.includes("CLEF"), `${key} names the CLEF check`);
+    assert.ok(text.includes("eidetic_recall") && text.includes("ledger_append"));
+  }
 });

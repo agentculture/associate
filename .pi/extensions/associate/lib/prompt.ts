@@ -23,10 +23,21 @@
  * exactly once: a later turn must not re-paste the prompt it already has.
  * Additive only — the handler returns a message and never blocks, replaces or
  * rewrites anything.
+ *
+ * Per-model prompts (t11): the active registry model's own prompt file
+ * (`models.json` `prompt_file`, repo-relative) rides ALONGSIDE `AGENTS.md` in
+ * the same single message. `AGENTS.md` stays the general, acp-facing prompt
+ * file on disk (culture's backend-consistency check and pi-acp both read it);
+ * the model file carries what is specific to one model — its exact tools,
+ * whether it may change things, and who it may spawn. The model file comes
+ * last so it is the more specific instruction. The active model is
+ * `$ASSOCIATE_MODEL` (a registry key) or the registry `default`, the same
+ * resolution `lib/provider.ts` uses.
  */
 
 import { existsSync, readFileSync } from "node:fs";
 import { join } from "node:path";
+import type { ContractModels, ModelEntry } from "./contract.ts";
 import type { AssociateContext } from "./context.ts";
 
 /** The environment variable that turns the injection on. */
@@ -66,6 +77,42 @@ export function readRuntimePrompt(checkoutRoot: string): string | undefined {
   }
 }
 
+/** The registry key of the active model: `$ASSOCIATE_MODEL`, else the registry default. */
+export function activeModelKey(
+  registry: ContractModels,
+  env: Record<string, string | undefined> = process.env,
+): string {
+  return (env.ASSOCIATE_MODEL ?? "").trim() || registry.default;
+}
+
+/** The active model's registry entry and key, or `undefined` for an unknown key. */
+export function activeModel(
+  registry: ContractModels,
+  env: Record<string, string | undefined> = process.env,
+): { key: string; entry: ModelEntry } | undefined {
+  const key = activeModelKey(registry, env);
+  const entry = registry.models[key];
+  return entry === undefined ? undefined : { key, entry };
+}
+
+/**
+ * The active model's own prompt file, read from `entry.prompt_file` (relative
+ * to the checkout root), or `undefined` when it is missing or empty.
+ */
+export function readModelPrompt(
+  checkoutRoot: string,
+  entry: ModelEntry,
+): { text: string; source: string } | undefined {
+  const source = join(checkoutRoot, entry.prompt_file);
+  if (!existsSync(source)) return undefined;
+  try {
+    const text = readFileSync(source, "utf8");
+    return text.trim() ? { text, source } : undefined;
+  } catch {
+    return undefined;
+  }
+}
+
 /** The message text: a labelled header, then the file verbatim. */
 export function renderRuntimePrompt(text: string, source: string): string {
   return [
@@ -95,9 +142,28 @@ export function installPromptInjection(
   if (!shouldInjectPrompt(env)) return false;
 
   const text = readRuntimePrompt(ctx.checkoutRoot);
-  if (text === undefined) return false;
+  const selected = activeModel(ctx.contract.models, env);
+  const model = selected ? readModelPrompt(ctx.checkoutRoot, selected.entry) : undefined;
+  if (text === undefined && model === undefined) return false;
 
-  const source = join(ctx.checkoutRoot, RUNTIME_PROMPT_FILENAME);
+  const parts: string[] = [];
+  if (text !== undefined) {
+    parts.push(renderRuntimePrompt(text, join(ctx.checkoutRoot, RUNTIME_PROMPT_FILENAME)));
+  }
+  if (model !== undefined && selected !== undefined) {
+    parts.push(
+      [
+        `# Model prompt — ${selected.key} (${selected.entry.label})`,
+        "",
+        `Loaded from ${model.source}. It is more specific than the general prompt`,
+        "above: where they differ, this one applies to you.",
+        "",
+        model.text.trimEnd(),
+        "",
+      ].join("\n"),
+    );
+  }
+  const content = parts.join("\n---\n\n");
   let injected = false;
   pi.on("before_agent_start", () => {
     if (injected) return undefined;
@@ -105,7 +171,7 @@ export function installPromptInjection(
     return {
       message: {
         customType: PROMPT_MESSAGE_TYPE,
-        content: renderRuntimePrompt(text, source),
+        content,
         display: false,
       },
     };
