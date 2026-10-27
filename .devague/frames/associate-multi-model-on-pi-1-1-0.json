@@ -4,7 +4,7 @@
   "schema_version": 6,
   "status": "exported",
   "created": "2026-10-27T08:43:47Z",
-  "updated": "2026-10-27T20:41:41Z",
+  "updated": "2026-10-27T22:48:30Z",
   "claims": [
     {
       "id": "c1",
@@ -1710,6 +1710,15 @@
       "code": "grader-unverified",
       "what": "chose 'markdownlint-cli2 docs/notes/walk-format.md' as the t20 cortex run's test command; it exits 0 when the file does not exist, so the harness test check passed a run that never wrote the file",
       "skipped_check": "check the test command fails when the expected artifact is absent",
+      "refs": [],
+      "origin": "llm",
+      "status": "proposed"
+    },
+    {
+      "id": "l10",
+      "code": "control-absent",
+      "what": "committed and pushed the PR #18 changelog with a markdownlint MD024 error: the lint ran as 'markdownlint-cli2 ... | tail -1 &&', so the pipe hid its exit status and the chain continued (a repeat of l2); fixed in the next commit",
+      "skipped_check": "check the lint exit status, not the piped tail",
       "refs": [],
       "origin": "llm",
       "status": "proposed"
