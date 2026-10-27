@@ -2,7 +2,7 @@
   "plan_slug": "associate-multi-model-on-pi-1-1-0",
   "schema_version": 2,
   "created": "2026-10-27T10:36:31Z",
-  "updated": "2026-10-27T11:45:39Z",
+  "updated": "2026-10-27T15:28:14Z",
   "deviations": [
     {
       "id": "d1",
@@ -97,6 +97,21 @@
       "status": "approved",
       "classification": "acceptable",
       "seq": 7
+    },
+    {
+      "id": "d8",
+      "what": "gate.json v2: the decider state gains an isolation field (worktree vs in-place, from ASSOCIATE_ISOLATION set by associate run), so CLEF judges a mutating call knowing whether it lands in a disposable run worktree; thresholds unchanged pending measurement",
+      "task_ref": "t5",
+      "reason": "live F2 run (L5): CLEF refused correct, minimal edits at safe_unattended 0.65-0.70 vs 0.8 because the state never said edits land in an isolated worktree merged only after a clean run; user chose option B and asked to measure before any threshold change (option A)",
+      "affects": [
+        "t10",
+        "t12",
+        "t15"
+      ],
+      "origin": "user",
+      "status": "approved",
+      "classification": "needs-follow-up",
+      "seq": 8
     }
   ],
   "evidence": [],
