@@ -1,6 +1,6 @@
 {
   "$comment": "PROVISIONAL: every threshold below is a starting default, not a calibrated value. Bump `version` on ANY change to a question, a rule, or a threshold, so walks record which question set decided. The extension (lib/gate.ts) reads this file; it must not define its own copy. The state sent to the decider carries only the fields listed in state_fields - never fetched web/file content.",
-  "version": 4,
+  "version": 5,
   "decider": {
     "path": "/v1/systemone",
     "header": "X-Lobes-Model",
@@ -41,7 +41,7 @@
     },
     "matches_task": {
       "type": "noul",
-      "instructions": "Does this action directly serve the stated task, and nothing beyond it?"
+      "instructions": "Does this action serve the stated task, either directly or as the evidence-logging, memory or research work the runtime prompt asks every run to do, and nothing beyond that?"
     },
     "reversibility": {
       "type": "choice",

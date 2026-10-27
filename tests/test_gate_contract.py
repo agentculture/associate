@@ -277,3 +277,16 @@ def test_the_isolation_line_only_speaks_about_the_checkout(doc):
     for text in doc["isolation"]["describe"].values():
         assert "checkout" in text
         assert not text.lower().startswith("this action runs")
+
+
+# ----------------------- d11: matches_task covers prompt-mandated duties
+
+
+def test_matches_task_counts_the_duties_the_runtime_prompt_assigns(doc):
+    """d11: CLEF never sees the runtime prompt, so the question names the
+    evidence-logging, memory and research duties it assigns to every run."""
+    assert doc["version"] >= 5
+    wording = doc["questions"]["matches_task"]["instructions"]
+    for duty in ("evidence-logging", "memory", "research", "runtime prompt"):
+        assert duty in wording
+    assert "nothing beyond" in wording
