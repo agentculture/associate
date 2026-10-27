@@ -3,8 +3,9 @@
 Small on purpose (spec claim c46). This package holds the values that stay the
 same whichever harness runs the lane:
 
-* ``role.json``   — the capability and forbidden-token lists, copied from
-  lobes' role registry;
+* ``role.json``   — the harness-wide bound every model shares (deviation d13:
+  no model makes a final or security decision); per-model rights are in
+  ``models.json``;
 * ``policy.json`` — the permission boundary (read denylist, shell allowlist,
   per-tool budgets, result/fetch caps, walk redaction patterns);
 * ``models.json`` — the per-model registry (lobes role, input modalities,

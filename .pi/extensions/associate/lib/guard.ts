@@ -170,8 +170,8 @@ export function evaluateToolCall(options: GuardOptions): GuardDecision | undefin
         block: true,
         reason:
           `associate: '${options.toolName}' would write to ${resolved}, outside this session's ` +
-          `scratch directory ${options.scratchDir}. The associate role is forbidden repo_action; ` +
-          "drafts are returned through the 'finish' tool, never written into the checkout.",
+          `scratch directory ${options.scratchDir}. The active model may not change the checkout ` +
+          "(models.json may_mutate: false); drafts are returned through the 'finish' tool.",
       };
     }
   }

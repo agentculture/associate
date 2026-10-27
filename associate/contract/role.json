@@ -1,8 +1,8 @@
 {
-  "$comment": "Copied from lobes-cli lobes/roles.py ROLE_RESPONSIBILITIES['associate'] and ROLE_FORBIDDEN['associate'] (read 2026-09-12). Copied, never imported: associate declares no runtime dependency, and lobes is the upstream authority \u2014 re-copy on a lobes role change, do not edit these lists locally.",
+  "$comment": "Deviation d13: associate's harness-wide bound, shared by every registry model. It is no longer a copy of the retired lobes 'associate' role (worker MINUS repo_action). What each model may change is owned by models.json (may_mutate, tools, may_spawn) and enforced by lib/guard.ts and the CLEF gate; this file lists only what no model may ever do.",
   "role": "associate",
-  "source": "lobes-cli lobes/roles.py",
-  "summary": "worker MINUS repo_action: it executes, drafts, inspects and calls tools, then hands the result back rather than enacting it.",
+  "source": "associate deviation d13 (docs/specs/2026-10-27-associate-multi-model-on-pi-1-1-0.md); per-model rights in models.json",
+  "summary": "a harness that runs one registry model on a task: every model reads, finds and summarizes; models with may_mutate change the checkout behind the CLEF gate; none makes a final or security decision.",
   "capabilities": [
     "execution",
     "ground_work",
@@ -14,12 +14,11 @@
   ],
   "forbidden": [
     "final_decision",
-    "security_decision",
-    "code_authoring",
-    "repo_action"
+    "security_decision"
   ],
   "notes": {
-    "addressing": "The lane is addressed by role name through the lobes gateway. No checkpoint id belongs in this file.",
-    "enforcement": "These tokens are a division-of-labour contract. They are made true by the tool surface and policy.json, not by prompt instruction."
+    "addressing": "Models are addressed by lobes role name through the gateway. No checkpoint id belongs in this file.",
+    "enforcement": "These tokens are a division-of-labour contract. They are made true by the tool surface, policy.json, models.json and the gate, not by prompt instruction.",
+    "per_model": "repo_action and code_authoring are granted per model by models.json may_mutate (worker, cortex) and withheld from the rest (senses)."
   }
 }
