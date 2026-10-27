@@ -300,15 +300,16 @@ def _gate_super_errors(allow: dict[str, Any], questions: dict[str, Any]) -> list
     return errors
 
 
-def validate_gate(doc: dict[str, Any]) -> list[str]:
+def validate_gate(doc: dict[str, Any], models: dict[str, Any] | None = None) -> list[str]:
     """Cross-field checks for gate.json; empty list means valid.
 
     Runs the structural schema first, then: choice questions carry criteria;
     every CLEF rule names an existing question (and, for a choice, a real
-    option) with a threshold in [0, 1]; both tiers rule on every question; and
-    Super's verdict rule matches each question's type.
+    option) with a threshold in [0, 1]; both tiers rule on every question;
+    Super's verdict rule matches each question's type; and ``super.model`` is a
+    key of *models* (``models.json`` when omitted).
     """
-    from associate.contract import load_schema  # noqa: PLC0415 - avoid import cycle
+    from associate.contract import load_models, load_schema  # noqa: PLC0415 - avoid import cycle
 
     errors = validate(doc, load_schema("gate"))
     if errors:
@@ -317,6 +318,9 @@ def validate_gate(doc: dict[str, Any]) -> list[str]:
     errors.extend(_gate_question_errors(questions))
     errors.extend(_gate_rule_errors(doc["clef"]["allow_when"], questions))
     errors.extend(_gate_super_errors(doc["super"]["allow_when"], questions))
+    registry = (models if models is not None else load_models())["models"]
+    if doc["super"]["model"] not in registry:
+        errors.append(f"super.model: {doc['super']['model']!r} is not a models.json key")
     return errors
 
 
