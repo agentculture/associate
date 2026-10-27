@@ -5,7 +5,7 @@
   "schema_version": 5,
   "status": "exported",
   "created": "2026-10-27T09:38:26Z",
-  "updated": "2026-10-27T10:34:56Z",
+  "updated": "2026-10-27T10:36:31Z",
   "targets": [
     {
       "id": "c1",
@@ -536,7 +536,9 @@
         "a docs/notes file records, with file:line citations, how the resident's model is resolved today",
         "after the fix, a culture start associate session reports model worker in its first pi event, verified live"
       ],
-      "deps": [],
+      "deps": [
+        "t6"
+      ],
       "covers": [
         "h3"
       ],
