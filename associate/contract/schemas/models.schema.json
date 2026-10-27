@@ -1,0 +1,38 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://github.com/agentculture/associate/contract/models.schema.json",
+  "title": "associate model registry",
+  "description": "The per-model registry (models.json). Structural shape only; cross-field rules (tool names in the canonical set, one active default, spawn targets exist) live in validate.validate_models.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["version", "default", "tool_names", "mutating_tools", "models"],
+  "properties": {
+    "$comment": {"type": "string"},
+    "version": {"type": "integer"},
+    "default": {"type": "string"},
+    "tool_names": {"type": "array", "items": {"type": "string", "pattern": "^[a-z][a-z0-9_]*$"}},
+    "mutating_tools": {"type": "array", "items": {"type": "string"}},
+    "models": {"type": "object", "additionalProperties": {"$ref": "#/$defs/model"}}
+  },
+  "$defs": {
+    "model": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "status", "label", "lobes_role", "input", "reasoning", "tools",
+        "prompt_file", "may_mutate", "may_spawn"
+      ],
+      "properties": {
+        "status": {"enum": ["active", "pending"]},
+        "label": {"type": "string"},
+        "lobes_role": {"type": "string", "pattern": "^[A-Za-z0-9_-]+$"},
+        "input": {"type": "array", "items": {"enum": ["text", "image"]}},
+        "reasoning": {"enum": ["model-default", "on", "off"]},
+        "tools": {"type": "array", "items": {"type": "string"}},
+        "prompt_file": {"type": "string"},
+        "may_mutate": {"type": "boolean"},
+        "may_spawn": {"type": "array", "items": {"type": "string"}}
+      }
+    }
+  }
+}

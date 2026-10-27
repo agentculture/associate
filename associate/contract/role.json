@@ -1,5 +1,5 @@
 {
-  "$comment": "Copied from lobes-cli lobes/roles.py ROLE_RESPONSIBILITIES['associate'] and ROLE_FORBIDDEN['associate'] (read 2026-09-12). Copied, never imported: associate declares no runtime dependency, and lobes is the upstream authority — re-copy on a lobes role change, do not edit these lists locally.",
+  "$comment": "Copied from lobes-cli lobes/roles.py ROLE_RESPONSIBILITIES['associate'] and ROLE_FORBIDDEN['associate'] (read 2026-09-12). Copied, never imported: associate declares no runtime dependency, and lobes is the upstream authority \u2014 re-copy on a lobes role change, do not edit these lists locally.",
   "role": "associate",
   "source": "lobes-cli lobes/roles.py",
   "summary": "worker MINUS repo_action: it executes, drafts, inspects and calls tools, then hands the result back rather than enacting it.",
@@ -19,7 +19,6 @@
     "repo_action"
   ],
   "notes": {
-    "text_only": "The associate lane's checkpoint carries no vision tower; no image_understanding or video_understanding is claimed.",
     "addressing": "The lane is addressed by role name through the lobes gateway. No checkpoint id belongs in this file.",
     "enforcement": "These tokens are a division-of-labour contract. They are made true by the tool surface and policy.json, not by prompt instruction."
   }
