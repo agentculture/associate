@@ -4,7 +4,7 @@
   "schema_version": 6,
   "status": "exported",
   "created": "2026-10-27T08:43:47Z",
-  "updated": "2026-10-27T17:42:13Z",
+  "updated": "2026-10-27T20:41:41Z",
   "claims": [
     {
       "id": "c1",
@@ -1701,6 +1701,15 @@
       "code": "instrument-changed-mid-series",
       "what": "a replay variant run used loadContract({}), which ignores ASSOCIATE_CONTRACT_DIR, so the first 'reworded matches_task' measurement silently scored the unmodified contract; caught because the numbers were identical to the baseline, then rerun",
       "skipped_check": "assert the replayed contract carries the variant before scoring",
+      "refs": [],
+      "origin": "llm",
+      "status": "proposed"
+    },
+    {
+      "id": "l9",
+      "code": "grader-unverified",
+      "what": "chose 'markdownlint-cli2 docs/notes/walk-format.md' as the t20 cortex run's test command; it exits 0 when the file does not exist, so the harness test check passed a run that never wrote the file",
+      "skipped_check": "check the test command fails when the expected artifact is absent",
       "refs": [],
       "origin": "llm",
       "status": "proposed"
