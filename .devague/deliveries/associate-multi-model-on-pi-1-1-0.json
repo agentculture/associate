@@ -2,7 +2,7 @@
   "plan_slug": "associate-multi-model-on-pi-1-1-0",
   "schema_version": 2,
   "created": "2026-10-27T10:36:31Z",
-  "updated": "2026-10-27T11:42:10Z",
+  "updated": "2026-10-27T11:45:39Z",
   "deviations": [
     {
       "id": "d1",
@@ -84,6 +84,19 @@
       "status": "approved",
       "classification": "acceptable",
       "seq": 6
+    },
+    {
+      "id": "d7",
+      "what": "web_search and web_page also pass the CLEF gate for every model (added to gated_tools alongside eidetic_remember, extending d6); with CLEF and Super unreachable they are refused like any gated call",
+      "task_ref": "t12",
+      "reason": "user decision: 'Web tool search and page - yes' (follow-up to r17: they can send data off the machine)",
+      "affects": [
+        "t8"
+      ],
+      "origin": "user",
+      "status": "approved",
+      "classification": "acceptable",
+      "seq": 7
     }
   ],
   "evidence": [],
