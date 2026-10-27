@@ -234,3 +234,46 @@ def test_clef_thresholds_sit_inside_the_measured_band(doc, question):
 def test_the_thresholds_are_marked_tentative_and_point_at_the_benchmark(doc):
     assert doc["version"] >= 3
     assert "#13" in doc["clef"]["$comment"]
+
+
+# ------------------------------------- d10: the state says what a tool does
+
+
+def _gate_reachable_tools() -> set[str]:
+    models = contract.load_models()
+    return set(models["mutating_tools"]) | set(models["gated_tools"])
+
+
+def test_every_tool_that_can_reach_the_gate_has_an_effect(doc):
+    """d10: CLEF is told what the tool does, not only its name."""
+    assert doc["version"] >= 4
+    assert "effect" in doc["state_fields"]
+    effects = {tool: text for tool, text in doc["effects"].items() if tool != "$comment"}
+    assert set(effects) == _gate_reachable_tools()
+    assert all(text.strip() for text in effects.values())
+
+
+def test_a_gate_reachable_tool_without_an_effect_is_rejected(doc):
+    del doc["effects"]["ledger_append"]
+    errors = validate.validate_gate(doc, contract.load_models())
+    assert any("ledger_append" in e for e in errors)
+
+
+def test_an_effect_for_a_tool_the_gate_never_sees_is_rejected(doc):
+    doc["effects"]["read"] = "reads a file"
+    errors = validate.validate_gate(doc, contract.load_models())
+    assert any("read" in e for e in errors)
+
+
+def test_the_isolation_line_is_only_sent_for_tools_that_write_into_the_checkout(doc):
+    """d10: ledger/memory/web calls write elsewhere or off the machine, so the
+    worktree line says nothing true about them and is left out."""
+    assert set(doc["isolation"]["applies_to"]) == {"write", "edit", "bash"}
+    assert set(doc["isolation"]["applies_to"]) <= _gate_reachable_tools()
+
+
+def test_the_isolation_line_only_speaks_about_the_checkout(doc):
+    """d10: true for every tool, including ones that write outside the checkout."""
+    for text in doc["isolation"]["describe"].values():
+        assert "checkout" in text
+        assert not text.lower().startswith("this action runs")

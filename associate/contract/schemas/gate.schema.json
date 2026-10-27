@@ -5,7 +5,7 @@
   "description": "The pre-mutation safety-gate question set (gate.json). Structural shape only; cross-field rules (thresholds in [0,1], every rule names an existing question and option) live in validate.validate_gate.",
   "type": "object",
   "additionalProperties": false,
-  "required": ["version", "decider", "state_fields", "isolation", "questions", "clef", "super", "readonly_fallback", "redaction"],
+  "required": ["version", "decider", "state_fields", "effects", "isolation", "questions", "clef", "super", "readonly_fallback", "redaction"],
   "properties": {
     "$comment": {"type": "string"},
     "version": {"type": "integer"},
@@ -20,13 +20,20 @@
         "max_input_tokens": {"type": "integer"}
       }
     },
-    "state_fields": {"type": "array", "items": {"enum": ["task", "action", "arguments", "model", "isolation"]}},
+    "state_fields": {"type": "array", "items": {"enum": ["task", "action", "effect", "arguments", "model", "isolation"]}},
+    "effects": {
+      "type": "object",
+      "description": "Tool name -> what the tool does (d10). Must name exactly models.json mutating_tools + gated_tools; checked in validate.validate_gate.",
+      "properties": {"$comment": {"type": "string"}},
+      "additionalProperties": {"type": "string", "pattern": "\\S"}
+    },
     "isolation": {
       "type": "object",
       "additionalProperties": false,
-      "required": ["describe"],
+      "required": ["applies_to", "describe"],
       "properties": {
         "$comment": {"type": "string"},
+        "applies_to": {"type": "array", "items": {"type": "string"}},
         "describe": {
           "type": "object",
           "additionalProperties": false,

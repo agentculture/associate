@@ -328,8 +328,9 @@ def validate_gate(doc: dict[str, Any], models: dict[str, Any] | None = None) -> 
     Runs the structural schema first, then: choice questions carry criteria;
     every CLEF rule names an existing question (and, for a choice, a real
     option) with a threshold in [0, 1]; both tiers rule on every question;
-    Super's verdict rule matches each question's type; and ``super.model`` is a
-    key of *models* (``models.json`` when omitted).
+    Super's verdict rule matches each question's type; ``super.model`` is a
+    key of *models* (``models.json`` when omitted); and ``effects`` names
+    exactly that registry's ``mutating_tools`` + ``gated_tools`` (d10).
     """
     from associate.contract import load_models, load_schema  # noqa: PLC0415 - avoid import cycle
 
@@ -340,9 +341,30 @@ def validate_gate(doc: dict[str, Any], models: dict[str, Any] | None = None) -> 
     errors.extend(_gate_question_errors(questions))
     errors.extend(_gate_rule_errors(doc["clef"]["allow_when"], questions))
     errors.extend(_gate_super_errors(doc["super"]["allow_when"], questions))
-    registry = (models if models is not None else load_models())["models"]
-    if doc["super"]["model"] not in registry:
+    models_doc = models if models is not None else load_models()
+    if doc["super"]["model"] not in models_doc["models"]:
         errors.append(f"super.model: {doc['super']['model']!r} is not a models.json key")
+    errors.extend(_gate_effect_errors(doc["effects"], models_doc))
+    errors.extend(
+        f"isolation.applies_to: {tool!r} has no entry in effects"
+        for tool in doc["isolation"]["applies_to"]
+        if tool not in doc["effects"] or tool == "$comment"
+    )
+    return errors
+
+
+def _gate_effect_errors(effects: dict[str, Any], models: dict[str, Any]) -> list[str]:
+    """d10: ``effects`` describes exactly the tools that can reach the gate."""
+    reachable = set(models["mutating_tools"]) | set(models.get("gated_tools", []))
+    described = {name for name in effects if name != "$comment"}
+    errors = [
+        f"effects: {tool!r} can reach the gate but has no effect"
+        for tool in sorted(reachable - described)
+    ]
+    errors.extend(
+        f"effects: {tool!r} never reaches the gate (not in mutating_tools or gated_tools)"
+        for tool in sorted(described - reachable)
+    )
     return errors
 
 
