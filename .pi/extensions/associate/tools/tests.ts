@@ -661,6 +661,13 @@ export function createTestsTool(ctx: AssociateContext, deps: TestsDeps = {}) {
       "After changing code and before finish, call run_tests and report any failure honestly; if it says no test command is configured, say so in the hand-back.",
     ],
     parameters: RUN_TESTS_SCHEMA,
+    // review r2/5: pi 1.1.0 runs one message's tool calls in parallel unless a
+    // tool in the batch is sequential (pi-agent-core agent-loop.js
+    // executeToolCalls). run_tests restores the checkout afterwards, so a
+    // sibling write running beside it would be reverted; sequential makes pi
+    // run the whole batch one call at a time. The guard's test window
+    // (lib/guard.ts, review r2/5) is the second half, for anything this misses.
+    executionMode: "sequential",
     execute(_toolCallId: string, params: Record<string, unknown>): Promise<Result> {
       const next = queue.then(() => run(params ?? {}));
       queue = next.catch(() => undefined);

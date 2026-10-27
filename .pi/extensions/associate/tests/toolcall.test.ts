@@ -10,7 +10,7 @@
 
 import test from "node:test";
 import assert from "node:assert/strict";
-import { cpSync, existsSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import { cpSync, existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, symlinkSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { loadExtension, type FakePi } from "./load-extension.ts";
@@ -76,6 +76,10 @@ function installDecider(answers: () => Record<string, unknown>): Decider {
 interface Run {
   pi: FakePi;
   walkPath: string;
+  /** The run's checkout root (ASSOCIATE_CHECKOUT_ROOT). */
+  checkout: string;
+  /** The session's scratch directory. */
+  scratch: string;
   decider: Decider;
   dispose(): void;
 }
@@ -115,6 +119,8 @@ async function start(
   return {
     pi,
     walkPath: join(root, `t12-${model}`, "export", "walk.jsonl"),
+    checkout,
+    scratch: join(root, `t12-${model}`, "scratch"),
     decider,
     dispose() {
       decider.restore();
@@ -654,4 +660,171 @@ test("d12: worker's run_tests reaches the CLEF gate with its effect and isolatio
     },
     { answers: unsafeClefAnswers },
   );
+});
+
+// ------------------- review r2 / finding 2: may_mutate writes stay in the checkout
+
+async function callAs(
+  pi: FakePi,
+  toolCallId: string,
+  toolName: string,
+  input: unknown,
+): Promise<{ block: boolean; reason: string } | undefined> {
+  return (await pi.fireToolCall({ type: "tool_call", toolName, toolCallId, input })) as any;
+}
+
+for (const key of ["worker", "cortex"]) {
+  test(`r2/2: ${key}'s write to an absolute path outside the checkout is refused without asking the decider`, async () => {
+    const outside = mkdtempSync(join(tmpdir(), "associate-r2-outside-"));
+    try {
+      await withRun(key, async ({ pi, decider, walkPath }) => {
+        for (const target of [join(outside, "main-checkout-file.txt"), "/etc/associate-r2-never", "~/.bashrc", "@/etc/x", `file://${outside}/f`]) {
+          for (const tool of ["write", "edit"]) {
+            const decision = await call(pi, tool, { path: target, content: "x", edits: [] });
+            assert.ok(decision?.block, `${key} ${tool} to ${target} was not refused`);
+            assert.match(decision!.reason, /outside the run's checkout/, decision!.reason);
+          }
+        }
+        assert.equal(decider.calls.length, 0, "an escaping write reached the decider");
+        assert.deepEqual(gateLines(walkPath), []);
+        assert.ok(!existsSync(join(outside, "main-checkout-file.txt")));
+      });
+    } finally {
+      rmSync(outside, { recursive: true, force: true });
+    }
+  });
+
+  test(`r2/2: ${key}'s ../ escape from the checkout is refused before the gate`, async () => {
+    await withRun(key, async ({ pi, decider }) => {
+      for (const target of ["../sibling/file.txt", "src/../../escape.txt", "./a/../../../x"]) {
+        const decision = await call(pi, "write", { path: target, content: "x" });
+        assert.ok(decision?.block, `${target} was not refused`);
+        assert.match(decision!.reason, /outside the run's checkout/);
+      }
+      assert.equal(decider.calls.length, 0);
+    });
+  });
+
+  test(`r2/2: ${key}'s write through a symlink inside the checkout pointing outside is refused`, async () => {
+    const outside = mkdtempSync(join(tmpdir(), "associate-r2-link-target-"));
+    try {
+      await withRun(key, async ({ pi, decider, checkout }) => {
+        symlinkSync(outside, join(checkout, "escape-link"));
+        symlinkSync(join(outside, "file.txt"), join(checkout, "file-link.txt"));
+        for (const target of ["escape-link/new.txt", "escape-link/deeper/new.txt", "file-link.txt"]) {
+          const decision = await call(pi, "write", { path: target, content: "x" });
+          assert.ok(decision?.block, `${target} was not refused`);
+          assert.match(decision!.reason, /outside the run's checkout/);
+        }
+        assert.equal(decider.calls.length, 0);
+      });
+    } finally {
+      rmSync(outside, { recursive: true, force: true });
+    }
+  });
+
+  test(`r2/2: ${key}'s in-checkout and scratch writes still reach the gate`, async () => {
+    await withRun(key, async ({ pi, decider, checkout, scratch }) => {
+      mkdirSync(join(checkout, "src"), { recursive: true });
+      for (const target of ["CHANGELOG.md", "src/new/file.ts", join(checkout, "abs.txt"), "src/../inside.txt", join(scratch, "draft.md")]) {
+        const before = decider.calls.length;
+        const decision = await call(pi, "write", { path: target, content: "x" });
+        assert.equal(decision, undefined, `${target}: ${decision?.reason}`);
+        assert.equal(decider.calls.length, before + 1, `${target} did not reach the gate`);
+      }
+    });
+  });
+}
+
+test("r2/2: senses' write is still refused as a mutation, never as a checkout escape", async () => {
+  await withRun("senses", async ({ pi, decider }) => {
+    const decision = await call(pi, "write", { path: "/etc/x", content: "x" });
+    assert.ok(decision?.block);
+    assert.doesNotMatch(decision!.reason, /outside the run's checkout/);
+    assert.equal(decider.calls.length, 0);
+  });
+});
+
+// ------------- review r2 / finding 5: nothing mutates while run_tests holds the checkout
+
+test("r2/5: run_tests is a sequential tool, so pi never runs a sibling call beside it", async () => {
+  await withRun("worker", async ({ pi }) => {
+    assert.equal(pi.tool("run_tests").executionMode, "sequential");
+  });
+});
+
+test("r2/5: while run_tests is in flight, write/edit/mutating bash/run_tests are refused before the gate", async () => {
+  await withRun(
+    "worker",
+    async ({ pi, decider }) => {
+      assert.equal(await callAs(pi, "rt-1", "run_tests", {}), undefined);
+      assert.equal(decider.calls.length, 1);
+      const attempts: Array<[string, unknown]> = [
+        ["write", { path: "README.md", content: "x" }],
+        ["edit", { path: "README.md", edits: [] }],
+        ["bash", { argv: ["touch", "made-during-tests"] }],
+        ["run_tests", {}],
+        ["ledger_append", { text: "x" }],
+      ];
+      for (const [tool, input] of attempts) {
+        const decision = await callAs(pi, `during-${tool}`, tool, input);
+        assert.ok(decision?.block, `${tool} was not refused during run_tests`);
+        assert.match(decision!.reason, /tests are running; retry after run_tests returns/);
+        await pi.fireToolExecutionEnd({ toolCallId: `during-${tool}`, toolName: tool, isError: true });
+      }
+      assert.equal(decider.calls.length, 1, "a call refused for the test window reached the decider");
+      // Reads are untouched by the window.
+      assert.equal(await callAs(pi, "read-1", "read", { path: "README.md" }), undefined);
+      // Once run_tests ends, a write reaches the gate again.
+      await pi.fireToolExecutionEnd({ toolCallId: "rt-1", toolName: "run_tests", isError: false });
+      assert.equal(await callAs(pi, "after-1", "write", { path: "README.md", content: "x" }), undefined);
+      assert.equal(decider.calls.length, 2);
+    },
+    { env: { ASSOCIATE_ISOLATION: "worktree" } },
+  );
+});
+
+test("r2/5: run_tests is refused while an allowed write from the same batch is still in flight", async () => {
+  await withRun("worker", async ({ pi, decider }) => {
+    assert.equal(await callAs(pi, "w-1", "write", { path: "README.md", content: "x" }), undefined);
+    const decision = await callAs(pi, "rt-1", "run_tests", {});
+    assert.ok(decision?.block, "run_tests ran beside an in-flight write");
+    assert.match(decision!.reason, /change to the checkout is still in progress/);
+    assert.equal(decider.calls.length, 1);
+    await pi.fireToolExecutionEnd({ toolCallId: "rt-1", toolName: "run_tests", isError: true });
+    await pi.fireToolExecutionEnd({ toolCallId: "w-1", toolName: "write", isError: false });
+    assert.equal(await callAs(pi, "rt-2", "run_tests", {}), undefined);
+  });
+});
+
+test("r2/5: a run_tests the gate refused opens no test window", async () => {
+  await withRun(
+    "worker",
+    async ({ pi }) => {
+      assert.ok((await callAs(pi, "rt-1", "run_tests", {}))?.block);
+      const decision = await callAs(pi, "w-1", "write", { path: "README.md", content: "x" });
+      assert.doesNotMatch(decision?.reason ?? "", /tests are running/);
+    },
+    { answers: unsafeClefAnswers },
+  );
+});
+
+test("r2/5: cortex may not spawn a writing child while run_tests is in flight; a reading child still may", async () => {
+  await withRun("cortex", async ({ pi }) => {
+    assert.equal(await callAs(pi, "rt-1", "run_tests", {}), undefined);
+    const writer = await callAs(pi, "sp-1", "spawn_subagent", { model: "worker", task: "edit things" });
+    assert.ok(writer?.block, "a writing child was spawned during run_tests");
+    assert.match(writer!.reason, /tests are running; retry after run_tests returns/);
+    for (const model of [undefined, "no-such-model"]) {
+      const unknown = await callAs(pi, `sp-${model}`, "spawn_subagent", { model, task: "x" });
+      assert.ok(unknown?.block, `an unresolvable child (${model}) was treated as a reader`);
+    }
+    assert.equal(await callAs(pi, "sp-2", "spawn_subagent", { model: "senses", task: "look" }), undefined);
+    await pi.fireToolExecutionEnd({ toolCallId: "rt-1", toolName: "run_tests", isError: false });
+    // And the reverse: a writing child in flight holds run_tests off.
+    assert.equal(await callAs(pi, "sp-3", "spawn_subagent", { model: "worker", task: "edit" }), undefined);
+    const tests = await callAs(pi, "rt-2", "run_tests", {});
+    assert.ok(tests?.block);
+    assert.match(tests!.reason, /change to the checkout is still in progress/);
+  });
 });

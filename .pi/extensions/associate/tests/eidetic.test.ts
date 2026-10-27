@@ -208,6 +208,35 @@ test("reads in a foreign checkout taint; reads in associate's own repo do not", 
   }
 });
 
+test("r2/10: a spawn_subagent hand-back taints later records untrusted:child, in any checkout", async () => {
+  const r = rig();
+  try {
+    const { tool, taint } = get(r, "eidetic_remember");
+    taint.observe("spawn_subagent");
+    assert.equal(taint.provenance(), "untrusted:child");
+    taint.observe("web_page");
+    assert.equal(taint.provenance(), "untrusted:child+web");
+    await tool.execute("c1", { text: "relayed by a child" });
+    assert.equal(JSON.parse(calls(r)[0].argv[1]).metadata.provenance, "untrusted:child+web");
+  } finally {
+    r.dispose();
+  }
+  // In associate's own repo too: the child's text may come from the web or anywhere.
+  const own = rig();
+  try {
+    const ownCtx = createAssociateContext({
+      checkoutRoot: join(own.ctx.contract.dir, "..", ".."),
+      contract: own.ctx.contract,
+      env: { ASSOCIATE_EXPORT_ROOT: join(own.checkout, "..", "runs3"), ASSOCIATE_SESSION_ID: "own-child" },
+    });
+    const { taint } = createEideticTools(ownCtx, { env: own.env });
+    taint.observe("spawn_subagent");
+    assert.equal(taint.provenance(), "untrusted:child");
+  } finally {
+    own.dispose();
+  }
+});
+
 test("register wires a tool_call listener so web use taints later records", async () => {
   const r = rig();
   try {

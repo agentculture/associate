@@ -10,11 +10,15 @@ import test from "node:test";
 import assert from "node:assert/strict";
 import { join } from "node:path";
 import { tmpdir } from "node:os";
+import { mkdirSync, mkdtempSync, realpathSync, rmSync, symlinkSync } from "node:fs";
 import {
   BUILTIN_WRITER_TOOLS,
   collectPathArguments,
+  confineWriteToCheckout,
   evaluateToolCall,
   isWriterTool,
+  resolveWriteDestination,
+  resolveWriteTarget,
 } from "../lib/guard.ts";
 
 const scratchDir = join(tmpdir(), "associate-runs", "sess-1", "scratch");
@@ -130,4 +134,42 @@ test("every path-shaped argument is collected, including arrays", () => {
     empty: "",
   });
   assert.deepEqual(paths, ["a.txt", ["b.txt", "c.txt"], "/tmp"].flat());
+});
+
+// ---------------------------------------------- review r2/2: checkout confinement
+
+test("r2/2: write targets resolve the way pi's resolveToCwd does", () => {
+  const home = join(tmpdir(), "fake-home");
+  assert.equal(resolveWriteTarget("~", cwd, home), home);
+  assert.equal(resolveWriteTarget("~/.bashrc", cwd, home), join(home, ".bashrc"));
+  assert.equal(resolveWriteTarget("@src/a.ts", cwd, home), join(cwd, "src", "a.ts"));
+  assert.equal(resolveWriteTarget("@/etc/x", cwd, home), "/etc/x");
+  assert.equal(resolveWriteTarget("file:///etc/x", cwd, home), "/etc/x");
+  assert.equal(resolveWriteTarget("a/../../b", cwd, home), join(cwd, "..", "b"));
+});
+
+test("r2/2: a dangling symlink is followed to where a write would create it", () => {
+  const dir = realpathSync(mkdtempSync(join(tmpdir(), "associate-r2-dangle-")));
+  try {
+    mkdirSync(join(dir, "root"));
+    symlinkSync(join(dir, "elsewhere", "f.txt"), join(dir, "root", "link.txt"));
+    assert.equal(resolveWriteDestination(join(dir, "root", "link.txt")), join(dir, "elsewhere", "f.txt"));
+    symlinkSync(join(dir, "root", "loop-b"), join(dir, "root", "loop-a"));
+    symlinkSync(join(dir, "root", "loop-a"), join(dir, "root", "loop-b"));
+    assert.throws(() => resolveWriteDestination(join(dir, "root", "loop-a")));
+  } finally {
+    rmSync(dir, { recursive: true, force: true });
+  }
+});
+
+test("r2/2: confineWriteToCheckout passes non-writers and refuses a pathless writer", () => {
+  const base = { checkoutRoot: cwd, scratchDir, cwd };
+  assert.equal(confineWriteToCheckout({ ...base, toolName: "read", input: { path: "/etc/passwd" } }), undefined);
+  assert.equal(
+    confineWriteToCheckout({ ...base, toolName: "bash", input: { argv: ["ls"] }, declaredNonWriters: ["bash"] }),
+    undefined,
+  );
+  assert.match(confineWriteToCheckout({ ...base, toolName: "bash", input: { command: "rm -rf ~" } })!.reason, /declares no path/);
+  assert.equal(confineWriteToCheckout({ ...base, toolName: "write", input: { path: join(scratchDir, "d.md") } }), undefined);
+  assert.match(confineWriteToCheckout({ ...base, toolName: "write", input: { path: "/etc/x" } })!.reason, /outside the run's checkout/);
 });
