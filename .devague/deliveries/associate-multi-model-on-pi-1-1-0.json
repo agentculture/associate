@@ -2,7 +2,7 @@
   "plan_slug": "associate-multi-model-on-pi-1-1-0",
   "schema_version": 2,
   "created": "2026-10-27T10:36:31Z",
-  "updated": "2026-10-27T11:00:59Z",
+  "updated": "2026-10-27T11:06:54Z",
   "deviations": [
     {
       "id": "d1",
@@ -44,6 +44,20 @@
       "status": "proposed",
       "classification": "acceptable",
       "seq": 3
+    },
+    {
+      "id": "d4",
+      "what": "live testing starts now instead of only at t20: associate itself, driven by the live models (worker/bolt, senses, cortex) and the live CLEF decider, reviews this integration branch and fixes what it finds; read-only review runs first, mutating fix runs only after t12 (gate wiring) and the self-examination conflict (r13) are fixed",
+      "task_ref": "t20",
+      "reason": "user instruction: 'As live test, use associate with the models we have to review and fix'",
+      "affects": [
+        "t12",
+        "t19"
+      ],
+      "origin": "user",
+      "status": "approved",
+      "classification": "acceptable",
+      "seq": 4
     }
   ],
   "evidence": [],
