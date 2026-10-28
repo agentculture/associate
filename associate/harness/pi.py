@@ -796,6 +796,11 @@ class PiHarness(Harness):
 
         env = dict(self._base_env if self._base_env is not None else os.environ)
         env["ASSOCIATE_CONTRACT_DIR"] = str(self._contract_dir)
+        # The extension's guard confines writes to ASSOCIATE_CHECKOUT_ROOT
+        # (lib/runtime.ts): it is always this run's own checkout (the run
+        # worktree for a mutating run), never a value inherited from the
+        # operator's environment.
+        env["ASSOCIATE_CHECKOUT_ROOT"] = str(self._checkout)
         env["ASSOCIATE_SESSION_ID"] = self._session_id
         env["ASSOCIATE_EXPORT_ROOT"] = str(self._export_root)
         # r16: context-file discovery is off, so the extension injects the
