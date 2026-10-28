@@ -51,6 +51,11 @@ export interface ModelEntry {
   readonly prompt_file: string;
   readonly may_mutate: boolean;
   readonly may_spawn: readonly string[];
+  /**
+   * Deviation d18: registry models this model may hand a task to through
+   * `delegate_run`. Absent (an older contract) reads as none.
+   */
+  readonly may_delegate?: readonly string[];
 }
 
 /** The parsed `models.json`. */
@@ -196,4 +201,34 @@ export function policySection(policy: ContractPolicy, name: string): Record<stri
   return section && typeof section === "object" && !Array.isArray(section)
     ? (section as Record<string, unknown>)
     : {};
+}
+
+/**
+ * The extension-side check of `models.json` `may_delegate` (deviation d18),
+ * mirroring `validate.py`'s `_check_delegation`: every list is an array of
+ * distinct strings naming a registry model other than its owner that may
+ * mutate and does not delegate itself. Returns the problems found, empty when
+ * the registry is sound. `tools/delegate.ts` calls it at load and refuses
+ * every delegation while any problem stands — a malformed allowlist is never
+ * read as permission.
+ */
+export function delegationProblems(models: ContractModels): string[] {
+  const problems: string[] = [];
+  for (const [name, entry] of Object.entries(models.models ?? {})) {
+    const raw = (entry as { may_delegate?: unknown }).may_delegate;
+    if (raw === undefined) continue;
+    if (!Array.isArray(raw) || !raw.every((item) => typeof item === "string")) {
+      problems.push(`models.${name}.may_delegate must be an array of registry keys`);
+      continue;
+    }
+    if (new Set(raw).size !== raw.length) problems.push(`models.${name}.may_delegate has duplicates`);
+    for (const target of raw as string[]) {
+      const other = Object.hasOwn(models.models, target) ? models.models[target] : undefined;
+      if (!other) problems.push(`models.${name}.may_delegate names unknown model '${target}'`);
+      else if (target === name) problems.push(`models.${name}.may_delegate names itself`);
+      else if (other.may_mutate !== true) problems.push(`models.${name}.may_delegate names '${target}', which may not mutate`);
+      else if ((other.may_delegate ?? []).length > 0) problems.push(`models.${name}.may_delegate names '${target}', which delegates`);
+    }
+  }
+  return problems;
 }

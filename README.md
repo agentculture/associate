@@ -55,6 +55,15 @@ Writing models also get `run_tests` (the operator's test commands, gated),
 eidetic memory (`eidetic_recall` / `eidetic_remember`) and a workledger ledger
 (`ledger_append` / `ledger_list`); `cortex` gets `spawn_subagent`.
 
+`senses` — the model the mesh resident runs — never writes itself. It hands a
+task that needs a change to a separate `worker` run with `delegate_run`
+(deviation d18), which returns a run id at once; `delegate_status` reports the
+run's outcome, merge and test results. The delegated run is an ordinary
+`associate run` of the tree that holds the extension: its own worktree, the
+operator's test commands (`ASSOCIATE_TEST_COMMANDS`, required), merged to
+`main` only when clean, nothing pushed. Built and unit-tested only; no
+delegated run has been started live.
+
 ## What is measured, and what is not
 
 **Measured live, one run each:**

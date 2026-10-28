@@ -85,6 +85,11 @@
       "$comment": "spawn_subagent (plan t16): max_output_chars bounds the child's hand-back plus final text returned to the parent; timeout_ms is one child's wall clock, after which its process group is killed; spawn_subagent caps it further at what is left of the parent run (ASSOCIATE_RUN_DEADLINE, set by the Python harness from its --timeout) minus a safety margin, so a child never outlives its parent.",
       "max_output_chars": 25000,
       "timeout_ms": 900000
+    },
+    "delegate": {
+      "$comment": "delegate_run / delegate_status (deviation d18): timeout_ms is passed to the delegated `associate run` as its --timeout (the wait for the delegated model's pi run; worktree setup and the operator's test commands come on top, each command under associate run's own --test-timeout). 1,800,000 ms (30 min) because live worker runs on this repo have taken up to ~25 minutes; the resident's turn is not held for it, since delegate_run returns at once. max_output_chars bounds what delegate_status returns of the delegated run's result (its final reply first).",
+      "max_output_chars": 25000,
+      "timeout_ms": 1800000
     }
   },
   "caps": {

@@ -557,8 +557,8 @@ test("d20: an oversized write's change line goes to the large evaluator, not dro
 
 // ------------- d6 / r17, d7: gated_tools (memory writes, web egress)
 
-test("d6/d7: gated_tools lists the memory write and both web tools, none a repo mutation", () => {
-  assert.deepEqual([...CONTRACT.models.gated_tools], ["eidetic_remember", "web_search", "web_page"]);
+test("d6/d7/d18: gated_tools lists the memory write, both web tools and delegate_run, none a repo mutation", () => {
+  assert.deepEqual([...CONTRACT.models.gated_tools], ["eidetic_remember", "web_search", "web_page", "delegate_run"]);
   for (const name of CONTRACT.models.gated_tools) {
     assert.ok(!CONTRACT.models.mutating_tools.includes(name), `${name} must not be a repo mutation`);
     assert.ok(CONTRACT.models.models.senses!.tools.includes(name), `senses keeps ${name} (c35, d7)`);
@@ -1013,3 +1013,85 @@ test("r2/5: cortex may not spawn a writing child while run_tests is in flight; a
     assert.match(tests!.reason, /change to the checkout is still in progress/);
   });
 });
+
+// ------------- d18: senses hands a writing task to a separate associate run
+
+test("d18: senses' delegate_run reaches the CLEF gate with its effect line, and runs on allow", async () => {
+  const gate = JSON.parse(readFileSync(join(findRepoContractDir()!, "gate.json"), "utf8"));
+  const input = { model: "worker", task: "Fix the typo in README.md" };
+  await withRun("senses", async ({ pi, decider, walkPath }) => {
+    assert.ok(pi.getActiveTools().includes("delegate_run"));
+    assert.ok(pi.getActiveTools().includes("delegate_status"));
+    const decision = await call(pi, "delegate_run", input);
+    assert.equal(decision, undefined, `a safe verdict must let delegate_run run: ${decision?.reason}`);
+    assert.equal(decider.calls.length, 1, "the decider was asked about delegate_run");
+    const [line] = gateLines(walkPath);
+    assert.equal(line.gated_tool, "delegate_run");
+    assert.equal(line.decision, "allow");
+    assert.equal(line.tier, "clef");
+    const state: string = decider.calls[0]!.body.state;
+    assert.ok(state.includes(gate.effects.delegate_run), state);
+    assert.ok(state.includes("Fix the typo in README.md"), "the task shown to CLEF is the delegated task");
+    assert.ok(state.includes("model: senses"), state);
+    // The resident's own checkout gets no isolation line: it changes nothing itself.
+    assert.ok(!state.includes(gate.isolation.describe["in-place"]), state);
+
+    // delegate_status is a plain read: never gated.
+    assert.equal(await call(pi, "delegate_status", { run_id: "dlg-20261028T101500Z-0badc0de" }), undefined);
+    assert.equal(decider.calls.length, 1, "delegate_status reached the decider");
+
+    // senses still may not write, edit or run commands — refused before the gate.
+    for (const [tool, args] of [
+      ["write", { path: "README.md", content: "x" }],
+      ["edit", { path: "README.md", oldText: "a", newText: "b" }],
+      ["bash", { argv: ["git", "commit", "-m", "x"] }],
+    ] as const) {
+      const refused = await call(pi, tool, args);
+      assert.ok(refused?.block, `senses' ${tool} was not refused`);
+    }
+    assert.equal(decider.calls.length, 1, "a senses write reached the decider");
+  });
+});
+
+test("d18: senses' delegate_run is refused on an unsafe verdict, and by the read-only fallback without a decider", async () => {
+  const input = { model: "worker", task: "Fix the typo in README.md" };
+  await withRun(
+    "senses",
+    async ({ pi, decider, walkPath }) => {
+      const decision = await call(pi, "delegate_run", input);
+      assert.ok(decision?.block);
+      assert.match(decision!.reason, /safety gate refused 'delegate_run' \(g1, tier clef\)/);
+      assert.equal(decider.calls.length, 1);
+      assert.equal(gateLines(walkPath)[0].decision, "refuse");
+    },
+    { answers: unsafeClefAnswers },
+  );
+  await withRun(
+    "senses",
+    async ({ pi, decider, walkPath }) => {
+      const decision = await call(pi, "delegate_run", input);
+      assert.ok(decision?.block, "delegate_run is not a read: the read-only fallback must refuse it");
+      assert.equal(decider.calls.length, 0);
+      const [line] = gateLines(walkPath);
+      assert.equal(line.tier, "readonly");
+      assert.equal(line.decision, "refuse");
+      // delegate_status still runs: it only reads this session's files.
+      assert.equal(await call(pi, "delegate_status", { run_id: "dlg-20261028T101500Z-0badc0de" }), undefined);
+    },
+    { key: false },
+  );
+});
+
+for (const key of ["worker", "cortex"]) {
+  test(`d18: ${key} does not hold delegate_run or delegate_status; both are refused, the decider never asked`, async () => {
+    await withRun(key, async ({ pi, decider }) => {
+      for (const tool of ["delegate_run", "delegate_status"]) {
+        assert.ok(!pi.getActiveTools().includes(tool), `${tool} active for ${key}`);
+        const decision = await call(pi, tool, tool === "delegate_run" ? { model: "worker", task: "x" } : { run_id: "x" });
+        assert.ok(decision?.block);
+        assert.match(decision!.reason, new RegExp(`not in the tool set of the active model '${key}'`));
+      }
+      assert.equal(decider.calls.length, 0);
+    });
+  });
+}

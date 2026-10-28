@@ -137,6 +137,17 @@ def test_policy_budgets_the_spawn_tool():
     assert spawn["timeout_ms"] > 0
 
 
+def test_policy_budgets_the_delegate_tools():
+    """d18: the delegated run's --timeout and the status result cap are contract values."""
+    delegate = contract.load_policy()["budgets"]["delegate"]
+    assert isinstance(delegate["max_output_chars"], int)
+    assert delegate["max_output_chars"] > 0
+    assert isinstance(delegate["timeout_ms"], int)
+    # Live worker runs have taken ~25 minutes; the budget must cover that.
+    assert delegate["timeout_ms"] >= 25 * 60 * 1000
+    assert "d18" in delegate["$comment"]
+
+
 def test_policy_shell_allowlist_has_no_mutating_command():
     policy = contract.load_policy()
     names = {entry["command"] for entry in policy["shell"]["allowlist"]}

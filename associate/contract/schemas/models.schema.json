@@ -2,7 +2,7 @@
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "$id": "https://github.com/agentculture/associate/contract/models.schema.json",
   "title": "associate model registry",
-  "description": "The per-model registry (models.json). Structural shape only; cross-field rules (tool names in the canonical set, gated_tools disjoint from mutating_tools, one active default, spawn targets exist) live in validate.validate_models.",
+  "description": "The per-model registry (models.json). Structural shape only; cross-field rules (tool names in the canonical set, gated_tools disjoint from mutating_tools, one active default, spawn targets exist, delegate targets are writing models that do not delegate) live in validate.validate_models.",
   "type": "object",
   "additionalProperties": false,
   "required": ["version", "default", "endpoint", "tool_names", "mutating_tools", "gated_tools", "models"],
@@ -27,7 +27,7 @@
       "additionalProperties": false,
       "required": [
         "status", "label", "lobes_role", "input", "reasoning", "tools",
-        "prompt_file", "may_mutate", "may_spawn"
+        "prompt_file", "may_mutate", "may_spawn", "may_delegate"
       ],
       "properties": {
         "status": {"enum": ["active", "pending"]},
@@ -38,7 +38,8 @@
         "tools": {"type": "array", "items": {"type": "string"}},
         "prompt_file": {"type": "string"},
         "may_mutate": {"type": "boolean"},
-        "may_spawn": {"type": "array", "items": {"type": "string"}}
+        "may_spawn": {"type": "array", "items": {"type": "string"}},
+        "may_delegate": {"type": "array", "items": {"type": "string"}}
       }
     }
   }
