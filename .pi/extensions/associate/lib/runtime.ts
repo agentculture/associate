@@ -13,7 +13,7 @@ import { loadContract, type Contract } from "./contract.ts";
 import { isInside, resolveSessionDirs, type SessionDirs } from "./session.ts";
 import { isWriterTool } from "./guard.ts";
 import { EXTENSION_VERSION, toolsDir as defaultToolsDir } from "./paths.ts";
-import type { AssociateContext, ToolModule } from "./context.ts";
+import type { AssociateContext, CheckoutHold, ChildWalkLinker, TestWindow, ToolModule } from "./context.ts";
 
 export interface CreateContextOptions {
   /** Defaults to `process.cwd()` — the checkout pi was started in. */
@@ -25,6 +25,25 @@ export interface CreateContextOptions {
   session?: SessionDirs;
   /** False to resolve directory paths without creating them (tests). */
   create?: boolean;
+}
+
+/** A fresh, empty {@link TestWindow}: one per session context. */
+export function createTestWindow(): TestWindow {
+  const holds = new Map<string, CheckoutHold>();
+  const any = (kind: CheckoutHold): boolean => {
+    for (const held of holds.values()) if (held === kind) return true;
+    return false;
+  };
+  return {
+    begin(toolCallId: string, kind: CheckoutHold): void {
+      holds.set(toolCallId, kind);
+    },
+    end(toolCallId: string): void {
+      holds.delete(toolCallId);
+    },
+    testsRunning: () => any("tests"),
+    changesInFlight: () => any("change"),
+  };
 }
 
 /** Build the context handed to every tool module. */
@@ -45,6 +64,7 @@ export function createAssociateContext(options: CreateContextOptions = {}): Asso
   // Overrides of a built-in writer's name that cannot write — see
   // AssociateContext.declareNonWriter and lib/guard.ts.
   const nonWriters = new Set<string>();
+  let walk: ChildWalkLinker | undefined;
 
   return {
     extensionVersion: EXTENSION_VERSION,
@@ -53,6 +73,7 @@ export function createAssociateContext(options: CreateContextOptions = {}): Asso
     policy: contract.policy,
     schemas: contract.schemas,
     session,
+    testWindow: createTestWindow(),
     contain: {
       isInside,
       resolveWithin(candidate: string, base?: string): string {
@@ -81,6 +102,12 @@ export function createAssociateContext(options: CreateContextOptions = {}): Asso
     },
     declaredNonWriters(): readonly string[] {
       return [...nonWriters];
+    },
+    attachWalk(recorder: ChildWalkLinker): void {
+      walk = recorder;
+    },
+    walk(): ChildWalkLinker | undefined {
+      return walk;
     },
   };
 }

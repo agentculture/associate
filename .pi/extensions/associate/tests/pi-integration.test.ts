@@ -91,9 +91,12 @@ function toolResults(run: PiRun, toolName: string): Array<Record<string, any>> {
 test("a real pi run lists associate_ready and finish and activates no writer", { timeout: TIMEOUT_MS + 30_000 }, (t) => {
   if (!piOnPath()) return t.skip("pi is not on PATH");
 
+  // Pinned to senses, the model that may not mutate (t12). worker/cortex may
+  // write by the user's decision, so for them write/edit ARE active and every
+  // mutating call goes through the safety gate instead (tests/toolcall.test.ts).
   const run = runPi("Call the associate_ready tool, then call finish with a one-line summary.", {
     cwd: REPO_ROOT,
-    env: { ASSOCIATE_CONTRACT_DIR: findRepoContractDir() },
+    env: { ASSOCIATE_CONTRACT_DIR: findRepoContractDir(), ASSOCIATE_MODEL: "senses" },
   });
 
   const ready = toolResults(run, "associate_ready");
@@ -109,15 +112,10 @@ test("a real pi run lists associate_ready and finish and activates no writer", {
   // Criterion 1: the sentinel and finish are offered; no writer is.
   assert.ok(report.active_tools.includes("associate_ready"), "associate_ready must be active");
   assert.ok(report.active_tools.includes("finish"), "finish must be active");
-  // `bash` is active on purpose: it is the extension's allowlisted override
-  // (spec c35/h27), and the assertion below is that exactly one tool carries
-  // that name and no writer is active.
-  assert.deepEqual(
-    report.active_tools.filter((name: string) => name === "bash"),
-    ["bash"],
-    `exactly one bash must be active: ${report.active_tools.join(", ")}`,
-  );
-  for (const forbidden of ["edit", "write"]) {
+  // senses' models.json tool set has no shell, so not even the extension's
+  // allowlisted `bash` override is active (the one-bash invariant itself is
+  // covered by tests/shell.test.ts).
+  for (const forbidden of ["edit", "write", "bash"]) {
     assert.ok(
       !report.active_tools.includes(forbidden),
       `${forbidden} must not be active: ${report.active_tools.join(", ")}`,
@@ -132,6 +130,15 @@ test("a real pi run blocks a write into the checkout and shows the block in the 
   // defaultTools: [] leaves no writer to attempt, so the built-in write is
   // re-enabled for this run only, with --tools. That is the point of the
   // guard: it holds even when the structural restriction is overridden.
+  //
+  // This test normally SKIPS, and that is structural, not a pi 1.1.0 change:
+  // since deviation d7 the extension's own tool-set hook removes `write` from
+  // the active set on session_start, so --tools no longer gets a writer onto
+  // the wire (re-measured on 1.1.0: the leading system message's toolsAdded
+  // names only associate_ready and finish) and the model has nothing to
+  // attempt. The guard's decision is covered by guard.test.ts and
+  // extension.test.ts; the wire-level absence of writers by
+  // tests/test_provider_wire.py.
   const probe = join(REPO_ROOT, "GUARD_PROBE.txt");
   rmSync(probe, { force: true });
 
@@ -140,7 +147,8 @@ test("a real pi run blocks a write into the checkout and shows the block in the 
     {
       cwd: REPO_ROOT,
       args: ["--tools", "write,associate_ready,finish"],
-      env: { ASSOCIATE_CONTRACT_DIR: findRepoContractDir() },
+      // senses: the model that may not mutate (t12).
+      env: { ASSOCIATE_CONTRACT_DIR: findRepoContractDir(), ASSOCIATE_MODEL: "senses" },
     },
   );
 
@@ -155,11 +163,16 @@ test("a real pi run blocks a write into the checkout and shows the block in the 
       );
     }
 
-    // The block is visible in the transcript…
+    // The block is visible in the transcript… Two layers can stop it. The
+    // guard refuses a write that reaches the tool_call hook. But `write` is
+    // removed from the active set on session_start (d7), and a model that
+    // calls it anyway never reaches the hook: pi itself answers "Tool write
+    // not found" (measured on pi 1.1.0, Gemma senses). Both are this
+    // extension's refusals; what must never happen is the write itself.
     assert.match(
       run.stdout,
-      /outside this session's scratch directory/,
-      "the guard's reason must appear in the transcript",
+      /not in the tool set of the active model 'senses'|may not mutate|Tool write not found/,
+      "the guard's reason, or pi's unknown-tool refusal, must appear in the transcript",
     );
     // …and nothing was written.
     assert.equal(existsSync(probe), false, "the guard must have prevented the write");

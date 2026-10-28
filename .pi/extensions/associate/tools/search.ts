@@ -22,7 +22,8 @@
  *
  * Locating the vendored binaries: Pi keeps `rg` and `fd` under its agent
  * directory's `bin/` (pi-coding-agent's `getBinDir()` — measured against pi
- * 0.84.2 in `node_modules/@earendil-works/pi-coding-agent/dist/config.js` —
+ * 0.84.2, and unchanged on 1.1.0, in
+ * `node_modules/@earendil-works/pi-coding-agent/dist/config.js` —
  * joins `getAgentDir()` with `"bin"`, and `getAgentDir()` prefers
  * `$PI_CODING_AGENT_DIR`, falling back to `~/.pi/agent`). This module mirrors
  * that resolution rather than hardcoding a home path: `$PI_CODING_AGENT_DIR`

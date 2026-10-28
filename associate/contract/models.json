@@ -1,0 +1,96 @@
+{
+  "$comment": "The per-model registry. Data only: the Pi extension and the Python adapter read this; neither defines its own copy. `tool_names` is the canonical set of tool names the extension may register - the contract is the source of truth, and the extension checks its registered tools against it. `lobes_role` is a lobes role name, never a checkpoint id. `endpoint.default_base_url` is the OpenAI-compatible base URL used when ASSOCIATE_BASE_URL is unset (the local lobes gateway). `reasoning` is interpreted by the provider layer: model-default sends no override, on marks the model reasoning-capable, off sends the off switch for that model only. `gated_tools` (deviations d6/r17 and d7) are tools that are not repo mutations but still pass the CLEF safety gate for EVERY model, senses included: a memory write (eidetic_remember) and the web tools (web_search, web_page, which can send data off the machine) are not reads, so the read-only fallback refuses them when CLEF and Super are both unreachable. A gated tool is never also in `mutating_tools`, because a may_mutate=false model is refused every mutating call before the gate. `run_tests` (deviation d12) runs only the test commands the operator configured for the run (ASSOCIATE_TEST_COMMANDS); it executes repository code, so it is a mutating tool (never held by senses, always gated). `prompt_file` is checked for shape only; the files land with the prompts task. `may_delegate` (deviation d18) lists the registry models this model may hand a task to through `delegate_run`, which starts a separate `associate run` of that model in its own git worktree (merged into the local main branch only on a clean run whose operator test commands all pass) and returns at once; `delegate_status` reads its result. The model calling delegate_run changes nothing itself, so delegate_run is a gated tool (CLEF-gated for every model, senses included), never a mutating one, and delegate_status is a read. A delegate target must be a may_mutate model that does not delegate itself; delegate_run and delegate_status are held exactly by the models whose may_delegate is non-empty.",
+  "version": 1,
+  "default": "worker",
+  "endpoint": {"default_base_url": "http://localhost:8001/v1"},
+  "tool_names": [
+    "read",
+    "find",
+    "grep",
+    "ls",
+    "bash",
+    "code_lens",
+    "web_search",
+    "web_page",
+    "write",
+    "edit",
+    "eidetic_recall",
+    "eidetic_remember",
+    "ledger_append",
+    "ledger_list",
+    "run_tests",
+    "spawn_subagent",
+    "delegate_run",
+    "delegate_status",
+    "associate_ready",
+    "finish"
+  ],
+  "mutating_tools": ["write", "edit", "bash", "ledger_append", "run_tests"],
+  "gated_tools": ["eidetic_remember", "web_search", "web_page", "delegate_run"],
+  "models": {
+    "worker": {
+      "status": "active",
+      "label": "bolt",
+      "lobes_role": "worker",
+      "input": ["text", "image"],
+      "reasoning": "on",
+      "tools": [
+        "read", "find", "grep", "ls", "bash", "code_lens", "web_search", "web_page",
+        "write", "edit", "eidetic_recall", "eidetic_remember", "ledger_append",
+        "ledger_list", "run_tests", "associate_ready", "finish"
+      ],
+      "prompt_file": ".pi/extensions/associate/prompts/worker.md",
+      "may_mutate": true,
+      "may_spawn": [],
+      "may_delegate": []
+    },
+    "senses": {
+      "status": "active",
+      "label": "senses",
+      "lobes_role": "senses",
+      "input": ["text", "image"],
+      "reasoning": "model-default",
+      "tools": [
+        "read", "find", "grep", "ls", "web_search", "web_page",
+        "eidetic_recall", "eidetic_remember", "delegate_run", "delegate_status",
+        "associate_ready", "finish"
+      ],
+      "prompt_file": ".pi/extensions/associate/prompts/senses.md",
+      "may_mutate": false,
+      "may_spawn": [],
+      "may_delegate": ["worker"]
+    },
+    "cortex": {
+      "status": "active",
+      "label": "cortex",
+      "lobes_role": "cortex",
+      "input": ["text", "image"],
+      "reasoning": "on",
+      "tools": [
+        "read", "find", "grep", "ls", "bash", "code_lens", "web_search", "web_page",
+        "write", "edit", "eidetic_recall", "eidetic_remember", "ledger_append",
+        "ledger_list", "run_tests", "spawn_subagent", "associate_ready", "finish"
+      ],
+      "prompt_file": ".pi/extensions/associate/prompts/cortex.md",
+      "may_mutate": true,
+      "may_spawn": ["worker", "senses"],
+      "may_delegate": []
+    },
+    "super-vl": {
+      "status": "pending",
+      "label": "super-vl",
+      "lobes_role": "PENDING-no-lobes-role-yet",
+      "input": ["text", "image"],
+      "reasoning": "model-default",
+      "tools": [
+        "read", "find", "grep", "ls", "bash", "code_lens", "web_search", "web_page",
+        "write", "edit", "eidetic_recall", "eidetic_remember", "ledger_append",
+        "ledger_list", "run_tests", "spawn_subagent", "associate_ready", "finish"
+      ],
+      "prompt_file": ".pi/extensions/associate/prompts/super-vl.md",
+      "may_mutate": true,
+      "may_spawn": ["worker", "senses"],
+      "may_delegate": []
+    }
+  }
+}

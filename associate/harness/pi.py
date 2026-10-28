@@ -10,9 +10,12 @@ How readiness is decided (c34, honesty condition h26, deviation d8)
 -------------------------------------------------------------------
 h26 pins the mechanism: the check is made **from the tool list Pi reports**,
 never from trusting that ``.pi/settings.json`` or the extension directory
-exists on disk. Pi 0.84.2 offers no ``--list-tools``, and its JSON event stream
-carries no startup tool inventory — the session header is
-``{"type":"session",…}`` and nothing else precedes the first turn.
+exists on disk. Pi offers no ``--list-tools`` (measured on 0.84.2 and again
+on the pinned 1.1.0), and its JSON event stream carries no startup tool
+inventory — the session header is ``{"type":"session",…}`` and nothing else
+precedes the first turn. (1.1.0's transcript-backed leading ``system`` message
+does carry ``toolsAdded``, but it is emitted inside the run, after
+``before_agent_start`` — where the preflight below has already exited.)
 
 The first implementation read that list off an ``associate_ready`` tool result
 in the task's own turn, which made the proof depend on the *model* choosing to
@@ -34,12 +37,15 @@ the lane travels with the launcher instead of depending on the examined
 checkout carrying its own ``.pi/`` — the second half of d8.
 
 Two things are checked on that report, and the distinction is measured, not
-guessed (risk r14, against pi 0.84.2): ``defaultTools: []`` narrows the
-**active** tool set while ``pi.getAllTools()`` still lists
-``read``/``bash``/``edit``/``write``/``grep``/``find``/``ls``. So the gate is
+guessed (risk r14, measured on pi 0.84.2 and re-measured on 1.1.0):
+``defaultTools: []`` narrows the **active** tool set while ``pi.getAllTools()``
+still lists ``read``/``bash``/``edit``/``write``/``grep``/``find``/``ls`` (and,
+on 1.1.0, ``powershell``/``codemode``/``tool_search`` too). So the gate is
 
 * ``associate_ready`` present in ``active_tools`` — the extension loaded;
-* ``writer_tools_active`` empty — no write path was offered.
+* ``writer_tools_active`` empty — no write path was offered — unless the
+  run's registry model is ``may_mutate`` (worker/cortex, plan t12), whose
+  mutating calls the extension sends through the safety gate instead.
 
 The full ``tools`` list is reported for the record and is never a failure.
 
@@ -49,12 +55,15 @@ Pi loads ``AGENTS.md``/``CLAUDE.md`` from every ancestor directory, so a
 workspace-level ``CLAUDE.md`` one level above a checkout would leak into the
 system prompt of a run examining that checkout. The launcher passes
 ``--no-context-files`` and sets ``ASSOCIATE_INJECT_PROMPT=1``, which the
-extension's ``lib/prompt.ts`` answers by injecting the checkout's own
-``AGENTS.md`` — the runtime prompt for this lane — and nothing else.
+extension's ``lib/prompt.ts`` answers by injecting associate's own
+``AGENTS.md`` (from its install, never the checkout) as the runtime prompt for
+this lane. The examined checkout's ``AGENTS.md`` is skipped under
+``--untrusted-checkout`` and, for a trusted checkout, injected labelled as
+repository context rather than as the runtime prompt (deviation d17).
 
 Version pin (c39)
 -----------------
-``pi`` is pinned exactly at the tested 0.84.2. A different version **warns on
+``pi`` is pinned exactly at the tested 1.1.0. A different version **warns on
 stderr naming the tested one and still runs**: refusing on a version number
 alone would make the harness unusable the day pi ships a patch, and the
 behavioural evidence is what the bench is for.
@@ -69,6 +78,7 @@ import re
 import shutil
 import subprocess  # nosec B404 - fixed argv, shell=False; the whole point of c13
 import sys
+import time
 from pathlib import Path
 from typing import Any, Callable, Iterable, Sequence
 
@@ -97,7 +107,7 @@ __all__ = [
 ]
 
 #: The tested pi version (CLAUDE.md, "The Pi harness floors"; spec c39).
-PINNED_PI_VERSION = "0.84.2"
+PINNED_PI_VERSION = "1.1.0"
 
 #: The tool whose presence in the reported active tool list proves the load.
 SENTINEL_TOOL = "associate_ready"
@@ -105,9 +115,6 @@ SENTINEL_TOOL = "associate_ready"
 #: Default export root name when the contract names none — mirrors
 #: ``lib/session.ts``'s ``DEFAULT_EXPORT_ROOT_NAME`` so both sides agree.
 DEFAULT_EXPORT_ROOT_NAME = ".associate-runs"
-
-#: The lobes gateway; the same documented default ``lib/provider.ts`` carries.
-DEFAULT_BASE_URL = "http://localhost:8001/v1"
 
 #: The first (and, for a readiness probe, only) turn.
 READINESS_PROMPT = (
@@ -179,6 +186,19 @@ def stderr_tail(stderr: str | None, lines: int = _STDERR_TAIL_LINES) -> str:
     """
     kept = [line.strip() for line in (stderr or "").strip().splitlines() if line.strip()]
     return " | ".join(_redact(line) for line in kept[-lines:])
+
+
+def output_tail(text: str | None, chars: int) -> str:
+    """The last *chars* characters of *text*, redacted — for a test command's output.
+
+    Same redaction as :func:`stderr_tail` (the contract's patterns, via
+    :func:`_redact`), but bounded by characters rather than lines: a test
+    run's useful part is its final summary, which can span many lines. The
+    window redacted is wider than the one kept, so a secret cut in half at the
+    window's edge is normally cut away again before the tail is returned.
+    """
+    window = (text or "")[-chars * 8 :]
+    return _redact(window)[-chars:]
 
 
 # ---------------------------------------------------------------- session ids
@@ -344,6 +364,44 @@ def parse_events(stdout: str) -> list[dict[str, Any]]:
     return events
 
 
+#: How much of the model's last reply the run result keeps (redacted).
+FINAL_REPLY_CHARS = 2000
+
+
+def final_turn(events: list[dict[str, Any]]) -> dict[str, Any]:
+    """How the task turn ended: the last assistant reply, its stop reason, any lane error.
+
+    A run that ends without ``finish`` otherwise leaves no trace of why (live
+    runs live-bolt-tests-gaps/-gaps2): the walk holds tool calls only. Text
+    blocks are kept (thinking is not), redacted and bounded; ``lane_error`` is
+    present only when pi reported one.
+    """
+    last: dict[str, Any] | None = None
+    for event in events:
+        message = event.get("message")
+        if (
+            event.get("type") == "message_end"
+            and isinstance(message, dict)
+            and message.get("role") == "assistant"
+        ):
+            last = message
+    if last is None:
+        return {"final_reply": "", "stop_reason": None}
+    blocks = last.get("content") if isinstance(last.get("content"), list) else []
+    text = "\n".join(
+        str(block.get("text", ""))
+        for block in blocks
+        if isinstance(block, dict) and block.get("type") == "text"
+    ).strip()
+    turn: dict[str, Any] = {
+        "final_reply": output_tail(text, FINAL_REPLY_CHARS),
+        "stop_reason": last.get("stopReason") if isinstance(last.get("stopReason"), str) else None,
+    }
+    if last.get("errorMessage"):
+        turn["lane_error"] = output_tail(str(last["errorMessage"]), FINAL_REPLY_CHARS)
+    return turn
+
+
 def _is_sentinel_end(event: dict[str, Any]) -> bool:
     """Whether *event* is the ``tool_execution_end`` of the sentinel tool."""
     return event.get("type") == "tool_execution_end" and event.get("toolName") == SENTINEL_TOOL
@@ -399,6 +457,8 @@ class PiHarness(Harness):
         prompt: str | None = None,
         continue_from: str | None = None,
         timeout: float = 900.0,
+        model: str | None = None,
+        untrusted_checkout: bool = False,
         executable: str | None = None,
         env: dict[str, str] | None = None,
         warn: Callable[[str], None] | None = None,
@@ -406,6 +466,8 @@ class PiHarness(Harness):
         self._prompt = prompt
         self._continue_from = continue_from
         self._timeout = timeout
+        self._model_key = model
+        self._untrusted_checkout = untrusted_checkout
         self._executable = executable
         self._base_env = dict(env) if env is not None else None
         self._warn = warn if warn is not None else _warn
@@ -465,13 +527,10 @@ class PiHarness(Harness):
         # The task run's own session_start rewrites ready.json; the sentinel
         # event is only a fallback for a pi that somehow wrote no file, and the
         # preflight's report is the last resort.
-        report = (
-            self._read_ready_report(export_dir)
-            or sentinel_report(parse_events(completed.stdout))
-            or report
-        )
+        events = parse_events(completed.stdout)
+        report = self._read_ready_report(export_dir) or sentinel_report(events) or report
 
-        self._result = self._assemble_result(export_dir, report)
+        self._result = {**self._assemble_result(export_dir, report), **final_turn(events)}
 
     def _run_preflight(
         self,
@@ -585,6 +644,10 @@ class PiHarness(Harness):
             "extension_version": report.get("extension_version"),
             "contract_version": report.get("contract_version"),
             "active_tools": list(report.get("active_tools") or []),
+            # The registry key of the active model (env ASSOCIATE_MODEL, else the
+            # registry default) and its lobes role — which model actually ran.
+            "model": self.model_key(),
+            "lobes_role": self.model_entry().get("lobes_role"),
         }
 
     def collect(self) -> dict[str, Any]:
@@ -656,12 +719,31 @@ class PiHarness(Harness):
           exact fail-open c34 exists to close.
         * ``--no-context-files`` — risk r16: ancestor ``CLAUDE.md``/``AGENTS.md``
           files would leak into the system prompt.
+        * ``--no-mcp`` — risk r7: pi 1.1.0's built-in MCP support would connect
+          the operator's MCP servers and offer their ``mcp__*`` tools. The
+          extension's ``tool_call`` guard already refuses any tool outside the
+          active model's ``models.json`` set; this keeps them off the wire too.
         * ``-e <index.ts>`` — deviation d8: the extension is named explicitly
           so it loads in **any** checkout, not only one that happens to carry
           its own ``.pi/``. ``--approve`` stays: the examined checkout may
           still carry project files pi needs to trust.
+        * ``--no-approve --no-extensions`` instead of ``--approve`` when the
+          run is ``untrusted_checkout`` (risk r16, deviation d5, opt-in): pi
+          then ignores the examined checkout's ``.pi`` settings, extensions and
+          MCP config, and loads no built-in extension, so the only extension
+          that runs is the one ``-e`` names. Off by default by the operator's
+          decision.
         """
-        args = ["-p", "--mode", "json", "--no-session", "--approve", "--no-context-files"]
+        trust = ["--no-approve", "--no-extensions"] if self._untrusted_checkout else ["--approve"]
+        args = [
+            "-p",
+            "--mode",
+            "json",
+            "--no-session",
+            *trust,
+            "--no-context-files",
+            "--no-mcp",
+        ]
         args.extend(["-e", str(resolve_extension_path(self._base_env))])
         provider = self._provider_arguments()
         if provider:
@@ -676,6 +758,7 @@ class PiHarness(Harness):
         pi's own default provider applies instead, and the launcher says so
         rather than leaving the operator to infer which model answered.
         """
+        entry = self.model_entry()  # refuses unknown/pending even with no key
         env = self._base_env if self._base_env is not None else os.environ
         if not (env.get("ASSOCIATE_API_KEY") or "").strip():
             self._warn(
@@ -683,8 +766,28 @@ class PiHarness(Harness):
                 "registered and pi's own default model applies to this run."
             )
             return []
-        model = (env.get("ASSOCIATE_MODEL") or "associate").strip() or "associate"
-        return ["--provider", "associate", "--model", model]
+        return ["--provider", "associate", "--model", entry["lobes_role"]]
+
+    def model_key(self) -> str:
+        """The registry key this run uses: ``model=`` or the registry default."""
+        return self._model_key or str(contract.load_models()["default"])
+
+    def model_entry(self) -> dict[str, Any]:
+        """The ``models.json`` entry for this run; refuses unknown/pending keys."""
+        key = self.model_key()
+        models = contract.load_models()["models"]
+        entry = models.get(key)
+        if entry is None:
+            raise HarnessError(
+                f"unknown model {key!r}",
+                remediation=f"registry models: {', '.join(models)}",
+            )
+        if entry.get("status") == "pending":
+            raise HarnessError(
+                f"model {key!r} is pending (no lobes role yet) and cannot be run",
+                remediation=f"registry models: {', '.join(models)}",
+            )
+        return entry
 
     def environment(self, task: dict[str, Any]) -> dict[str, str]:
         """The environment handed to pi. No secret is read, written or logged."""
@@ -693,11 +796,53 @@ class PiHarness(Harness):
 
         env = dict(self._base_env if self._base_env is not None else os.environ)
         env["ASSOCIATE_CONTRACT_DIR"] = str(self._contract_dir)
+        # The extension's guard confines writes to ASSOCIATE_CHECKOUT_ROOT
+        # (lib/runtime.ts): it is always this run's own checkout (the run
+        # worktree for a mutating run), never a value inherited from the
+        # operator's environment.
+        env["ASSOCIATE_CHECKOUT_ROOT"] = str(self._checkout)
         env["ASSOCIATE_SESSION_ID"] = self._session_id
         env["ASSOCIATE_EXPORT_ROOT"] = str(self._export_root)
-        # r16: context-file discovery is off, so the runtime prompt is injected
-        # by the extension from the checkout's own AGENTS.md instead.
+        # r16: context-file discovery is off, so the extension injects the
+        # runtime prompt itself — associate's own AGENTS.md — and, only when
+        # ASSOCIATE_PI_TRUST below is "approve" (d17), the examined checkout's
+        # AGENTS.md labelled as repository context.
         env["ASSOCIATE_INJECT_PROMPT"] = "1"
+        # The REGISTRY KEY (not the wire id) tells the extension which
+        # models.json entry is active.
+        env["ASSOCIATE_MODEL"] = self.model_key()
+        # t16: the trust mode this run's pi was launched with, so the
+        # extension's spawn_subagent never launches a child MORE trusting than
+        # its parent. Always set from the launcher's own flag — an inherited
+        # value is overwritten, and the extension reads anything other than
+        # exactly "approve" (including its absence) as untrusted.
+        env["ASSOCIATE_PI_TRUST"] = "untrusted" if self._untrusted_checkout else "approve"
+
+        # d8: the gate tells the decider where writes land. Only the task —
+        # which ``associate run`` builds from the run it actually started —
+        # may claim isolation; an inherited value is never passed through.
+        if task.get("isolation"):
+            env["ASSOCIATE_ISOLATION"] = str(task["isolation"])
+        else:
+            env.pop("ASSOCIATE_ISOLATION", None)
+
+        # r3: the run's own deadline (absolute epoch ms), so spawn_subagent
+        # never starts a child that would outlive the pi process this
+        # launcher kills at --timeout. Computed here, before the preflight,
+        # so it is never later than the task turn's real kill time. Like
+        # isolation, an inherited value is never passed through.
+        if self._timeout and self._timeout > 0:
+            env["ASSOCIATE_RUN_DEADLINE"] = str(int(time.time() * 1000 + self._timeout * 1000))
+        else:
+            env.pop("ASSOCIATE_RUN_DEADLINE", None)
+
+        # d12: the operator's test commands, for the extension's run_tests
+        # tool. Same rule as isolation — only the task may name them, so a
+        # stale value in the operator's environment never reaches the model.
+        if task.get("test_commands"):
+            env["ASSOCIATE_TEST_COMMANDS"] = json.dumps(task["test_commands"])
+        else:
+            env.pop("ASSOCIATE_TEST_COMMANDS", None)
 
         continue_from = self._continue_from or task.get("continue_from")
         if continue_from:
@@ -796,14 +941,28 @@ class PiHarness(Harness):
                 remediation="check the extension's defaultTools and any --tools/-t filter",
             )
 
-        writers = [str(name) for name in report.get("writer_tools_active") or []]
-        if writers:
+        # The extension resolves its active model from ASSOCIATE_MODEL, which
+        # this launcher sets; a report naming another model is not evidence
+        # about the run being served (plan t12).
+        reported_model = report.get("model")
+        if reported_model is not None and reported_model != self.model_key():
             raise ExtensionNotLoadedError(
-                "pi reported active writer tools, which the associate role forbids: "
-                + ", ".join(writers),
+                f"the extension reported model {reported_model!r}, not {self.model_key()!r}",
+                remediation="check ASSOCIATE_MODEL reaches pi unchanged",
+            )
+
+        # Plan t12 (user decision q17/q21): only a model the registry marks
+        # may_mutate — worker/cortex, run in their own worktree (t15) with the
+        # safety gate in front of every mutating call — may be offered writers.
+        # For any other model an active writer still fails closed.
+        writers = [str(name) for name in report.get("writer_tools_active") or []]
+        if writers and self.model_entry().get("may_mutate") is not True:
+            raise ExtensionNotLoadedError(
+                "pi reported active writer tools for a model that may not change the "
+                "checkout (models.json may_mutate: false): " + ", ".join(writers),
                 remediation=(
-                    "the lane is read-only (lobes `worker` minus `repo_action`); remove the "
-                    "write tools from the extension's active set before serving"
+                    "this model is read-only; remove the write tools from the extension's "
+                    "active set before serving"
                 ),
             )
 
@@ -839,7 +998,7 @@ class PiHarness(Harness):
         import urllib.request
 
         env = self._base_env if self._base_env is not None else os.environ
-        base = (env.get("ASSOCIATE_BASE_URL") or DEFAULT_BASE_URL).strip().rstrip("/")
+        base = (env.get("ASSOCIATE_BASE_URL") or contract.default_base_url()).strip().rstrip("/")
         url = f"{base}/models" if base.endswith("/v1") else f"{base}/v1/models"
 
         # The scheme is checked before a Request is built, so no file:// or

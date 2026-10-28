@@ -2,8 +2,8 @@
 
 The launcher's whole job is to refuse to serve unless the ``associate`` Pi
 extension actually loaded, and h26 pins *how* it may know: **from the tool list
-Pi reports**, never from the presence of a config file on disk. Pi 0.84.2 has no
-``--list-tools``, and its ``--mode json`` stream carries no startup tool
+Pi reports**, never from the presence of a config file on disk. Pi (0.84.2, and
+the pinned 1.1.0) has no ``--list-tools``, and its ``--mode json`` stream carries no startup tool
 inventory (``docs/json.md``), so the only list Pi reports is the one the
 ``associate_ready`` sentinel returns as a tool result. The launcher therefore
 drives one turn whose prompt is "call associate_ready, then finish" and reads
@@ -32,7 +32,12 @@ import pytest
 from associate.cli import main
 from associate.harness import available_harnesses, get_harness
 from associate.harness.base import ExtensionNotLoadedError, HarnessError
-from associate.harness.pi import PiHarness, resolve_export_root, sanitize_session_id
+from associate.harness.pi import (
+    PINNED_PI_VERSION,
+    PiHarness,
+    resolve_export_root,
+    sanitize_session_id,
+)
 from tests.conftest import require_pi
 from tests.fake_lane import FakeLaneServer
 
@@ -151,7 +156,7 @@ def _install_fake_pi(
     *,
     ready: bool = True,
     writers: list[str] | None = None,
-    version: str = "0.84.2",
+    version: str = "1.1.0",
     task_exit: int = 0,
     artifacts: list[str] | None = None,
 ) -> Path:
@@ -259,10 +264,13 @@ def test_unknown_harness_in_json_mode_emits_the_error_object(
 def test_an_active_writer_tool_fails_closed(
     fake_pi, checkout: Path, tmp_path: Path, capsys: pytest.CaptureFixture[str]
 ):
-    """r14: the check is on ``writer_tools_active``, never on the full tool list."""
+    """r14: the check is on ``writer_tools_active``, never on the full tool list.
+
+    Plan t12: for ``senses`` — the model that may not mutate.
+    """
     fake_pi(ready=True, writers=["write"])
 
-    code = _run([], checkout, tmp_path)
+    code = _run(["--model", "senses"], checkout, tmp_path)
     assert code == 2
 
     captured = capsys.readouterr()
@@ -270,10 +278,32 @@ def test_an_active_writer_tool_fails_closed(
     assert "write" in captured.err
 
 
+@pytest.mark.parametrize("model", ["worker", "cortex"])
+def test_a_may_mutate_model_is_served_with_its_writers_active(
+    fake_pi, checkout: Path, tmp_path: Path, model: str
+):
+    """Plan t12: worker/cortex may write (each mutating call goes through the gate)."""
+    fake_pi(ready=True, writers=["write", "edit"])
+
+    assert _run(["--model", model], checkout, tmp_path) == 0
+
+
+def test_a_ready_report_for_another_model_fails_closed():
+    """Plan t12: writers are allowed per model, so the report must be about THIS model."""
+    harness = PiHarness(model="senses")
+    with pytest.raises(ExtensionNotLoadedError, match="worker"):
+        harness._assert_ready(
+            {"active_tools": ["associate_ready"], "writer_tools_active": [], "model": "worker"}
+        )
+    harness._assert_ready(
+        {"active_tools": ["associate_ready"], "writer_tools_active": [], "model": "senses"}
+    )
+
+
 def test_the_full_tool_list_containing_writers_is_not_a_failure(
     fake_pi, checkout: Path, tmp_path: Path, capsys: pytest.CaptureFixture[str]
 ):
-    """r14 (measured under pi 0.84.2): ``getAllTools()`` lists edit/write regardless."""
+    """r14 (measured under pi 0.84.2 and 1.1.0): ``getAllTools()`` lists edit/write regardless."""
     fake_pi(ready=True)
 
     assert _run([], checkout, tmp_path) == 0
@@ -310,6 +340,19 @@ def test_json_mode_prints_the_result_object(
     assert Path(payload["walk_path"]).is_file()
     assert Path(payload["statements_md_path"]).is_file()
     assert payload["outcome"] == "ok"
+
+
+def test_json_mode_prints_the_active_model(
+    fake_pi, checkout: Path, tmp_path: Path, capsys: pytest.CaptureFixture[str]
+):
+    """The --json result names the registry key and the model's lobes role."""
+    fake_pi(ready=True)
+    code = _run(["--model", "cortex", "--json"], checkout, tmp_path)
+    assert code == 0
+
+    payload = json.loads(capsys.readouterr().out)
+    assert payload["model"] == "cortex"
+    assert payload["lobes_role"] == "cortex"
 
 
 # ------------------------------------------------------ a failed task run
@@ -443,6 +486,8 @@ def test_the_launcher_passes_the_flags_the_contract_requires(
     argv = invocation["argv"]
     for flag in ("-p", "--mode", "json", "--no-session", "--approve", "--no-context-files"):
         assert flag in argv, f"{flag} missing from {argv}"
+    # r7 (plan t12): pi 1.1.0's built-in MCP tools never reach the lane.
+    assert "--no-mcp" in argv, f"--no-mcp missing from {argv}"
     assert invocation["cwd"] == str(checkout.resolve())
     # r16: with ancestor context files disabled, AGENTS.md is injected instead.
     assert invocation["env"]["ASSOCIATE_INJECT_PROMPT"] == "1"
@@ -450,8 +495,34 @@ def test_the_launcher_passes_the_flags_the_contract_requires(
     assert invocation["env"]["ASSOCIATE_CONTRACT_DIR"].endswith("contract")
     assert invocation["env"]["ASSOCIATE_EXPORT_ROOT"] == str(tmp_path / "runs")
     assert "ASSOCIATE_CONTINUE_FROM" not in invocation["env"]
+    # d8: a plain (non-git) checkout runs in place, and the extension is told so.
+    assert invocation["env"]["ASSOCIATE_ISOLATION"] == "in-place"
     # The recorded gotcha: pi blocks on an inherited stdin, so it gets DEVNULL.
     assert invocation["stdin_closed"] is True
+
+
+def test_the_default_launch_still_trusts_the_checkout(fake_pi, checkout: Path, tmp_path: Path):
+    """Deviation d5: the hardened launch is opt-in; the default is unchanged."""
+    assert _run(["--session-id", "d5-default"], checkout, tmp_path) == 0
+
+    argv = _invocation(tmp_path)["argv"]
+    assert "--approve" in argv
+    assert "--no-approve" not in argv
+    assert "--no-extensions" not in argv
+
+
+def test_untrusted_checkout_ignores_the_checkouts_pi_files(fake_pi, checkout: Path, tmp_path: Path):
+    """r16 / d5: the examined checkout's .pi settings, extensions and MCP config stay unloaded."""
+    assert _run(["--untrusted-checkout", "--session-id", "d5-untrusted"], checkout, tmp_path) == 0
+
+    for invocation in _invocations(tmp_path):
+        argv = invocation["argv"]
+        assert "--approve" not in argv, argv
+        for flag in ("--no-approve", "--no-extensions", "--no-mcp"):
+            assert flag in argv, f"{flag} missing from {argv}"
+        # Explicit -e paths still load with --no-extensions: associate's own
+        # extension is always named, so it is the only one that runs.
+        assert _extension_flags(argv), f"no -e in {argv}"
 
 
 def test_the_launcher_always_passes_the_extension_explicitly(
@@ -575,28 +646,96 @@ def test_provider_flags_when_a_key_is_set(
     fake_pi, checkout: Path, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ):
     monkeypatch.setenv("ASSOCIATE_API_KEY", "dummy-test-key")  # nosec B105
-    monkeypatch.setenv("ASSOCIATE_MODEL", "associate")
 
     assert _run([], checkout, tmp_path) == 0
 
-    argv = _invocation(tmp_path)["argv"]
+    invocation = _invocation(tmp_path)
+    argv = invocation["argv"]
     assert argv[argv.index("--provider") + 1] == "associate"
-    assert argv[argv.index("--model") + 1] == "associate"
+    assert argv[argv.index("--model") + 1] == "worker"
+    assert invocation["env"]["ASSOCIATE_MODEL"] == "worker"
     assert "dummy-test-key" not in " ".join(argv)
 
 
-def test_a_version_mismatch_warns_but_still_serves(
+@pytest.mark.parametrize("model", ["worker", "senses", "cortex"])
+def test_model_flag_passes_the_registry_entry_to_pi(
+    fake_pi, checkout: Path, tmp_path: Path, monkeypatch: pytest.MonkeyPatch, model: str
+):
+    monkeypatch.setenv("ASSOCIATE_API_KEY", "dummy-test-key")  # nosec B105
+    monkeypatch.setenv("ASSOCIATE_MODEL", "stale-inherited")
+
+    assert _run(["--model", model], checkout, tmp_path) == 0
+
+    for invocation in _invocations(tmp_path):
+        argv = invocation["argv"]
+        assert argv[argv.index("--provider") + 1] == "associate"
+        assert argv[argv.index("--model") + 1] == model
+        assert invocation["env"]["ASSOCIATE_MODEL"] == model
+
+
+def test_model_flag_without_a_key_still_tells_the_extension(
+    fake_pi, checkout: Path, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+):
+    monkeypatch.delenv("ASSOCIATE_API_KEY", raising=False)
+
+    assert _run(["--model", "senses"], checkout, tmp_path) == 0
+
+    invocation = _invocation(tmp_path)
+    assert "--provider" not in invocation["argv"]
+    assert invocation["env"]["ASSOCIATE_MODEL"] == "senses"
+
+
+def test_unknown_model_exits_1_naming_the_registry(
     fake_pi, checkout: Path, tmp_path: Path, capsys: pytest.CaptureFixture[str]
 ):
-    """c39: the launcher warns naming the tested version; it never refuses on it."""
-    fake_pi(version="0.99.0")
+    assert _run(["--model", "nope"], checkout, tmp_path) == 1
+    err = capsys.readouterr().err
+    assert "unknown model 'nope'" in err
+    for name in ("worker", "senses", "cortex", "super-vl"):
+        assert name in err
+
+
+def test_pending_model_is_refused_with_exit_1(
+    fake_pi, checkout: Path, tmp_path: Path, capsys: pytest.CaptureFixture[str]
+):
+    assert _run(["--model", "super-vl"], checkout, tmp_path) == 1
+    assert "pending" in capsys.readouterr().err
+    assert not (tmp_path / "runs" / "invocation.json").exists()
+
+
+def test_the_tested_pin_is_pi_1_1_0():
+    """c39 / t2: the harness is pinned exactly at the pi it was migrated to."""
+    assert PINNED_PI_VERSION == "1.1.0"
+
+
+@pytest.mark.parametrize("installed", ["0.84.2", "0.99.0", "1.0.4", "1.1.1", "2.0.0"])
+def test_a_version_mismatch_warns_but_still_serves(
+    fake_pi,
+    checkout: Path,
+    tmp_path: Path,
+    capsys: pytest.CaptureFixture[str],
+    installed: str,
+):
+    """c39: any version but the pin warns naming the tested one; it never refuses."""
+    fake_pi(version=installed)
 
     assert _run([], checkout, tmp_path) == 0
 
     captured = capsys.readouterr()
-    assert "0.84.2" in captured.err
-    assert "0.99.0" in captured.err
+    assert f"pi {installed} is installed" in captured.err
+    assert "tested against 1.1.0" in captured.err
     assert "walk.jsonl" in captured.out
+
+
+def test_the_pinned_version_does_not_warn(
+    fake_pi, checkout: Path, tmp_path: Path, capsys: pytest.CaptureFixture[str]
+):
+    """The pin itself runs silently — the warning is reserved for a mismatch."""
+    fake_pi(version="1.1.0")
+
+    assert _run([], checkout, tmp_path) == 0
+
+    assert "tested against" not in capsys.readouterr().err
 
 
 def test_a_missing_pi_binary_is_an_environment_error(
@@ -728,13 +867,17 @@ def test_the_real_pi_writes_both_artifacts_against_the_fake_lane(
 
     monkeypatch.setenv("ASSOCIATE_BASE_URL", f"{fake_lane.base_url}/v1")
     monkeypatch.setenv("ASSOCIATE_API_KEY", "dummy-test-key")  # nosec B105
-    monkeypatch.setenv("ASSOCIATE_MODEL", "associate")
+    monkeypatch.setenv("ASSOCIATE_MODEL", "worker")
     monkeypatch.setenv("PI_OFFLINE", "1")
 
     export_root = tmp_path / "runs"
     code = main(
         [
             "run",
+            # senses never mutates, so the run stays in place: a mutating
+            # model would open a worktree of this very repo (t15).
+            "--model",
+            "senses",
             "--checkout",
             str(REPO_ROOT),
             "--export-root",
@@ -758,7 +901,7 @@ def test_the_real_pi_writes_both_artifacts_against_the_fake_lane(
 
 
 def test_the_real_pi_help_offers_the_flags_the_launcher_passes():
-    """The launcher's flags are pinned against pi 0.84.2; a rename must fail here."""
+    """The launcher's flags are pinned against pi 1.1.0; a rename must fail here."""
     require_pi()
 
     result = subprocess.run(  # nosec B603 B607 - fixed argv, no shell
@@ -769,5 +912,290 @@ def test_the_real_pi_help_offers_the_flags_the_launcher_passes():
         timeout=60,
         check=False,
     )
-    for flag in ("--mode", "--no-session", "--approve", "--no-context-files", "--print"):
+    for flag in (
+        "--mode",
+        "--no-session",
+        "--approve",
+        "--no-context-files",
+        "--no-mcp",
+        "--no-approve",
+        "--no-extensions",
+        "--print",
+    ):
         assert flag in result.stdout, f"pi --help no longer documents {flag}"
+
+
+def _planted_checkout(root: Path) -> tuple[Path, Path]:
+    """A checkout whose own .pi loads an extension that drops a marker file."""
+    marker = root / "planted-extension-ran"
+    repo = root / "foreign"
+    ext = repo / ".pi" / "extensions" / "planted"
+    ext.mkdir(parents=True)
+    (repo / ".pi" / "settings.json").write_text(
+        json.dumps({"extensions": ["extensions/planted"]}), encoding="utf-8"
+    )
+    (ext / "index.ts").write_text(
+        'import { writeFileSync } from "node:fs";\n'
+        f"writeFileSync({json.dumps(str(marker))}, 'ran');\n"
+        "export default function () {}\n",
+        encoding="utf-8",
+    )
+    return repo, marker
+
+
+@pytest.mark.parametrize(
+    ("flags", "expect_ran"),
+    [(["--approve"], True), (["--no-approve", "--no-extensions"], False)],
+    ids=["default-trusts", "untrusted-checkout"],
+)
+def test_the_real_pi_runs_a_checkouts_planted_extension_only_when_trusted(
+    tmp_path: Path, flags: list[str], expect_ran: bool
+):
+    """r16: a planted .pi extension runs under --approve; the d5 flags keep it out.
+
+    The trusted case is the control that proves the probe can see a planted
+    extension at all, so the untrusted case's silence means something.
+    """
+    require_pi()
+    repo, marker = _planted_checkout(tmp_path)
+
+    subprocess.run(  # nosec B603 B607 - fixed argv, no shell
+        ["pi", *flags, "--no-mcp", "--list-models", "nothing-matches-this"],
+        cwd=repo,
+        capture_output=True,
+        text=True,
+        stdin=subprocess.DEVNULL,
+        timeout=120,
+        check=False,
+        env={**os.environ, "PI_OFFLINE": "1"},
+    )
+
+    assert marker.exists() is expect_ran
+
+
+def _bound_harness(tmp_path: Path, env: dict[str, str]) -> PiHarness:
+    harness = PiHarness(env=env)
+    harness.start(
+        checkout=tmp_path,
+        contract_dir=tmp_path,
+        session_id="d8",
+        export_dir=tmp_path / "runs",
+    )
+    return harness
+
+
+def _task(tmp_path: Path, **extra: str) -> dict[str, str]:
+    return {
+        "id": "d8",
+        "prompt": "p",
+        "checkout": str(tmp_path),
+        "session_id": "d8",
+        "export_dir": str(tmp_path / "runs"),
+        **extra,
+    }
+
+
+@pytest.mark.parametrize("mode", ["worktree", "in-place"])
+def test_the_task_isolation_reaches_the_extension(tmp_path: Path, mode: str):
+    """d8: the gate state's isolation field is fed from the task, nothing else."""
+    harness = _bound_harness(tmp_path, {})
+    assert harness.environment(_task(tmp_path, isolation=mode))["ASSOCIATE_ISOLATION"] == mode
+
+
+def test_an_inherited_isolation_claim_is_never_passed_through(tmp_path: Path):
+    """A stale ASSOCIATE_ISOLATION=worktree must not make an unisolated run look isolated."""
+    harness = _bound_harness(tmp_path, {"ASSOCIATE_ISOLATION": "worktree"})
+    assert "ASSOCIATE_ISOLATION" not in harness.environment(_task(tmp_path))
+
+
+def test_an_unknown_isolation_mode_is_refused_by_the_task_schema(tmp_path: Path):
+    from associate import contract
+    from associate.contract import validate as contract_validate
+
+    errors = contract_validate.validate(
+        _task(tmp_path, isolation="sandbox"), contract.load_schema("task")
+    )
+    assert errors
+
+
+# ------------------------------------- d12a: operator-named test commands
+
+
+def test_test_commands_reach_the_extension_as_json(tmp_path: Path):
+    harness = _bound_harness(tmp_path, {})
+    commands = [["uv", "run", "pytest", "-q"], ["make", "lint"]]
+    task = {**_task(tmp_path), "test_commands": commands}
+    assert json.loads(harness.environment(task)["ASSOCIATE_TEST_COMMANDS"]) == commands
+
+
+def test_an_inherited_test_commands_value_is_never_passed_through(tmp_path: Path):
+    """d12: like ASSOCIATE_ISOLATION, only the task may name the test commands."""
+    harness = _bound_harness(tmp_path, {"ASSOCIATE_TEST_COMMANDS": '[["rm", "-rf", "/"]]'})
+    assert "ASSOCIATE_TEST_COMMANDS" not in harness.environment(_task(tmp_path))
+
+
+def test_the_launcher_hands_test_commands_to_pi(fake_pi, checkout: Path, tmp_path: Path):
+    assert _run(["--test-command", "true --flag"], checkout, tmp_path) == 0
+    env = _invocation(tmp_path)["env"]
+    assert json.loads(env["ASSOCIATE_TEST_COMMANDS"]) == [["true", "--flag"]]
+
+
+def test_the_task_schema_accepts_test_commands(tmp_path: Path):
+    from associate import contract
+    from associate.contract import validate as contract_validate
+
+    task = {**_task(tmp_path), "test_commands": [["pytest", "-q"], ["make"]]}
+    assert contract_validate.validate(task, contract.load_schema("task")) == []
+
+
+@pytest.mark.parametrize("bad", [[[]], [["pytest", 3]], ["pytest -q"], [], "pytest"], ids=repr)
+def test_the_task_schema_refuses_malformed_test_commands(tmp_path: Path, bad):
+    from associate import contract
+    from associate.contract import validate as contract_validate
+
+    task = {**_task(tmp_path), "test_commands": bad}
+    assert contract_validate.validate(task, contract.load_schema("task"))
+
+
+# ------------------------------------- t16: the trust mode reaches the extension
+
+
+def test_the_trust_mode_reaches_the_extension(tmp_path: Path):
+    """t16: spawn_subagent launches a child no more trusting than its parent."""
+    trusted = _bound_harness(tmp_path, {})
+    assert trusted.environment(_task(tmp_path))["ASSOCIATE_PI_TRUST"] == "approve"
+
+    untrusted = PiHarness(env={}, untrusted_checkout=True)
+    untrusted.start(
+        checkout=tmp_path, contract_dir=tmp_path, session_id="t16", export_dir=tmp_path / "runs"
+    )
+    assert untrusted.environment(_task(tmp_path))["ASSOCIATE_PI_TRUST"] == "untrusted"
+
+
+def test_an_inherited_trust_claim_is_never_passed_through(tmp_path: Path):
+    """A stale ASSOCIATE_PI_TRUST=approve must not make an untrusted run's children trusting."""
+    harness = PiHarness(env={"ASSOCIATE_PI_TRUST": "approve"}, untrusted_checkout=True)
+    harness.start(
+        checkout=tmp_path, contract_dir=tmp_path, session_id="t16", export_dir=tmp_path / "runs"
+    )
+    assert harness.environment(_task(tmp_path))["ASSOCIATE_PI_TRUST"] == "untrusted"
+
+
+def test_the_launcher_hands_the_trust_mode_to_pi(fake_pi, checkout: Path, tmp_path: Path):
+    assert _run(["--untrusted-checkout", "--session-id", "t16-untrusted"], checkout, tmp_path) == 0
+    assert _invocation(tmp_path)["env"]["ASSOCIATE_PI_TRUST"] == "untrusted"
+
+
+# ------------------------------------------ how a run ended (live finding)
+
+
+def _assistant_end(text: str, stop: str = "stop", **extra: object) -> dict:
+    return {
+        "type": "message_end",
+        "message": {
+            "role": "assistant",
+            "content": [{"type": "thinking", "thinking": "hidden"}, {"type": "text", "text": text}],
+            "stopReason": stop,
+            **extra,
+        },
+    }
+
+
+def test_final_turn_keeps_the_last_assistant_reply_and_stop_reason():
+    from associate.harness.pi import final_turn
+
+    events = [
+        _assistant_end("first reply", stop="toolUse"),
+        {"type": "message_end", "message": {"role": "toolResult", "content": []}},
+        _assistant_end("I could not run id -u, so I stopped."),
+        {"type": "agent_end", "messages": []},
+    ]
+    assert final_turn(events) == {
+        "final_reply": "I could not run id -u, so I stopped.",
+        "stop_reason": "stop",
+    }
+
+
+def test_final_turn_reports_a_lane_error_and_redacts_and_bounds_the_reply():
+    from associate.harness.pi import FINAL_REPLY_CHARS, final_turn
+
+    secret = "Authorization: Bearer sk-abcdefghijklmnop1234"
+    events = [_assistant_end("x" * 5000 + " " + secret, stop="error", errorMessage="503 " + secret)]
+    turn = final_turn(events)
+    assert turn["stop_reason"] == "error"
+    assert "sk-abcdefghijklmnop1234" not in turn["final_reply"]
+    assert "sk-abcdefghijklmnop1234" not in turn["lane_error"]
+    assert len(turn["final_reply"]) <= FINAL_REPLY_CHARS
+    assert turn["lane_error"].startswith("503")
+
+
+def test_final_turn_is_empty_when_no_assistant_message_arrived():
+    from associate.harness.pi import final_turn
+
+    assert final_turn([]) == {"final_reply": "", "stop_reason": None}
+
+
+def test_the_run_result_says_how_the_run_ended(
+    fake_pi, checkout: Path, tmp_path: Path, capsys: pytest.CaptureFixture[str]
+):
+    assert _run(["--session-id", "final-turn", "--json"], checkout, tmp_path) == 0
+    payload = json.loads(capsys.readouterr().out)
+    assert payload["final_reply"] == ""
+    assert payload["stop_reason"] is None
+
+
+# ------------------------------------- r3: the run deadline reaches the extension
+
+
+def test_the_run_deadline_reaches_the_extension(tmp_path: Path):
+    """spawn_subagent caps each child by the parent run's own deadline."""
+    harness = PiHarness(env={}, timeout=120.0)
+    harness.start(
+        checkout=tmp_path, contract_dir=tmp_path, session_id="r3", export_dir=tmp_path / "runs"
+    )
+    before = time.time() * 1000
+    deadline = int(harness.environment(_task(tmp_path))["ASSOCIATE_RUN_DEADLINE"])
+    after = time.time() * 1000
+    assert before + 120_000 - 1 <= deadline <= after + 120_000 + 1
+
+
+def test_an_inherited_run_deadline_is_never_passed_through(tmp_path: Path):
+    """A stale ASSOCIATE_RUN_DEADLINE is overwritten by this run's own, or removed."""
+    stale = {"ASSOCIATE_RUN_DEADLINE": "99999999999999"}
+    harness = _bound_harness(tmp_path, stale)
+    assert harness.environment(_task(tmp_path))["ASSOCIATE_RUN_DEADLINE"] != "99999999999999"
+
+    unbounded = PiHarness(env=stale, timeout=0)
+    unbounded.start(
+        checkout=tmp_path, contract_dir=tmp_path, session_id="r3", export_dir=tmp_path / "runs"
+    )
+    assert "ASSOCIATE_RUN_DEADLINE" not in unbounded.environment(_task(tmp_path))
+
+
+def test_served_model_id_default_comes_from_the_contract(monkeypatch: pytest.MonkeyPatch):
+    """No hand-rolled endpoint: the registry's default_base_url is the fallback."""
+    import urllib.request
+
+    from associate import contract
+
+    registry = json.loads(json.dumps(contract.load_models()))
+    registry["endpoint"]["default_base_url"] = "http://moved.invalid:9/v1"
+    monkeypatch.setattr(contract, "load_models", lambda: registry)
+    seen: list[str] = []
+
+    def fake_urlopen(request, timeout=None):
+        seen.append(request.full_url)
+        raise OSError("not reached")
+
+    monkeypatch.setattr(urllib.request, "urlopen", fake_urlopen)
+    assert PiHarness(env={}).served_model_id() is None
+    assert seen == ["http://moved.invalid:9/v1/models"]
+
+
+def test_an_inherited_checkout_root_never_reaches_the_extension(tmp_path: Path):
+    """The guard confines writes to ASSOCIATE_CHECKOUT_ROOT (lib/runtime.ts). An
+    operator value pointing at the main checkout must not survive into a run whose
+    checkout is its own worktree."""
+    harness = _bound_harness(tmp_path, {"ASSOCIATE_CHECKOUT_ROOT": "/home/op/main-checkout"})
+    env = harness.environment(_task(tmp_path))
+    assert env["ASSOCIATE_CHECKOUT_ROOT"] == str(tmp_path.resolve())

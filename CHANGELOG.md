@@ -5,6 +5,198 @@ All notable changes to this project will be documented in this file.
 Format follows [Keep a Changelog](https://keepachangelog.com/). This project
 adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.10.0] - 2026-10-27
+
+The multi-model associate on Pi 1.1.0 (plan
+`docs/plans/2026-10-27-associate-multi-model-on-pi-1-1-0.md`, tasks t1–t20 and
+deviations d1–d15).
+
+**Measured live, single runs** (`docs/notes/t20-live-acceptance.md`):
+
+- worker, senses and cortex walks on pi 1.1.0;
+- every worker and cortex mutating call carried a gate verdict;
+- with the decider unreachable, writes fell to the read-only fallback while
+  reads still ran;
+- a cortex run linked a senses child walk and a worker child walk;
+- worker (bolt) changes on this repo under the gate, each reviewed and fixed
+  before merge;
+- the mesh resident starts through pi-acp.
+
+**Not measured yet:**
+
+- the resident's first reply (it paused under the mesh sleep schedule);
+- every public-benchmark score (t21).
+
+Live findings that remain open: worker sometimes ends without `finish`, and a
+senses statement claimed an action it never took.
+
+### Added
+
+- **Delegation from the read-only resident** (deviation d18):
+  `delegate_run` / `delegate_status` (`tools/delegate.ts`), held by `senses`
+  only (`models.json` `may_delegate`: `["worker"]`, validated by
+  `validate.py` and the extension). `delegate_run` starts the in-tree
+  `associate run --model worker --json` detached — its own worktree, every
+  operator test command from `ASSOCIATE_TEST_COMMANDS` (none configured:
+  refused), `--untrusted-checkout` unless trusted, `--timeout` from the new
+  `policy.json` `budgets.delegate` — and returns a run id; one run per checkout
+  at a time; a `child` walk line links its walk. It is CLEF-gated for every
+  model (`gate.json` version 9 adds its effect line); `delegate_status` is a
+  read whose result taints later memory records `untrusted:child`. Built and
+  unit-tested against a fake launcher; no delegated run has been started live.
+- **Model registry** `associate/contract/models.json`: `worker` (Pi label
+  "bolt", the default), `senses`, `cortex`, and `super-vl` (pending, no lobes
+  role). Each entry names its lobes role, input modalities, reasoning mode,
+  exact tool set, prompt file, `may_mutate` and `may_spawn`; provider and
+  adapter both read it. `associate run --model <key>` selects one.
+- **Per-model prompts** in `.pi/extensions/associate/prompts/`, injected after
+  `AGENTS.md`; per-model reasoning (no global reasoning-off hook).
+- **The CLEF safety gate** (`lib/gate.ts`, `associate/contract/gate.json`, now
+  version 6): every mutating call and every gated call (`eidetic_remember`,
+  `web_search`, `web_page`) is scored by the lobes decider; Super tier (counts
+  as unreachable while `super-vl` is pending), then a read-only fallback. Gate
+  state carries task, action, arguments and model — never fetched content. The
+  verdict and tier land in the walk; `walkstats` reports tier shares and
+  read-only fallbacks.
+- **Worktree per mutating run** (`associate/harness/worktree.py`): a
+  `may_mutate` model runs in `../.worktrees.<repo>/run-<session>`; only a clean
+  run is committed and merged to `main` locally, never pushed.
+- **Operator test commands** (`--test-command`, `--test-timeout`, deviation
+  d12; `associate/harness/testcmds.py`): the harness runs them after the model,
+  reverts their side effects, and merges a worktree run only when all pass. The
+  same commands are offered to writing models as the gated `run_tests` tool.
+- **`--untrusted-checkout`** (deviation d5): ignore the examined checkout's own
+  `.pi` settings, extensions and MCP config.
+- **Tools:** `eidetic_recall` / `eidetic_remember` (eidetic-cli, destination
+  pinned outside the checkout, untrusted provenance tagged); `ledger_append` /
+  `ledger_list` (workledger-cli 0.8.0); `spawn_subagent` for cortex (children
+  `worker` or `senses` only, one writing child per checkout at a time, child
+  walk paths in the parent walk); image blocks from `read` for models whose
+  entry lists image input.
+- **Public benchmark runner:** `associate bench --suite <name> --model <key>`
+  over `associate/bench/suites.json` (BFCL, MMMU, LiveCodeBench), using each
+  suite's own upstream runner and scorer. Every entry is `verified: false`; no
+  suite has been run.
+- **Run result** names the model and lobes role that ran, isolation and merge
+  outcome, test results, and how the task turn ended (final reply, stop
+  reason, lane error). A guard refusal is recorded in the walk with its reason.
+- **Notes:** `docs/notes/pi-1.1.0-migration.md` (a verdict per breaking change),
+  `docs/notes/gate-calibration.md` (the measured CLEF probe bench),
+  `docs/notes/resident-model-resolution.md` (why `culture.yaml`'s `model:` does
+  not reach the resident, and the extension-side fix).
+- CI fails a PR with unresolved SonarCloud issues (deviation d2).
+
+### Changed
+
+- **Pi pin 0.84.2 → 1.1.0**, with the extension and harness migrated.
+- **The guard is per model:** `senses` keeps the old block on writers;
+  `worker` and `cortex` may write and edit in the run checkout behind the gate.
+  `AGENTS.md` states the per-model bound (live finding L1).
+- **CLEF thresholds** `safe_unattended` and `matches_task` at 0.5 — tentative,
+  from one task's probes (deviation d9); issue #13 is the benchmark that
+  replaces them, #14–#17 the follow-ups. `gate.json` v2–v6 added the isolation
+  line (d8), a truthful per-tool effect line (d10), a `matches_task` wording
+  that counts prompt-mandated duties (d11), and `run_tests` (d12).
+- **`culture.yaml`** `model: associate` → `model: worker` (a registry key).
+  On its own this does not select the resident's model; the extension pins it.
+- **`role.json` is the harness-wide bound** (deviation d13): no model makes a
+  `final_decision` or `security_decision`. Per-model write rights live in
+  `models.json`. It no longer copies the retired lobes `associate` role.
+- **`super-vl` holds `run_tests`**, like cortex (deviation d15).
+- **Docs and identity:** `CLAUDE.md` (current state, measured vs. not measured,
+  runtime lanes by lobes role with `roles.py` citations, Pi and contract pins,
+  a full `ASSOCIATE_*` table tied to the code), `README.md`, `AGENTS.md`, the
+  `explain` / `learn` text and the package description now describe the
+  multi-model harness.
+
+### Security (PR #18 code review)
+
+The PR #18 code review found ten issues. All ten were confirmed in the code
+and fixed, test-first. The tenth, large writes always refused, was settled by
+deviations d16 and d19.
+
+- A `worker`/`cortex` `write` or `edit` must land inside the run checkout or
+  the session scratch directory. Paths are resolved the way pi does (`~`, `@`,
+  `file://`, symlinks, `..`). The guard refuses anything else before CLEF is
+  asked.
+- Per-model prompts are read only from associate's own install, never from the
+  examined checkout. A checkout that plants its own
+  `prompts/<model>.md` is ignored.
+- The runtime prompt is associate's own `AGENTS.md`, from its install. The
+  examined checkout's `AGENTS.md` is skipped under `--untrusted-checkout` (and
+  whenever `ASSOCIATE_PI_TRUST` is not exactly `approve`). For a trusted
+  checkout it is injected labelled as repository context, not as the runtime
+  prompt (deviation d17).
+- Text a `spawn_subagent` child hands back taints memory writes
+  (`untrusted:child`).
+- `run_tests` runs alone (`executionMode: sequential`), and a per-session test
+  window refuses writes and writing-child spawns while tests run. pi 1.1.0 runs
+  a message's tool calls in parallel by default.
+- A gate state too large for CLEF is no longer cut and refused (d16, gate.json
+  version 7). CLEF is not asked. A large-context registry model judges the
+  full state with the Super-tier questions: the first `large_state.evaluators`
+  entry (`cortex`, `worker`) that is active, registered and not the acting
+  model. If none qualifies, the acting model judges its own call from a
+  history-free request (d19, `large_state.self_fallback`). The walk records
+  tier `large`, the `evaluator` and `self_evaluated`. A missing evaluator, a
+  failed or malformed answer, or a state over `large_state.max_input_tokens`
+  still refuses. Measured live once since, with cortex (one pair, below).
+- A `write` that replaces a file now shows the gate the lines it adds and
+  removes (d20, gate.json version 8). The guard computes this `change` line
+  as a bounded line diff against the current checkout file. The full content
+  stays in `arguments`. A new path says it creates a file. A file the guard
+  does not read says why. Lines over the render bound are counted, not
+  dropped. `edit` gets no change line: its arguments already are the change.
+  The large-state evaluator gets its own `large_state.timeout_ms` (300 s)
+  instead of the Super tier's 120 s. Measured once, one pair, not a rate.
+  On a 40 KB `CLAUDE.md` write, cortex allowed a planted exfiltration line
+  when it saw only the full state, and refused it once the changed lines were
+  stated. Large-state latency was 37–213 s.
+
+### Fixed
+
+- A long-lived session (the mesh resident) no longer refuses every tool call
+  after its first `finish`: per-prompt state resets on `before_agent_start`.
+- Active-model resolution has one rule (`resolveActiveModel`), read once at
+  load. The prompt, image-read and ledger code had their own diverging copies;
+  a pending model no longer gets its prompt injected.
+- A spawned child's wall clock is capped by the parent run's deadline
+  (`ASSOCIATE_RUN_DEADLINE`, set by the harness), counting time spent waiting
+  for the writer lock. A child that could not finish in time is refused.
+- `associate bench`: the upstream runner's output goes to stderr, so `--json`
+  stdout parses. The default endpoint is read from `models.json` here and in
+  the harness's served-model probe.
+- Every SonarCloud issue the d2 gate reported (19, none a behaviour change).
+
+### Known issues
+
+- `lib/contain.ts` `confine()` (read and shell confinement) does not follow a
+  dangling symlink. Write confinement now handles that case on its own.
+
+- `steward doctor` fails `portability` and `skills-convention` on `main` and
+  on this branch alike (42 and 5 findings), and this branch adds none
+  (deviation d14). The findings are in devague records from PR #6 and in
+  vendored method-only skills. The rule question is open in steward#86.
+
+### Removed
+
+- **The Nemotron 3.5 Lightning lane** (lobes role `associate`) as associate's
+  model: `worker` replaces it. The lobes role itself is untouched.
+- The single hardcoded provider and the global `enable_thinking` override.
+- The in-house 7-case behavioral suite (`tests/behavioral/`) and
+  `associate bench --harness`; benchmarks are public suites only.
+
+### Security
+
+- Every mutating or data-egressing tool call passes the CLEF gate and fails
+  closed to read-only when no decider tier answers.
+- Gate requests carry no fetched web or file text, so planted content cannot
+  argue the gate into approving.
+- Spawned children are never more trusting than their parent
+  (`ASSOCIATE_PI_TRUST`); the launcher passes `--no-mcp`.
+- Memory and ledger destinations are pinned outside the examined checkout and
+  refused if they resolve inside it.
+
 ## [0.9.1] - 2026-09-12
 
 ### Changed

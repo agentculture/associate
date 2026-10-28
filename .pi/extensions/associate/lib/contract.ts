@@ -38,6 +38,48 @@ export type ContractPolicy = {
   [key: string]: unknown;
 };
 
+export type ReasoningSetting = "model-default" | "on" | "off";
+
+/** One `models.json` entry. Field names are the contract's, not ours. */
+export interface ModelEntry {
+  readonly status: "active" | "pending";
+  readonly label: string;
+  readonly lobes_role: string;
+  readonly input: readonly ("text" | "image")[];
+  readonly reasoning: ReasoningSetting;
+  readonly tools: readonly string[];
+  readonly prompt_file: string;
+  readonly may_mutate: boolean;
+  readonly may_spawn: readonly string[];
+  /**
+   * Deviation d18: registry models this model may hand a task to through
+   * `delegate_run`. Absent (an older contract) reads as none.
+   */
+  readonly may_delegate?: readonly string[];
+}
+
+/** The parsed `models.json`. */
+export interface ContractModels {
+  readonly version: number;
+  /** Registry key used when `ASSOCIATE_MODEL` is unset. */
+  readonly default: string;
+  readonly endpoint: { readonly default_base_url: string };
+  /** The canonical tool-name set (checked against registration by another task). */
+  readonly tool_names: readonly string[];
+  readonly mutating_tools: readonly string[];
+  /**
+   * Tools that are not repo mutations but pass the safety gate for every
+   * model, senses included (d6/r17: `eidetic_remember`; d7: `web_search`,
+   * `web_page`).
+   * Disjoint from `mutating_tools` — the Python validator enforces it.
+   */
+  readonly gated_tools: readonly string[];
+  readonly models: Readonly<Record<string, ModelEntry>>;
+}
+
+/** The parsed `gate.json`; open record, the gate library owns its shape. */
+export type ContractGate = { version?: number; [key: string]: unknown };
+
 export type ContractSchemas = Readonly<Record<SchemaName, unknown>>;
 
 export interface Contract {
@@ -47,6 +89,8 @@ export interface Contract {
   readonly source: "env" | "repo";
   readonly policy: ContractPolicy;
   readonly schemas: ContractSchemas;
+  readonly models: ContractModels;
+  readonly gate: ContractGate;
   /** `policy.json`'s `version`, or 0 when it declares none. */
   readonly version: number;
 }
@@ -109,7 +153,7 @@ export function resolveContractDir(
   return { dir, source: "repo" };
 }
 
-/** Load `policy.json` and every schema from the resolved contract directory. */
+/** Load `policy.json`, `models.json`, `gate.json` and every schema from the resolved contract directory. */
 export function loadContract(
   env: Record<string, string | undefined> = process.env,
   start: string = extensionDir,
@@ -126,10 +170,20 @@ export function loadContract(
     schemas[name] = readJson(path);
   }
 
+  const requireFile = (name: string): unknown => {
+    const path = join(dir, name);
+    if (!existsSync(path)) throw new Error(`contract at ${dir} is missing ${name}`);
+    return readJson(path);
+  };
+  const models = requireFile("models.json") as ContractModels;
+  const gate = requireFile("gate.json") as ContractGate;
+
   return {
     dir,
     source,
     policy,
+    models,
+    gate,
     schemas: Object.freeze(schemas),
     version: typeof policy.version === "number" ? policy.version : 0,
   };
@@ -147,4 +201,34 @@ export function policySection(policy: ContractPolicy, name: string): Record<stri
   return section && typeof section === "object" && !Array.isArray(section)
     ? (section as Record<string, unknown>)
     : {};
+}
+
+/**
+ * The extension-side check of `models.json` `may_delegate` (deviation d18),
+ * mirroring `validate.py`'s `_check_delegation`: every list is an array of
+ * distinct strings naming a registry model other than its owner that may
+ * mutate and does not delegate itself. Returns the problems found, empty when
+ * the registry is sound. `tools/delegate.ts` calls it at load and refuses
+ * every delegation while any problem stands — a malformed allowlist is never
+ * read as permission.
+ */
+export function delegationProblems(models: ContractModels): string[] {
+  const problems: string[] = [];
+  for (const [name, entry] of Object.entries(models.models ?? {})) {
+    const raw = (entry as { may_delegate?: unknown }).may_delegate;
+    if (raw === undefined) continue;
+    if (!Array.isArray(raw) || !raw.every((item) => typeof item === "string")) {
+      problems.push(`models.${name}.may_delegate must be an array of registry keys`);
+      continue;
+    }
+    if (new Set(raw).size !== raw.length) problems.push(`models.${name}.may_delegate has duplicates`);
+    for (const target of raw as string[]) {
+      const other = Object.hasOwn(models.models, target) ? models.models[target] : undefined;
+      if (!other) problems.push(`models.${name}.may_delegate names unknown model '${target}'`);
+      else if (target === name) problems.push(`models.${name}.may_delegate names itself`);
+      else if (other.may_mutate !== true) problems.push(`models.${name}.may_delegate names '${target}', which may not mutate`);
+      else if ((other.may_delegate ?? []).length > 0) problems.push(`models.${name}.may_delegate names '${target}', which delegates`);
+    }
+  }
+  return problems;
 }

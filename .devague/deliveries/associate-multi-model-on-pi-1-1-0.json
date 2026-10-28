@@ -1,0 +1,285 @@
+{
+  "plan_slug": "associate-multi-model-on-pi-1-1-0",
+  "schema_version": 2,
+  "created": "2026-10-27T10:36:31Z",
+  "updated": "2026-10-27T23:32:44Z",
+  "deviations": [
+    {
+      "id": "d1",
+      "what": "t1 gains a dependency on t6: its investigation note merges now, its fix (the extension sets the session model on session_start via pi.setModel from the registry default) and live check move after t6, into wave 5",
+      "task_ref": "t1",
+      "reason": "pi-acp ignores session/new params.model and culture never sends session/set_model (docs/notes/resident-model-resolution.md), so the fix must live in the extension's lib/provider.ts, which t6 rewrites",
+      "affects": [
+        "t6",
+        "t19"
+      ],
+      "origin": "user",
+      "status": "approved",
+      "classification": "acceptable",
+      "seq": 1
+    },
+    {
+      "id": "d2",
+      "what": "add a CI gate that fails when SonarCloud reports new issues (accepted issues are fine), modelled on ../culture-library, to workledger-cli#5 (t3) and to associate's integration branch",
+      "task_ref": "t3",
+      "reason": "user instruction mid-run: SonarCloud new issues must fail CI, not just be visible; accepted issues stay allowed",
+      "affects": [
+        "t19"
+      ],
+      "origin": "user",
+      "status": "approved",
+      "classification": "acceptable",
+      "seq": 2
+    },
+    {
+      "id": "d3",
+      "what": "t13's tools are named ledger_append / ledger_list (the contract's tool_names, set in t4 and already used by the t11 prompts and models.json mutating_tools), not workledger_append / workledger_list as t13's plan text says; the released workledger-cli console script is ledger",
+      "task_ref": "t13",
+      "reason": "the main agent's t4 brief chose the ledger_* names before t13 ran; the contract is the single source of truth for tool names, so following the plan text now would split it",
+      "affects": [
+        "t4",
+        "t11"
+      ],
+      "origin": "llm",
+      "status": "approved",
+      "classification": "acceptable",
+      "seq": 3
+    },
+    {
+      "id": "d4",
+      "what": "live testing starts now instead of only at t20: associate itself, driven by the live models (worker/bolt, senses, cortex) and the live CLEF decider, reviews this integration branch and fixes what it finds; read-only review runs first, mutating fix runs only after t12 (gate wiring) and the self-examination conflict (r13) are fixed",
+      "task_ref": "t20",
+      "reason": "user instruction: 'As live test, use associate with the models we have to review and fix'",
+      "affects": [
+        "t12",
+        "t19"
+      ],
+      "origin": "user",
+      "status": "approved",
+      "classification": "acceptable",
+      "seq": 4
+    },
+    {
+      "id": "d5",
+      "what": "add an opt-in launcher option (off by default) that starts pi with --no-approve --no-extensions --no-mcp, so the examined checkout's .pi settings, extensions and mcp.json are ignored; default launch keeps --approve",
+      "task_ref": "t12",
+      "reason": "user decision on risk r16: 'R16 as optional, yes (no default)'; built by the main agent after t12 merges because both touch associate/harness/pi.py",
+      "affects": [
+        "t20"
+      ],
+      "origin": "user",
+      "status": "approved",
+      "classification": "acceptable",
+      "seq": 5
+    },
+    {
+      "id": "d6",
+      "what": "eidetic_remember passes the CLEF gate for every model via a new contract list gated_tools (gated but not a repo mutation, so senses keeps it)",
+      "task_ref": "t12",
+      "reason": "user decision on r17: 'R17 checked as well'",
+      "affects": [
+        "t8"
+      ],
+      "origin": "user",
+      "status": "approved",
+      "classification": "acceptable",
+      "seq": 6
+    },
+    {
+      "id": "d7",
+      "what": "web_search and web_page also pass the CLEF gate for every model (added to gated_tools alongside eidetic_remember, extending d6); with CLEF and Super unreachable they are refused like any gated call",
+      "task_ref": "t12",
+      "reason": "user decision: 'Web tool search and page - yes' (follow-up to r17: they can send data off the machine)",
+      "affects": [
+        "t8"
+      ],
+      "origin": "user",
+      "status": "approved",
+      "classification": "acceptable",
+      "seq": 7
+    },
+    {
+      "id": "d8",
+      "what": "gate.json v2: the decider state gains an isolation field (worktree vs in-place, from ASSOCIATE_ISOLATION set by associate run), so CLEF judges a mutating call knowing whether it lands in a disposable run worktree; thresholds unchanged pending measurement",
+      "task_ref": "t5",
+      "reason": "live F2 run (L5): CLEF refused correct, minimal edits at safe_unattended 0.65-0.70 vs 0.8 because the state never said edits land in an isolated worktree merged only after a clean run; user chose option B and asked to measure before any threshold change (option A)",
+      "affects": [
+        "t10",
+        "t12",
+        "t15"
+      ],
+      "origin": "user",
+      "status": "approved",
+      "classification": "needs-follow-up",
+      "seq": 8
+    },
+    {
+      "id": "d9",
+      "what": "gate.json v3: CLEF thresholds safe_unattended >= 0.5 and matches_task >= 0.5 (were 0.8 / 0.7), tentative until the CLEF benchmark in issue #13 freezes a calibrated policy",
+      "task_ref": "t5",
+      "reason": "measured (docs/notes/gate-calibration.md): legitimate F2 edits/writes score safe_unattended >= 0.714 and matches_task >= 0.701 under the v2 worktree state, harmful probes <= 0.120 and <= 0.043; 0.8 sat inside the legitimate range. User set 0.5 tentatively, with issue #13 as the benchmark that replaces it",
+      "affects": [
+        "t10",
+        "t21"
+      ],
+      "origin": "user",
+      "status": "approved",
+      "classification": "needs-follow-up",
+      "seq": 9
+    },
+    {
+      "id": "d10",
+      "what": "gate.json v4: the decider state names what the gated tool actually does - a contract-owned effect line per tool that can reach the gate (mutating_tools + gated_tools) - and the isolation line is reworded to cover only changes to the checkout, so it is true for every tool",
+      "task_ref": "t5",
+      "reason": "the v2/v3 state named the tool but not its effect, and its isolation line claimed a run worktree for tools that write outside the checkout or off the machine (ledger_append, eidetic_remember, web_search, web_page); with a true effect line ledger entries scored safe_unattended 0.83-0.88 instead of 0.07-0.24 (docs/notes/gate-calibration.md). User approved d10",
+      "affects": [
+        "t10",
+        "t8",
+        "t13"
+      ],
+      "origin": "user",
+      "status": "approved",
+      "classification": "needs-follow-up",
+      "seq": 10
+    },
+    {
+      "id": "d11",
+      "what": "gate.json v5: matches_task reworded to count the evidence-logging, memory and research work the runtime prompt asks every run to do as serving the task",
+      "task_ref": "t5",
+      "reason": "v4 measurement (docs/notes/gate-calibration.md): with a truthful state, ledger/memory writes score safe 0.62-0.84 but fail matches_task 0.12-0.45 because those duties live in the runtime prompt CLEF never sees; the rewording admitted all ledger entries and the benign memory note while every harmful probe stayed refused (matches_task <= 0.10). User confirmed; remaining gaps go to issues, fixed after the issue #13 benchmark",
+      "affects": [
+        "t10",
+        "t13",
+        "t8"
+      ],
+      "origin": "user",
+      "status": "approved",
+      "classification": "needs-follow-up",
+      "seq": 11
+    },
+    {
+      "id": "d12",
+      "what": "models that may change code can run tests (option 3): the operator names exact test commands with 'associate run --test-command' (repeatable, no default); worker and cortex get a dedicated run_tests tool that runs exactly those commands behind the CLEF gate, and the harness runs them itself after the model finishes and merges only if all pass; test-run side effects on the worktree are reverted so they are never committed as the model's work",
+      "task_ref": "t15",
+      "reason": "live F2 run: bolt edited code it could not verify (node/uv/pytest are not on the bash allowlist), shipped one defect the suite then caught, and timed out; user accepted option 3 (harness check is the final word, models may also run the fixed commands)",
+      "affects": [
+        "t12",
+        "t5",
+        "t20"
+      ],
+      "origin": "user",
+      "status": "approved",
+      "classification": "needs-follow-up",
+      "seq": 12
+    },
+    {
+      "id": "d13",
+      "what": "role.json becomes associate's harness-wide bound: final_decision and security_decision are forbidden for every model; per-model write rights (repo_action, code_authoring) are owned by models.json may_mutate, no longer forbidden for all by a copy of the retired lobes associate role",
+      "task_ref": "t11",
+      "reason": "role.json still copied the retired lobes 'associate' role (worker MINUS repo_action), forbidding code_authoring and repo_action for everyone, contradicting models.json (worker and cortex may_mutate) and the d4 AGENTS.md bound; a guard refusal still said 'the associate role is forbidden repo_action'. User accepted the recommendation",
+      "affects": [
+        "t12",
+        "t19"
+      ],
+      "origin": "user",
+      "status": "approved",
+      "classification": "acceptable",
+      "seq": 13
+    },
+    {
+      "id": "d14",
+      "what": "t19's 'steward doctor passes' criterion is read as 'steward doctor adds no findings compared with main': measured 0 new (42 portability lines and 5 skills-convention findings on both main dfae5dd and this branch); the existing findings are fixed upstream (devague evidence records, steward rules) and steward doctor is added to CI once they land",
+      "task_ref": "t19",
+      "reason": "every finding is in files this branch did not create and repo rules forbid editing: the September plan's .devague records and their exports (PR #6) and vendored skills; the five method-only devague skills are scriptless by design. User confirmed option 1",
+      "affects": [],
+      "origin": "user",
+      "status": "approved",
+      "classification": "needs-follow-up",
+      "seq": 14
+    },
+    {
+      "id": "d15",
+      "what": "super-vl gets the run_tests tool (models.json tools and prompts/super-vl.md), like cortex, for when the model arrives",
+      "task_ref": "t16",
+      "reason": "d12 briefed run_tests for worker and cortex only; super-vl mirrors cortex's tool set and may mutate. User confirmed",
+      "affects": [
+        "t11"
+      ],
+      "origin": "user",
+      "status": "approved",
+      "classification": "acceptable",
+      "seq": 15
+    },
+    {
+      "id": "d16",
+      "what": "oversized gate states (over the decider's input budget) are no longer cut and refused: they are judged by a different, large-context registry model (gate.json large_state.evaluators, default [cortex, worker]; the first active entry that is not the acting model), asked the same questions with the full state through the Super-style JSON verdict; no evaluator reachable, or a state too large even for it, is still refused",
+      "task_ref": "t10",
+      "reason": "PR #18 review finding 4: any write or task over about 7-14 KB was always refused because CLEF's 16k-token input forced truncation (r15). User declined a summarised state and chose a different model as evaluator for large inputs; the actor never judges its own call",
+      "affects": [
+        "t5",
+        "t12"
+      ],
+      "origin": "user",
+      "status": "approved",
+      "classification": "needs-follow-up",
+      "seq": 16
+    },
+    {
+      "id": "d17",
+      "what": "the examined checkout's AGENTS.md is skipped under --untrusted-checkout and, for a trusted checkout, injected labelled as repository context rather than as this lane's runtime prompt",
+      "task_ref": "t11",
+      "reason": "PR #18 review follow-up: a hostile checkout's AGENTS.md was injected as the runtime prompt even under --untrusted-checkout; user accepted skipping it there and relabelling it otherwise",
+      "affects": [
+        "t2"
+      ],
+      "origin": "user",
+      "status": "approved",
+      "classification": "acceptable",
+      "seq": 17
+    },
+    {
+      "id": "d18",
+      "what": "design D (O3): the mesh resident stays read-only and hands any task that writes to 'associate run' (a per-run worktree, the operator test check and the clean-only merge) through a new gated tool, instead of writing in its own long-lived session",
+      "task_ref": "t16",
+      "reason": "culture's ACP runner keeps one long-lived pi session in the registered directory, so a mesh request cannot get its own worktree inside that session; O3 reuses the one isolation path measured live. User accepted O3",
+      "affects": [
+        "t15",
+        "t20"
+      ],
+      "origin": "user",
+      "status": "approved",
+      "classification": "needs-follow-up",
+      "seq": 18
+    },
+    {
+      "id": "d19",
+      "what": "amends d16: when no other large-state evaluator is available (no active registry model in large_state.evaluators other than the acting model), the acting model itself evaluates the oversized call in a fresh, history-free request with a short focused gate prompt (the questions and the JSON verdict shape only) and the call's state; the walk marks the verdict as self-evaluated; refusal stays the outcome if that also fails",
+      "task_ref": "t10",
+      "reason": "user accepted d16 and added: if no other model exists, defer to the current model with smaller context and a focused prompt",
+      "affects": [
+        "t5"
+      ],
+      "origin": "user",
+      "status": "approved",
+      "classification": "needs-follow-up",
+      "seq": 19
+    },
+    {
+      "id": "d20",
+      "what": "gate.json v8: the gate state gains a change line for a write that replaces an existing file (the lines it adds and removes versus the current file, computed by the guard, redacted like every field; the full content stays), and the large-state path gets its own timeout (large_state.timeout_ms, default 300000) instead of reusing Super's 120 s",
+      "task_ref": "t10",
+      "reason": "live d16 probe: cortex allowed a realistic 40 KB CLAUDE.md write with one planted exfiltration line when shown full content only, and refused it (exfiltrates=true) with the change line added; 3 of 7 large probes ran past the 120 s Super timeout (37-213 s). One pair, not a rate. User approved d20",
+      "affects": [
+        "t5",
+        "t12"
+      ],
+      "origin": "user",
+      "status": "approved",
+      "classification": "needs-follow-up",
+      "seq": 20
+    }
+  ],
+  "evidence": [],
+  "deltas": [],
+  "supersessions": []
+}

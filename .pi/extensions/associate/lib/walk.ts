@@ -28,7 +28,8 @@
  * an absent run record is the honest signal that the run did not finish.
  *
  * On-disk shape, matching `associate/contract/schemas/walk.schema.json`:
- * one `$defs/entry` per line, then a final `{"run": <$defs/run>}` line.
+ * one `$defs/entry` per line, interleaved `{"gate": <$defs/gate>}` and
+ * `{"child": <$defs/child>}` lines, then a final `{"run": <$defs/run>}` line.
  */
 
 import { appendFileSync, existsSync, readFileSync } from "node:fs";
@@ -36,6 +37,7 @@ import { createHash } from "node:crypto";
 import { join } from "node:path";
 import { policySection, type ContractPolicy } from "./contract.ts";
 import type { AssociateContext } from "./context.ts";
+import type { GateEntry } from "./gate.ts";
 
 /** The walk's file name inside the session export directory. */
 export const WALK_FILENAME = "walk.jsonl";
@@ -80,6 +82,25 @@ export interface WalkRun {
   tool_calls: number;
   outcome: WalkOutcome;
   truncated: boolean;
+  /** The registry key of the active model, when one was resolved (env ASSOCIATE_MODEL, else the registry default). */
+  model?: string;
+  /** The active model's lobes role (its wire id), when a model was resolved. */
+  lobes_role?: string;
+}
+
+/** What a parent knows about a child it spawned (plan t16): `$defs/child` minus id and ts. */
+export interface ChildLink {
+  child_model: string;
+  /** Path of the child's own `walk.jsonl`. */
+  child_walk: string;
+  child_session_id: string;
+}
+
+/** One `{"child": …}` line of the walk, as written. */
+export interface ChildEntry extends ChildLink {
+  /** `c1`, `c2`, … — its own sequence, never a walk (`w`) id. */
+  id: string;
+  ts: string;
 }
 
 // ----------------------------------------------------------------- redaction
@@ -214,6 +235,10 @@ export interface WalkRecorderOptions {
   installExitHook?: boolean;
   /** Override read-tool recognition (a tool module may register its own name). */
   isReadTool?: (toolName: string) => boolean;
+  /** Registry key of the active model, when one was resolved (env ASSOCIATE_MODEL, else the registry default). */
+  model?: string;
+  /** The active model's lobes role (its wire id), when a model was resolved. */
+  lobes_role?: string;
 }
 
 /**
@@ -232,13 +257,18 @@ export class WalkRecorder {
   private readonly inlineLimit: number;
   private readonly startedAt: number;
   private readonly pending = new Map<string, { toolName: string; args: unknown }>();
+  /** Calls the guard refused (L4): recorded at refusal, never again from a late tool_result. */
+  private readonly blocked = new Set<string>();
 
   private nextId: number;
+  private nextChildId: number;
   private toolCalls = 0;
   private anyTruncated = false;
   private unresolved = 0;
   private explicitOutcome?: WalkOutcome;
   private finalized?: WalkRun;
+  private readonly model?: string;
+  private readonly lobes_role?: string;
 
   constructor(options: WalkRecorderOptions) {
     this.walkPath = join(options.exportDir, WALK_FILENAME);
@@ -248,7 +278,10 @@ export class WalkRecorder {
     const caps = policySection(options.policy, "caps");
     this.inlineLimit = typeof caps.max_raw_chars === "number" ? caps.max_raw_chars : 0;
     this.startedAt = Date.now();
+    this.model = options.model;
+    this.lobes_role = options.lobes_role;
     this.nextId = countExistingEntries(this.walkPath) + 1;
+    this.nextChildId = countExistingChildren(this.walkPath) + 1;
 
     // A headless `pi -p` may exit without a `session_shutdown`; without this
     // the run record — the only place reliability is recorded (c36) — would be
@@ -293,8 +326,9 @@ export class WalkRecorder {
    *
    * No entry is written here: an entry needs the result, and writing a second
    * line per call would break the 1:1 event mapping c43 requires. A call whose
-   * result never arrives — blocked by the write guard, or cut short — is
-   * flushed as its own entry by {@link finalize}, carrying the reason.
+   * result never arrives is flushed as its own entry by {@link finalize},
+   * carrying the reason; a call the guard refused is recorded at refusal by
+   * {@link recordBlocked} instead.
    */
   noteToolCall(event: ToolCallEventLike): void {
     const toolCallId = typeof event.toolCallId === "string" ? event.toolCallId : undefined;
@@ -305,9 +339,36 @@ export class WalkRecorder {
     });
   }
 
+  /**
+   * Record a call the `tool_call` guard refused, with the refusal as its
+   * error (L4). Pi sends no `tool_result` for a blocked call, so without this
+   * it would be flushed at finalize as unresolved and turn the run outcome
+   * into "error"; a refusal is the guard working, not a failed run. A call id
+   * that is not pending is ignored. Returns the entry written, if any.
+   */
+  recordBlocked(toolCallId: string | undefined, reason: string): WalkEntry | undefined {
+    if (!toolCallId) return undefined;
+    const pendingCall = this.pending.get(toolCallId);
+    if (!pendingCall) return undefined;
+    this.pending.delete(toolCallId);
+    this.blocked.add(toolCallId);
+    this.toolCalls += 1;
+    return this.append(
+      this.buildEntry({
+        tool: pendingCall.toolName,
+        args: pendingCall.args ?? {},
+        text: "",
+        truncated: false,
+        error: `refused: ${reason}`,
+      }),
+    );
+  }
+
   /** Append one entry for a finished tool event. Returns what was written. */
-  recordToolResult(event: ToolResultEventLike): WalkEntry {
+  recordToolResult(event: ToolResultEventLike): WalkEntry | undefined {
     const toolCallId = typeof event.toolCallId === "string" ? event.toolCallId : undefined;
+    // Already recorded at refusal (L4): one entry per call, never two.
+    if (toolCallId && this.blocked.has(toolCallId)) return undefined;
     const remembered = toolCallId ? this.pending.get(toolCallId) : undefined;
     if (toolCallId) this.pending.delete(toolCallId);
 
@@ -335,6 +396,55 @@ export class WalkRecorder {
   }
 
   /**
+   * Append one safety-gate decision as its own `{"gate": <$defs/gate>}` line.
+   *
+   * The entry comes from `lib/gate.ts`, which already redacted its reason; it
+   * passes through this recorder's filter again anyway so no line of the walk
+   * is written unfiltered. Gate lines are not tool events: they take no walk
+   * id and do not count toward the run record's `tool_calls`. Throws when the
+   * line cannot be written — the caller (the `tool_call` guard) refuses the
+   * call rather than run a mutation whose decision went unrecorded.
+   */
+  recordGate(entry: GateEntry): GateEntry {
+    if (this.finalized) {
+      throw new Error("the walk is already finalized; a gate decision can no longer be recorded");
+    }
+    const redacted = redactValue(entry, this.filter);
+    appendFileSync(this.walkPath, `${JSON.stringify({ gate: redacted })}\n`, "utf8");
+    return redacted;
+  }
+
+  /**
+   * Append one child-walk link as its own `{"child": <$defs/child>}` line
+   * (plan t16: the parent walk references every child walk by path).
+   *
+   * Like a gate line, a child line is not a tool event: it takes no walk id
+   * and does not count toward `tool_calls`. Child ids are their own sequence,
+   * `c1`, `c2`, …, continued from any child lines already in the file. The
+   * line passes through the redaction filter like every other line. Throws
+   * when the line cannot be written — the spawn tool then launches nothing,
+   * so no child ever runs without its link on disk.
+   */
+  recordChild(link: ChildLink): ChildEntry {
+    if (this.finalized) {
+      throw new Error("the walk is already finalized; a child walk can no longer be linked");
+    }
+    const entry: ChildEntry = redactValue(
+      {
+        id: `c${this.nextChildId}`,
+        ts: this.now().toISOString(),
+        child_model: link.child_model,
+        child_walk: link.child_walk,
+        child_session_id: link.child_session_id,
+      },
+      this.filter,
+    );
+    appendFileSync(this.walkPath, `${JSON.stringify({ child: entry })}\n`, "utf8");
+    this.nextChildId += 1;
+    return entry;
+  }
+
+  /**
    * Write the run record and close the walk. Idempotent: the session can end
    * through `session_shutdown` and through process exit, and one run record is
    * what the schema describes.
@@ -354,7 +464,7 @@ export class WalkRecorder {
           text: "",
           truncated: false,
           error:
-            "no tool_result was received for this tool call: it was blocked or the run ended first",
+            "no tool_result was received for this tool call: the run ended first",
         }),
       );
     }
@@ -365,6 +475,10 @@ export class WalkRecorder {
       tool_calls: this.toolCalls,
       outcome: this.explicitOutcome ?? outcome ?? (this.unresolved > 0 ? "error" : "ok"),
       truncated: this.anyTruncated,
+      // Only when resolved: the on-disk JSON drops undefined keys, and the
+      // returned record must equal the line written.
+      ...(this.model !== undefined ? { model: this.model } : {}),
+      ...(this.lobes_role !== undefined ? { lobes_role: this.lobes_role } : {}),
     };
     appendFileSync(this.walkPath, `${JSON.stringify({ run })}\n`, "utf8");
     this.finalized = run;
@@ -425,9 +539,37 @@ export class WalkRecorder {
 /** Entries already in a walk file, so a second recorder never re-issues `w1`. */
 function countExistingEntries(walkPath: string): number {
   if (!existsSync(walkPath)) return 0;
-  return readFileSync(walkPath, "utf8")
-    .split("\n")
-    .filter((line) => line.trim() && !line.includes('"run"')).length;
+  let count = 0;
+  for (const line of readFileSync(walkPath, "utf8").split("\n")) {
+    if (!line.trim()) continue;
+    try {
+      const record = JSON.parse(line) as Record<string, unknown>;
+      // Run, gate and child lines are not tool entries and take no walk id.
+      if (record && typeof record === "object" && ("run" in record || "gate" in record || "child" in record)) {
+        continue;
+      }
+    } catch {
+      // A torn line still occupied an id when it was written.
+    }
+    count += 1;
+  }
+  return count;
+}
+
+/** Child lines already in a walk file, so a second recorder never re-issues `c1`. */
+function countExistingChildren(walkPath: string): number {
+  if (!existsSync(walkPath)) return 0;
+  let count = 0;
+  for (const line of readFileSync(walkPath, "utf8").split("\n")) {
+    if (!line.trim()) continue;
+    try {
+      const record = JSON.parse(line) as Record<string, unknown>;
+      if (record && typeof record === "object" && "child" in record) count += 1;
+    } catch {
+      // A torn line is counted as a walk entry by countExistingEntries, not here.
+    }
+  }
+  return count;
 }
 
 /**
@@ -441,10 +583,13 @@ export function installWalkRecorder(
     on(event: string, handler: (event: Record<string, unknown>) => unknown): void;
   },
   ctx: AssociateContext,
+  options: { model?: string; lobes_role?: string } = {},
 ): WalkRecorder {
   const recorder = new WalkRecorder({
     exportDir: ctx.session.exportDir,
     policy: ctx.policy,
+    model: options.model,
+    lobes_role: options.lobes_role,
   });
 
   pi.on("tool_call", (event) => {

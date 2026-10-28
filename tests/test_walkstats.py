@@ -9,8 +9,27 @@ import pytest
 from associate.bench import walkstats
 
 
-def write_walk(directory, *, entries=1, run=None, name="walk.jsonl"):
-    """Write a walk with *entries* entries and an optional run record."""
+def gate_line(index, tier, decision, *, tool="write"):
+    """One ``{"gate": ...}`` line as the gate writes it (walk.schema.json)."""
+    entry = {
+        "id": f"g{index}",
+        "ts": "2026-09-12T10:00:01.000Z",
+        "tier": tier,
+        "question_set_version": 1,
+        "gated_tool": tool,
+        "decision": decision,
+    }
+    if tier == "clef":
+        entry["probabilities"] = {"is_safe": 0.9}
+    if tier in ("super", "large"):
+        entry["verdict"] = {"safe": decision == "allow"}
+    if tier == "large":
+        entry["evaluator"] = "cortex"
+    return {"gate": entry}
+
+
+def write_walk(directory, *, entries=1, run=None, gates=(), name="walk.jsonl"):
+    """Write a walk with *entries* entries, optional gate lines and an optional run record."""
     directory.mkdir(parents=True, exist_ok=True)
     path = directory / name
     lines = [
@@ -26,6 +45,7 @@ def write_walk(directory, *, entries=1, run=None, name="walk.jsonl"):
         )
         for index in range(1, entries + 1)
     ]
+    lines += [json.dumps(entry) for entry in gates]
     if run is not None:
         lines.append(json.dumps({"run": run}))
     path.write_text("\n".join(lines) + "\n", encoding="utf-8")
@@ -146,3 +166,152 @@ def test_main_json_mode_emits_the_aggregate_and_every_run(tmp_path, capsys):
 def test_main_reports_when_there_is_nothing_to_aggregate(tmp_path, capsys):
     assert walkstats.main([str(tmp_path)]) == 1
     assert "no walk.jsonl found" in capsys.readouterr().err
+
+
+def gated_walks(tmp_path):
+    """Three walks whose gate lines hold five gated calls, two of them read-only fallbacks.
+
+    Tiers: clef x2 (allow, refuse), super x1 (allow), readonly x2 (allow, refuse).
+    The child link line must not be counted as a gated call.
+    """
+    write_walk(
+        tmp_path / "a" / "export",
+        entries=2,
+        gates=[gate_line(1, "clef", "allow"), gate_line(2, "super", "allow")],
+        run={"duration_ms": 10, "tool_calls": 2, "outcome": "ok"},
+    )
+    write_walk(
+        tmp_path / "b" / "export",
+        entries=1,
+        gates=[
+            gate_line(1, "clef", "refuse"),
+            {
+                "child": {
+                    "id": "c1",
+                    "ts": "2026-09-12T10:00:02.000Z",
+                    "child_model": "associate",
+                    "child_walk": "/x/walk.jsonl",
+                    "child_session_id": "s",
+                }
+            },
+            gate_line(2, "readonly", "allow"),
+        ],
+        run={"duration_ms": 20, "tool_calls": 1, "outcome": "ok"},
+    )
+    write_walk(
+        tmp_path / "c" / "export",
+        entries=1,
+        gates=[gate_line(1, "readonly", "refuse")],
+        run=None,
+    )
+    return tmp_path
+
+
+def test_gate_lines_are_read_and_an_old_walk_has_none(tmp_path):
+    old = write_walk(
+        tmp_path / "old", entries=3, run={"duration_ms": 1, "tool_calls": 3, "outcome": "ok"}
+    )
+    assert walkstats.load_gate_records(old) == []
+    gated = gated_walks(tmp_path / "new")
+    records = [
+        record
+        for path in walkstats.find_walks([gated])
+        for record in walkstats.load_gate_records(path)
+    ]
+    assert len(records) == 5, "child link lines are not gate records"
+    assert all("tier" in record for record in records)
+
+
+def test_tier_shares_and_readonly_fallbacks_over_fixture_walks(tmp_path):
+    root = gated_walks(tmp_path)
+    records = [
+        record
+        for path in walkstats.find_walks([root])
+        for record in walkstats.load_gate_records(path)
+    ]
+    gates = walkstats.aggregate_gates(records).as_dict()
+
+    assert gates["gated_calls"] == 5
+    assert gates["readonly_fallbacks"] == 2
+    assert gates["tiers"]["clef"] == {"count": 2, "share": 0.4, "allow": 1, "refuse": 1}
+    assert gates["tiers"]["super"] == {"count": 1, "share": 0.2, "allow": 1, "refuse": 0}
+    assert gates["tiers"]["readonly"] == {"count": 2, "share": 0.4, "allow": 1, "refuse": 1}
+
+
+def test_zero_gated_calls_report_zero_shares_without_dividing(tmp_path):
+    gates = walkstats.aggregate_gates([]).as_dict()
+    assert gates["gated_calls"] == 0
+    assert gates["readonly_fallbacks"] == 0
+    for tier in ("clef", "super", "large", "readonly"):
+        assert gates["tiers"][tier] == {"count": 0, "share": 0.0, "allow": 0, "refuse": 0}
+
+
+def test_gate_lines_with_an_unknown_tier_are_not_counted(tmp_path):
+    bogus = gate_line(1, "clef", "allow")
+    bogus["gate"]["tier"] = "mystery"
+    stats = walkstats.aggregate_gates([bogus["gate"], gate_line(2, "readonly", "refuse")["gate"]])
+    assert stats.gated == 1
+    assert stats.readonly_fallbacks == 1
+
+
+def test_render_prints_a_gate_line_with_tier_shares_and_fallbacks(tmp_path):
+    root = gated_walks(tmp_path)
+    records = [walkstats.load_run_record(path) for path in walkstats.find_walks([root])]
+    gates = walkstats.aggregate_gates(
+        record
+        for path in walkstats.find_walks([root])
+        for record in walkstats.load_gate_records(path)
+    )
+    text = walkstats.render([walkstats.aggregate(records)], (), gates=gates)
+    gate_lines = [line for line in text.splitlines() if line.startswith("gates:")]
+
+    assert len(gate_lines) == 1
+    assert "gated=5" in gate_lines[0]
+    assert "clef=2 (40.0%" in gate_lines[0]
+    assert "super=1 (20.0%" in gate_lines[0]
+    assert "readonly=2 (40.0%" in gate_lines[0]
+    assert "readonly fallbacks=2" in gate_lines[0]
+
+
+def test_main_text_reports_gates_for_fixture_walks(tmp_path, capsys):
+    root = gated_walks(tmp_path)
+    assert walkstats.main([str(root)]) == 0
+    out = capsys.readouterr().out
+    assert "readonly fallbacks=2" in out
+    assert "| group" in out, "the existing table is still printed"
+
+
+def test_main_text_for_old_walks_reports_zero_gates(tmp_path, capsys):
+    write_walk(
+        tmp_path / "old", entries=1, run={"duration_ms": 1, "tool_calls": 1, "outcome": "ok"}
+    )
+    assert walkstats.main([str(tmp_path)]) == 0
+    assert "gates: gated=0" in capsys.readouterr().out
+
+
+def test_main_json_mode_includes_gate_aggregate(tmp_path, capsys):
+    root = gated_walks(tmp_path)
+    assert walkstats.main([str(root), "--json"]) == 0
+    payload = json.loads(capsys.readouterr().out)
+    assert payload["gates"]["gated_calls"] == 5
+    assert payload["gates"]["readonly_fallbacks"] == 2
+    assert payload["gates"]["tiers"]["clef"]["share"] == 0.4
+    assert payload["aggregate"]["runs"] == 3, "existing fields are unchanged"
+
+
+def test_large_state_gate_lines_count_as_their_own_tier(tmp_path):
+    """d16: a state over CLEF's budget is judged by a registry evaluator, and the
+    report keeps it apart from CLEF and Super."""
+    stats = walkstats.aggregate_gates(
+        [
+            gate_line(1, "large", "allow")["gate"],
+            gate_line(2, "large", "refuse")["gate"],
+            gate_line(3, "clef", "allow")["gate"],
+        ]
+    ).as_dict()
+    assert stats["gated_calls"] == 3
+    assert stats["tiers"]["large"] == {"count": 2, "share": 0.6667, "allow": 1, "refuse": 1}
+    text = walkstats.render_gates(
+        walkstats.aggregate_gates([gate_line(1, "large", "allow")["gate"]])
+    )
+    assert "large=1 (100.0%" in text

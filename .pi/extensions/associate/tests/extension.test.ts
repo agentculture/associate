@@ -125,8 +125,9 @@ test("associate_ready reports the extension version, the contract version and th
 });
 
 test("associate_ready reports no active writer under defaultTools: []", async () => {
-  // Measured against pi 0.84.2: getAllTools() lists the built-ins even when
-  // defaultTools: [] leaves them inactive, so the launcher's check (spec c34)
+  // Measured against pi 0.84.2, re-measured on 1.1.0: getAllTools() lists
+  // the built-ins even when defaultTools: [] leaves them inactive, so the
+  // launcher's check (spec c34)
   // is writer_tools_active, and the sentinel must not hide a writer that *is*
   // active.
   const s = scratch();
@@ -207,10 +208,50 @@ test("finish returns the hand-back as its payload and leaves one text reply (d9)
   }
 });
 
-test("the tool_call hook is registered and blocks a write into the checkout", async () => {
+test("a new prompt in the same session is not blocked by the previous prompt's finish", async () => {
+  // The mesh resident runs ONE long-lived `pi --mode rpc` session (via pi-acp)
+  // and sends one prompt per mesh request. `finish` closes the current task
+  // only; the next before_agent_start starts a fresh one.
   const s = scratch();
   try {
     await withExtension(s.env, async ({ pi }) => {
+      const startPrompt = async (prompt: string) => {
+        for (const handler of pi.handlers.get("before_agent_start") ?? []) {
+          await handler({ type: "before_agent_start", prompt, systemPrompt: "" }, {});
+        }
+      };
+      await pi.fireSessionStart();
+      await startPrompt("first task: read server.py");
+      await pi.tool("finish").execute("call-1", { summary: "Done with the first task." });
+      const blocked = (await pi.fireToolCall({
+        toolCallId: "tc-1",
+        toolName: "read",
+        input: { path: "server.py" },
+      })) as any;
+      assert.equal(blocked?.block, true, "within the finished prompt, tools stay blocked");
+      assert.match(String(blocked?.reason), /handed back/);
+
+      await startPrompt("second task: read client.py");
+      const next = (await pi.fireToolCall({
+        toolCallId: "tc-2",
+        toolName: "read",
+        input: { path: "client.py" },
+      })) as any;
+      assert.doesNotMatch(String(next?.reason ?? ""), /handed back/, "prompt 2 must not inherit prompt 1's finish");
+      assert.notEqual(next?.block, true, JSON.stringify(next));
+    });
+  } finally {
+    s.dispose();
+  }
+});
+
+test("the tool_call hook is registered and blocks a write into the checkout", async () => {
+  // Pinned to senses, the model that may not mutate (t12): `write` is not in
+  // its tool set, so the call is refused before anything else is asked. The
+  // worker/cortex path (the safety gate) is covered in tests/toolcall.test.ts.
+  const s = scratch();
+  try {
+    await withExtension({ ...s.env, ASSOCIATE_MODEL: "senses" }, async ({ pi }) => {
       // The guard is one of the `tool_call` hooks; the walk recorder is the
       // other, and it records without ever blocking.
       assert.ok((pi.handlers.get("tool_call")?.length ?? 0) >= 1, "no tool_call hook");
@@ -222,7 +263,7 @@ test("the tool_call hook is registered and blocks a write into the checkout", as
       })) as { block: boolean; reason: string } | undefined;
       assert.ok(blocked, "a write into the checkout must be blocked");
       assert.equal(blocked!.block, true);
-      assert.match(blocked!.reason, /outside this session's scratch directory/);
+      assert.match(blocked!.reason, /not in the tool set of the active model 'senses'/);
 
       const allowed = await pi.fireToolCall({
         toolName: "read",
@@ -294,7 +335,10 @@ test("every module under tools/ is discovered and must export register()", async
 });
 
 test("writers are deactivated at load even when the host offered them (deviation d7)", async () => {
-  const { pi, cleanup } = await loadExtension({}, (fake) => {
+  // senses: the model that may not mutate. worker/cortex keep write/edit —
+  // see tests/toolcall.test.ts.
+  const { pi, cleanup } = await loadExtension({ ASSOCIATE_MODEL: "senses" }, (fake) => {
+    fake.builtinTools = ["read", "bash", "edit", "write", "grep"];
     fake.activeBuiltinTools = ["read", "bash", "edit", "write", "grep"];
   });
   assert.ok(pi.getActiveTools().includes("edit"), "precondition: the host offered edit before session_start");
@@ -303,8 +347,9 @@ test("writers are deactivated at load even when the host offered them (deviation
   assert.ok(!active.includes("edit"), `edit still active: ${active.join(", ")}`);
   assert.ok(!active.includes("write"), `write still active: ${active.join(", ")}`);
   assert.ok(active.includes("associate_ready") && active.includes("finish"));
-  // the argv shell overrides `bash` and declares itself a non-writer, so it stays
-  assert.ok(active.includes("bash"));
+  // senses' models.json tool set has no shell at all, so even the argv shell
+  // (a declared non-writer) is not active for it.
+  assert.ok(!active.includes("bash"), `bash active for senses: ${active.join(", ")}`);
   cleanup();
 });
 
@@ -317,7 +362,9 @@ test("session_start writes ready.json carrying the sentinel's report (deviation 
   const s = scratch();
   const readyPath = join(s.root, "unit-session", "export", "ready.json");
   try {
-    const { pi, cleanup } = await loadExtension(s.env, (fake) => {
+    // senses: the model whose ready.json must name no writer (worker/cortex
+    // may write, t12 — tests/toolcall.test.ts).
+    const { pi, cleanup } = await loadExtension({ ...s.env, ASSOCIATE_MODEL: "senses" }, (fake) => {
       fake.builtinTools = ["read", "bash", "edit", "write"];
       fake.activeBuiltinTools = ["read", "bash", "edit", "write"];
     });
@@ -342,7 +389,7 @@ test("session_start writes ready.json carrying the sentinel's report (deviation 
       assert.equal(onDisk.session.id, "unit-session");
       assert.ok(onDisk.active_tools.includes("associate_ready"));
       assert.ok(onDisk.active_tools.includes("finish"));
-      // Written AFTER dropWriters, so no writer can appear in either list.
+      // Written AFTER applyModelToolSet, so no writer can appear in either list.
       assert.deepEqual(onDisk.writer_tools_active, [], "no writer may be active in ready.json");
       for (const writer of ["edit", "write"]) {
         assert.ok(!onDisk.active_tools.includes(writer), `${writer} is still active`);
@@ -350,6 +397,57 @@ test("session_start writes ready.json carrying the sentinel's report (deviation 
     } finally {
       cleanup();
     }
+  } finally {
+    s.dispose();
+  }
+});
+
+/**
+ * pi 0.86.0 restricted `ToolResultMessage.details` (and `ToolCall.arguments`)
+ * to JSON-compatible values. The restriction is a type, not a runtime check —
+ * pi loads this extension with types stripped — so the only proof is the value
+ * itself: anything that does not survive `JSON.stringify` unchanged (an
+ * `undefined` field, a function, `NaN`, a `Date`, a `Map`) is named here.
+ */
+function nonJsonPaths(value: unknown, path = "details"): string[] {
+  if (value === null || typeof value === "string" || typeof value === "boolean") return [];
+  if (typeof value === "number") return Number.isFinite(value) ? [] : [path];
+  if (Array.isArray(value)) return value.flatMap((item, i) => nonJsonPaths(item, `${path}[${i}]`));
+  if (typeof value === "object" && Object.getPrototypeOf(value) === Object.prototype) {
+    return Object.entries(value as Record<string, unknown>).flatMap(([key, item]) =>
+      nonJsonPaths(item, `${path}.${key}`),
+    );
+  }
+  return [path];
+}
+
+test("core tool results carry JSON-compatible details (pi 0.86.0)", async () => {
+  const s = scratch();
+  try {
+    writeFileSync(join(s.checkout, "server.py"), "print('hi')\n");
+    await withExtension(s.env, async ({ pi }) => {
+      const results: Array<[string, { details?: unknown }]> = [
+        ["associate_ready", await pi.tool("associate_ready").execute("call-1", {})],
+        ["read", await pi.tool("read").execute("call-2", { path: join(s.checkout, "server.py") })],
+      ];
+      await pi.fireToolResult({
+        toolCallId: "call-2",
+        toolName: "read",
+        input: { path: join(s.checkout, "server.py") },
+        content: [{ type: "text", text: "1\tprint('hi')" }],
+      });
+      results.push([
+        "finish",
+        await pi.tool("finish").execute("call-3", {
+          summary: "One file.",
+          statements: [{ text: "server.py prints hi.", evidence: ["w1"] }, { text: "No evidence." }],
+          citations: [{ path: "server.py", line: 1 }],
+        }),
+      ]);
+      for (const [name, result] of results) {
+        assert.deepEqual(nonJsonPaths(result.details), [], `${name} details must be JSON-compatible`);
+      }
+    });
   } finally {
     s.dispose();
   }

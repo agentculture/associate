@@ -4,11 +4,13 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## What this project is
 
-**associate** is a *non-coding agent harness* — a fast, reliable worker for
-**read, summarize, and find** work across local files and the web. It exists to
-take non-coding tool work off [`colleague`](https://github.com/agentculture/colleague)
-so colleague can spend its budget on coding and thinking. The design is modelled
-on the Pi harness and merged from colleague's base tools.
+**associate** is a *multi-model agent harness* on [Pi](https://pi.dev): it runs
+one of the fleet's models — chosen per run from a registry — on one task, with
+that model's own tool set, prompt and permissions, and hands back what it saw,
+what it did, and where. It began as a read/summarize/find worker that takes
+non-coding tool work off [`colleague`](https://github.com/agentculture/colleague);
+models the registry allows to change things now also write and edit, each
+mutating call behind a CLEF safety gate and inside a per-run git worktree.
 
 It is a sibling in the AgentCulture mesh alongside
 [`colleague`](https://github.com/agentculture/colleague) (the diverse-backend
@@ -19,114 +21,229 @@ skills supplier), [`steward`](https://github.com/agentculture/steward)
 (the IRC mesh itself). See the workspace-level `CLAUDE.md` one directory above
 for the cross-project overview.
 
-Sibling paths in this file (`../devague/`, `../guildmaster/`) **assume the
-workspace layout** where siblings are checked out in the same parent directory.
-In a standalone clone, read the same files on GitHub or clone the sibling beside
-this repo first. Each path names a project, not a guaranteed location.
+It serves two audiences: **the operator**, who runs it headless
+(`associate run`) or as the mesh resident (`culture start associate`), and **mesh
+peers** (colleague and others) that hand it read/summarize/find and, now,
+execution work over IRC.
+
+Sibling paths in this file (`../devague/`, `../guildmaster/`, `../lobes-cli/`)
+**assume the workspace layout** where siblings are checked out in the same
+parent directory. In a standalone clone, read the same files on GitHub or clone
+the sibling beside this repo first. Each path names a project, not a guaranteed
+location.
 
 ## Current state vs. target
 
 **Read this before believing the description.** This repo was scaffolded from
-`culture-agent-template` (`guild create`) and carries the template's full
-baseline — the agent-first CLI, the vendored skill kit, CI, PyPI publishing, and
-an inherited `CHANGELOG.md` whose pre-`0.8.0` entries are *template* history with
-the names substituted, not things that happened here.
+`culture-agent-template` (`guild create`); `CHANGELOG.md` entries before `0.8.0`
+are *template* history with the names substituted, not things that happened
+here. Two devague plans have run since:
+`docs/plans/2026-09-12-associate-on-pi-with-opinionated-tools.md` (the Pi
+harness, 0.9.x) and `docs/plans/2026-10-27-associate-multi-model-on-pi-1-1-0.md`
+(this multi-model work, 0.10.0).
 
-What exists today:
+**Before the multi-model plan** (commit `5f023e7`, 0.9.1 — check each with
+`git show 5f023e7:<path>`): associate was bound to one model — the lobes
+`associate` role, Nemotron 3.5 Lightning — through a single hardcoded provider
+(`.pi/extensions/associate/lib/provider.ts:52`, `ASSOCIATE_PROVIDER_ID =
+"associate"`, default model id `associate` at `:58`); it ran on pi 0.84.2
+(`associate/harness/pi.py:57`); it never changed anything (every write outside
+scratch refused as `repo_action`, `lib/guard.ts:166`); it had no memory, ledger,
+decider or sub-agent tools; and its only quality measure was a 7-case in-house
+suite whose last live run passed 1/7
+(`docs/deliveries/2026-09-12-associate-on-pi-with-opinionated-tools.md:89`,
+follow-up r26).
 
-- the agent-first CLI (`whoami` / `learn` / `explain` / `overview` / `doctor` /
-  `cli overview` / `bench`) — introspection plus a behavioral-suite runner, no
-  read/find/summarize domain verbs yet;
-- the mesh identity: `culture.yaml` now declares `backend: acp` with
-  `acp_command: [pi-acp]`, and `AGENTS.md` is the Pi runtime prompt
-  (`AGENTS.colleague.md` is retained until the ACP path is verified live);
-- 19 vendored skills under `.claude/skills/`;
-- a green build/lint/publish baseline;
-- **the harness pieces landed so far, per
-  `docs/specs/2026-09-12-associate-on-pi-with-opinionated-tools.md`:** a
-  tracked `.pi/` project config and package manifest; the portable contract
-  under `associate/contract/` (`role.json`, `policy.json`, the walk/statements
-  JSON schemas) plus a Python-side adapter boundary (`associate/harness/base.py`,
-  a `stub` adapter — no `pi` adapter registered yet); the Pi extension's core
-  (`.pi/extensions/associate/`: loader, sentinel tool, `finish`, the write
-  guard, session-keyed scratch/export dirs); a containment library
-  (`.pi/extensions/associate/lib/contain.ts`) ported case by case from
-  `colleague`'s guards; and `associate bench --harness stub`, which runs the
-  behavioral suite end to end today to verify plumbing only.
+**What exists now** (all in-repo, covered by unit tests and the extension's
+`node --test` suite against fakes; see "Measured vs. not measured" for what has
+run live):
 
-What is **still landing** (do not describe any of it as working until it
-ships and a run measures it): the `pi` harness adapter itself
-(`associate/harness/pi.py`) and the `associate run` CLI verb that drives it;
-the Pi provider registration (`lib/provider.ts`, reasoning-off on the wire);
-the live proof that `culture start associate` launches through pi-acp; and the walk/statements
-artifacts a real run would produce. **Until a task measures a live `pi`
-adapter run end to end (tracked as t15 in this plan's split), the harness does
-not work end to end — say so plainly, here and in any commit or PR body.**
-Treat "Project shape" below as the ground you build on, not as a description
-of a finished harness.
+- **Pi 1.1.0.** The extension and harness moved from the 0.84.2 pin; every
+  breaking change in between has a verdict in `docs/notes/pi-1.1.0-migration.md`.
+- **A model registry** in the portable contract,
+  `associate/contract/models.json`: `worker` (Pi label "bolt", the default),
+  `senses`, `cortex`, and `super-vl` (status `pending`, no lobes role yet —
+  not usable). Each entry names its lobes role, input modalities, reasoning
+  mode, exact tool set, prompt file (`.pi/extensions/associate/prompts/`),
+  `may_mutate`, and `may_spawn`. The provider (`lib/provider.ts`) and the Python
+  adapter (`associate/harness/pi.py`) both read it; neither hardcodes a model.
+  `associate run --model <key>` picks an entry.
+- **Per-model tool surface and guard.** A model is offered only its registry
+  tools (`pi.setActiveTools`), and `lib/guard.ts` refuses anything else.
+  `senses` (`may_mutate: false`) never gets `write`/`edit`/`bash`/
+  `ledger_append`/`run_tests`; `worker` and `cortex` may write and edit in the
+  run checkout.
+- **The CLEF safety gate** (`lib/gate.ts`, question set and thresholds in
+  `associate/contract/gate.json`, version 9). Every mutating call
+  (`models.json` `mutating_tools`) and every gated call (`gated_tools`:
+  `eidetic_remember`, `web_search`, `web_page`, `delegate_run`) is scored by the lobes decider
+  (`POST /v1/systemone`); below threshold it is refused. Tiers: CLEF, then
+  Super (a chat model answering the same questions as JSON — counted as
+  unreachable while `super-vl` is pending), then a read-only fallback that
+  refuses every mutating call. The verdict lands in the walk. The thresholds
+  (`safe_unattended` and `matches_task` ≥ 0.5) are **tentative**, set from one
+  task's probes (`docs/notes/gate-calibration.md`, deviations d8–d11); issue #13
+  is the CLEF benchmark that replaces them, and #14–#17 are the follow-ups.
+- **Worktree per mutating run** (`associate/harness/worktree.py`): a
+  `may_mutate` model runs in `../.worktrees.<repo>/run-<session>` on branch
+  `associate-run/<session>`; only a clean run is committed and merged to `main`
+  locally (never pushed); anything else is kept and reported.
+  `--untrusted-checkout` (deviation d5) ignores the examined checkout's own
+  `.pi` settings, extensions and MCP config.
+- **Operator test commands** (deviation d12): `--test-command` names commands
+  the harness runs after the model (`associate/harness/testcmds.py`); a worktree
+  run merges only when all exit 0. The same commands are offered to writing
+  models as the gated `run_tests` tool (`tools/tests.ts`).
+- **Tools beyond the base set:** `eidetic_recall` / `eidetic_remember`
+  (`tools/eidetic.ts`, shelling out to eidetic-cli with a pinned destination
+  outside the checkout); `ledger_append` / `ledger_list` (`tools/ledger.ts`,
+  over workledger-cli 0.8.0's `ledger append|list`); `spawn_subagent`
+  (`tools/spawn.ts`, cortex only, children `worker` or `senses`, one writing
+  child per checkout at a time, child walk paths recorded in the parent walk);
+  image blocks from `read` for models whose entry lists `image` input.
+- **Delegation from the read-only resident** (deviation d18, `tools/delegate.ts`):
+  senses holds `delegate_run` and `delegate_status`, allowed targets from
+  `models.json` `may_delegate` (senses: `worker`; every other model `[]`).
+  `delegate_run` starts `associate run --model <target> --checkout <session
+  checkout> --json` **detached** and returns a run id at once (culture's turn
+  timeout is 600 s; live worker runs took up to ~25 min); `delegate_status`
+  reads the run's `--json` result (outcome, merge, merge_reason, worktree,
+  tests, final_reply) or reports it running, failed or lost. The run is the
+  in-tree CLI — `<tree>/.venv/bin/python` (else `python3` on PATH) `-m
+  associate`, cwd and `PYTHONPATH` set to the tree that holds the extension
+  (`lib/paths.ts` `associateRoot`), `ASSOCIATE_EXTENSION_PATH` to this
+  extension — never the PATH `associate` and never `uv`, so the tree's
+  `uv.lock` is untouched. It passes every operator test command from
+  `ASSOCIATE_TEST_COMMANDS` as `--test-command` (and refuses to start with
+  none configured), `--untrusted-checkout` unless `ASSOCIATE_PI_TRUST` is
+  `approve`, and `--timeout` from `policy.json` `budgets.delegate.timeout_ms`.
+  One delegated run per checkout at a time; it refuses a checkout outside git.
+  Its export root is `<session root>/delegated`, its session id the run id, its
+  stdout/stderr beside it; a `child` line in the session walk names its walk.
+  `delegate_run` is in `gated_tools` (CLEF-gated for every model, effect line in
+  `gate.json` version 9), not in `mutating_tools`; `delegate_status` is a read,
+  and its result taints later memory records `untrusted:child`.
+- **The run result** names the model and lobes role that ran, the isolation and
+  merge outcome, the test results, and how the task turn ended (final reply,
+  stop reason, lane error).
+- **Public benchmarks as data** (`associate/bench/suites.json`: BFCL, MMMU,
+  LiveCodeBench), run by `associate bench --suite <name> --model <key>` through
+  each suite's own upstream runner and scorer. The in-house behavioral suite was
+  dropped (plan task t9). Every suite entry is `verified: false`.
+- `walkstats` (`associate/bench/walkstats.py`) reports gate-tier shares and
+  read-only fallback counts over a set of walks.
+
+### Measured vs. not measured
+
+**Measured live:** worker (bolt) runs on this repo, under the gate, each
+reviewed and fixed before merge — `live-bolt-fix-f2c` drafted the bug-F2 fix
+(commit `ceb5a7e`; it hit its timeout, and one defect the suite found was fixed
+in `1669af3`), and `live-bolt-tests-gaps2` wrote three `run_tests` tests, ran
+them with `run_tests`, and was kept out of `main` by the harness test check
+(commit `50c7630`, fixed in review). Plan task t20 then recorded single live
+runs on pi 1.1.0 (`docs/notes/t20-live-acceptance.md`):
+
+- a walk each for `worker`, `senses` and `cortex`;
+- every worker and cortex mutating call carried a gate verdict;
+- a fault-injected run, with the decider unreachable, fell back to read-only
+  while reads still ran;
+- a cortex run linked one `senses` and one `worker` child walk;
+- the `culture start associate` resident starts through pi-acp.
+
+It runs as a systemd user unit that passes only the gateway key, with
+`ASSOCIATE_MODEL=senses` (no checkout writes). Together with the probe bench
+in `docs/notes/gate-calibration.md`, that is the whole of the live evidence.
+Each item is one run, not a rate.
+
+**Not measured yet. Do not describe any of it as working:**
+
+- the resident's first reply on the mesh: it paused under the 23:00–08:00
+  sleep schedule before answering;
+- a writing model on the mesh: mesh sessions get no run worktree;
+- delegation from the resident (d18): `delegate_run` / `delegate_status` are
+  built and unit-tested against a fake launcher only; no delegated run has been
+  started live. While the resident's checkout is on a branch whose base is not
+  on `main`, the harness keeps (does not merge) every delegated run — see
+  `associate/harness/worktree.py`;
+- **any** benchmark score: no row of the 8-row matrix has run (t21).
+
+Say "built and unit-tested", never "works", for these. Two live findings
+remain open: worker sometimes ends without `finish`, and a senses statement
+claimed an action it never took.
 
 **One known inconsistency in the inherited scaffold** — don't "fix" it by
 guessing which side is right; ask. The `remember` skill's `SKILL.md` frontmatter
 says records default to the home-dir store (`$HOME/.eidetic/memory`) at
 **private** visibility; its `scripts/remember.sh` actually defaults to **public**
 (in-repo). The script is authoritative — see [Memory discipline](#memory-discipline--recall-before-remember-after).
+(This concerns the Claude Code skill only; the extension's `eidetic_remember`
+tool always pins its own destination.)
 
-## The runtime lane: `associate` is a first-class lobes role
+**The bound is split in two (deviation d13).** `associate/contract/role.json`
+is the harness-wide bound every model shares: none may take a
+`final_decision` or a `security_decision`. What each model may change is
+owned by `models.json` (`may_mutate`, tools, `may_spawn`). `worker` and
+`cortex` hold `repo_action` and `code_authoring`; `senses` does not.
+`AGENTS.md` states the same per-model bound to the model.
 
-This is not an aspiration — it is wired and serving today, and it is the reason
-this repo exists.
+## The runtime lanes: models addressed by lobes role
 
-`associate` is the **tenth Colleague-facing role** in
-[`lobes`](https://github.com/agentculture/lobes-cli) (`lobes/roles.py`), backed
-by `nvidia/NVIDIA-Nemotron-3.5-Lightning-30B-A3B-NVFP4` — a Mamba-2/MoE/attention
-hybrid, ~3B active of 30B total. lobes defines it as **`worker` MINUS
-`repo_action`**: it may execute, draft, inspect, and call tools, then hands the
-result **back** rather than enacting it. Its forbidden set is
-`final_decision`, `security_decision`, `code_authoring`, `repo_action`. That is
-this repo's remit stated in someone else's registry — read `lobes/roles.py`
-before you widen this agent's scope.
+associate no longer has a lane of its own. Every registry model is a **lobes
+role** served by the local lobes gateway
+([`lobes`](https://github.com/agentculture/lobes-cli), default
+`http://localhost:8001/v1`), and associate addresses it by role name, never by a
+checkpoint id. The gateway resolves a role to whichever box and checkpoint
+currently serve it, so a lane can move or re-checkpoint without touching this
+repo. That is lobes' stated purpose, and it is why no checkpoint id appears in
+`models.json`, `culture.yaml`, or this file.
 
-The topology, as measured on 2026-09-05:
+| Registry key | lobes role | What lobes says the role is for (`../lobes-cli/lobes/roles.py`, `ROLE_RESPONSIBILITIES` at `:325`, read 2026-10-27) | associate grants |
+|---|---|---|---|
+| `worker` (bolt) | `worker` | the fast doer: `execution`, `tool_use`, `repo_inspection`, `run_authorized_commands`, `repo_action`, `image_understanding` | writes behind the gate; no spawn |
+| `senses` | `senses` | intake: `intake`, `normalize_input`, `classify_intent`, `prepare_context_packet`; served on the `multimodal` backend (role hint at `:153`) — no `image_understanding` token | read-only; memory writes behind the gate |
+| `cortex` | `cortex` | `reasoning`, `planning`, `tool_use`, `code_repo_actions`, `image_understanding` | writes behind the gate; spawns `worker` / `senses` |
+| `super-vl` | — (pending) | not yet a lobes role | not usable |
 
-```text
-associate (backend: colleague)
-  └─ colleague default base_url  http://localhost:8001/v1
-       └─ lobes gateway (this box, the DGX Spark)
-            ASSOCIATE_FEASIBLE=false        # not hosted here
-            ASSOCIATE_PEER_PROXY=true       # forward, don't 404
-            ASSOCIATE_PEER_ORIGIN=http://<orin-host>:8000   # the tailnet peer
-              └─ Jetson AGX Orin 64GB (sm_87, zero swap), shape `orin-associate`
-                   associate: feasible=true ready=true loaded=true
-                   nvidia/NVIDIA-Nemotron-3.5-Lightning-30B-A3B-NVFP4
-```
+The decider (CLEF) is the lobes `decider` role (`typed_decision`,
+`guardrail_check`), reached at `/v1/systemone`, not a chat model and not a
+registry entry. "bolt" is not a lobes role: it is the Pi provider label for the
+`worker` role.
 
-So `culture.yaml` names the **role** (`model: associate`), never a checkpoint id.
-The gateway resolves the role to whichever box hosts it; the lane can move or
-re-checkpoint without touching this repo. Addressing a capability by role instead
-of hardcoding an endpoint is lobes' stated purpose.
+What serves a role is measured, not assumed. On 2026-10-27, every reply in a
+live pi run on the `worker` role reported `responseModel`
+`nvidia/NVIDIA-Nemotron-3.5-Bolt-74B-A9B-24GB` in pi's JSON event stream (24
+of 24 assistant messages). That is an observation of the gateway on that
+date, not a pin. Re-read `responseModel` rather than trusting this line, and
+never copy a checkpoint id into the contract. The other roles' serving
+checkpoints have not been read from a live run.
 
-**Known deployment defect (in the fleet, not in this repo):** the Orin advertises
-that lane on its `/v1/models` under the checkpoint id, while the Spark's
-`ASSOCIATE_SERVED_NAME=associate`. `probe_peer_ready` compares exactly those two
-strings, so the readiness probe fails and the Spark reports the role
-`ready=false, loaded=false` and omits it from its own `/v1/models` — even though
-the data plane proxies it correctly and `model=associate` returns real
-completions. Effect: **the lane works when addressed explicitly but is invisible
-to model discovery.** Any client that lists models before choosing one will not
-see it. Don't work around this in repo code; it is fixed in the deployment env.
+The earlier lane — the lobes `associate` role, Nemotron 3.5 Lightning on the
+Jetson AGX Orin, `worker` MINUS `repo_action` — is **out** (spec claim c30);
+`worker` replaces it as the default. The lobes `associate` role itself is
+untouched (this work changes no file in lobes-cli or colleague; spec boundary
+c18). Its history is in `CHANGELOG.md` (0.8.0–0.9.1).
 
 ## Identity: this file is not the runtime prompt
 
-`culture.yaml` declares `backend: colleague`, so the **resident agent's** runtime
-prompt is [`AGENTS.colleague.md`](AGENTS.colleague.md), not this file. This
-`CLAUDE.md` is the prompt for **Claude Code sessions working on the repo** — the
-two audiences are different and both are real.
+`culture.yaml` declares `backend: acp` with `acp_command: ["pi-acp"]`, so the
+**resident agent's** runtime prompt is [`AGENTS.md`](AGENTS.md), followed by the
+active model's prompt from `.pi/extensions/associate/prompts/`. This `CLAUDE.md`
+is the prompt for **Claude Code sessions working on the repo** — the two
+audiences are different and both are real. `AGENTS.colleague.md` is retained
+until the ACP path is verified live (t20), so the cutover stays one revert.
 
-That split is what the `backend-consistency` invariant checks: the declared
-backend must agree with the prompt file on disk (`claude` → `CLAUDE.md`,
-`colleague` → `AGENTS.colleague.md`, `acp` → `AGENTS.md`, `gemini` →
-`GEMINI.md`). If you ever change `backend:`, the matching prompt file must exist
-or both `associate doctor` and `steward doctor` fail. Verify with:
+`culture.yaml`'s `model: worker` is the registry key of the default model. It
+does **not** by itself select the resident's model: pi-acp ignores the ACP
+`session/new` model and culture never sends `session/set_model`; the extension
+pins the session to the registry model on `session_start` when
+`ASSOCIATE_API_KEY` is set (`docs/notes/resident-model-resolution.md`). Whether
+that holds on a live `culture start associate` is part of t20.
+
+The `backend-consistency` invariant checks that the declared backend agrees with
+the prompt file on disk (`claude` → `CLAUDE.md`, `colleague` →
+`AGENTS.colleague.md`, `acp` → `AGENTS.md`, `gemini` → `GEMINI.md`). If you ever
+change `backend:`, the matching prompt file must exist or both
+`associate doctor` and `steward doctor` fail. Verify with:
 
 ```bash
 uv run associate whoami      # nick / version / backend / model
@@ -144,13 +261,25 @@ associate/                  # Python package (top level — no src/ wrapper)
 │   ├── _errors.py          # CliError + EXIT_SUCCESS/USER_ERROR/ENV_ERROR
 │   ├── _output.py          # emit_result / emit_error / emit_diagnostic
 │   └── _commands/          # one module per verb, each exposing register(sub)
-└── explain/
-    ├── __init__.py         # resolve(path) / known_paths()
-    └── catalog.py          # ENTRIES: dict[tuple[str, ...], str] of markdown
-tests/                      # pytest — test_cli.py, test_cli_introspection.py
+├── explain/
+│   ├── __init__.py         # resolve(path) / known_paths()
+│   └── catalog.py          # ENTRIES: dict[tuple[str, ...], str] of markdown
+├── contract/               # the portable contract: models.json, gate.json,
+│                           #   role.json, policy.json, schemas/, validate.py
+├── harness/                # adapters (pi.py, stub.py), worktree.py, testcmds.py
+└── bench/                  # public suites (suites.json, public.py), walkstats
+.pi/extensions/associate/   # the Pi extension (TypeScript, no npm deps)
+├── index.ts                # loader: registry model, tool surface, guard, gate
+├── lib/                    # provider, guard, gate, walk, session, contain, …
+├── tools/                  # read, search, shell, web, codelens, eidetic,
+│                           #   ledger, tests (run_tests), spawn, delegate
+├── prompts/                # one prompt per registry model
+└── tests/                  # node --test suite (run.sh)
+tests/                      # pytest — CLI, contract, run, worktree, gate, …
 .claude/skills/<name>/      # SKILL.md + scripts/ per skill (cite-don't-import)
 docs/skill-sources.md       # skill provenance ledger — authoritative
-culture.yaml                # agent suffix + backend + model
+docs/notes/                 # pi-1.1.0 migration, gate calibration, resident model
+culture.yaml                # agent suffix + backend + model (a registry key)
 sonar-project.properties    # SonarCloud key agentculture_associate
 ```
 
@@ -210,11 +339,17 @@ exists purely to satisfy this and is the pattern to copy.
 - **Run from source:** `uv run associate --version` / `uv run python -m associate ...`
 - **Tests:** `uv run pytest -n auto -v`
 - **Single test:** `uv run pytest tests/test_cli.py::test_whoami_json -v`
-- **Behavioral suite:** `uv run associate bench --harness stub` — runs the
-  same corpus (`tests/behavioral/`) the `pi` adapter will run once it lands,
-  against the plumbing-only stub; prints a per-category pass/fail table and
-  exits non-zero on any failure. Labelled `plumbing-only` output is about the
-  wiring, never a claim about model reliability.
+- **Extension tests:** `bash .pi/extensions/associate/tests/run.sh` — Node's
+  built-in test runner over `.pi/extensions/associate/tests/*.test.ts` (Node
+  >=22; skips with a reason below that). A required CI job.
+- **Plumbing check:** `uv run associate run --harness stub` — the run verb
+  against the stub adapter; labelled `plumbing_only`, never a claim about a
+  model.
+- **Public benchmarks (operator-side, never CI):**
+  `uv run associate bench` lists the suites in `associate/bench/suites.json`;
+  `uv run associate bench --suite bfcl --model worker` launches the upstream
+  runner and scorer through the gateway. They need the upstream tool installed,
+  network, and a lane key. No suite has been run yet (t21).
 - **Coverage** (what CI and Sonar consume):
   `uv run pytest -n auto --cov=associate --cov-report=xml:coverage.xml --cov-report=term`
   — `fail_under = 60`, and `relative_files = true` is load-bearing: absolute or
@@ -348,44 +483,71 @@ install hint rather than blocking a clone):
 - **`eidetic`** (>=0.10.0) — for `remember` / `recall`; the version floor is what
   routes public records in-repo instead of to `$HOME`.
 
-#### The Pi harness floors (exact pins, not floors-and-up)
+#### The Pi harness pins (exact pins, not floors-and-up)
 
-The four things a Pi-driven run of the associate lane depends on, pinned
-exactly because they were the versions actually tested (spec claim c39, see
-`docs/specs/2026-09-12-associate-on-pi-with-opinionated-tools.md`):
+What a Pi-driven associate run depends on, pinned exactly because they are the
+versions the extension's tests and the worker live runs used:
 
-- **`pi`** (`@earendil-works/pi-coding-agent`) — **0.84.2**, tested.
-- **`pi-acp`** — **0.0.33**, tested. Bridges ACP JSON-RPC over stdio to
-  `pi --mode rpc`; MVP-grade and Zed-centred per its own README.
-- **Node** — **>=22** (pi-acp's floor).
-- **the extension itself** — version 1 of the portable contract
-  (`associate/contract/`); a contract-version bump is a compatibility event,
-  not a patch note.
+- **`pi`** (`@earendil-works/pi-coding-agent`) — **1.1.0**. Migrated from
+  0.84.2; every breaking change in between has a verdict in
+  `docs/notes/pi-1.1.0-migration.md`. The pin lives in
+  `associate/harness/pi.py`.
+- **`pi-acp`** — **0.0.33**. Bridges ACP JSON-RPC over stdio to
+  `pi --mode rpc`; MVP-grade and Zed-centred per its own README. The mesh path
+  through it is not yet measured on 1.1.0 (t20).
+- **Node** — **>=22** (pi-acp's floor, and the extension test runner's).
+- **the portable contract** (`associate/contract/`) — `models.json` version 1,
+  `gate.json` version 9 (d18 added the `delegate_run` effect). A
+  contract-version bump is a compatibility event, not a patch note; a `gate.json` bump changes what CLEF is asked, so record why
+  (`docs/notes/gate-calibration.md`).
+- **CLIs the tools shell out to** — `eidetic` (eidetic-cli) for
+  `eidetic_recall` / `eidetic_remember`, and `ledger` from **workledger-cli
+  0.8.0** (the release that ships `ledger append` / `ledger list`) for the
+  ledger tools. Each tool degrades with an install hint when its CLI is absent.
 
-**Upgrade rule:** bump a pin only after `associate bench` passes against the
-new version — never bump ahead of a measured run. `pi update` is never run by
-the harness itself; the launcher checks the installed version against the pin
-and warns (naming the tested version) rather than silently working with
-whatever is on PATH.
+**Upgrade rule:** bump a pin only after the extension tests pass and a live run
+has been measured against the new version — never bump ahead of a measured run.
+`pi update` is never run by the harness itself; the launcher checks the
+installed version against the pin and warns (naming the tested version) rather
+than silently working with whatever is on PATH.
 
 The extension declares no npm dependency beyond what Pi itself provides
 (`typebox`, via `pi`), and no `node_modules/` directory is ever tracked — see
-the `.gitignore` re-include note under "Skills convention" below for the one
+the `.gitignore` re-include note under "Skills convention" above for the one
 place that rule gets subtle.
 
 #### `ASSOCIATE_*` environment variables
 
-These are the whole external interface to the Pi lane's endpoint and session
-plumbing — no committed file names a host, port, or bearer:
+These are the whole external interface to the lanes, the gate, and the session
+plumbing — no committed file names a host, port, or bearer beyond the documented
+gateway default. Every row is read by the code named in it; "set by
+`associate run`" means the launcher sets (or clears) it per run and an operator
+value is not inherited.
 
-| Variable | Default | Purpose |
-|----------|---------|---------|
-| `ASSOCIATE_BASE_URL` | `http://localhost:8001/v1` (the local lobes gateway) | OpenAI-compatible base URL the Pi provider (or the bench harness) talks to. |
-| `ASSOCIATE_API_KEY` | — | Bearer for that endpoint. Never committed; never logged; never required to read for a test to pass. |
-| `ASSOCIATE_MODEL` | `associate` | The lobes role name sent as `model` — never a checkpoint id (see "The runtime lane" above). |
-| `ASSOCIATE_CONTRACT_DIR` | repo-relative `associate/contract/` | Where the Pi extension and the Python adapter both load `role.json` / `policy.json` / the walk and statements schemas from — set by the Python adapter when it knows better than the repo-relative fallback. |
-| `ASSOCIATE_SESSION_ID` | generated | Pins the scratch/export directory to one session id (the ACP `session/new` id when running under `culture start associate`, or a generated id headless), so concurrent runs never share a scratch dir. |
-| `ASSOCIATE_EXPORT_ROOT` | — | Where a run's `walk.jsonl` / statements export lands; the Python adapter sets this per run. |
+| Variable | Default | Read by | Purpose |
+|----------|---------|---------|---------|
+| `ASSOCIATE_BASE_URL` | `endpoint.default_base_url` in `models.json` (the local lobes gateway) | `lib/provider.ts`, `lib/gate.ts`, `associate/bench/public.py`, `associate/harness/pi.py` (bench's served-model probe) | OpenAI-compatible base URL for the model lanes, the CLEF decider (`/v1/systemone`) and Super, and the benchmark runners. |
+| `ASSOCIATE_API_KEY` | — | `lib/provider.ts`, `lib/gate.ts`, `tools/spawn.ts`, bench | Bearer for that endpoint. Unset: no `associate` provider is registered (pi's own default model applies, and `associate run` says so), and CLEF counts as unreachable, so the gate falls back to read-only. Never committed, never logged, never needed by a test. |
+| `ASSOCIATE_MODEL` | `default` in `models.json` (`worker`) | `lib/provider.ts`, `lib/prompt.ts`, `associate/harness/pi.py`; set by `associate run --model` and by `spawn_subagent` for a child | The **registry key** of the active model. The wire `model` is that entry's `lobes_role`, never a checkpoint id. An unknown or `pending` key registers no provider and prints one error line. |
+| `ASSOCIATE_CONTRACT_DIR` | repo-relative `associate/contract/` | `lib/contract.ts`; set by `associate run` | Where the extension loads `models.json`, `gate.json`, `role.json`, `policy.json` and the schemas. |
+| `ASSOCIATE_SESSION_ID` | `PI_ACP_SESSION_ID` / `ACP_SESSION_ID`, else generated | `lib/session.ts`; set by `associate run` and per child by `spawn_subagent` | Keys the scratch and export directories, so concurrent runs never share one. |
+| `ASSOCIATE_EXPORT_ROOT` | `.associate-runs` beside the checkout | `lib/session.ts`; set by `associate run` | Where the session directory (`<root>/<session id>/export`, holding `walk.jsonl` and the statements) is created — always outside the examined checkout. |
+| `ASSOCIATE_CHECKOUT_ROOT` | the process cwd | `lib/runtime.ts`; set by `spawn_subagent` for a child | The checkout a session examines and confines tools to. |
+| `ASSOCIATE_CONTINUE_FROM` | — | `lib/torch.ts`; set by `associate run --continue-from` | A prior run's export directory, loaded as this session's first context. |
+| `ASSOCIATE_INJECT_PROMPT` | — | `lib/prompt.ts`; set to `1` by `associate run` | With pi's ancestor context-file discovery off, inject associate's own `AGENTS.md` as the runtime prompt plus the active model's prompt — both from associate's install (`prompts/<model>.md`), never from the checkout — and nothing above it. The examined checkout's `AGENTS.md` (when it is not associate's own install) is injected only when `ASSOCIATE_PI_TRUST` is `approve`, labelled as repository context, between the two (deviation d17). Unset for the mesh resident (pi-acp), whose pi loads context files itself. |
+| `ASSOCIATE_EXTENSION_PATH` | the `.pi/extensions/associate/index.ts` above the installed package | `associate/harness/pi.py`; set by `delegate_run` for a delegated run | The extension entry point `associate run` passes pi with `-e`. |
+| `ASSOCIATE_ISOLATION` | absent (read as `in-place`) | `index.ts` → `lib/gate.ts`; set by `associate run` | Where the run's checkout writes land, `worktree` or `in-place`; told to CLEF as the `isolation` state line (deviation d8). |
+| `ASSOCIATE_TEST_COMMANDS` | absent | `tools/tests.ts`, `tools/delegate.ts`; set by `associate run --test-command` | The operator's test commands as a JSON array of argv lists, for the `run_tests` tool. The harness runs the same commands itself after the model (deviation d12). For the mesh resident the operator sets it in the unit's environment: `delegate_run` passes each one to the delegated run as `--test-command` and refuses to start any run while it names none (d18). |
+| `ASSOCIATE_PI_TRUST` | absent (read as untrusted) | `lib/trust.ts`, read by `tools/spawn.ts`, `tools/delegate.ts` and `lib/prompt.ts`; set by `associate run` | `approve` or `untrusted`, from how the parent pi was launched (deviation d5); only the exact value `approve` is trust. It gives a child `--approve` and a delegated run no `--untrusted-checkout` (neither is ever more trusting than its parent) and lets the examined checkout's `AGENTS.md` be injected as repository context (d17); anything else skips that file. |
+| `ASSOCIATE_RUN_DEADLINE` | absent (no cap beyond `budgets.spawn.timeout_ms`) | `tools/spawn.ts`; set by `associate run` from `--timeout`, never inherited | The parent run's deadline as absolute epoch milliseconds. Each child's wall clock is the contract's `timeout_ms` capped at what is left of the run minus a safety margin, measured after any wait for the writer lock; a spawn with too little time left is refused (`run_deadline`) rather than started to be killed. |
+| `ASSOCIATE_EIDETIC_DIR` | `$HOME/.eidetic/memory` | `tools/eidetic.ts` | The eidetic store the memory tools pin (`EIDETIC_DATA_DIR`); must be absolute and outside the examined checkout. |
+| `ASSOCIATE_LEDGER_PATH` | `$HOME/.workledger/associate.jsonl` | `tools/ledger.ts` | The workledger file the ledger tools pin (`WORKLEDGER_PATH`); must be absolute and outside the examined checkout. |
+| `ASSOCIATE_BENCH_SUITES` | `associate/bench/suites.json` | `associate/bench/public.py` | An alternative suites file for `associate bench`. |
+| `ASSOCIATE_PROVIDER`, `ASSOCIATE_REASONING_EFFORT`, `ASSOCIATE_REASONING` | — | `associate/bench/config.py` | Only labels in a bench row's configuration stamp (provider falls back to `ASSOCIATE_BASE_URL`); they change nothing on the wire. Reasoning is per model in `models.json`. |
+
+`ASSOCIATE_TEST_PI_PROVIDER` / `ASSOCIATE_TEST_PI_MODEL` appear only in the
+extension's integration tests, and `ASSOCIATE_PROVIDER_ID` is a constant in
+`lib/provider.ts`, not an environment variable.
 
 ## `steward doctor` invariants (build to pass these)
 
@@ -410,8 +572,10 @@ checkout. The first two checks are also covered locally by `associate doctor`.
 This repo's memory is **in-repo and public**: a plain `/remember` resolves to
 `<repo-root>/.eidetic/memory` — committed, and shared with the team and mesh
 peers, so memory travels with the repo rather than a private home-dir store.
-Both the `claude` and `colleague` backends resolve the same `associate` scope, so
-they read each other's records.
+Claude Code sessions and any other backend using these skills resolve the same
+`associate` scope, so they read each other's records. (The extension's
+`eidetic_remember` tool is separate: it pins its own destination, see
+`ASSOCIATE_EIDETIC_DIR`.)
 
 - **`/recall` before you start** a non-trivial task — prior decisions, gotchas,
   "have we done this before?" — so you build on what's known instead of
@@ -446,19 +610,28 @@ root key** — see invariant 3 under "Adding a verb".
 ## What not to invent
 
 - **Don't add a runtime dependency.** `dependencies = []` is deliberate: the
-  harness must install and start fast. `culture.yaml` is parsed by hand in
+  harness must install and start fast. The same holds for `package.json`: it is
+  a Pi project manifest with no `dependencies` and no `scripts`. `culture.yaml` is parsed by hand in
   `_commands/whoami.py` specifically to avoid a YAML dependency. If you think you
   need a dep, that is a conversation, not a commit.
 - **Don't edit a vendored skill** to fix a bug in it. Fix it upstream.
 - **Don't skip the version bump** because the change is "just docs".
-- **Don't describe the harness as working** in docs, commits, or PR bodies until
-  a read/summarize/find verb actually ships **and t15 measures a live `pi`
-  adapter run end to end** — the contract, extension core, containment
-  library, and `associate bench --harness stub` landing is real progress, not
-  a working harness. Say exactly what exists and what doesn't; don't round up.
-- **Don't hand-roll a harness pin, an endpoint constant, or a policy value**
-  the contract already owns. The Pi extension reads `policy.json` and the
-  schemas from `associate/contract/` (via `$ASSOCIATE_CONTRACT_DIR` or the
-  repo-relative fallback); it must not define its own copy in TypeScript, and
-  the harness version pins belong in CLAUDE.md's Tooling prerequisites, not
-  scattered as literals.
+- **Don't describe a model, the mesh path, the gate's fallbacks, or delegation
+  as working** in docs, commits, or PR bodies until a live run measures it
+  (t20) — and don't quote a benchmark number until t21 commits one. The worker
+  live runs listed under "Measured vs. not measured" are the only live evidence;
+  say exactly what exists and what doesn't; don't round up.
+- **Don't treat the 0.5 gate thresholds as calibrated.** They are tentative
+  (deviation d9); change them only with new measurements recorded in
+  `docs/notes/gate-calibration.md`, or from the issue #13 benchmark.
+- **Don't name a checkpoint id** in `models.json`, `culture.yaml`, prompts or
+  docs. Address a model by lobes role; the gateway owns the checkpoint.
+- **Don't change lobes-cli or colleague from here.** Both are consumed as they
+  are (spec boundary c18); a needed change there is an issue on that repo.
+- **Don't hand-roll a harness pin, an endpoint constant, a model entry, or a
+  policy value** the contract already owns. The Pi extension reads
+  `models.json`, `gate.json`, `policy.json` and the schemas from
+  `associate/contract/` (via `$ASSOCIATE_CONTRACT_DIR` or the repo-relative
+  fallback); it must not define its own copy in TypeScript, and the harness
+  version pins belong in CLAUDE.md's Tooling prerequisites, not scattered as
+  literals.

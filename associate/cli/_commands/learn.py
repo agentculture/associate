@@ -12,14 +12,16 @@ from associate import __version__
 from associate.cli._output import emit_result
 
 _TEXT = """\
-associate — a clonable template for AgentCulture mesh agents.
+associate — a multi-model agent harness on Pi for AgentCulture.
 
 Purpose
 -------
-Scaffold for a new Culture mesh agent: an agent-first CLI (cited from the teken
-`python-cli` reference), an identity (culture.yaml + CLAUDE.md), the canonical
-guildmaster skill kit under .claude/skills/, and a deploy/CI baseline. Clone it,
-rename the package, and edit culture.yaml to mint a new agent.
+Run one fleet model (worker, senses or cortex, from the contract's models.json)
+on one task with its own tools and prompt, every mutating call behind a CLEF
+safety gate, and hand back a walk of tool calls plus statements citing it.
+Models that may change things run in their own git worktree, merged to main
+locally only after a clean run. Live runs of senses and cortex, the mesh path
+and every public benchmark are not yet measured.
 
 Commands
 --------
@@ -28,8 +30,9 @@ Commands
   associate explain <path>...  Markdown docs for any noun/verb path.
   associate overview           Descriptive snapshot of the agent.
   associate doctor             Check the agent-identity invariants.
-  associate run [prompt]       Run one task on a harness adapter, or fail closed.
-  associate bench              Run the behavioral suite against a harness adapter.
+  associate run [prompt]       Run one task on a harness adapter (--model,
+                               --test-command), or fail closed.
+  associate bench              Run a public suite (--suite NAME --model KEY) or list suites.
   associate cli overview       Describe the CLI surface itself.
 
 Machine-readable output
@@ -54,7 +57,10 @@ def _as_json_payload() -> dict[str, object]:
     return {
         "tool": "associate",
         "version": __version__,
-        "purpose": "Clonable scaffold for a new AgentCulture mesh agent.",
+        "purpose": (
+            "Multi-model agent harness on Pi: run one registry model on one task "
+            "behind a CLEF safety gate and hand back an evidenced result."
+        ),
         "commands": [
             {"path": ["whoami"], "summary": "Identity probe from culture.yaml."},
             {"path": ["learn"], "summary": "Self-teaching prompt."},
@@ -64,13 +70,15 @@ def _as_json_payload() -> dict[str, object]:
             {
                 "path": ["run"],
                 "summary": (
-                    "Run one task on a harness adapter; exits 2 without serving when the "
-                    "adapter cannot prove its extension loaded."
+                    "Run one task on a harness adapter (--model picks a registry model; "
+                    "--test-command names checks the harness runs before merging); "
+                    "exits 2 without serving when the adapter cannot prove its "
+                    "extension loaded."
                 ),
             },
             {
                 "path": ["bench"],
-                "summary": "Run the behavioral suite against a harness adapter.",
+                "summary": "Run a public suite (--suite NAME --model KEY) or list suites.",
             },
             {"path": ["cli", "overview"], "summary": "Describe the CLI surface."},
         ],

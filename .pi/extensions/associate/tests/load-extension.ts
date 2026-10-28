@@ -47,9 +47,9 @@ export class FakePi {
   /** Providers registered through `registerProvider`, in registration order. */
   readonly providers: Array<{ id: string; config: Record<string, unknown> }> = [];
   /**
-   * Built-in tools pi has *configured*. Measured against pi 0.84.2:
-   * `getAllTools()` lists these even when `defaultTools: []` leaves them
-   * inactive, so the fake models the same split.
+   * Built-in tools pi has *configured*. Measured against pi 0.84.2 and
+   * re-measured on 1.1.0: `getAllTools()` lists these even when
+   * `defaultTools: []` leaves them inactive, so the fake models the same split.
    */
   builtinTools: string[] = [];
   /** Built-ins pi has *active* — empty under `defaultTools: []`. */
@@ -123,9 +123,17 @@ export class FakePi {
     }
   }
 
-  async fireToolCall(event: Record<string, unknown>): Promise<unknown> {
+  /** Run every `tool_execution_end` handler — pi emits one for every prepared call, blocked or run. */
+  async fireToolExecutionEnd(event: Record<string, unknown>): Promise<void> {
+    for (const handler of this.handlers.get("tool_execution_end") ?? []) {
+      await handler({ type: "tool_execution_end", ...event });
+    }
+  }
+
+  /** Run every `tool_call` handler; `ctx` stands in for pi's event context (e.g. `modelRegistry`). */
+  async fireToolCall(event: Record<string, unknown>, ctx?: Record<string, unknown>): Promise<unknown> {
     for (const handler of this.handlers.get("tool_call") ?? []) {
-      const decision = await handler(event);
+      const decision = await handler(event, ctx);
       if (decision) return decision;
     }
     return undefined;

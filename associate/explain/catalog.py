@@ -12,11 +12,15 @@ from __future__ import annotations
 _ROOT = """\
 # associate
 
-A clonable template for AgentCulture mesh agents. It carries an agent-first CLI
-(cited from the teken `python-cli` reference), a mesh identity (`culture.yaml` +
-`CLAUDE.md`), the canonical guildmaster skill kit under `.claude/skills/`, and a
-buildable/deployable package baseline. Clone it, rename the package, edit
-`culture.yaml`, and you have a new agent.
+A multi-model agent harness on Pi. `associate run` runs one model from the
+contract's registry (`associate/contract/models.json`: `worker`, `senses`,
+`cortex`) on one task with that model's own tools and prompt, behind a CLEF
+safety gate for every mutating call, and hands back a walk of every tool call
+plus statements that cite it. A model that may change things runs in its own
+git worktree, merged to `main` locally only after a clean run. Models are
+addressed by lobes role through the gateway, never by checkpoint id. Live runs
+of senses and cortex, the mesh path, and every public benchmark are not yet
+measured.
 
 ## Verbs
 
@@ -26,7 +30,7 @@ buildable/deployable package baseline. Clone it, rename the package, edit
 - `associate overview` — descriptive snapshot of the agent.
 - `associate doctor` — check the agent-identity invariants.
 - `associate run` — run one task on a harness adapter, or fail closed.
-- `associate bench` — run the behavioral suite against a harness adapter.
+- `associate bench` — run a public benchmark suite (BFCL, MMMU, LiveCodeBench) or list them.
 - `associate cli overview` — describe the CLI surface.
 
 ## Exit-code policy
@@ -117,7 +121,9 @@ Pi's non-interactive modes load a project's `.pi/extensions` only on a trusted
 checkout; without trust they fall back to Pi's **full built-in tool set**,
 `edit` and `write` included. So the launcher checks the tool list **pi itself
 reports**, never the presence of a config file on disk. A run with no report, or
-whose report lists an active writer tool, exits `2` and serves nothing.
+whose report lists an active writer tool for a model the registry does not mark
+`may_mutate` (`senses`), exits `2` and serves nothing. For `worker` and
+`cortex` the writers are expected; their mutating calls pass the CLEF gate.
 
 Readiness is proven by a **preflight**, not by the task turn. Every run is two
 pi invocations: the first adds `-e lib/preflight.ts`, an extension whose only
@@ -133,41 +139,107 @@ checkout — a fixture repo, an unrelated project — rather than depending on t
 examined checkout carrying its own `.pi/`. `$ASSOCIATE_EXTENSION_PATH` overrides
 which `index.ts` that is.
 
-Measured against pi 0.84.2: the *full* tool list still names `edit` and `write`
-even when they are inactive, so the check is on `active_tools` and
-`writer_tools_active` — never on the full list.
+Measured against pi 0.84.2 and re-measured on the pinned 1.1.0: the *full*
+tool list still names `edit` and `write` even when they are inactive, so the
+check is on `active_tools` and `writer_tools_active` — never on the full list.
 
 ## What it passes pi
 
 `-p --mode json --no-session --approve --no-context-files -e <index.ts>`, with
 `--no-context-files` there because pi otherwise loads `AGENTS.md`/`CLAUDE.md`
 from every *ancestor* directory — a workspace-level file one level above the
-checkout would leak into the system prompt. The checkout's own `AGENTS.md` is
-injected by the extension instead (`ASSOCIATE_INJECT_PROMPT=1`).
+checkout would leak into the system prompt. The extension injects associate's
+own `AGENTS.md` as the runtime prompt instead (`ASSOCIATE_INJECT_PROMPT=1`);
+the examined checkout's `AGENTS.md` is skipped under `--untrusted-checkout` and
+otherwise injected labelled as repository context, never as the runtime prompt.
 
-`--provider associate --model $ASSOCIATE_MODEL` are passed only when
-`ASSOCIATE_API_KEY` is set; with no key the extension registers no provider, so
-pi's own default model applies and the launcher says so on stderr.
+`--model <key>` picks an entry of the contract's `models.json` registry
+(default: the registry's `default`). With `ASSOCIATE_API_KEY` set the launcher
+passes `--provider associate --model <lobes_role>`; either way it sets
+`ASSOCIATE_MODEL=<key>` so the extension knows the active registry entry. With
+no key the extension registers no provider, so pi's own default model applies
+and the launcher says so on stderr. An unknown `--model` (the error lists the
+registry's models) or a `pending` one exits `1`.
+
+`--untrusted-checkout` (off by default) launches pi with `--no-approve
+--no-extensions` instead of `--approve`: the examined checkout's own `.pi`
+settings, extensions and MCP config are ignored and no built-in pi extension
+loads, so associate's extension (named with `-e`) is the only one that runs.
+Use it for a repo you do not control, and when associate examines a worktree
+of itself.
+
+## Worktree isolation
+
+A model the registry marks `may_mutate` runs in its own git worktree,
+`dirname(repo)/.worktrees.<name>/run-<session>`, on branch
+`associate-run/<session>`, based on the checkout's `HEAD`; uncommitted operator
+changes are not carried in, and `ASSOCIATE_ISOLATION=worktree` tells the gate so.
+A clean run (outcome `ok`, and every test command passing) is committed there
+and merged to `main` locally — never pushed. Anything else is kept, its
+location printed, and `merge=kept` with `merge_reason` reported; the exit code
+stays `0` because the run served. A merge is refused (and the run kept) when
+there is no `main`, the base commit is not on `main`, `main` is checked out with
+uncommitted changes, or the merge does not apply cleanly. A read-only model
+(`senses`) runs in place; a mutating run on a non-git directory runs in place
+with a stderr warning.
+
+## Test commands (deviation d12)
+
+`--test-command "<command line>"` (repeatable, no default) names a command the
+**harness** runs after the model finishes: split like a shell would
+(`shlex.split`) but run without one, in the run checkout, stdin closed, with
+`--test-timeout` seconds each (default 900), and with every `ASSOCIATE_*`
+variable — the lane key included — removed from its environment. All commands
+run, in order, even after a failure. A worktree run is merged only when the
+outcome is `ok` **and** every command exited `0`; otherwise nothing is
+committed, the worktree is kept, and `merge_reason` names the failing command.
+
+Side effects never become the model's work: in a git checkout the harness
+snapshots every uncommitted path before the tests and afterwards restores each
+path that was dirty before or after (pre-test bytes, or `HEAD`); gitignored
+files are left alone. Restored paths are listed in `tests.reverted`. Above a
+64 MiB snapshot the tests are not run and are reported failed. In a non-git
+checkout they run unprotected, with a stderr note. The same commands reach the
+extension as `ASSOCIATE_TEST_COMMANDS` for the model's `run_tests` tool.
 
 ## Output
 
 `walk_path`, `statements_path`, `statements_md_path`, `export_dir`, `outcome`
 and `session_id` on stdout — `key=value` lines, or one JSON object with
-`--json`. Diagnostics (the pi version warning, the no-lane note) go to stderr.
+`--json` — plus `isolation`, `merge`, `merge_reason`, `worktree` and
+`run_branch` when they apply, the model and lobes role that ran, and how the
+task turn ended (final reply, stop reason, lane error). With test commands,
+`tests` too: `{passed, commands: [{argv, exit_code, timed_out, duration_ms,
+output_tail}], reverted}` in JSON (the output tail redacted and bounded), one
+summary line in text. Diagnostics (the
+pi version warning, the no-lane note) go to stderr.
+
+## How the turn ended
+
+With `--json`, the result also says how the task turn ended: `final_reply`
+is the model's last assistant reply (text only, redacted, at most 2000
+characters); `stop_reason` is pi's stop reason for that reply (for example
+`stop` or `length`), or null when no assistant reply arrived; and
+`lane_error` is present only when pi reported an error from the model lane.
+A run that ended without `finish` is visible here: the reply says why, or
+is empty.
 
 ## Usage
 
     associate run
     associate run "Find every caller of load_policy" --json
+    associate run --model senses
     associate run --harness stub
     associate run --continue-from <prior export dir>
     associate run --export-root <dir> --session-id <id>
+    associate run "Fix the failing parser test" --test-command "uv run pytest -q"
 
 ## Exit codes
 
 - `0` the run served; both artifact paths are on stdout
-- `1` unknown `--harness` (the error lists the registered adapters), or a
-  `--checkout` that is not a directory
+- `1` unknown `--harness` (the error lists the registered adapters), an
+  unknown or pending `--model`, an empty or unsplittable `--test-command`, a
+  non-positive `--test-timeout`, or a `--checkout` that is not a directory
 - `2` the adapter failed closed (no sentinel, or an active writer tool), pi is
   not on PATH, the run timed out, or the export root is inside the checkout
 """
@@ -175,39 +247,34 @@ and `session_id` on stdout — `key=value` lines, or one JSON object with
 _BENCH = """\
 # associate bench
 
-Runs the behavioral suite — seven cases, one per category — against a harness
-adapter and prints a table whose rows carry the complete configuration the run
-was measured on. Exits non-zero if any category failed.
+Runs a **public** benchmark suite (BFCL, MMMU, LiveCodeBench) against a registry
+model through the gateway. Suites are data (`associate/bench/suites.json`, or the
+file named by `ASSOCIATE_BENCH_SUITES`): name, pinned version, the upstream runner
+as an argv template, the upstream's own scorer, and the models it applies to.
+`associate` never re-implements a scorer or touches a dataset itself; it launches
+the upstream runner/scorer and reads the score the scorer wrote. Adding a suite is
+a data addition.
 
-The corpus is adapter-free: the *same* seven cases run for every adapter, so two
-tables differ only in their adapter and model-role columns.
+Each row carries the suite name and version, the scorer, the score, the model key
+and lobes role, and the full configuration stamp. Entries marked
+`verified: false` are best-reference entry points not yet run end to end.
 
-## Categories
-
-`local read/find`, `repo exploration`, `summarization`, `structured evidence
-extraction`, `tool-call reliability`, `forbidden mutation attempts`, `bounded
-completion and hand-back`.
-
-## Columns
-
-harness, model role, served model id (as the endpoint reports it), pi version,
-extension version, provider, reasoning setting, category, pass/fail, wall time,
-and a note. A run against the `stub` adapter is labelled **plumbing-only**: it
-verifies the wiring — artifact shapes, schemas, checks — with no pi and no lane,
-and is never a measurement of model reliability.
+The endpoint comes from `ASSOCIATE_BASE_URL` / `ASSOCIATE_API_KEY` (never printed).
 
 ## Usage
 
-    associate bench --harness stub
-    associate bench --harness stub --json
-    associate bench --harness stub --cases tests/behavioral/cases
+    associate bench                       # list suites
+    associate bench --suite               # list suites (--json supported)
+    associate bench --suite bfcl --model worker
+    associate bench --suite mmmu --model senses --json --output-dir ./out
 
 ## Exit codes
 
-- `0` every category passed
-- `1` a category failed, or the named adapter is unknown (the error lists the
-  available adapters)
-- `2` the behavioral corpus could not be found (pass `--cases <dir>`)
+- `0` listed suites, or the run produced a score
+- `1` unknown suite, unknown or pending model, a model the suite does not list,
+  or `--model` missing
+- `2` upstream runner/scorer not on PATH or failed, its result file unreadable,
+  or the suites file is malformed
 """
 
 _CLI = """\

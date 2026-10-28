@@ -73,7 +73,7 @@ def _build_parser() -> argparse.ArgumentParser:
 
     parser = _CliArgumentParser(
         prog="associate",
-        description="associate — a clonable template for AgentCulture mesh agents.",
+        description="associate — a multi-model agent harness on Pi for AgentCulture.",
     )
     parser.add_argument(
         "--version",

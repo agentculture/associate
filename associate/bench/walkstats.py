@@ -11,6 +11,12 @@ is a run that did not finish — it is counted as ``incomplete`` and counted
 against the failure rate, never silently skipped, because an unfinished run is
 exactly the kind of failure the table exists to surface.
 
+Walks written under the safety gate also carry ``{"gate": ...}`` lines, one per
+gated mutating call. Those are folded into a second, separate report: gated calls
+per tier with each tier's share of all gated calls, allow/refuse counts per tier,
+and the read-only fallback count. A walk with no gate lines (every walk written
+before the gate existed) contributes nothing to that report and is still read.
+
 Usage::
 
     python -m associate.bench.walkstats <dir-or-walk.jsonl> [...] [--per-run]
@@ -31,9 +37,14 @@ from typing import Any, Iterable, Sequence
 __all__ = [
     "WALK_FILENAME",
     "OUTCOMES",
+    "GATE_DECISIONS",
+    "GATE_TIERS",
+    "GateStats",
     "Stats",
     "aggregate",
+    "aggregate_gates",
     "find_walks",
+    "load_gate_records",
     "load_run_record",
     "main",
     "render",
@@ -48,6 +59,15 @@ OUTCOMES: tuple[str, ...] = ("ok", "error", "refused", "budget_exceeded", "incom
 
 #: Every outcome that is not a clean finish.
 FAILURE_OUTCOMES = frozenset(OUTCOMES) - {"ok"}
+
+#: The safety-gate tiers ``gate.json`` names, in the order the report prints them.
+#: ``large`` (d16) is a state over CLEF's budget, judged whole by a registry evaluator.
+#: ``readonly`` is the read-only fallback: the gate could not clear the call and
+#: the run continued with mutating tools withheld.
+GATE_TIERS: tuple[str, ...] = ("clef", "super", "large", "readonly")
+
+#: The decisions a gate line can record.
+GATE_DECISIONS: tuple[str, ...] = ("allow", "refuse")
 
 
 def find_walks(paths: Sequence[str | Path]) -> list[Path]:
@@ -74,6 +94,31 @@ def find_walks(paths: Sequence[str | Path]) -> list[Path]:
     return unique
 
 
+def _read_walk_text(walk_path: Path) -> str:
+    """The text of a walk file, or ``""`` when it is not a readable ``walk.jsonl``."""
+    resolved = Path(walk_path).resolve()
+    if resolved.name != WALK_FILENAME or not resolved.is_file():
+        return ""
+    try:
+        return resolved.read_text(encoding="utf-8")
+    except OSError:
+        return ""
+
+
+def _parsed_lines(text: str) -> Iterable[Any]:
+    """Each non-blank line of a walk, parsed as JSON; lines that do not parse are skipped."""
+    for line in text.splitlines():
+        line = line.strip()
+        if not line:
+            continue
+        try:
+            yield json.loads(line)
+        except json.JSONDecodeError:
+            # A partially written final line is what a killed run leaves; the
+            # lines before it are still good, so this is not fatal.
+            continue
+
+
 def load_run_record(walk_path: Path) -> dict[str, Any]:
     """The run record of one walk, or an ``incomplete`` stand-in.
 
@@ -82,25 +127,8 @@ def load_run_record(walk_path: Path) -> dict[str, Any]:
     """
     record: dict[str, Any] = {}
     walk_path = Path(walk_path)
-    resolved = walk_path.resolve()
-    if resolved.name != WALK_FILENAME or not resolved.is_file():
-        text = ""
-    else:
-        try:
-            text = resolved.read_text(encoding="utf-8")
-        except OSError:
-            text = ""
     entries = 0
-    for line in text.splitlines():
-        line = line.strip()
-        if not line:
-            continue
-        try:
-            parsed = json.loads(line)
-        except json.JSONDecodeError:
-            # A partially written final line is what a killed run leaves; the
-            # lines before it are still good, so this is not fatal.
-            continue
+    for parsed in _parsed_lines(_read_walk_text(walk_path)):
         if isinstance(parsed, dict) and set(parsed) == {"run"} and isinstance(parsed["run"], dict):
             record = dict(parsed["run"])
         elif isinstance(parsed, dict):
@@ -122,6 +150,23 @@ def load_run_record(walk_path: Path) -> dict[str, Any]:
     record["path"] = str(walk_path)
     record["complete"] = True
     return record
+
+
+def load_gate_records(walk_path: Path) -> list[dict[str, Any]]:
+    """The ``gate`` entries of one walk, in file order.
+
+    A walk written before the safety gate existed has none, and yields ``[]``.
+    Child-link lines and the run record are not gate entries and are skipped.
+    """
+    gates: list[dict[str, Any]] = []
+    for parsed in _parsed_lines(_read_walk_text(Path(walk_path))):
+        if (
+            isinstance(parsed, dict)
+            and set(parsed) == {"gate"}
+            and isinstance(parsed["gate"], dict)
+        ):
+            gates.append(dict(parsed["gate"]))
+    return gates
 
 
 def percentile(values: Sequence[float], fraction: float) -> float:
@@ -195,6 +240,63 @@ def aggregate(records: Iterable[dict[str, Any]], label: str = "all") -> Stats:
     return stats
 
 
+@dataclass
+class GateStats:
+    """The safety-gate report: every gated call, by tier and decision.
+
+    A gated call is one gate line with a known tier. ``share`` is a tier's count
+    over all gated calls; with no gated calls every share is ``0.0`` rather than
+    a division by zero, the same convention ``failure_rate`` uses for zero runs.
+    """
+
+    gated: int = 0
+    tiers: dict[str, int] = field(default_factory=lambda: dict.fromkeys(GATE_TIERS, 0))
+    decisions: dict[str, dict[str, int]] = field(
+        default_factory=lambda: {tier: dict.fromkeys(GATE_DECISIONS, 0) for tier in GATE_TIERS}
+    )
+
+    @property
+    def readonly_fallbacks(self) -> int:
+        return self.tiers["readonly"]
+
+    def share(self, tier: str) -> float:
+        return round(self.tiers[tier] / self.gated, 4) if self.gated else 0.0
+
+    def as_dict(self) -> dict[str, Any]:
+        return {
+            "gated_calls": self.gated,
+            "readonly_fallbacks": self.readonly_fallbacks,
+            "tiers": {
+                tier: {
+                    "count": self.tiers[tier],
+                    "share": self.share(tier),
+                    "allow": self.decisions[tier]["allow"],
+                    "refuse": self.decisions[tier]["refuse"],
+                }
+                for tier in GATE_TIERS
+            },
+        }
+
+
+def aggregate_gates(records: Iterable[dict[str, Any]]) -> GateStats:
+    """Fold gate entries into one :class:`GateStats`.
+
+    An entry whose tier is not one of ``GATE_TIERS`` is not a gate decision the
+    schema allows, so it is left out of every count rather than guessed at.
+    """
+    stats = GateStats()
+    for record in records:
+        tier = record.get("tier")
+        if tier not in GATE_TIERS:
+            continue
+        stats.gated += 1
+        stats.tiers[tier] += 1
+        decision = record.get("decision")
+        if decision in GATE_DECISIONS:
+            stats.decisions[tier][decision] += 1
+    return stats
+
+
 #: (header, row key) pairs, in print order — the same shape ``bench.table`` uses.
 COLUMNS: tuple[tuple[str, str], ...] = (
     ("group", "label"),
@@ -210,8 +312,34 @@ COLUMNS: tuple[tuple[str, str], ...] = (
 )
 
 
-def render(rows: Sequence[Stats], breakdown: Sequence[dict[str, Any]] = ()) -> str:
-    """Render the latency and failure table, plus an outcome breakdown line."""
+def render_gates(gates: GateStats) -> str:
+    """One line: gated-call total, then each tier's count, share and allow/refuse split."""
+    parts = []
+    for tier in GATE_TIERS:
+        allow = gates.decisions[tier]["allow"]
+        refuse = gates.decisions[tier]["refuse"]
+        parts.append(
+            f"{tier}={gates.tiers[tier]} ({gates.share(tier) * 100:.1f}%, "
+            f"allow={allow}, refuse={refuse})"
+        )
+    return (
+        f"gates: gated={gates.gated}; "
+        + "; ".join(parts)
+        + f"; readonly fallbacks={gates.readonly_fallbacks}"
+    )
+
+
+def render(
+    rows: Sequence[Stats],
+    breakdown: Sequence[dict[str, Any]] = (),
+    *,
+    gates: GateStats | None = None,
+) -> str:
+    """Render the latency and failure table, plus an outcome breakdown line.
+
+    When *gates* is given, the safety-gate line follows the outcome lines and
+    precedes the per-run breakdown.
+    """
     dicts = [row.as_dict() for row in rows]
     cells = [[header for header, _ in COLUMNS]]
     cells += [[str(row.get(key, "")) for _, key in COLUMNS] for row in dicts]
@@ -227,6 +355,9 @@ def render(rows: Sequence[Stats], breakdown: Sequence[dict[str, Any]] = ()) -> s
     for row in dicts:
         counts = ", ".join(f"{name}={count}" for name, count in row["outcomes"].items())
         out.append(f"outcomes ({row['label']}): {counts or 'none'}")
+
+    if gates is not None:
+        out.append(render_gates(gates))
 
     for record in breakdown:
         out.append(
@@ -259,10 +390,12 @@ def main(argv: Sequence[str] | None = None) -> int:
 
     records = [load_run_record(path) for path in walks]
     stats = aggregate(records)
+    gates = aggregate_gates(record for path in walks for record in load_gate_records(path))
     if args.json:
-        print(json.dumps({"aggregate": stats.as_dict(), "runs": records}, indent=2))
+        payload = {"aggregate": stats.as_dict(), "runs": records, "gates": gates.as_dict()}
+        print(json.dumps(payload, indent=2))
     else:
-        print(render([stats], records if args.per_run else ()))
+        print(render([stats], records if args.per_run else (), gates=gates))
     return 0
 
 

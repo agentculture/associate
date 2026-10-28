@@ -6,15 +6,13 @@ Three things the TypeScript unit tests cannot show on their own:
   ``ASSOCIATE_MODEL`` set, ``pi --list-models`` lists a provider named
   ``associate``; with them unset, it does not, and the extension prints a hint
   naming the three variables. The endpoint is therefore configuration, not code.
-* **c28 / h8** — reasoning-off is verified *on the wire*: a real request pi
-  sends is captured by the stdlib fake lane and the reasoning-off field the
-  ``before_provider_request`` hook injects is asserted on the captured body,
-  not inferred from the model's compat flags.
+* **per-model reasoning** — verified *on the wire*: a real request pi sends is
+  captured by the stdlib fake lane. A model whose registry entry declares no
+  reasoning override sends no ``chat_template_kwargs``; only an entry that says
+  ``off`` gets ``enable_thinking=false``.
 
-The live-lane half of h8 (does the served Nemotron lane actually *honour* the
-field?) is out of scope here — the lane was 503 through the gateway when this
-landed — and is recorded by the verification task. ``ASSOCIATE_REASONING_OFF``
-selects which field is sent so that check needs no code edit.
+``ASSOCIATE_MODEL`` is a registry key; the wire ``model`` is that entry's
+``lobes_role``.
 
 The fake lane answers plain JSON while pi's ``openai-completions`` path expects
 an SSE stream, so pi never finishes the turn. That is fine and deliberate: the
@@ -25,7 +23,9 @@ was never built to produce.
 
 from __future__ import annotations
 
+import json
 import os
+import shutil
 import subprocess
 import time
 from pathlib import Path
@@ -46,7 +46,7 @@ _CONTROLLED = (
     "ASSOCIATE_BASE_URL",
     "ASSOCIATE_API_KEY",
     "ASSOCIATE_MODEL",
-    "ASSOCIATE_REASONING_OFF",
+    "ASSOCIATE_CONTRACT_DIR",
 )
 
 
@@ -95,14 +95,15 @@ def test_list_models_shows_the_provider_when_the_env_is_set(fake_lane: FakeLaneS
         _pi_env(
             ASSOCIATE_BASE_URL=f"{fake_lane.base_url}/v1",
             ASSOCIATE_API_KEY=DUMMY_KEY,
-            ASSOCIATE_MODEL="associate",
+            ASSOCIATE_MODEL="worker",
         ),
     )
 
     assert result.returncode == 0, result.stderr
     rows = _provider_rows(result.stdout)
     assert rows, f"no row for provider {PROVIDER_ID!r} in:\n{result.stdout}"
-    assert any("associate" in row.split()[1] for row in rows)
+    # One row per ACTIVE registry model, id = lobes_role; pending is absent.
+    assert sorted(row.split()[1] for row in rows) == ["cortex", "senses", "worker"]
 
 
 def test_no_provider_and_a_hint_when_the_env_is_unset():
@@ -120,33 +121,27 @@ def test_no_provider_and_a_hint_when_the_env_is_unset():
         assert name in combined, f"the hint must name {name}:\n{combined}"
 
 
-@pytest.mark.parametrize(
-    ("mode", "expected"),
-    [
-        (None, {"chat_template_kwargs": {"enable_thinking": False}}),
-        ("reasoning_effort", {"reasoning_effort": "none"}),
-        (
-            "both",
-            {
-                "chat_template_kwargs": {"enable_thinking": False},
-                "reasoning_effort": "none",
-            },
-        ),
-    ],
-)
-def test_reasoning_off_reaches_the_wire(
-    fake_lane: FakeLaneServer, mode: str | None, expected: dict[str, object]
-):
-    require_pi()
+def _contract_with_reasoning(tmp_path: Path, key: str, reasoning: str) -> Path:
+    """A copy of the contract directory whose ``key`` entry has ``reasoning`` set."""
+    dest = tmp_path / "contract"
+    shutil.copytree(REPO_ROOT / "associate" / "contract", dest)
+    path = dest / "models.json"
+    doc = json.loads(path.read_text(encoding="utf-8"))
+    doc["models"][key]["reasoning"] = reasoning
+    path.write_text(json.dumps(doc), encoding="utf-8")
+    return dest
 
-    overrides = {
+
+def _first_chat_body(
+    fake_lane: FakeLaneServer, role: str | None, **overrides: str
+) -> dict[str, object]:
+    """The first chat request pi sends; ``role=None`` passes no --provider/--model."""
+    env = {
         "ASSOCIATE_BASE_URL": f"{fake_lane.base_url}/v1",
         "ASSOCIATE_API_KEY": DUMMY_KEY,
-        "ASSOCIATE_MODEL": "associate",
+        **overrides,
     }
-    if mode is not None:
-        overrides["ASSOCIATE_REASONING_OFF"] = mode
-
+    selection = [] if role is None else ["--provider", PROVIDER_ID, "--model", role]
     process = subprocess.Popen(  # nosec B603 - fixed argv, no shell
         [
             "pi",
@@ -155,17 +150,14 @@ def test_reasoning_off_reaches_the_wire(
             "--approve",
             "--no-tools",
             "--no-context-files",
-            "--provider",
-            PROVIDER_ID,
-            "--model",
-            "associate",
+            *selection,
             "pong",
         ],
         stdout=subprocess.PIPE,
         stderr=subprocess.PIPE,
         stdin=subprocess.DEVNULL,
         text=True,
-        env=_pi_env(**overrides),
+        env=_pi_env(**env),
         cwd=REPO_ROOT,
     )
     try:
@@ -178,14 +170,258 @@ def test_reasoning_off_reaches_the_wire(
 
     captured = fake_lane.requests.chat_completions
     assert captured, "pi sent no /v1/chat/completions request to the fake lane"
+    return captured[0]
 
-    body = captured[0]
-    assert body["model"] == "associate"
-    for field, value in expected.items():
-        assert body.get(field) == value, f"{field} missing or wrong on the wire: {body!r}"
 
-    # The complement: only what the selected mode asks for is sent.
-    if "reasoning_effort" not in expected:
-        assert "reasoning_effort" not in body
-    if "chat_template_kwargs" not in expected:
-        assert "chat_template_kwargs" not in body
+@pytest.mark.parametrize("key", ["worker", "senses", "cortex"])
+def test_no_enable_thinking_override_when_the_entry_declares_none(
+    fake_lane: FakeLaneServer, key: str
+):
+    """The shipped entries are ``on`` or ``model-default``: nothing is injected."""
+    require_pi()
+
+    body = _first_chat_body(fake_lane, key, ASSOCIATE_MODEL=key)
+
+    assert body["model"] == key
+    assert "chat_template_kwargs" not in body, body
+    assert "reasoning_effort" not in body, body
+
+
+def test_without_model_flags_the_session_runs_the_selected_registry_model(
+    fake_lane: FakeLaneServer,
+):
+    """pi-acp launches pi with no --provider/--model (docs/notes/resident-model-resolution.md).
+
+    The extension must still put the session on the registry model ASSOCIATE_MODEL
+    names, rather than on whatever the operator's user-level pi default is.
+    """
+    require_pi()
+
+    body = _first_chat_body(fake_lane, None, ASSOCIATE_MODEL="senses")
+
+    assert body["model"] == "senses", body
+
+
+def test_reasoning_off_reaches_the_wire_for_that_model_only(
+    fake_lane: FakeLaneServer, tmp_path: Path
+):
+    require_pi()
+    contract = _contract_with_reasoning(tmp_path, "senses", "off")
+
+    body = _first_chat_body(
+        fake_lane, "senses", ASSOCIATE_MODEL="senses", ASSOCIATE_CONTRACT_DIR=str(contract)
+    )
+    assert body["model"] == "senses"
+    assert body.get("chat_template_kwargs") == {"enable_thinking": False}, body
+    assert "reasoning_effort" not in body
+
+    fake_lane.requests.chat_completions.clear()
+    sibling = _first_chat_body(
+        fake_lane, "worker", ASSOCIATE_MODEL="worker", ASSOCIATE_CONTRACT_DIR=str(contract)
+    )
+    assert sibling["model"] == "worker"
+    assert "chat_template_kwargs" not in sibling, sibling
+
+
+# ------------------------------------------------- pi 1.1.0 transcript semantics
+
+#: A second extension, loaded with ``-e`` ahead of the project's own, that
+#: re-enables the built-in writers from *its* ``before_agent_start`` handler and
+#: records the active set it left behind and the one ``agent_start`` sees.
+#: Handlers run in extension load order, so the associate extension's own
+#: ``before_agent_start`` ``dropWriters`` runs after this one — the exact path
+#: ``index.ts`` keeps "in case a later hook re-enabled a writer".
+_REENABLE_WRITERS_EXTENSION = """\
+import { writeFileSync } from "node:fs";
+
+export default async function (pi: any) {
+  const seen: Record<string, string[]> = {};
+  const dump = () => writeFileSync(process.env.ASSOCIATE_TEST_PROBE_OUT!, JSON.stringify(seen));
+  pi.on("before_agent_start", async () => {
+    pi.setActiveTools([...pi.getActiveTools(), "write", "edit"]);
+    seen.after_reenable = pi.getActiveTools();
+    dump();
+  });
+  pi.on("agent_start", async () => {
+    seen.at_agent_start = pi.getActiveTools();
+    dump();
+  });
+}
+"""
+
+
+def _message_text(message: dict[str, object]) -> str:
+    content = message.get("content")
+    if isinstance(content, str):
+        return content
+    if isinstance(content, list):
+        return "".join(str(part.get("text", "")) for part in content if isinstance(part, dict))
+    return ""
+
+
+def _first_request_with_extension(
+    fake_lane: FakeLaneServer,
+    tmp_path: Path,
+    extra_args: list[str],
+    model: str = "worker",
+    **env_overrides: str,
+) -> dict[str, object]:
+    """Run real ``pi`` with the project extension and return its first request body.
+
+    The fake lane answers plain JSON, so pi never finishes the turn; the body
+    is captured the moment it is sent and pi is then killed (see the module
+    docstring).
+    """
+    env = _pi_env(
+        ASSOCIATE_BASE_URL=f"{fake_lane.base_url}/v1",
+        ASSOCIATE_API_KEY=DUMMY_KEY,
+        ASSOCIATE_MODEL=model,
+        ASSOCIATE_CONTRACT_DIR=str(REPO_ROOT / "associate" / "contract"),
+        ASSOCIATE_EXPORT_ROOT=str(tmp_path / "runs"),
+        **env_overrides,
+    )
+    env.pop("ASSOCIATE_CONTINUE_FROM", None)
+
+    process = subprocess.Popen(  # nosec B603 - fixed argv, no shell
+        [
+            "pi",
+            "-p",
+            "--no-session",
+            "--approve",
+            "--no-context-files",
+            *extra_args,
+            "--provider",
+            PROVIDER_ID,
+            "--model",
+            model,
+            "pong",
+        ],
+        stdout=subprocess.PIPE,
+        stderr=subprocess.PIPE,
+        stdin=subprocess.DEVNULL,
+        text=True,
+        env=env,
+        cwd=REPO_ROOT,
+    )
+    try:
+        deadline = time.monotonic() + 120
+        while time.monotonic() < deadline and not fake_lane.requests.chat_completions:
+            time.sleep(0.2)
+    finally:
+        process.kill()
+        _, stderr = process.communicate(timeout=60)
+
+    captured = fake_lane.requests.chat_completions
+    assert captured, f"pi sent no /v1/chat/completions request to the fake lane:\n{stderr}"
+    return captured[0]
+
+
+def _declared_tools(body: dict[str, object]) -> list[str]:
+    return [tool["function"]["name"] for tool in body.get("tools", [])]  # type: ignore[union-attr]
+
+
+def test_transcript_backed_prompt_and_tool_changes_reach_the_first_request(
+    fake_lane: FakeLaneServer, tmp_path: Path
+):
+    """pi 0.86.0 made ``before_agent_start`` prompt and tool changes transcript-backed.
+
+    Measured on the wire rather than inferred from the changelog — the first
+    ``/v1/chat/completions`` body pi sends must show:
+
+    * the system prompt delivered as a leading ``system`` message (the 0.86.0
+      ``TranscriptContext`` conversion, with ``supportsDeveloperRole: false``),
+      carrying no ancestor context file under ``--no-context-files``;
+    * ``lib/prompt.ts``'s ``before_agent_start`` message — the checkout's own
+      ``AGENTS.md`` — in the conversation;
+    * no ``edit``/``write`` declared for ``senses`` (the model that may not
+      mutate, plan t12), although an earlier ``before_agent_start`` handler
+      re-enabled both: ``index.ts``'s ``setActiveTools`` from the same event
+      must apply to this very request, not only to a later one.
+    """
+    require_pi()
+
+    helper = tmp_path / "reenable-writers.ts"
+    helper.write_text(_REENABLE_WRITERS_EXTENSION, encoding="utf-8")
+    probe_out = tmp_path / "active-tools.json"
+
+    body = _first_request_with_extension(
+        fake_lane,
+        tmp_path,
+        ["-e", str(helper)],
+        "senses",
+        ASSOCIATE_INJECT_PROMPT="1",
+        ASSOCIATE_TEST_PROBE_OUT=str(probe_out),
+    )
+
+    # The helper really did re-enable the writers, and they were gone again by
+    # agent_start — so the removal came from a later before_agent_start handler.
+    seen = json.loads(probe_out.read_text(encoding="utf-8"))
+    assert {"write", "edit"} <= set(seen["after_reenable"]), seen
+    assert not {"write", "edit"} & set(seen["at_agent_start"]), seen
+
+    declared = _declared_tools(body)
+    assert "associate_ready" in declared, declared
+    assert "finish" in declared, declared
+    assert not {"write", "edit"} & set(declared), f"a writer reached the wire: {declared}"
+
+    messages = body["messages"]
+    assert messages[0]["role"] == "system", [m["role"] for m in messages]
+    system_text = _message_text(messages[0])
+    assert system_text.strip(), "the system prompt is empty on the wire"
+    assert (
+        "<project_instructions" not in system_text
+    ), "--no-context-files must keep every context file out of the system prompt"
+
+    injected = [m for m in messages[1:] if "this lane's runtime prompt" in _message_text(m)]
+    assert len(injected) == 1, "the AGENTS.md injection must reach the request exactly once"
+    agents_first_line = (REPO_ROOT / "AGENTS.md").read_text(encoding="utf-8").splitlines()[0]
+    assert agents_first_line in _message_text(injected[0])
+
+
+def test_an_operator_added_powershell_never_reaches_the_wire(
+    fake_lane: FakeLaneServer, tmp_path: Path
+):
+    """pi 0.84.3 added a built-in ``powershell``; 1.1.0's ``--tools +name`` adds it.
+
+    Measured on pi 1.1.0 (Linux): ``getAllTools()`` lists ``powershell`` as a
+    configured built-in, and before ``lib/guard.ts`` named it a writer,
+    ``--tools +powershell`` put an unrestricted shell on the wire beside the
+    associate tools. It must be dropped like the built-in ``bash`` is.
+    """
+    require_pi()
+
+    body = _first_request_with_extension(fake_lane, tmp_path, ["--tools", "+powershell"])
+
+    declared = _declared_tools(body)
+    assert "associate_ready" in declared, declared
+    assert "powershell" not in declared, f"powershell reached the wire: {declared}"
+
+
+def _tools_declared_for(fake_lane: FakeLaneServer, tmp_path: Path, model: str) -> set[str]:
+    fake_lane.requests.chat_completions.clear()
+    return set(
+        _declared_tools(_first_request_with_extension(fake_lane, tmp_path / model, [], model))
+    )
+
+
+def test_each_model_declares_exactly_its_registry_tool_set_on_the_wire(
+    fake_lane: FakeLaneServer, tmp_path: Path
+):
+    """Plan t12, criterion 1, on the wire: the first request pi sends declares
+    exactly the active model's ``models.json`` tools that this extension and pi
+    provide — ``senses`` no ``write``/``edit``/``bash``, ``worker`` and
+    ``cortex`` their full set including ``write``/``edit``/``bash``. Tools a
+    model's entry names but nothing registers yet (later plan tasks) are
+    absent, and nothing outside the entry is ever declared.
+    """
+    require_pi()
+    models = json.loads((REPO_ROOT / "associate" / "contract" / "models.json").read_text())
+
+    declared = {key: _tools_declared_for(fake_lane, tmp_path, key) for key in ("senses", "worker")}
+
+    assert not {"write", "edit", "bash"} & declared["senses"], declared["senses"]
+    assert {"write", "edit", "bash"} <= declared["worker"], declared["worker"]
+    for key, tools in declared.items():
+        allowed = set(models["models"][key]["tools"])
+        assert {"associate_ready", "finish", "read"} <= tools, (key, tools)
+        assert tools <= allowed, f"{key} declared tools outside its entry: {tools - allowed}"

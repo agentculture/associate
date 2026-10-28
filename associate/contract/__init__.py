@@ -3,10 +3,15 @@
 Small on purpose (spec claim c46). This package holds the values that stay the
 same whichever harness runs the lane:
 
-* ``role.json``   — the capability and forbidden-token lists, copied from
-  lobes' role registry;
+* ``role.json``   — the harness-wide bound every model shares (deviation d13:
+  no model makes a final or security decision); per-model rights are in
+  ``models.json``;
 * ``policy.json`` — the permission boundary (read denylist, shell allowlist,
   per-tool budgets, result/fetch caps, walk redaction patterns);
+* ``models.json`` — the per-model registry (lobes role, input modalities,
+  reasoning mode, allowed tools, prompt file, may_mutate, may_spawn);
+* ``gate.json``   — the pre-mutation safety-gate question set, thresholds and
+  fallback rules;
 * ``schemas/``    — JSON Schema documents for the task input, the walk, and the
   statements/hand-back.
 
@@ -31,13 +36,18 @@ __all__ = [
     "schemas_dir",
     "load_role",
     "load_policy",
+    "load_models",
+    "default_base_url",
+    "load_gate",
     "load_schema",
     "SCHEMA_NAMES",
     "walk_entry_schema",
     "walk_run_schema",
+    "walk_gate_schema",
+    "walk_child_schema",
 ]
 
-SCHEMA_NAMES: tuple[str, ...] = ("task", "walk", "statements")
+SCHEMA_NAMES: tuple[str, ...] = ("task", "walk", "statements", "models", "gate")
 
 #: Key under which a schema keeps its local subschema definitions.
 DEFS_KEY = "$defs"
@@ -72,6 +82,25 @@ def load_policy() -> dict[str, Any]:
     return _cached(str(contract_dir() / "policy.json"))
 
 
+def load_models() -> dict[str, Any]:
+    """The per-model registry (``models.json``)."""
+    return _cached(str(contract_dir() / "models.json"))
+
+
+def default_base_url() -> str:
+    """The base URL used when ``ASSOCIATE_BASE_URL`` is unset.
+
+    ``models.json`` ``endpoint.default_base_url`` owns it; the provider and the
+    CLEF gate read the same value, so no adapter carries its own constant.
+    """
+    return str(load_models()["endpoint"]["default_base_url"])
+
+
+def load_gate() -> dict[str, Any]:
+    """The safety-gate question set (``gate.json``)."""
+    return _cached(str(contract_dir() / "gate.json"))
+
+
 def load_schema(name: str) -> dict[str, Any]:
     """Load one contract schema by short name (``task``/``walk``/``statements``)."""
     if name not in SCHEMA_NAMES:
@@ -100,3 +129,13 @@ def walk_entry_schema() -> dict[str, Any]:
 def walk_run_schema() -> dict[str, Any]:
     """Schema for the walk's final run record."""
     return _walk_def("run")
+
+
+def walk_gate_schema() -> dict[str, Any]:
+    """Schema for one walk.jsonl safety-gate line."""
+    return _walk_def("gate")
+
+
+def walk_child_schema() -> dict[str, Any]:
+    """Schema for one walk.jsonl child-walk link line."""
+    return _walk_def("child")
