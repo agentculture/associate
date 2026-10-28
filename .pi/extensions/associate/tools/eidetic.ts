@@ -17,7 +17,8 @@
  *
  * Provenance: the model's own claim about where a fact came from is not
  * evidence, so the extension watches the session instead. Once `web_search` /
- * `web_page` has been called, a `spawn_subagent` child has handed text back,
+ * `web_page` has been called, a `spawn_subagent` child has handed text back
+ * (or a `delegate_status` result has relayed a delegated run's reply),
  * or any read-class tool has run against a checkout that is not associate's
  * own repo — every later `eidetic_remember`
  * record carries `metadata.provenance` naming the untrusted source(s). Records
@@ -75,9 +76,12 @@ const READ_TOOLS = ["read", "grep", "find", "ls", "bash", "code_lens"];
 /**
  * Tools whose result relays another session's text. A child's hand-back can
  * carry anything the child read — the web, a foreign checkout — and the
- * parent cannot see which, so it is untrusted in every checkout.
+ * parent cannot see which, so it is untrusted in every checkout. A
+ * `delegate_status` result (deviation d18) carries the delegated run's final
+ * reply, model output of exactly that kind; `delegate_run` itself returns only
+ * a run id and does not taint.
  */
-const CHILD_TOOLS = ["spawn_subagent"];
+const CHILD_TOOLS = ["spawn_subagent", "delegate_status"];
 
 export const EIDETIC_RECALL_SCHEMA = {
   type: "object",

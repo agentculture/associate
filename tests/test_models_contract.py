@@ -140,9 +140,10 @@ def test_policy_shell_read_only_subset_excludes_the_writing_subcommands():
 
 
 def test_gated_tools_gate_memory_and_web_without_making_them_mutations():
-    """Deviations d6 (r17) and d7: memory writes and web egress are gated for every model."""
+    """Deviations d6 (r17), d7 and d18: memory writes, web egress and a delegated
+    run are gated for every model."""
     doc = contract.load_models()
-    assert doc["gated_tools"] == ["eidetic_remember", "web_search", "web_page"]
+    assert doc["gated_tools"] == ["eidetic_remember", "web_search", "web_page", "delegate_run"]
     assert doc["mutating_tools"] == ["write", "edit", "bash", "ledger_append", "run_tests"]
     for tool in doc["gated_tools"]:
         assert tool not in doc["mutating_tools"]
@@ -183,3 +184,75 @@ def test_run_tests_is_a_mutation_held_only_by_models_that_may_change_code():
     assert "senses" not in holders
     for name in holders:
         assert doc["models"][name]["may_mutate"] is True, name
+
+
+# ------------------------------- d18: the resident hands writes to a run
+
+
+def test_senses_delegates_only_to_worker_and_nobody_else_delegates():
+    """d18: the read-only resident hands writing tasks to a worker run; no
+    other model holds the delegation pair (worker and cortex write themselves)."""
+    models = contract.load_models()["models"]
+    assert models["senses"]["may_delegate"] == ["worker"]
+    for name in ("worker", "cortex", "super-vl"):
+        assert models[name]["may_delegate"] == [], name
+    for name, m in models.items():
+        for tool in ("delegate_run", "delegate_status"):
+            assert (tool in m["tools"]) == bool(m["may_delegate"]), (name, tool)
+    assert models["senses"]["may_mutate"] is False
+
+
+def test_delegate_run_is_gated_and_delegate_status_is_a_read():
+    doc = contract.load_models()
+    assert "delegate_run" in doc["gated_tools"]
+    for tool in ("delegate_run", "delegate_status"):
+        assert tool in doc["tool_names"]
+        assert tool not in doc["mutating_tools"]
+    assert "delegate_status" not in doc["gated_tools"]
+
+
+def test_may_delegate_is_required(doc):
+    del doc["models"]["worker"]["may_delegate"]
+    assert any("may_delegate" in e for e in validate.validate_models(doc))
+
+
+@pytest.mark.parametrize(
+    ("target", "fragment"),
+    [("nobody", "unknown"), ("senses", "itself"), ("super-vl", None)],
+)
+def test_bad_delegate_targets_are_rejected(doc, target, fragment):
+    doc["models"]["senses"]["may_delegate"] = [target]
+    errors = validate.validate_models(doc)
+    if fragment is None:
+        # super-vl may mutate and does not delegate: a valid (if pending) target.
+        assert errors == []
+    else:
+        assert any("may_delegate" in e and fragment in e for e in errors), errors
+
+
+def test_a_delegate_target_that_may_not_mutate_is_rejected(doc):
+    doc["models"]["cortex"]["may_delegate"] = ["senses"]
+    doc["models"]["cortex"]["tools"] += ["delegate_run", "delegate_status"]
+    errors = validate.validate_models(doc)
+    assert any("'senses', which may not mutate" in e for e in errors), errors
+
+
+def test_a_delegate_target_that_delegates_is_rejected(doc):
+    doc["models"]["worker"]["may_delegate"] = ["cortex"]
+    doc["models"]["worker"]["tools"] += ["delegate_run", "delegate_status"]
+    errors = validate.validate_models(doc)
+    assert any("'worker', which delegates" in e for e in errors), errors
+
+
+def test_delegation_tools_and_may_delegate_go_together(doc):
+    doc["models"]["senses"]["tools"].remove("delegate_status")
+    errors = validate.validate_models(doc)
+    assert any("delegate_status and may_delegate" in e for e in errors), errors
+
+
+def test_delegate_run_must_stay_gated_and_never_mutating(doc):
+    doc["gated_tools"].remove("delegate_run")
+    assert any("delegate_run must be gated" in e for e in validate.validate_models(doc))
+    doc = copy.deepcopy(contract.load_models())
+    doc["mutating_tools"].append("delegate_status")
+    assert any("must not be a mutating tool" in e for e in validate.validate_models(doc))

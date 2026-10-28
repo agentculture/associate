@@ -422,3 +422,26 @@ def test_large_state_timeout_is_required(doc):
 def test_large_state_timeout_must_be_a_positive_integer(doc, value):
     doc["large_state"]["timeout_ms"] = value
     assert any("timeout_ms" in e for e in validate.validate_gate(doc))
+
+
+# ------------------- d18: the resident hands a writing task to a separate run
+
+
+def test_delegate_run_has_a_truthful_effect(doc):
+    """d18: CLEF is told that delegate_run starts a separate run in its own
+    worktree, merged only on a clean run whose operator tests pass, never pushed."""
+    assert doc["version"] >= 9
+    effect = doc["effects"]["delegate_run"]
+    for fact in (
+        "separate associate run",
+        "returns at once",
+        "changes nothing itself",
+        "git worktree",
+        "local main branch",
+        "test command the operator configured",
+        "Nothing is pushed",
+    ):
+        assert fact in effect, fact
+    assert "d18" in doc["effects"]["$comment"]
+    # It writes nothing into THIS checkout, so the isolation line is not sent for it.
+    assert "delegate_run" not in doc["isolation"]["applies_to"]

@@ -237,6 +237,19 @@ test("r2/10: a spawn_subagent hand-back taints later records untrusted:child, in
   }
 });
 
+test("d18: a delegate_status result taints later records untrusted:child; starting a run does not", async () => {
+  const r = rig();
+  try {
+    const { taint } = get(r, "eidetic_remember");
+    taint.observe("delegate_run");
+    assert.equal(taint.provenance(), null, "delegate_run returns only a run id");
+    taint.observe("delegate_status");
+    assert.equal(taint.provenance(), "untrusted:child");
+  } finally {
+    r.dispose();
+  }
+});
+
 test("register wires a tool_call listener so web use taints later records", async () => {
   const r = rig();
   try {

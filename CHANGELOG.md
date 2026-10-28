@@ -32,6 +32,18 @@ senses statement claimed an action it never took.
 
 ### Added
 
+- **Delegation from the read-only resident** (deviation d18):
+  `delegate_run` / `delegate_status` (`tools/delegate.ts`), held by `senses`
+  only (`models.json` `may_delegate`: `["worker"]`, validated by
+  `validate.py` and the extension). `delegate_run` starts the in-tree
+  `associate run --model worker --json` detached — its own worktree, every
+  operator test command from `ASSOCIATE_TEST_COMMANDS` (none configured:
+  refused), `--untrusted-checkout` unless trusted, `--timeout` from the new
+  `policy.json` `budgets.delegate` — and returns a run id; one run per checkout
+  at a time; a `child` walk line links its walk. It is CLEF-gated for every
+  model (`gate.json` version 9 adds its effect line); `delegate_status` is a
+  read whose result taints later memory records `untrusted:child`. Built and
+  unit-tested against a fake launcher; no delegated run has been started live.
 - **Model registry** `associate/contract/models.json`: `worker` (Pi label
   "bolt", the default), `senses`, `cortex`, and `super-vl` (pending, no lobes
   role). Each entry names its lobes role, input modalities, reasoning mode,

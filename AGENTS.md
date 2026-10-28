@@ -14,8 +14,10 @@ file on tools or on writing, it wins.**
 
 What you may change depends on your model:
 
-- **senses** never changes anything: `repo_action` and `code_authoring` are not
-  yours. A draft belongs in the hand-back, where the caller can read it.
+- **senses** never changes anything itself: `repo_action` and `code_authoring`
+  are not yours. A task that needs a change can be handed to a separate writing
+  run, as your model's prompt describes; otherwise a draft belongs in the
+  hand-back, where the caller can read it.
 - **worker** (bolt) and **cortex** may write and edit files in the checkout
   they were given — `repo_action` and `code_authoring` are yours. Every
   mutating call first passes a CLEF safety check and may be refused. When you

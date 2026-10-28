@@ -74,9 +74,9 @@ run live):
   `ledger_append`/`run_tests`; `worker` and `cortex` may write and edit in the
   run checkout.
 - **The CLEF safety gate** (`lib/gate.ts`, question set and thresholds in
-  `associate/contract/gate.json`, version 6). Every mutating call
+  `associate/contract/gate.json`, version 9). Every mutating call
   (`models.json` `mutating_tools`) and every gated call (`gated_tools`:
-  `eidetic_remember`, `web_search`, `web_page`) is scored by the lobes decider
+  `eidetic_remember`, `web_search`, `web_page`, `delegate_run`) is scored by the lobes decider
   (`POST /v1/systemone`); below threshold it is refused. Tiers: CLEF, then
   Super (a chat model answering the same questions as JSON — counted as
   unreachable while `super-vl` is pending), then a read-only fallback that
@@ -101,6 +101,28 @@ run live):
   (`tools/spawn.ts`, cortex only, children `worker` or `senses`, one writing
   child per checkout at a time, child walk paths recorded in the parent walk);
   image blocks from `read` for models whose entry lists `image` input.
+- **Delegation from the read-only resident** (deviation d18, `tools/delegate.ts`):
+  senses holds `delegate_run` and `delegate_status`, allowed targets from
+  `models.json` `may_delegate` (senses: `worker`; every other model `[]`).
+  `delegate_run` starts `associate run --model <target> --checkout <session
+  checkout> --json` **detached** and returns a run id at once (culture's turn
+  timeout is 600 s; live worker runs took up to ~25 min); `delegate_status`
+  reads the run's `--json` result (outcome, merge, merge_reason, worktree,
+  tests, final_reply) or reports it running, failed or lost. The run is the
+  in-tree CLI — `<tree>/.venv/bin/python` (else `python3` on PATH) `-m
+  associate`, cwd and `PYTHONPATH` set to the tree that holds the extension
+  (`lib/paths.ts` `associateRoot`), `ASSOCIATE_EXTENSION_PATH` to this
+  extension — never the PATH `associate` and never `uv`, so the tree's
+  `uv.lock` is untouched. It passes every operator test command from
+  `ASSOCIATE_TEST_COMMANDS` as `--test-command` (and refuses to start with
+  none configured), `--untrusted-checkout` unless `ASSOCIATE_PI_TRUST` is
+  `approve`, and `--timeout` from `policy.json` `budgets.delegate.timeout_ms`.
+  One delegated run per checkout at a time; it refuses a checkout outside git.
+  Its export root is `<session root>/delegated`, its session id the run id, its
+  stdout/stderr beside it; a `child` line in the session walk names its walk.
+  `delegate_run` is in `gated_tools` (CLEF-gated for every model, effect line in
+  `gate.json` version 9), not in `mutating_tools`; `delegate_status` is a read,
+  and its result taints later memory records `untrusted:child`.
 - **The run result** names the model and lobes role that ran, the isolation and
   merge outcome, the test results, and how the task turn ended (final reply,
   stop reason, lane error).
@@ -138,6 +160,11 @@ Each item is one run, not a rate.
 - the resident's first reply on the mesh: it paused under the 23:00–08:00
   sleep schedule before answering;
 - a writing model on the mesh: mesh sessions get no run worktree;
+- delegation from the resident (d18): `delegate_run` / `delegate_status` are
+  built and unit-tested against a fake launcher only; no delegated run has been
+  started live. While the resident's checkout is on a branch whose base is not
+  on `main`, the harness keeps (does not merge) every delegated run — see
+  `associate/harness/worktree.py`;
 - **any** benchmark score: no row of the 8-row matrix has run (t21).
 
 Say "built and unit-tested", never "works", for these. Two live findings
@@ -245,7 +272,7 @@ associate/                  # Python package (top level — no src/ wrapper)
 ├── index.ts                # loader: registry model, tool surface, guard, gate
 ├── lib/                    # provider, guard, gate, walk, session, contain, …
 ├── tools/                  # read, search, shell, web, codelens, eidetic,
-│                           #   ledger, tests (run_tests), spawn
+│                           #   ledger, tests (run_tests), spawn, delegate
 ├── prompts/                # one prompt per registry model
 └── tests/                  # node --test suite (run.sh)
 tests/                      # pytest — CLI, contract, run, worktree, gate, …
@@ -470,8 +497,8 @@ versions the extension's tests and the worker live runs used:
   through it is not yet measured on 1.1.0 (t20).
 - **Node** — **>=22** (pi-acp's floor, and the extension test runner's).
 - **the portable contract** (`associate/contract/`) — `models.json` version 1,
-  `gate.json` version 6. A contract-version bump is a compatibility event, not a
-  patch note; a `gate.json` bump changes what CLEF is asked, so record why
+  `gate.json` version 9 (d18 added the `delegate_run` effect). A
+  contract-version bump is a compatibility event, not a patch note; a `gate.json` bump changes what CLEF is asked, so record why
   (`docs/notes/gate-calibration.md`).
 - **CLIs the tools shell out to** — `eidetic` (eidetic-cli) for
   `eidetic_recall` / `eidetic_remember`, and `ledger` from **workledger-cli
@@ -508,10 +535,10 @@ value is not inherited.
 | `ASSOCIATE_CHECKOUT_ROOT` | the process cwd | `lib/runtime.ts`; set by `spawn_subagent` for a child | The checkout a session examines and confines tools to. |
 | `ASSOCIATE_CONTINUE_FROM` | — | `lib/torch.ts`; set by `associate run --continue-from` | A prior run's export directory, loaded as this session's first context. |
 | `ASSOCIATE_INJECT_PROMPT` | — | `lib/prompt.ts`; set to `1` by `associate run` | With pi's ancestor context-file discovery off, inject associate's own `AGENTS.md` as the runtime prompt plus the active model's prompt — both from associate's install (`prompts/<model>.md`), never from the checkout — and nothing above it. The examined checkout's `AGENTS.md` (when it is not associate's own install) is injected only when `ASSOCIATE_PI_TRUST` is `approve`, labelled as repository context, between the two (deviation d17). Unset for the mesh resident (pi-acp), whose pi loads context files itself. |
-| `ASSOCIATE_EXTENSION_PATH` | the `.pi/extensions/associate/index.ts` above the installed package | `associate/harness/pi.py` | The extension entry point `associate run` passes pi with `-e`. |
+| `ASSOCIATE_EXTENSION_PATH` | the `.pi/extensions/associate/index.ts` above the installed package | `associate/harness/pi.py`; set by `delegate_run` for a delegated run | The extension entry point `associate run` passes pi with `-e`. |
 | `ASSOCIATE_ISOLATION` | absent (read as `in-place`) | `index.ts` → `lib/gate.ts`; set by `associate run` | Where the run's checkout writes land, `worktree` or `in-place`; told to CLEF as the `isolation` state line (deviation d8). |
-| `ASSOCIATE_TEST_COMMANDS` | absent | `tools/tests.ts`; set by `associate run --test-command` | The operator's test commands as a JSON array of argv lists, for the `run_tests` tool. The harness runs the same commands itself after the model (deviation d12). |
-| `ASSOCIATE_PI_TRUST` | absent (read as untrusted) | `lib/trust.ts`, read by `tools/spawn.ts` and `lib/prompt.ts`; set by `associate run` | `approve` or `untrusted`, from how the parent pi was launched (deviation d5); only the exact value `approve` is trust. It gives a child `--approve` (a child is never more trusting than its parent) and lets the examined checkout's `AGENTS.md` be injected as repository context (d17); anything else skips that file. |
+| `ASSOCIATE_TEST_COMMANDS` | absent | `tools/tests.ts`, `tools/delegate.ts`; set by `associate run --test-command` | The operator's test commands as a JSON array of argv lists, for the `run_tests` tool. The harness runs the same commands itself after the model (deviation d12). For the mesh resident the operator sets it in the unit's environment: `delegate_run` passes each one to the delegated run as `--test-command` and refuses to start any run while it names none (d18). |
+| `ASSOCIATE_PI_TRUST` | absent (read as untrusted) | `lib/trust.ts`, read by `tools/spawn.ts`, `tools/delegate.ts` and `lib/prompt.ts`; set by `associate run` | `approve` or `untrusted`, from how the parent pi was launched (deviation d5); only the exact value `approve` is trust. It gives a child `--approve` and a delegated run no `--untrusted-checkout` (neither is ever more trusting than its parent) and lets the examined checkout's `AGENTS.md` be injected as repository context (d17); anything else skips that file. |
 | `ASSOCIATE_RUN_DEADLINE` | absent (no cap beyond `budgets.spawn.timeout_ms`) | `tools/spawn.ts`; set by `associate run` from `--timeout`, never inherited | The parent run's deadline as absolute epoch milliseconds. Each child's wall clock is the contract's `timeout_ms` capped at what is left of the run minus a safety margin, measured after any wait for the writer lock; a spawn with too little time left is refused (`run_deadline`) rather than started to be killed. |
 | `ASSOCIATE_EIDETIC_DIR` | `$HOME/.eidetic/memory` | `tools/eidetic.ts` | The eidetic store the memory tools pin (`EIDETIC_DATA_DIR`); must be absolute and outside the examined checkout. |
 | `ASSOCIATE_LEDGER_PATH` | `$HOME/.workledger/associate.jsonl` | `tools/ledger.ts` | The workledger file the ledger tools pin (`WORKLEDGER_PATH`); must be absolute and outside the examined checkout. |

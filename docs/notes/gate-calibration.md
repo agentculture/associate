@@ -272,3 +272,18 @@ The planted write was refused, but with `exfiltrates` false. The earlier
 scratch probe had flagged it `exfiltrates` true. The evaluator refuses the
 write, but it does not reliably name why. One pair, not a rate. Large-write
 probes belong in issue #13's corpus.
+
+## Version 9 (d18): the `delegate_run` effect
+
+Deviation d18 lets the read-only resident (`senses`) hand a writing task to a
+separate `associate run` through `delegate_run`, a gated tool for every model.
+Version 9 adds only its `effects` line: it starts a separate run of the named
+model on the task shown and returns at once; the caller changes nothing itself;
+the run works in its own git worktree, is merged into the local `main` only
+when it finishes cleanly and every operator test command passes, and nothing
+is pushed. No question, rule or threshold changed, and no `isolation` line is
+sent for it (it writes nothing into the caller's checkout).
+
+**Unmeasured:** no `delegate_run` state has been probed against CLEF. How the
+decider scores a delegation — whose `arguments` carry a whole task text rather
+than a concrete change — is unknown; such probes belong in issue #13's corpus.

@@ -194,6 +194,9 @@ def assert_valid(instance: Any, schema: dict[str, Any]) -> None:
 #: Where a model's prompt file must live (checked for shape, not existence).
 PROMPT_DIR = ".pi/extensions/associate/prompts/"
 
+#: The delegation pair (deviation d18): start a delegated run, read its result.
+DELEGATE_TOOLS = ("delegate_run", "delegate_status")
+
 
 def _check_model_tools(name: str, model: dict[str, Any], known: set[str], mutating: set[str]):
     errors: list[str] = []
@@ -208,6 +211,46 @@ def _check_model_tools(name: str, model: dict[str, Any], known: set[str], mutati
         errors.append(f"models.{name}: may_mutate is false but holds {held}")
     if ("spawn_subagent" in tools) != bool(model.get("may_spawn")):
         errors.append(f"models.{name}: spawn_subagent and may_spawn must go together")
+    for tool in DELEGATE_TOOLS:
+        if (tool in tools) != bool(model.get("may_delegate")):
+            errors.append(f"models.{name}: {tool} and may_delegate must go together")
+    return errors
+
+
+def _check_delegation(doc: dict[str, Any]) -> list[str]:
+    """``may_delegate`` (deviation d18): who may hand a task to a delegated run.
+
+    A target must be a real, writing (``may_mutate``) model other than the
+    delegator, and must not delegate itself — the hand-off exists to give a
+    write a worktree, a test check and a clean-only merge, and a chain of
+    delegations would only hide who started what. ``delegate_run`` is gated
+    for every model and never a mutating tool (the delegator changes nothing
+    itself); ``delegate_status`` is a read and is neither.
+    """
+    errors: list[str] = []
+    models = doc["models"]
+    for name, model in models.items():
+        targets = model["may_delegate"]
+        if len(set(targets)) != len(targets):
+            errors.append(f"models.{name}: may_delegate has duplicates")
+        for target in targets:
+            entry = models.get(target)
+            if entry is None:
+                errors.append(f"models.{name}: may_delegate names unknown model {target!r}")
+            elif target == name:
+                errors.append(f"models.{name}: may_delegate names itself")
+            elif entry.get("may_mutate") is not True:
+                errors.append(f"models.{name}: may_delegate names {target!r}, which may not mutate")
+            elif entry["may_delegate"]:
+                errors.append(f"models.{name}: may_delegate names {target!r}, which delegates")
+    known = set(doc["tool_names"])
+    if "delegate_run" in known and "delegate_run" not in doc["gated_tools"]:
+        errors.append("gated_tools: delegate_run must be gated (deviation d18)")
+    for tool in DELEGATE_TOOLS:
+        if tool in doc["mutating_tools"]:
+            errors.append(f"mutating_tools: {tool!r} must not be a mutating tool (deviation d18)")
+    if "delegate_status" in doc["gated_tools"]:
+        errors.append("gated_tools: delegate_status is a read and is not gated (deviation d18)")
     return errors
 
 
@@ -251,6 +294,8 @@ def validate_models(doc: dict[str, Any]) -> list[str]:
     ``tool_names``; ``gated_tools`` are known and disjoint from
     ``mutating_tools``; a non-mutating model holds no mutating tool; only models
     that may spawn hold ``spawn_subagent``; ``may_spawn`` names real models;
+    ``may_delegate`` names writing models that do not delegate, and only those
+    models hold ``delegate_run`` / ``delegate_status`` (d18);
     prompt files have the right shape; and the default exists and is active.
     """
     from associate.contract import load_schema  # noqa: PLC0415 - avoid import cycle
@@ -272,6 +317,7 @@ def validate_models(doc: dict[str, Any]) -> list[str]:
                 errors.append(f"models.{name}: may_spawn names unknown model {target!r}")
             elif target == name:
                 errors.append(f"models.{name}: may_spawn names itself")
+    errors.extend(_check_delegation(doc))
     default = doc["default"]
     if default not in models:
         errors.append(f"default {default!r} is not a model")
