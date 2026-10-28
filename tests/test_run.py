@@ -1190,3 +1190,12 @@ def test_served_model_id_default_comes_from_the_contract(monkeypatch: pytest.Mon
     monkeypatch.setattr(urllib.request, "urlopen", fake_urlopen)
     assert PiHarness(env={}).served_model_id() is None
     assert seen == ["http://moved.invalid:9/v1/models"]
+
+
+def test_an_inherited_checkout_root_never_reaches_the_extension(tmp_path: Path):
+    """The guard confines writes to ASSOCIATE_CHECKOUT_ROOT (lib/runtime.ts). An
+    operator value pointing at the main checkout must not survive into a run whose
+    checkout is its own worktree."""
+    harness = _bound_harness(tmp_path, {"ASSOCIATE_CHECKOUT_ROOT": "/home/op/main-checkout"})
+    env = harness.environment(_task(tmp_path))
+    assert env["ASSOCIATE_CHECKOUT_ROOT"] == str(tmp_path.resolve())
