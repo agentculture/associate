@@ -5,6 +5,108 @@ All notable changes to this project will be documented in this file.
 Format follows [Keep a Changelog](https://keepachangelog.com/). This project
 adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.11.0] - 2026-11-16
+
+The bridge: another service can start an `associate run` on a checkout and read
+its result, over a CLI, an HTTP API or an MCP server, and see runs in a
+read-only web UI. This is the bridge's first release: its tests use a stand-in for the
+run, and no real run has been started through it (built and unit-tested only).
+
+### Added
+
+- **The runs API** (`associate/runs/`): `associate runs start|show|list`. A start
+  validates the checkout, model, instruction and test commands, takes a
+  per-checkout lock (one run per checkout), starts a detached supervisor and
+  returns a run id at once. `runs show` reports `status` (`running`, `finished`,
+  `failed-to-start`, `lost`) and, once finished, `ok`, `outcome`, `merge`
+  (`merged`, `refused`, `nothing_to_merge`, `not_attempted`), `tests`,
+  `base_commit` and `changed_paths`, always in under 64 KiB. A clean run whose
+  tests pass is merged into the checkout's local `main`; nothing is pushed.
+  State lives in `ASSOCIATE_RUNS_DIR`, and `ASSOCIATE_RUNS_ROOTS` is the
+  checkout allowlist (empty: every start over HTTP and MCP is refused).
+- **`associate serve`** (`associate/server/`, the `server` extra): the runs HTTP
+  API (`POST /runs`, `GET /runs/{run_id}`, `GET /runs`, public `GET /health`).
+  A loopback listener (`127.0.0.1:8794`) that trusts Cloudflare Access when
+  `ASSOCIATE_ACCESS_*` is set, and an optional LAN listener (port `8795`)
+  that takes service tokens only.
+- **`associate tokens issue|list|revoke`**: service tokens (`asc_...`) in a
+  `0600` file of hashes, with the roles `viewer`, `editor` and `admin`. Only
+  `admin` starts a run.
+- **`associate mcp`** (the `mcp` extra): the `runs_start`, `runs_show` and
+  `runs_list` tools over stdio, calling the same functions as the CLI and HTTP.
+- **The cited framework** (`associate/bridge/`): auth, route policy, Access JWT
+  verification, service tokens and the MCP server, cited from qodo-cli, which
+  cited it from culture-rules. It names no app.
+- **A surface parity test** (`tests/test_surface_parity.py`): every runs verb
+  must exist, with the same parameters, on the CLI, the MCP server and the HTTP
+  API.
+- **The web UI** (`web/`, Vite + React + TypeScript, the culture-design tokens
+  and conventions cited from qodo-cli): **Runs** (`/runs`; a card per run with
+  a status pill, timing, model, title, checkout and outcome; a filter for all,
+  in progress and needs a look) and **one run** (`/runs/<id>`: why it was not
+  merged, each test command's exit code, the changed paths with the truncation
+  note, the instruction and the final reply). Read-only; it refreshes every 5
+  seconds while something runs and pauses while the tab is hidden. `create_app`
+  mounts it through `associate/bridge/static.py` when the package holds
+  `associate/web_dist`; then `GET /**` is viewer-readable and the same-origin
+  `/api` prefix reaches the same routes at the same roles. Without a build, `/`
+  is a JSON 404. Every API answer now says `Cache-Control: no-store`.
+- **`hatch_build.py`** ships `web/dist` in the wheel as `associate/web_dist`
+  (never committed; never runs Node). `ASSOCIATE_REQUIRE_WEB=1` fails a build
+  without it, `ASSOCIATE_SKIP_WEB=1` leaves it out. CI has a `web` job
+  (install, typecheck, vitest, the tokens check, build), and `publish.yml`
+  builds the UI before `uv build` and triggers on `web/**` and `hatch_build.py`.
+- **More fields for the UI, bounded**: `runs list` adds `finished_at`, `title`,
+  `merge`, `outcome`, `exit_code`, `tests` counts, `changed_paths_total` and
+  `test_command_count` (the reply stays under 64 KiB, cutting text first, then
+  leaving out the oldest runs with `truncated`); `runs show` adds `instruction`
+  (cut at 4000 characters), `test_command_count` and `tests.results` (each
+  command's line and exit code, at most 16, never its output).
+- **Docs**: `docs/operations/bridge.md` for operators, agents and integrators;
+  the README and `CLAUDE.md` describe the bridge.
+
+### Security
+
+- **The role check reads the path the router matches.** `authorize` looked up the route
+  policy on `request.url.path`, which older Starlette (the `fastapi>=0.115` bound still allows
+  it) cuts at a `?` or `#` inside the decoded path, so an unauthenticated
+  `GET /health%3F/../assets/a.js` was judged as the public `/health` and the static handler
+  then served a built UI file. It now reads `scope["path"]`, and `bridge/static.py` refuses
+  (JSON 404, before anything is resolved) a path with a `..` segment, `?`, `#`, a backslash
+  or a control character. Ported from qodo-cli; the tests drive a raw ASGI scope
+  (`tests/rawasgi.py`). Whole-number parsing (ports, the Access listen port, a
+  `Content-Length`) now requires ASCII digits, so a superscript digit is a refusal, not a
+  crash.
+- **A write cannot be forged from another site.** Behind Cloudflare Access a browser's cookie
+  is the credential, and `POST /runs` accepted any body, so a page an admin opened could start
+  a run with its own test commands as a `text/plain` "simple" request. Every method other
+  than GET, HEAD and OPTIONS now goes through the new `associate/bridge/origin.py` before
+  authentication (one answer, credential or not): 403 `cross_site_request` when
+  `Sec-Fetch-Site` is `cross-site`, 403 `cross_origin_request` when `Origin` is not the
+  request's own scheme and `Host` (not compared when the browser itself says
+  `Sec-Fetch-Site: same-origin`), and 415 `unsupported_media_type` unless the body is
+  declared `application/json` (the shape of qodo-cli's 415 rule). Callers with neither header
+  (curl, a rules engine, the CLI) are unaffected; the API sends no CORS header.
+- **The start body is capped while it is read.** A body without `Content-Length` (chunked)
+  was buffered whole before the length check. It is now read as a stream and refused 413
+  `body_too_large` as soon as it passes 512 KiB, whatever `Content-Length` says; a declared
+  length over the cap is refused before reading (it was a 400).
+
+### Fixed
+
+- **A run that has just started is never reported `lost`.** Between `request.json` and
+  `supervisor.json` a reader saw `lost` (`ok: false`, "its checkout is free again") for a run
+  that was starting. `request.json` now carries a `start_deadline` (120 seconds): until it, a
+  run with no supervisor or child record reads `running`; past it, `failed-to-start` (the
+  starter died before the run began, and its checkout lock went with it). The status words
+  are unchanged.
+- **`runs list` no longer reads every run.** It orders runs by their `request.json`'s mtime
+  (a `stat`) and reads only the runs it returns; `total` still counts every run.
+
+### Changed
+
+- The package version is 0.11.0 (`pyproject.toml`, `uv.lock`).
+
 ## [0.10.0] - 2026-10-27
 
 The multi-model associate on Pi 1.1.0 (plan

@@ -1,0 +1,532 @@
+/*
+ * App layer over culture-design/tokens.css. Values come from the two associate artboards on the
+ * design canvas (Runs and One run: sample content, real styling): a 1200px content width,
+ * 24px 16px 64px page padding, 32px between blocks, 20px-radius white cards with a 1px line and
+ * 24px 28px padding, 14px-radius tiles on the sky-paper, 999px pills, 44px controls.
+ * Every colour is a tokens.css custom property or one of the app tokens below, which carry a
+ * dark-mode twin (prefers-color-scheme only, as upstream; the canvas is light only).
+ *
+ * Shape cited from qodo-cli web/src/styles/app.css @ ee73d5682a02952a76567887995b4f2e3aca5ea2
+ * (which cited culture-rules web/src/styles/app.css; cite-don't-import: this repo owns its copy).
+ * Adapted: only what the two screens use; the cards, filter, tiles and pills of the artboards.
+ */
+
+:root {
+  --nav-line: rgba(35, 42, 77, 0.14);
+  --line-strong: rgba(35, 42, 77, 0.3);
+  --chip-warm-bg: #fbe9df;
+  --chip-warm-ink: #8a3413;
+  --chip-cool-bg: #e6e9fa;
+  --chip-cool-ink: #2f3a86;
+  --chip-calm-ink: #0b534c;
+  --chip-grey-bg: #e3e5ee;
+}
+
+@media (prefers-color-scheme: dark) {
+  :root {
+    --nav-line: rgba(233, 236, 248, 0.14);
+    --line-strong: rgba(233, 236, 248, 0.3);
+    --chip-warm-bg: #4a2418;
+    --chip-warm-ink: #ffcfb8;
+    --chip-cool-bg: #262d5c;
+    --chip-cool-ink: #c9d0ff;
+    --chip-calm-ink: #b4ece0;
+    --chip-grey-bg: #262b4a;
+  }
+}
+
+/* The canvas sits on flat sky-paper: no dawn gradient behind the app. */
+body::before {
+  display: none;
+}
+
+body {
+  background: var(--bg);
+}
+
+.app {
+  min-height: 100dvh;
+  box-sizing: border-box;
+  padding: 24px 16px 64px;
+}
+
+.app__frame {
+  max-width: 1200px;
+  margin: 0 auto;
+  display: flex;
+  flex-direction: column;
+  gap: 32px;
+}
+
+/* ---------- header ---------- */
+
+.app-header {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+}
+
+.app-header__brand {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.brand-dot {
+  display: inline-block;
+  width: 14px;
+  height: 14px;
+  border-radius: 50%;
+  background: var(--accent);
+}
+
+.app-header__wordmark {
+  font-family: var(--font-display);
+  font-size: 24px;
+  font-weight: 600;
+  line-height: 1.2;
+}
+
+.app-header__status {
+  margin: 0;
+  color: var(--ink-soft);
+  font-size: 14px;
+}
+
+/* ---------- screens ---------- */
+
+.page {
+  min-width: 0;
+}
+
+main:focus {
+  outline: none;
+}
+
+.screen {
+  display: flex;
+  flex-direction: column;
+  gap: 32px;
+  min-width: 0;
+}
+
+.screen__intro {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.page__title {
+  margin: 0;
+  font-family: var(--font-display);
+  font-size: 40px;
+  font-weight: 600;
+  line-height: 1.1;
+  overflow-wrap: anywhere;
+}
+
+.page__lede {
+  margin: 0;
+  max-width: 720px;
+  color: var(--ink-soft);
+}
+
+/* a status line is an <output> (its role is status), laid out as the paragraph it stands for */
+output {
+  display: block;
+  margin: 0 0 1.1em;
+  text-wrap: pretty;
+}
+
+output:last-child {
+  margin-bottom: 0;
+}
+
+.muted {
+  color: var(--ink-soft);
+}
+
+.small {
+  font-size: 14px;
+}
+
+/* something went wrong: said in weight as well as colour, and always in words */
+.warn-text {
+  color: var(--chip-warm-ink);
+  font-weight: 500;
+}
+
+code {
+  font-family: var(--font-mono);
+  font-size: 14px;
+  overflow-wrap: anywhere;
+}
+
+.path {
+  overflow-wrap: anywhere;
+}
+
+/* ---------- controls ---------- */
+
+.btn,
+.filter__button {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 44px;
+  padding: 0 16px;
+  border-radius: 999px;
+  border: 1px solid var(--line-strong);
+  background: var(--surface);
+  color: var(--ink);
+  font: inherit;
+  font-size: 15px;
+  font-weight: 500;
+  line-height: 1.2;
+  cursor: pointer;
+}
+
+.filter__button[aria-pressed="true"] {
+  border: 2px solid var(--accent);
+  color: var(--chip-calm-ink);
+  font-weight: 600;
+}
+
+.btn:focus-visible,
+.filter__button:focus-visible,
+.run-card:focus-visible,
+.back-link:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 3px;
+}
+
+/* a <fieldset> (the group the buttons belong to), without the browser's own frame */
+.filter {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  align-items: center;
+  min-width: 0;
+  margin: 0;
+  padding: 0;
+  border: 0;
+}
+
+.back-link {
+  display: inline-flex;
+  align-items: center;
+  align-self: flex-start;
+  min-height: 44px;
+  font-weight: 500;
+  color: var(--accent);
+}
+
+/* ---------- pills ---------- */
+
+.pill {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 4px 12px;
+  border-radius: 999px;
+  border: 1px solid transparent;
+  font-size: 14px;
+  font-weight: 600;
+  line-height: 1.3;
+  white-space: nowrap;
+}
+
+.pill--large {
+  padding: 6px 14px;
+}
+
+.pill--running {
+  background: var(--chip-cool-bg);
+  color: var(--chip-cool-ink);
+}
+
+.pill--good {
+  border-color: var(--accent);
+  color: var(--chip-calm-ink);
+}
+
+.pill--neutral {
+  background: var(--chip-grey-bg);
+  color: var(--ink);
+}
+
+.pill--bad {
+  background: var(--chip-warm-bg);
+  color: var(--chip-warm-ink);
+}
+
+.pill__pulse {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: currentColor;
+}
+
+/* the running dot breathes only for those who have not asked for less motion */
+@media (prefers-reduced-motion: no-preference) {
+  .pill__pulse {
+    animation: pulse 2.4s var(--ease-gentle) infinite;
+  }
+}
+
+@keyframes pulse {
+  0%,
+  100% {
+    opacity: 1;
+  }
+  50% {
+    opacity: 0.35;
+  }
+}
+
+/* ---------- the runs list ---------- */
+
+.run-list {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+
+.run-card {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  padding: 24px 28px;
+  border-radius: 20px;
+  border: 1px solid var(--nav-line);
+  background: var(--surface);
+  color: inherit;
+  text-decoration: none;
+  min-width: 0;
+}
+
+.run-card:hover {
+  border-color: var(--line-strong);
+}
+
+.run-card--running {
+  border: 2px solid var(--accent);
+}
+
+.run-card__top {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  align-items: center;
+  justify-content: space-between;
+}
+
+.run-card__status {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  align-items: center;
+}
+
+/* the artboards set card and panel titles in the body face, not the display face tokens.css
+   gives h2 */
+.run-card__title,
+.panel__title {
+  font-family: var(--font-body);
+  font-variation-settings: normal;
+  letter-spacing: 0;
+}
+
+.run-card__title {
+  margin: 0;
+  font-size: 20px;
+  font-weight: 600;
+  line-height: 1.3;
+  color: var(--ink);
+  overflow-wrap: anywhere;
+}
+
+.run-card__facts {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px 16px;
+  min-width: 0;
+}
+
+.run-card__facts > span {
+  overflow-wrap: anywhere;
+}
+
+/* ---------- panels ---------- */
+
+.panel {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+  padding: 24px 28px;
+  border-radius: 20px;
+  border: 1px solid var(--nav-line);
+  background: var(--surface);
+  min-width: 0;
+}
+
+.panel p {
+  margin: 0;
+  overflow-wrap: anywhere;
+}
+
+.panel--alert {
+  border: 2px solid var(--chip-warm-ink);
+  gap: 8px;
+}
+
+.panel__title {
+  margin: 0;
+  font-size: 20px;
+  font-weight: 600;
+}
+
+.eyebrow-heading {
+  margin: 0;
+  font-family: var(--font-body);
+  font-size: 13px;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--ink-soft);
+  font-weight: 600;
+}
+
+.empty-filter {
+  margin: 0;
+}
+
+.command {
+  margin: 0;
+  padding: 12px 16px;
+  border-radius: 14px;
+  background: var(--bg);
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+
+.notice {
+  margin: 0;
+  padding: 12px 16px;
+  border-radius: 14px;
+  border: 1px solid var(--accent);
+  background: var(--surface);
+}
+
+.problem {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 8px;
+  padding: 16px;
+  border-radius: 14px;
+  border: 1px solid var(--chip-warm-ink);
+  border-left-width: 6px;
+  background: var(--surface);
+}
+
+.problem p {
+  margin: 0;
+  overflow-wrap: anywhere;
+}
+
+.problem__message {
+  font-weight: 600;
+  color: var(--chip-warm-ink);
+}
+
+/* ---------- one run ---------- */
+
+.run-head {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  min-width: 0;
+}
+
+.run-head p {
+  margin: 0;
+  overflow-wrap: anywhere;
+}
+
+.run-head__status {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  align-items: center;
+}
+
+.grid-2 {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(min(340px, 100%), 1fr));
+  gap: 16px;
+  align-items: start;
+}
+
+.tiles {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.tile {
+  padding: 12px 16px;
+  border-radius: 14px;
+  background: var(--bg);
+  min-width: 0;
+}
+
+.tile--split {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+  align-items: center;
+  justify-content: space-between;
+}
+
+.tile--split code {
+  min-width: 0;
+}
+
+.prose {
+  max-width: 820px;
+  white-space: pre-wrap;
+}
+
+.reply {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.reply p {
+  max-width: 820px;
+  white-space: pre-line;
+}
+
+.quote {
+  overflow-wrap: anywhere;
+}
+
+@media (max-width: 720px) {
+  .page__title {
+    font-size: 32px;
+  }
+
+  .run-card,
+  .panel {
+    padding: 20px;
+  }
+}

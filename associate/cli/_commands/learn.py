@@ -33,6 +33,19 @@ Commands
   associate run [prompt]       Run one task on a harness adapter (--model,
                                --test-command), or fail closed.
   associate bench              Run a public suite (--suite NAME --model KEY) or list suites.
+  associate runs start         Start a detached run on a checkout (--checkout, --model,
+                               --test-command, instruction); prints a run id at once.
+  associate runs show <id>     Status, and when finished: ok, outcome, merge, tests,
+                               base commit and changed paths. Nothing is ever pushed.
+  associate runs list          The most recent runs with their status.
+  associate runs overview      Describe the runs verbs (also served over HTTP).
+  associate mcp                Serve the runs verbs as MCP tools over stdio (mcp extra).
+  associate serve              Run the runs HTTP API (server extra): loopback, and a LAN
+                               listener when --lan-host is set.
+  associate tokens issue       Issue a service token (--name, --role); printed once.
+  associate tokens list        List tokens (never a token or its hash).
+  associate tokens revoke <id> Stop a token working.
+  associate tokens overview    Describe the tokens verbs.
   associate cli overview       Describe the CLI surface itself.
 
 Machine-readable output
@@ -80,6 +93,34 @@ def _as_json_payload() -> dict[str, object]:
                 "path": ["bench"],
                 "summary": "Run a public suite (--suite NAME --model KEY) or list suites.",
             },
+            {
+                "path": ["runs", "start"],
+                "summary": (
+                    "Start a detached associate run on a checkout (one per checkout at a time); "
+                    "returns a run id at once."
+                ),
+            },
+            {
+                "path": ["runs", "show"],
+                "summary": (
+                    "A run's status and, when finished, ok (outcome ok AND merged AND tests "
+                    "passed), merge, tests, base commit and changed paths."
+                ),
+            },
+            {"path": ["runs", "list"], "summary": "The most recent runs with their status."},
+            {"path": ["runs", "overview"], "summary": "Describe the runs verbs."},
+            {
+                "path": ["mcp"],
+                "summary": "Serve the runs verbs as MCP tools over stdio (the mcp extra).",
+            },
+            {
+                "path": ["serve"],
+                "summary": "Run the runs HTTP API under uvicorn (the server extra).",
+            },
+            {"path": ["tokens", "issue"], "summary": "Issue a service token (printed once)."},
+            {"path": ["tokens", "list"], "summary": "List tokens, never the token or its hash."},
+            {"path": ["tokens", "revoke"], "summary": "Revoke a service token by id."},
+            {"path": ["tokens", "overview"], "summary": "Describe the tokens verbs."},
             {"path": ["cli", "overview"], "summary": "Describe the CLI surface."},
         ],
         "exit_codes": {

@@ -31,6 +31,8 @@ measured.
 - `associate doctor` — check the agent-identity invariants.
 - `associate run` — run one task on a harness adapter, or fail closed.
 - `associate bench` — run a public benchmark suite (BFCL, MMMU, LiveCodeBench) or list them.
+- `associate runs start|show|list|overview` — start a detached run on a checkout and read
+  its result by id (also an HTTP API).
 - `associate cli overview` — describe the CLI surface.
 
 ## Exit-code policy
@@ -300,6 +302,226 @@ itself (distinct from the global `overview`, which describes the agent).
 """
 
 
+_RUNS = """\
+# associate runs
+
+Start a **detached** `associate run` on a checkout and read its result by run id,
+from the CLI or over HTTP (`associate.server.app`, the `server` extra). One module,
+`associate/runs/service.py`, holds the logic; both surfaces call it.
+
+## Verbs
+
+- `associate runs start` — validate, take the checkout's lock, start the run in a
+  new session and print its run id at once (HTTP `POST /runs`, role `admin`).
+- `associate runs show <run id>` — status and result (HTTP `GET /runs/{run_id}`,
+  role `viewer`).
+- `associate runs list` — the most recent runs (HTTP `GET /runs`, role `viewer`).
+- `associate runs overview` — describe these verbs.
+
+`GET /health` needs no token and returns no secret.
+
+## Rules
+
+- **One run per checkout at a time**, keyed by the checkout's real path (a symlink
+  names the same checkout). A crashed run frees its checkout by itself: the lock is
+  an `flock` held by the run's processes, released by the kernel when they die.
+- The run is `associate run --json --untrusted-checkout --session-id <run id>`,
+  started as an argv list (never a shell); the instruction is one argument after
+  `--` and each test command one `--test-command`.
+- A clean run whose tests pass is **merged into the checkout's local `main`**;
+  nothing is ever pushed. `associate run` exits 0 even when the merge is refused,
+  so `ok` is true only when the exit code is 0, the outcome is `ok`, the merge
+  happened and the tests passed.
+- State lives in `ASSOCIATE_RUNS_DIR` (default `$XDG_STATE_HOME/associate/runs`),
+  never inside a checkout. A checkout must be a git work tree under a root in
+  `ASSOCIATE_RUNS_ROOTS`; while that is empty the HTTP API refuses every start.
+"""
+
+_RUNS_START = """\
+# associate runs start
+
+Start a detached `associate run` on a git checkout and return its run id at once.
+
+## Usage
+
+    associate runs start --checkout DIR --model worker \\
+        --test-command "uv run pytest -q" [--timeout SECONDS] [--json] -- "the task"
+
+The checkout must be a git work tree with a commit, under a root listed in
+`ASSOCIATE_RUNS_ROOTS` when that is set (the HTTP API requires it set). The model
+is an active registry key. At least one `--test-command` is required: the run
+merges only when every one passes. `--timeout` defaults to the contract's
+`budgets.delegate.timeout_ms`. The checkout is always treated as untrusted.
+
+## Output
+
+`run_id`, `status` (`running`), `checkout` (its real path), `model`,
+`base_commit` (the checkout's HEAD), `started_at`, `pushed: false`.
+
+## Exit codes
+
+- `0` started
+- `1` bad input, a checkout outside the allowed roots or not a git work tree, or a
+  checkout with a run in progress (the error names that run)
+- `2` the state directory, git or the process could not be used
+"""
+
+_RUNS_SHOW = """\
+# associate runs show
+
+A run's status, and once it has finished, its result.
+
+## Usage
+
+    associate runs show RUN_ID [--json]
+
+## Output
+
+- `status`: `running | finished | failed-to-start | lost` (lost: the run's
+  processes are gone and left no result; a run still starting reads `running`, and one
+  whose supervisor was never recorded within 120 s reads `failed-to-start`).
+- `ok`: true only when the exit code is 0, `outcome` is `ok`, `tests.passed` is
+  true and `merge` is `merged` or `nothing_to_merge` (a clean run that changed
+  nothing); `not_ok_because` says why not. Read `merge` to know whether anything
+  changed.
+- `merge`: `merged`, `refused` (a clean run whose merge was refused),
+  `not_attempted` (the outcome was not ok or the tests failed) or
+  `nothing_to_merge`; `merge_reason` is `associate run`'s own.
+- `tests`: `passed`, `commands`, `failed`.
+- `base_commit` and `changed_paths` (read from git: the merge commit for a merged
+  run, the kept worktree otherwise), `changed_paths_total` and
+  `changed_paths_truncated`. The whole reply stays under 64 KiB.
+- `pushed`: always false.
+
+## Exit codes
+
+- `0` the run was found (whatever its status)
+- `1` a malformed or unknown run id
+"""
+
+_RUNS_LIST = """\
+# associate runs list
+
+The most recent runs, newest first, each with `run_id`, `status`, `ok`, `model`,
+`started_at` and `checkout`.
+
+## Usage
+
+    associate runs list [--limit N] [--json]
+
+## Exit codes
+
+- `0` listed (possibly none)
+- `1` a limit outside 1-100
+"""
+
+_MCP = """\
+# associate mcp
+
+Serve the runs verbs as MCP tools over stdio, for an MCP client (an agent) to call.
+
+## Usage
+
+    associate mcp [--json]
+
+Needs the `mcp` extra: `pip install 'associate[mcp]'`. Without it the verb exits `2`
+with a message naming the extra; it never prints a traceback. Stdout is the protocol
+channel, so the verb writes nothing else there (a status line goes to stderr, and
+`--json` only shapes an error on stderr).
+
+## Tools
+
+One tool per runs verb, with the verb's own JSON schema as its input schema, calling the
+same code as the CLI and HTTP:
+
+- `runs_start` — `checkout`, `model`, `instruction`, `test_commands` (required),
+  `timeout`; a remote caller, so the checkout must be under `ASSOCIATE_RUNS_ROOTS`
+  (empty: every start is refused `forbidden`), exactly as `POST /runs`.
+- `runs_show` — `run_id` (required).
+- `runs_list` — `limit` (1-100).
+
+A refused request is a tool error `<kind>: <message> (hint: ...)` with kind `invalid`,
+`forbidden`, `not_found`, `busy` or `env`; no traceback is ever returned. A test fails if
+a verb lacks a CLI command, an MCP tool or an HTTP operation.
+
+## Exit codes
+
+- `0` the client disconnected
+- `2` the `mcp` extra is not installed
+"""
+
+
+_SERVE = """\
+# associate serve
+
+Run the runs HTTP API under uvicorn (the `server` extra): `POST /runs` (admin),
+`GET /runs/{run_id}` and `GET /runs` (viewer), and the public `GET /health`. When the
+installed package holds a built web UI (`associate/web_dist`, shipped in the wheel), it also
+serves that read-only UI (the runs list and one run) to any viewer, and the same routes under
+the same-origin `/api` prefix; without one, `/` is a JSON 404.
+
+## Usage
+
+    associate serve [--host H] [--port N] [--lan-host H] [--lan-port N] [--tokens PATH]
+                    [--log-level LEVEL] [--json]
+
+Two listeners:
+
+- **loopback**, always on, `127.0.0.1:8794` by default, and always a loopback address (anything
+  else is refused, exit 1): it is the one that trusts a Cloudflare Access assertion.
+- **lan**, off unless `--lan-host` is given (`ASSOCIATE_LAN_HOST`), port `8795` by default:
+  service tokens only; an Access header is ignored there. The two cannot share an address.
+
+Environment: `ASSOCIATE_HOST`, `ASSOCIATE_PORT`, `ASSOCIATE_LAN_HOST`, `ASSOCIATE_LAN_PORT`
+(flags win), `ASSOCIATE_ACCESS_LISTEN` + `ASSOCIATE_ACCESS_TEAM_DOMAIN` + `ASSOCIATE_ACCESS_AUD`
+(all three or none; Access on the loopback listener), `ASSOCIATE_ADMINS` / `ASSOCIATE_EDITORS`
+(comma-separated identities Access lets through; others are viewers),
+`ASSOCIATE_SERVER_TOKENS` (the token file) and `ASSOCIATE_RUNS_ROOTS` / `ASSOCIATE_RUNS_DIR`.
+
+The server starts even while `ASSOCIATE_RUNS_ROOTS` is empty; every `POST /runs` is then
+refused (403). The startup line says so. "listening" is printed once every listener has bound
+its socket; SIGINT or SIGTERM stops them together.
+
+A write (any method but GET, HEAD and OPTIONS) needs `Content-Type: application/json` (415
+otherwise) and is refused 403, before authentication, when `Sec-Fetch-Site` is `cross-site`
+or `Origin` is not the server's own; a body over 512 KiB is 413 as soon as it is counted. No
+CORS header is ever sent.
+
+## Exit codes
+
+- `0` stopped by a signal
+- `1` a bad address or port, a non-loopback loopback host, a partial Access configuration
+- `2` the `server` extra is not installed (`pip install 'associate[server]'`), or a port is taken
+"""
+
+_TOKENS = """\
+# associate tokens
+
+Issue, list and revoke the service tokens the HTTP API (`associate serve`) checks.
+
+## Usage
+
+    associate tokens issue --name NAME --role viewer|editor|admin [--tokens PATH] [--json]
+    associate tokens list [--tokens PATH] [--json]
+    associate tokens revoke ID [--tokens PATH] [--json]
+    associate tokens overview [--json]
+
+`issue` prints the plain token (`asc_<id>.<secret>`) **once**; it is never stored (only a hash
+is) and never logged. `list` shows id, identity, roles and state, never a token or a hash.
+`revoke` stops a token working at once. The store is one `0600` file: `--tokens`, else
+`ASSOCIATE_SERVER_TOKENS`, else `$XDG_STATE_HOME/associate/service_tokens.json`. Whoever can
+write that file administers the tokens, so these verbs need no server and no extra.
+
+Roles: `viewer` reads (`GET /runs`), `editor` is above it, `admin` starts runs (`POST /runs`).
+
+## Exit codes
+
+- `0` done
+- `1` a bad name or role, an unknown or already revoked id
+- `2` the token file cannot be read or written
+"""
+
+
 ENTRIES: dict[tuple[str, ...], str] = {
     (): _ROOT,
     ("associate",): _ROOT,
@@ -310,6 +532,18 @@ ENTRIES: dict[tuple[str, ...], str] = {
     ("doctor",): _DOCTOR,
     ("run",): _RUN,
     ("bench",): _BENCH,
+    ("runs",): _RUNS,
+    ("runs", "overview"): _RUNS,
+    ("runs", "start"): _RUNS_START,
+    ("runs", "show"): _RUNS_SHOW,
+    ("runs", "list"): _RUNS_LIST,
+    ("mcp",): _MCP,
+    ("serve",): _SERVE,
+    ("tokens",): _TOKENS,
+    ("tokens", "issue"): _TOKENS,
+    ("tokens", "list"): _TOKENS,
+    ("tokens", "revoke"): _TOKENS,
+    ("tokens", "overview"): _TOKENS,
     ("cli",): _CLI,
     ("cli", "overview"): _CLI,
 }

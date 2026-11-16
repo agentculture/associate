@@ -130,6 +130,46 @@ run live):
   `delegate_run` is in `gated_tools` (CLEF-gated for every model, effect line in
   `gate.json` version 9), not in `mutating_tools`; `delegate_status` is a read,
   and its result taints later memory records `untrusted:child`.
+- **The bridge** (0.11.0; page `docs/operations/bridge.md`). *Bridge* here means one
+  app with a CLI, an HTTP API and an MCP server over the same verbs, plus a
+  read-only web UI (see [Web UI](#web-ui-web)). Another service starts a detached
+  `associate run` on a checkout and reads the result:
+  - `associate/runs/` holds the verbs: `service.py` (`start`, `show`,
+    `list_runs`, and `VERBS`, the one table every surface reads), `state.py`
+    (state layout, atomic JSON, the `flock` checkout lock), `supervisor.py` (the
+    detached process that runs `python -m associate run --json
+    --untrusted-checkout` and writes `result.json`) and `mcp_tools.py`;
+  - `associate/server/` is the HTTP API (`app.py`: `POST /runs` admin,
+    `GET /runs/{run_id}` and `GET /runs` viewer, public `GET /health`;
+    `serve.py`: a loopback listener on `127.0.0.1:8794` that trusts Cloudflare
+    Access, and an optional LAN listener, port `8795`, service tokens only;
+    `tokenstore.py`: the token file); `create_app` mounts the built UI from
+    `associate/web_dist` when the package holds one;
+  - `associate/bridge/` is the app-agnostic framework (auth, route policy,
+    Access JWTs, service tokens, MCP server), cited from qodo-cli, which cited
+    it from culture-rules; it names no app. This repo owns its copy (cite, don't
+    import); each file's header names the source and commit. `origin.py` is
+    original here: before authentication, every method but GET/HEAD/OPTIONS
+    needs a JSON body (415) and is refused 403 when `Sec-Fetch-Site` is
+    `cross-site` or `Origin` is foreign, so a page cannot ride an Access cookie
+    into a start;
+  - the CLI verbs are `runs start|show|list`, `serve`, `tokens
+    issue|list|revoke` and `mcp`. `serve` needs the `server` extra and `mcp` the
+    `mcp` extra; the base package stays dependency-free;
+  - `tests/test_surface_parity.py` fails when a runs verb is missing from the
+    CLI, the MCP tools or the HTTP routes. A new verb goes in `VERBS` and needs
+    no edit there. It runs against the API-only app and the app serving a UI;
+    the UI's routes (the SPA fallback `static.install` adds) and the no-UI root
+    404 are classified explicitly, not exempted by loosening the check;
+  - a run **merges into the checkout's local `main`** when it is clean and its
+    tests pass, and never pushes, so the checkout is a dedicated clone;
+    `ASSOCIATE_RUNS_ROOTS` empty refuses every start over HTTP and MCP;
+  - `ok` is true only when the exit code is 0, the outcome is `ok`, the tests
+    passed and `merge` is `merged` or `nothing_to_merge`. A read-only model
+    (`senses`) makes no merge, so its run is never `ok`;
+  - **built and unit-tested only**: every test run uses the stand-in child
+    `tests/runs_fake_child.py`; no real run has been started through the
+    bridge. Known gaps are listed in `docs/operations/bridge.md`.
 - **The run result** names the model and lobes role that ran, the isolation and
   merge outcome, the test results, and how the task turn ended (final reply,
   stop reason, lane error).
@@ -275,7 +315,13 @@ associate/                  # Python package (top level — no src/ wrapper)
 │                           #   role.json, policy.json, schemas/, validate.py
 ├── harness/                # adapters (pi.py, stub.py), worktree.py, testcmds.py,
 │                           #   checkoutlock.py
+├── runs/                   # the bridge's verbs: service, state, supervisor, mcp_tools
+├── server/                 # the bridge's HTTP API: app, serve, tokenstore (server extra)
+├── bridge/                 # cited framework: auth, policy, Access, tokens, MCP server,
+│                           #   static UI serving, origin check
 └── bench/                  # public suites (suites.json, public.py), walkstats
+web/                        # the web UI (Vite + React + TS); built into the wheel as
+                            #   associate/web_dist by hatch_build.py (never committed)
 .pi/extensions/associate/   # the Pi extension (TypeScript, no npm deps)
 ├── index.ts                # loader: registry model, tool surface, guard, gate
 ├── lib/                    # provider, guard, gate, walk, session, contain, …
@@ -287,6 +333,7 @@ tests/                      # pytest — CLI, contract, run, worktree, gate, …
 .claude/skills/<name>/      # SKILL.md + scripts/ per skill (cite-don't-import)
 docs/skill-sources.md       # skill provenance ledger — authoritative
 docs/notes/                 # pi-1.1.0 migration, gate calibration, resident model
+docs/operations/            # the bridge: operators, agents and integrators
 culture.yaml                # agent suffix + backend + model (a registry key)
 sonar-project.properties    # SonarCloud key agentculture_associate
 ```
@@ -341,9 +388,36 @@ is never a one-file change:
 under it** — the rubric's `overview_cli_noun_exists` check. `_commands/cli.py`
 exists purely to satisfy this and is the pattern to copy.
 
+## Web UI (`web/`)
+
+A Vite + React + TypeScript app with two read-only screens, Runs (`/runs`) and one
+run (`/runs/<id>`), whose toolchain, design tokens (`web/src/culture-design/`,
+checked by `npm run check`) and conventions are cited from qodo-cli's `web/`
+(which cited culture-rules'); every cited file carries a provenance header with the
+source path and commit. The confirmed artboards ("associate: Runs" and "associate:
+One run" on the shared design canvas) are the visual source of truth; the UI shows
+only fields the API returns (`list_runs`, `show`) and invents none. Commands, from
+`web/`: `npm ci`, `npm run typecheck`, `npm test`, `npm run check` (the design
+tokens), `npm run build`. The browser calls the same-origin `/api` prefix, which
+`associate serve` strips (`associate/bridge/static.py`); in dev `npm run dev`
+proxies it to `ASSOCIATE_API_URL` (default `http://127.0.0.1:8794`). This app has
+no pinned OpenAPI file: the client's routes live in `web/src/api/routes.json`, and
+`tests/test_web_contract.py` binds them to `VERBS` and the fixtures
+(`web/src/fixtures/runs.json`) to the real `list_runs`/`show` fields.
+
+`hatch_build.py` packages an existing `web/dist` as `associate/web_dist`
+(git-ignored build output) and never runs Node, so a wheel built without Node is
+API-only. Release order: `npm ci && npm run build` in `web/`, then `uv build` with
+`ASSOCIATE_REQUIRE_WEB=1` (a missing build then fails the build);
+`ASSOCIATE_SKIP_WEB=1` leaves the UI out on purpose. `.github/workflows/publish.yml`
+does exactly this, and the `web` job in `tests.yml` runs install, typecheck,
+vitest, the tokens check and the build. `web/package.json` is the UI's own
+manifest; the root `package.json` stays the Pi manifest with no dependencies.
+
 ## Build, test, lint, publish
 
-- **Dev install:** `uv sync`
+- **Dev install:** `uv sync` (add `--extra server --extra mcp` for the bridge's
+  HTTP API and MCP server; their tests skip without them)
 - **Run from source:** `uv run associate --version` / `uv run python -m associate ...`
 - **Tests:** `uv run pytest -n auto -v`
 - **Single test:** `uv run pytest tests/test_cli.py::test_whoami_json -v`
@@ -553,6 +627,16 @@ value is not inherited.
 | `ASSOCIATE_RUNS_DIR` | `$XDG_STATE_HOME/associate/runs`, else `$HOME/.local/state/associate/runs` | `associate/harness/checkoutlock.py` | The state directory holding `locks/<sha256 of the checkout's real path>.lock`, the one-run-per-checkout lock `associate run --checkout-lock` holds (a kernel `flock`). Must be outside every checkout. |
 | `ASSOCIATE_EIDETIC_DIR` | `$HOME/.eidetic/memory` | `tools/eidetic.ts` | The eidetic store the memory tools pin (`EIDETIC_DATA_DIR`); must be absolute and outside the examined checkout. |
 | `ASSOCIATE_LEDGER_PATH` | `$HOME/.workledger/associate.jsonl` | `tools/ledger.ts` | The workledger file the ledger tools pin (`WORKLEDGER_PATH`); must be absolute and outside the examined checkout. |
+| `ASSOCIATE_RUNS_DIR` | `$XDG_STATE_HOME/associate/runs` (else `~/.local/state/associate/runs`) | `associate/runs/service.py` | The state directory of `associate runs` (one directory per run id, plus the per-checkout lock files); refused inside a checkout. Never inherited by a run. |
+| `ASSOCIATE_RUNS_ROOTS` | empty | `associate/runs/service.py` | The `os.pathsep`-separated directories a `runs start` checkout must be in (by real path). Empty: the HTTP API refuses every start; the local CLI is not restricted. Never inherited by a run. |
+| `ASSOCIATE_SERVER_TOKENS` | `$XDG_STATE_HOME/associate/service_tokens.json` | `associate/server/tokenstore.py` (`default_token_path`, `open_tokens`) | The file-backed service-token store (`associate/bridge/filetokens.py`; hashes only) that `associate tokens` writes and `associate serve` reads. Never inherited by a run. |
+| `ASSOCIATE_HOST`, `ASSOCIATE_PORT` | `127.0.0.1`, `8794` | `associate/server/serve.py` (`plan_listeners`) | `associate serve`'s loopback listener (always on; must be a loopback address). Flags `--host`/`--port` win. |
+| `ASSOCIATE_LAN_HOST`, `ASSOCIATE_LAN_PORT` | unset (no LAN listener), `8795` | `associate/server/serve.py` | `associate serve`'s optional LAN listener (service tokens only). Flags `--lan-host`/`--lan-port` win; it cannot share the loopback address. |
+| `ASSOCIATE_ACCESS_LISTEN`, `ASSOCIATE_ACCESS_TEAM_DOMAIN`, `ASSOCIATE_ACCESS_AUD` | unset | `associate/bridge/access.py` (`AccessListenerConfig.from_env`) | Cloudflare Access on the loopback listener: all three or none (a partial set is refused, exit 1); `ASSOCIATE_ACCESS_LISTEN` is a loopback `host:port`. |
+| `ASSOCIATE_ADMINS`, `ASSOCIATE_EDITORS` | empty | `associate/server/serve.py` (`names`) | Comma-separated identities Access lets through as admin or editor; any other Access person is a viewer. |
+| `ASSOCIATE_REQUIRE_WEB`, `ASSOCIATE_SKIP_WEB` | unset | `hatch_build.py` | At build time: `1` fails a build with no `web/dist`, or leaves the UI out of the wheel on purpose. |
+| `ASSOCIATE_API_URL` | `http://127.0.0.1:8794` | `web/vite.config.ts` | The API the UI's dev server (`npm run dev`) proxies `/api` to. |
+| `ASSOCIATE_DESIGN_SOURCE_REPO` | unset | `web/scripts/check-tokens.mjs` | A culture-rules checkout; when set, the tokens check also compares `tokens.css` with it at the pinned commit. |
 | `ASSOCIATE_BENCH_SUITES` | `associate/bench/suites.json` | `associate/bench/public.py` | An alternative suites file for `associate bench`. |
 | `ASSOCIATE_PROVIDER`, `ASSOCIATE_REASONING_EFFORT`, `ASSOCIATE_REASONING` | — | `associate/bench/config.py` | Only labels in a bench row's configuration stamp (provider falls back to `ASSOCIATE_BASE_URL`); they change nothing on the wire. Reasoning is per model in `models.json`. |
 
@@ -621,14 +705,15 @@ root key** — see invariant 3 under "Adding a verb".
 ## What not to invent
 
 - **Don't add a runtime dependency.** `dependencies = []` is deliberate: the
-  harness must install and start fast. The same holds for `package.json`: it is
-  a Pi project manifest with no `dependencies` and no `scripts`. `culture.yaml` is parsed by hand in
+  harness must install and start fast. The same holds for the root `package.json`: it is
+  a Pi project manifest with no `dependencies` and no `scripts` (the web UI's npm
+  packages live in `web/package.json` and never reach the Python package). `culture.yaml` is parsed by hand in
   `_commands/whoami.py` specifically to avoid a YAML dependency. If you think you
   need a dep, that is a conversation, not a commit.
 - **Don't edit a vendored skill** to fix a bug in it. Fix it upstream.
 - **Don't skip the version bump** because the change is "just docs".
-- **Don't describe a model, the mesh path, the gate's fallbacks, or delegation
-  as working** in docs, commits, or PR bodies until a live run measures it
+- **Don't describe a model, the mesh path, the gate's fallbacks, delegation, or
+  the bridge as working** in docs, commits, or PR bodies until a live run measures it
   (t20) — and don't quote a benchmark number until t21 commits one. The worker
   live runs listed under "Measured vs. not measured" are the only live evidence;
   say exactly what exists and what doesn't; don't round up.

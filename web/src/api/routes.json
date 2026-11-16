@@ -1,0 +1,5 @@
+{
+  "health": { "method": "GET", "path": "/health", "verb": null },
+  "list": { "method": "GET", "path": "/runs", "verb": "list" },
+  "show": { "method": "GET", "path": "/runs/{run_id}", "verb": "show" }
+}
