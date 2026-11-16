@@ -369,8 +369,10 @@ A run's status, and once it has finished, its result.
 
 - `status`: `running | finished | failed-to-start | lost` (lost: the run's
   processes are gone and left no result).
-- `ok`: true only when the exit code is 0, `outcome` is `ok`, `merge` is `merged`
-  and `tests.passed` is true; `not_ok_because` says why not.
+- `ok`: true only when the exit code is 0, `outcome` is `ok`, `tests.passed` is
+  true and `merge` is `merged` or `nothing_to_merge` (a clean run that changed
+  nothing); `not_ok_because` says why not. Read `merge` to know whether anything
+  changed.
 - `merge`: `merged`, `refused` (a clean run whose merge was refused),
   `not_attempted` (the outcome was not ok or the tests failed) or
   `nothing_to_merge`; `merge_reason` is `associate run`'s own.

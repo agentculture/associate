@@ -464,3 +464,63 @@ def test_cli_runs_overview_and_explain(capsys):
     assert main(["learn", "--json"]) == 0
     paths = [c["path"] for c in json.loads(capsys.readouterr().out)["commands"]]
     assert ["runs", "start"] in paths and ["runs", "show"] in paths
+
+
+# --- review fixes -----------------------------------------------------------------------
+
+
+def test_a_subdirectory_of_a_work_tree_is_refused(cfg, repo):
+    sub = repo / "sub"
+    sub.mkdir()
+    with pytest.raises(RunsError) as err:
+        start(cfg, sub)
+    assert err.value.kind == "invalid" and "root" in str(err.value)
+
+
+def test_an_instruction_is_limited_in_bytes_not_characters(cfg, repo):
+    wide = "\u20ac" * (service.MAX_INSTRUCTION_BYTES // 3 + 1)  # 3 bytes each
+    assert len(wide) < service.MAX_INSTRUCTION_BYTES
+    with pytest.raises(RunsError) as err:
+        start(cfg, repo, instruction=wide)
+    assert err.value.kind == "invalid"
+
+
+def test_a_clean_run_with_nothing_to_merge_is_ok():
+    reply = {}
+    service._finished(
+        reply,
+        {
+            "exit_code": 0,
+            "run_result": {
+                "outcome": "ok",
+                "merge": "nothing_to_merge",
+                "tests": {"passed": True, "commands": []},
+            },
+        },
+    )
+    assert reply["ok"] is True and reply["merge"] == "nothing_to_merge"
+    assert reply["changed_paths"] == []
+
+
+def test_the_reply_is_bounded_even_when_every_text_field_is_huge_and_non_ascii():
+    big = "\u20ac" * 500_000
+    reply = {}
+    service._finished(
+        reply,
+        {
+            "exit_code": 1,
+            "error": big,
+            "changed_paths_error": big,
+            "changed_paths": [big] * 500,
+            "run_result": {
+                "outcome": big,
+                "merge": "kept",
+                "merge_reason": big,
+                "worktree": big,
+                "run_branch": big,
+                "final_reply": big,
+                "tests": {"passed": False, "commands": [], "error": big},
+            },
+        },
+    )
+    assert service._size(reply) < service.REPLY_LIMIT_BYTES

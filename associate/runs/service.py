@@ -69,7 +69,7 @@ REPLY_LIMIT_BYTES = 64 * 1024
 _REPLY_BUDGET = REPLY_LIMIT_BYTES - 2048
 
 MODEL_PATTERN = re.compile(r"[a-z0-9][a-z0-9-]{0,31}")
-MAX_INSTRUCTION_CHARS = 100_000  # one argv string; Linux caps one at 128 KiB
+MAX_INSTRUCTION_BYTES = 100_000  # one argv string as UTF-8; Linux caps one at 128 KiB
 MAX_TEST_COMMANDS = 16
 MAX_TEST_COMMAND_CHARS = 4096
 MAX_TIMEOUT_SECONDS = 4 * 3600.0
@@ -254,8 +254,8 @@ def _validate_instruction(instruction: Any) -> str:
         raise RunsError("invalid", "instruction must be a non-empty string")
     if "\x00" in instruction:
         raise RunsError("invalid", "instruction must not contain a NUL character")
-    if len(instruction) > MAX_INSTRUCTION_CHARS:
-        raise RunsError("invalid", f"instruction is longer than {MAX_INSTRUCTION_CHARS} chars")
+    if len(instruction.encode("utf-8", "surrogatepass")) > MAX_INSTRUCTION_BYTES:
+        raise RunsError("invalid", f"instruction is longer than {MAX_INSTRUCTION_BYTES} bytes")
     return instruction
 
 
@@ -352,6 +352,14 @@ def _validate_checkout(
             "invalid",
             f"checkout {checkout!r} is not a git work tree",
             "a run commits and merges in git; pass a git checkout",
+        )
+    if Path(toplevel).resolve() != real:
+        # a subdirectory would take its own lock and pass the allowlist on its own path, while
+        # the run commits and merges in the whole work tree
+        raise RunsError(
+            "invalid",
+            f"checkout {checkout!r} is inside a git work tree, not its root",
+            f"pass the work tree's root: {toplevel}",
         )
     head = _git(real, "rev-parse", "--verify", "HEAD^{commit}")
     if not head:
@@ -568,7 +576,7 @@ def _finished(reply: dict[str, Any], result: dict[str, Any]) -> None:
     passed = tests.get("passed") if tests else None
     passed = passed if isinstance(passed, bool) else None
     commands = tests.get("commands") if tests and isinstance(tests.get("commands"), list) else []
-    outcome = run_result.get("outcome")
+    outcome = _cut(run_result.get("outcome"), 64)  # a short word; never trusted to be one
     exit_code = result.get("exit_code")
     merge = _merge_word(run_result.get("merge"), outcome, passed)
     reasons = []
@@ -578,7 +586,7 @@ def _finished(reply: dict[str, Any], result: dict[str, Any]) -> None:
         reasons.append(f"the outcome is {outcome!r}, not 'ok'")
     if passed is not True:
         reasons.append("the tests did not pass" if passed is False else "no test result")
-    if merge != "merged":
+    if merge not in ("merged", "nothing_to_merge"):  # nothing to merge: a clean run, no change
         reasons.append(f"the merge is {merge}")
     reply.update(
         {
@@ -629,6 +637,13 @@ def _bound_paths(reply: dict[str, Any], stored: Any) -> None:
     if _size(reply) >= _REPLY_BUDGET:
         reply["final_reply"] = None
         reply["final_reply_dropped"] = True
+    if _size(reply) >= _REPLY_BUDGET:  # the last resort: every free-text detail goes
+        for key in ("merge_reason", "changed_paths_error", "error", "not_ok_because"):
+            reply[key] = None
+        reply["worktree"] = reply["run_branch"] = None
+        if isinstance(reply.get("tests"), dict):
+            reply["tests"]["error"] = None
+        reply["details_dropped"] = True
 
 
 def show(run_id: Any, *, config: RunsConfig | None = None) -> dict[str, Any]:
