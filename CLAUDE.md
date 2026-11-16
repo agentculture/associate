@@ -125,8 +125,7 @@ run live):
   and its result taints later memory records `untrusted:child`.
 - **The bridge** (0.11.0; page `docs/operations/bridge.md`). *Bridge* here means one
   app with a CLI, an HTTP API and an MCP server over the same verbs; a web UI is
-  planned and **not built**. It is not the cultureagent agent-session bridge
-  (the README says so once; do not repeat it). Another service starts a detached
+  planned and **not built**. Another service starts a detached
   `associate run` on a checkout and reads the result:
   - `associate/runs/` holds the verbs: `service.py` (`start`, `show`,
     `list_runs`, and `VERBS`, the one table every surface reads), `state.py`

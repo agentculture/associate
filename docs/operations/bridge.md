@@ -115,8 +115,8 @@ A flag wins over its variable. Notes:
   is refused (exit `1`). With Access on and no `--host`/`--port`, the loopback
   listener binds `ASSOCIATE_ACCESS_LISTEN`, which must be a loopback address
   (`:8794` alone means every interface and is refused).
-- A port must be 1 to 65535. A port that is already taken is not handled
-  (see [known limits](#known-limits)).
+- A port must be 1 to 65535. If a listener cannot start (its port is taken),
+  `serve` exits `2` with a message and does not say it is listening.
 - `associate serve` starts even when `ASSOCIATE_RUNS_ROOTS` is empty. Every
   `POST /runs` is then refused with 403, and the startup line says so.
 - The server never enables the dev identity header; the only credentials are
