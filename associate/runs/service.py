@@ -24,7 +24,8 @@ For a writing model it makes a worktree, runs the model, runs the test commands,
 outcome is ``ok`` and every test passed commits and merges into the checkout's **local**
 ``main``. It exits 0 even when the merge is refused, and it never pushes; neither does this
 module. :func:`show` therefore never trusts the exit code alone: ``ok`` is true only when the
-exit code is 0, the outcome is ``ok``, the merge happened and the tests passed.
+exit code is 0, the outcome is ``ok``, the tests passed and the merge is ``merged`` or
+``nothing_to_merge`` (a clean run that changed nothing).
 
 Configuration (environment)
 ---------------------------

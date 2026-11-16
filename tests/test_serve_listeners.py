@@ -197,7 +197,8 @@ def test_serve_does_not_say_listening_when_a_port_is_taken(tmp_path):
         done = cli(env_for(tmp_path), "serve", "--port", str(taken))
     finally:
         held.close()
-    assert done.returncode != 0
+    assert done.returncode == 2, (done.returncode, done.stderr[-400:])  # an environment error
+    assert "Traceback" not in done.stderr
     assert "listening" not in done.stdout and "listening" not in done.stderr
 
 

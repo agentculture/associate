@@ -78,7 +78,14 @@ def cmd_serve(args: argparse.Namespace) -> int:
         )
         emit_result("\n".join(lines), json_mode=False)
 
-    srv.serve(listeners, log_level=args.log_level, ready=announce)
+    try:
+        srv.serve(listeners, log_level=args.log_level, ready=announce)
+    except srv.ListenerFailed as failed:
+        raise CliError(
+            code=EXIT_ENV_ERROR,
+            message=str(failed),
+            remediation="free the port or pick another with --port / --lan-port",
+        ) from None
     return 0
 
 

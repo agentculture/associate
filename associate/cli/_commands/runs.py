@@ -124,7 +124,8 @@ def _sections() -> list[dict[str, object]]:
             "title": "Rules",
             "items": [
                 "one run per checkout at a time (a second start is refused)",
-                "ok is true only when the outcome is ok, the merge happened and tests passed",
+                "ok is true only when the outcome is ok, tests passed and the merge is merged or "
+                "nothing_to_merge (a clean run that changed nothing)",
                 "a clean run is merged into the checkout's local main; nothing is pushed",
                 "state lives in ASSOCIATE_RUNS_DIR, outside every checkout",
             ],

@@ -416,13 +416,6 @@ A 401 or 403 from authentication comes before any handler runs.
 - **Linux only.** The checkout lock uses `fcntl.flock`, and liveness checks read
   `/proc/<pid>/cmdline` to guard against pid reuse. Where `/proc` is missing,
   the check falls back to a bare signal probe.
-- **`ok` and `nothing_to_merge`.** The `runs` docs in the CLI (`explain runs`)
-  say `ok` needs the merge to have happened. The code also accepts a clean run
-  that changed nothing (`nothing_to_merge`); this page follows the code.
-- **A taken port is not handled.** When `serve` cannot bind a port, uvicorn
-  exits the process with status `3` and a traceback on stderr. The CLI's
-  contract (no traceback, exit `2` for an environment error) and `associate
-  explain serve` say otherwise. Pick a free port.
 - **No web UI.** It is planned, pending a confirmed design. The cited framework
   carries a static-file helper, but the app does not serve a web build.
 - **No retention.** Run directories are never pruned.
