@@ -35,6 +35,8 @@ from pathlib import Path
 from typing import Any
 
 __all__ = [
+    "REQUEST_FILE",
+    "RESULT_FILE",
     "RUN_ID",
     "CheckoutBusy",
     "acquire_checkout_lock",
