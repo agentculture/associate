@@ -76,6 +76,7 @@ import json
 import os
 import re
 import shutil
+import signal
 import subprocess  # nosec B404 - fixed argv, shell=False; the whole point of c13
 import sys
 import time
@@ -152,6 +153,24 @@ _SESSION_ID_STEM_LENGTH = MAX_SESSION_ID_LENGTH - SESSION_ID_DIGEST_LENGTH - 1
 
 #: How many stderr lines a failure message may quote back.
 _STDERR_TAIL_LINES = 3
+
+#: Set by the extension's ``delegate_run`` (``tools/delegate.ts``) on the
+#: delegated ``associate run`` process, to its run id. A delegated run is meant
+#: to outlive the session that started it, so the timeout kill below leaves a
+#: process started with this variable (and what it started) alone. It never
+#: reaches the pi this launcher starts: only that one process carries it.
+DELEGATED_RUN_ENV = "ASSOCIATE_DELEGATED_RUN"
+
+#: Set by the extension's ``spawn_subagent`` (``tools/spawn.ts``) on a child
+#: pi, to the parent's session id. A run this launcher starts is nobody's
+#: spawned child, so an inherited value is never passed through.
+SPAWNED_BY_ENV = "ASSOCIATE_SPAWNED_BY"
+
+#: After a timeout kill, how long to wait for pi's output pipes to close.
+_KILL_DRAIN_SECONDS = 5.0
+
+#: Rescans of the process table after the first kill, for a process forked meanwhile.
+_KILL_SWEEPS = 3
 
 
 def _warn(line: str) -> None:
@@ -443,6 +462,115 @@ def sentinel_report(events: Iterable[dict[str, Any]]) -> dict[str, Any] | None:
     return None
 
 
+# ------------------------------------------------------- killing a run's tree
+
+
+def _process_table() -> dict[int, tuple[int, int, int]]:
+    """``pid -> (ppid, pgid, sid)`` for every process ``/proc`` lists (Linux)."""
+    table: dict[int, tuple[int, int, int]] = {}
+    try:
+        names = os.listdir("/proc")
+    except OSError:
+        return table
+    for name in names:
+        if not name.isdigit():
+            continue
+        try:
+            text = Path("/proc", name, "stat").read_text(encoding="utf-8", errors="replace")
+            # "<pid> (<comm>) <state> <ppid> <pgrp> <session> ..."; comm may hold ")".
+            fields = text.rsplit(")", 1)[1].split()
+            table[int(name)] = (int(fields[1]), int(fields[2]), int(fields[3]))
+        except (OSError, IndexError, ValueError):
+            continue
+    return table
+
+
+def _is_delegated_run(pid: int) -> bool:
+    """Whether *pid* was started with :data:`DELEGATED_RUN_ENV` in its environment."""
+    try:
+        environ = Path(f"/proc/{pid}/environ").read_bytes()
+    except OSError:
+        return False
+    return any(item.startswith(DELEGATED_RUN_ENV.encode() + b"=") for item in environ.split(b"\0"))
+
+
+def _descendants(root: int, table: dict[int, tuple[int, int, int]]) -> set[int]:
+    """Every process below *root*, except a delegated run and what it started."""
+    children: dict[int, list[int]] = {}
+    for pid, (ppid, _pgid, _sid) in table.items():
+        children.setdefault(ppid, []).append(pid)
+    found: set[int] = set()
+    queue = [root]
+    while queue:
+        for child in children.get(queue.pop(), []):
+            if child in found or _is_delegated_run(child):
+                continue
+            found.add(child)
+            queue.append(child)
+    return found
+
+
+def _signal(send: Callable[[int, int], None], target: int) -> None:
+    try:
+        send(target, signal.SIGKILL)
+    except (ProcessLookupError, PermissionError):
+        pass
+
+
+def _kill_tree(proc: subprocess.Popen[str]) -> None:
+    """Kill *proc*, its process group and every descendant, whatever session it is in.
+
+    pi runs in its own session (``start_new_session``), so its group holds what
+    it started directly. The extension starts test commands and child models
+    detached — each in a session of its own — so they are found through
+    ``/proc`` (by parent, then by the sessions already seen, for a process
+    forked or orphaned meanwhile) and killed with their groups. A delegated run
+    (:data:`DELEGATED_RUN_ENV`) is left alone. Without ``/proc`` only pi's own
+    group is killed.
+    """
+    killpg = getattr(os, "killpg", None)
+    if killpg is None:  # pragma: no cover - POSIX only in practice
+        proc.kill()
+        return
+    own_group = os.getpgrp()
+    own_session = os.getsid(0)
+    table = _process_table()
+    doomed = _descendants(proc.pid, table)
+    groups = {proc.pid} | {table[pid][1] for pid in doomed}
+    sessions = {proc.pid} | {table[pid][2] for pid in doomed}
+    sessions.discard(own_session)
+    for group in groups:
+        if group != own_group:
+            _signal(killpg, group)
+    for pid in doomed:
+        _signal(os.kill, pid)
+    for _ in range(_KILL_SWEEPS):
+        late = [
+            pid
+            for pid, (_ppid, _pgid, sid) in _process_table().items()
+            if sid in sessions and pid != os.getpid() and not _is_delegated_run(pid)
+        ]
+        if not late:
+            break
+        for pid in late:
+            _signal(os.kill, pid)
+        time.sleep(0.05)
+
+
+def _drain(proc: subprocess.Popen[str]) -> None:
+    """Reap a killed pi without waiting on a pipe something else still holds."""
+    try:
+        proc.communicate(timeout=_KILL_DRAIN_SECONDS)
+    except (subprocess.TimeoutExpired, OSError, ValueError):
+        for stream in (proc.stdout, proc.stderr):
+            if stream is not None:
+                try:
+                    stream.close()
+                except OSError:
+                    pass
+        proc.wait()
+
+
 # --------------------------------------------------------------- the adapter
 
 
@@ -665,30 +793,47 @@ class PiHarness(Harness):
         *,
         timeout: float,
     ) -> subprocess.CompletedProcess[str]:
-        """One pi invocation: fixed argv, no shell, closed stdin."""
+        """One pi invocation: fixed argv, no shell, closed stdin.
+
+        pi gets its own session, and when it does not finish in time (or the
+        wait is interrupted) everything it started goes with it — its process
+        group and every descendant, including the test commands and child
+        models the extension starts detached (:func:`_kill_tree`).
+        """
+        argv = [executable, *argv_tail]
         try:
-            return subprocess.run(  # nosec B603 - fixed argv, shell=False
-                [executable, *argv_tail],
-                capture_output=True,
+            proc = subprocess.Popen(  # nosec B603 - fixed argv, shell=False
+                argv,
+                stdout=subprocess.PIPE,
+                stderr=subprocess.PIPE,
                 text=True,
                 cwd=str(self._checkout),
                 env=env,
                 # The recorded gotcha: pi blocks reading an inherited stdin in
                 # print mode, so it is closed rather than passed through.
                 stdin=subprocess.DEVNULL,
-                timeout=timeout,
-                check=False,
+                start_new_session=True,
             )
-        except subprocess.TimeoutExpired as err:
-            raise HarnessError(
-                f"pi did not finish within {timeout:g}s",
-                remediation="raise --timeout, or check that the configured lane is reachable",
-            ) from err
         except OSError as err:
             raise HarnessError(
                 f"could not run {executable}: {err}",
                 remediation="install pi and make sure it is on PATH",
             ) from err
+        try:
+            stdout, stderr = proc.communicate(timeout=timeout)
+        except subprocess.TimeoutExpired as err:
+            _kill_tree(proc)
+            _drain(proc)
+            raise HarnessError(
+                f"pi did not finish within {timeout:g}s",
+                remediation="raise --timeout, or check that the configured lane is reachable",
+            ) from err
+        except BaseException:
+            # Interrupted (Ctrl-C reaches this process, not pi's own session).
+            _kill_tree(proc)
+            _drain(proc)
+            raise
+        return subprocess.CompletedProcess(argv, proc.returncode, stdout, stderr)
 
     @staticmethod
     def _read_ready_report(export_dir: Path) -> dict[str, Any] | None:
@@ -849,6 +994,13 @@ class PiHarness(Harness):
             env["ASSOCIATE_CONTINUE_FROM"] = str(continue_from)
         else:
             env.pop("ASSOCIATE_CONTINUE_FROM", None)
+
+        # Marks of who started a process, each true of one process only: the
+        # delegated `associate run` itself (never the pi it starts, or the
+        # timeout kill would spare that pi's children), and a child pi started
+        # by spawn_subagent (a run started here is nobody's spawned child).
+        env.pop(DELEGATED_RUN_ENV, None)
+        env.pop(SPAWNED_BY_ENV, None)
         return env
 
     # -- checks ------------------------------------------------------------

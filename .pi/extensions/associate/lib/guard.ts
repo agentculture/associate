@@ -619,21 +619,26 @@ async function decide(options: ModelGuardOptions): Promise<GuardDecision | undef
     ...(change !== undefined ? { change } : {}),
     isMutating: true,
   } as const;
-  const entry = await options.gate.evaluate(request, options.evaluateOptions ?? {});
+  // The state is built once, here, and handed to the gate: step 6 needs to
+  // know whether it was cut. One that cannot be built is left to the gate,
+  // which refuses the call and says why.
+  let built: ReturnType<typeof buildGateState> | undefined;
+  try {
+    built = buildGateState(options.gate.config, request);
+  } catch {
+    built = undefined;
+  }
+  const entry = await options.gate.evaluate(request, {
+    ...(options.evaluateOptions ?? {}),
+    ...(built ? { state: built } : {}),
+  });
 
   // 6. r15: a model that scored a cut state scored only part of the call. Since
   //    d16 an oversized state is never cut: the gate sends it whole to a
   //    large-state evaluator (tier `large`) or refuses it. This check stays as
   //    defence in depth for any allow from a tier that could have seen a cut
   //    state (clef/super), and for the gate's own truncation marker.
-  let truncated = false;
-  if (entry.tier !== "large") {
-    try {
-      truncated = buildGateState(options.gate.config, request).truncated;
-    } catch {
-      truncated = true;
-    }
-  }
+  let truncated = entry.tier !== "large" && (built === undefined || built.truncated);
   truncated ||= typeof entry.reason === "string" && entry.reason.includes(GATE_TRUNCATION_MARKER);
   // A refusal at the read-only tier asked nobody, so there is no partial score to note.
   if (truncated && (entry.decision === "allow" || entry.tier !== "readonly")) {

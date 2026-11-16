@@ -963,3 +963,113 @@ for (const model of ["worker", "senses", "cortex"]) {
     }
   });
 }
+
+// ------------------------------------------- review: streaming UTF-8 decoding
+
+test("defaultLauncher decodes a UTF-8 character split across two chunks, on stdout and stderr", async () => {
+  // Each stream gets a Hebrew word (two bytes a letter) in two writes, the cut inside a letter.
+  const script = [
+    "const out = Buffer.from(JSON.stringify({ t: '\\u05e9\\u05dc\\u05d5\\u05dd' }) + '\\n');",
+    "const err = Buffer.from('warn \\u05e9\\u05dc\\u05d5\\u05dd\\n');",
+    "const co = out.indexOf(0xd7) + 1, ce = err.indexOf(0xd7) + 1;",
+    "process.stdout.write(out.subarray(0, co)); process.stderr.write(err.subarray(0, ce));",
+    "setTimeout(() => { process.stdout.write(out.subarray(co)); process.stderr.write(err.subarray(ce)); }, 300);",
+  ].join(" ");
+  const lines: string[] = [];
+  const outcome = await defaultLauncher(
+    { file: process.execPath, args: ["-e", script], cwd: tmpdir(), env: { PATH: process.env.PATH ?? "" }, timeoutMs: 10_000 },
+    (line) => lines.push(line),
+  );
+  assert.equal(outcome.exitCode, 0);
+  assert.deepEqual(lines.map((line) => JSON.parse(line)), [{ t: "\u05e9\u05dc\u05d5\u05dd" }]);
+  assert.equal(outcome.stderrTail, "warn \u05e9\u05dc\u05d5\u05dd\n");
+});
+
+// ------------------------------------------- review: a child is never a spawner
+
+import { SPAWNED_BY_ENV } from "../lib/toolset.ts";
+import { createDelegateTools, DELEGATE_RUN_TOOL, DELEGATE_STATUS_TOOL } from "../tools/delegate.ts";
+
+test("review: every child is marked as spawned, with its parent's session id", async () => {
+  const r = rig();
+  try {
+    const launcher = fakeLauncher();
+    await run(tool(r, launcher), { model: "senses", task: "read" });
+    await run(tool(r, launcher), { model: "worker", task: "write" });
+    for (const spec of launcher.specs) assert.equal(spec.env[SPAWNED_BY_ENV], r.ctx.session.sessionId);
+  } finally {
+    r.dispose();
+  }
+});
+
+test("review: a senses child is offered no delegate tool, the guard refuses both, and the tool refuses by itself", async () => {
+  const r = rig();
+  try {
+    const launcher = fakeLauncher();
+    await run(tool(r, launcher), { model: "senses", task: "read" });
+    const childEnv = launcher.specs[0]!.env;
+    const originalFetch = globalThis.fetch;
+    let fetches = 0;
+    globalThis.fetch = (async () => {
+      fetches += 1;
+      throw new Error("no network in tests");
+    }) as typeof fetch;
+    const { pi, cleanup } = await loadExtension({ ...childEnv }, (fake) => {
+      fake.builtinTools = ["read", "bash", "edit", "write", "grep", "find", "ls"];
+      fake.activeBuiltinTools = [...fake.builtinTools];
+    });
+    try {
+      await pi.fireSessionStart();
+      const report = JSON.parse((await pi.tool("associate_ready").execute("r", {})).content[0]!.text);
+      assert.equal(report.model, "senses");
+      for (const name of [DELEGATE_RUN_TOOL, DELEGATE_STATUS_TOOL, SPAWN_TOOL_NAME]) {
+        assert.ok(!pi.getActiveTools().includes(name), `${name} is active in a senses child`);
+        const decision = (await pi.fireToolCall({
+          type: "tool_call",
+          toolName: name,
+          toolCallId: `c-${name}`,
+          input: { model: "worker", task: "change a file", run_id: "dlg-20261116T000000Z-0123abcd" },
+        })) as any;
+        assert.ok(decision?.block, `${name} was not refused in the senses child`);
+      }
+      assert.equal(fetches, 0, "the refusal came before any gate call");
+      // A senses session that is NOT a child still holds them (the mesh resident).
+      assert.ok(pi.getActiveTools().includes("read"));
+    } finally {
+      globalThis.fetch = originalFetch;
+      cleanup();
+    }
+
+    // Defence in depth: a call that reached the tool anyway starts nothing.
+    let launched = 0;
+    const delegate = createDelegateTools(r.ctx, {
+      env: { ...childEnv, ASSOCIATE_TEST_COMMANDS: JSON.stringify([["true"]]) },
+      launch: () => {
+        launched += 1;
+        return { pid: 1, exited: new Promise(() => {}) };
+      },
+      recordChild: (link) => r.walk.recordChild(link),
+    });
+    const out = (await delegate.run.execute("tc", { model: "worker", task: "change a file" })).details as any;
+    assert.equal(out.ok, false);
+    assert.equal(out.code, "delegate_refused");
+    assert.match(out.message, /spawned child/);
+    assert.equal(launched, 0);
+  } finally {
+    r.dispose();
+  }
+});
+
+test("review: a spawned child may not spawn, even under a model whose registry entry may", async () => {
+  const r = rig("cortex", { [SPAWNED_BY_ENV]: "some-parent" });
+  try {
+    const launcher = fakeLauncher();
+    const out = await run(tool(r, launcher), { model: "senses", task: "read" });
+    assert.equal(out.ok, false);
+    assert.equal(out.code, "spawn_refused");
+    assert.match(out.message, /spawned child/);
+    assert.equal(launcher.specs.length, 0);
+  } finally {
+    r.dispose();
+  }
+});

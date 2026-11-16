@@ -153,6 +153,65 @@ deviations d16 and d19.
   when it saw only the full state, and refused it once the changed lines were
   stated. Large-state latency was 37–213 s.
 
+### Security (PR #18 second code review)
+
+A second review read the code and verified nothing; each of its ten findings
+was checked against the code and a failing test before it was fixed. Nothing
+here has run live.
+
+- **One delegated run per checkout, across processes.** The lock was a map in
+  the process that called `delegate_run`, and a delegated run outlives that
+  process. The run now takes a kernel `flock` itself (`associate run
+  --checkout-lock`, `associate/harness/checkoutlock.py`) on
+  `<state>/locks/<sha256 of the checkout's real path>.lock` and holds it until
+  its process ends; the kernel drops it on a crash too. `<state>` is
+  `ASSOCIATE_RUNS_DIR`, else the XDG state directory's `associate/runs`.
+  `delegate_run` asks the tree's interpreter whether the lock is held before it
+  starts anything (`delegate_busy`, naming the holder), and refuses when it
+  cannot tell (`lock_unavailable`).
+- **A spawned child starts no run of its own.** A `senses` child of `cortex`
+  held `delegate_run`, so it could start a writing run that merges into `main`
+  while its parent was editing. `spawn_subagent` now marks every child
+  (`ASSOCIATE_SPAWNED_BY`); in a marked session `spawn_subagent`,
+  `delegate_run` and `delegate_status` are left out of the model's tool set,
+  refused by the guard and refused by the tools themselves, and the injected
+  prompt says so. `associate run` never passes the mark to the pi it starts.
+- **`run_tests` cleans up after a command that exited.** The command's process
+  group is killed when the command exits, not only on a timeout, and the tool
+  waits a bounded time for the output pipes instead of for whoever still holds
+  them. A test-made path that was staged (even with `git add -N`) leaves the
+  index as well as the work tree, as the harness already did it.
+- **A run timeout takes every descendant.** `associate run` starts pi in its own
+  session and, at `--timeout` (or when interrupted), kills pi's process group
+  and every process below it, found through `/proc`, including the test
+  commands and child models the extension starts in sessions of their own. A
+  delegated run (`ASSOCIATE_DELEGATED_RUN`) is left alone: it is meant to
+  outlive its starter.
+- **The gate state cannot be forged with a control character.** Only `\n` was
+  escaped in a state field. A lone carriage return, vertical tab, form feed,
+  NEL, U+2028, U+2029 and every other C0/C1 control are now shown as escapes
+  (`\r`, `\t`, `\u2028`, …), so text a model wrote cannot start what reads as
+  another labelled line.
+
+### Fixed (PR #18 second code review)
+
+- The decider URL keeps a path prefix of `ASSOCIATE_BASE_URL`
+  (`http://host/prefix/v1` → `http://host/prefix/v1/systemone`); it used to go
+  to the host root, and every gated call then fell back to read-only.
+- Child and search output is decoded with a streaming decoder
+  (`spawn_subagent`, `grep`/`find`), so a multi-byte character split across two
+  chunks is no longer corrupted.
+- `delegate_status` takes its result budget only from
+  `policy.budgets.delegate.max_output_chars`; the copied `25_000` is gone, and
+  without the contract value it refuses (`contract_incomplete`).
+- The harness reads a rename that `git status` reports on the work-tree side
+  (an `R` in the `Y` column, e.g. after `git add -N`) the way the extension does: both name
+  the source path, so it is restored after a test run.
+- The guard builds the gate state once per gated call and hands it to the gate.
+- CI: the detached-launcher test holds the event loop open while it waits for
+  the unref'd child (it failed on Node 22), and the three SonarCloud issues in
+  `associate/contract/validate.py` are refactored away (no behaviour change).
+
 ### Fixed
 
 - A long-lived session (the mesh resident) no longer refuses every tool call

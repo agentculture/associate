@@ -12,6 +12,13 @@
  *     `tools` list, so for every other model the active-set filter never
  *     offers it and the `tool_call` guard refuses it; the `may_spawn` check
  *     here is defence in depth for a call that reaches `execute` anyway.
+ *   * **A child starts no run of its own.** Every child's environment carries
+ *     `ASSOCIATE_SPAWNED_BY` (the parent's session id). In such a session
+ *     `lib/toolset.ts` leaves `spawn_subagent`, `delegate_run` and
+ *     `delegate_status` out of the model's tool set — never active, refused by
+ *     the `tool_call` guard — and both tools refuse by themselves as well. So a
+ *     senses child cannot hand a writing task to a delegated run (which merges
+ *     into `main`) while its cortex parent is editing.
  *   * **Each child runs under its own model's guard.** A child is launched as
  *     pi with THIS extension (`-e <index.ts>`) and `ASSOCIATE_MODEL=<child>`,
  *     so its own `tool_call` guard, active tool set and CLEF gate apply to
@@ -71,13 +78,14 @@ import { spawn as nodeSpawn } from "node:child_process";
 import { randomBytes } from "node:crypto";
 import { closeSync, openSync, readSync, realpathSync, statSync } from "node:fs";
 import { join, resolve } from "node:path";
+import { StringDecoder } from "node:string_decoder";
 import type { AssociateContext } from "../lib/context.ts";
 import type { ModelEntry } from "../lib/contract.ts";
 import { extensionDir } from "../lib/paths.ts";
 import { ASSOCIATE_PROVIDER_ID } from "../lib/provider.ts";
 import { resolveSessionDirs, sanitizeSessionId } from "../lib/session.ts";
 import { PI_TRUST_ENV, PI_TRUSTED, isCheckoutTrusted } from "../lib/trust.ts";
-import { resolveActiveModel } from "../lib/toolset.ts";
+import { resolveActiveModel, SPAWNED_BY_ENV } from "../lib/toolset.ts";
 import {
   compileRedaction,
   contentToText,
@@ -171,6 +179,9 @@ export const defaultLauncher: Launcher = (spec, onLine) =>
   new Promise<LaunchOutcome>((resolvePromise) => {
     let buffer = "";
     let stderr = "";
+    // Streaming decoders: a character split across two chunks is decoded whole.
+    const stdoutDecoder = new StringDecoder("utf8");
+    const stderrDecoder = new StringDecoder("utf8");
     let timedOut = false;
     let aborted = false;
     let spawnError: string | undefined;
@@ -202,17 +213,19 @@ export const defaultLauncher: Launcher = (spec, onLine) =>
         // A parser fault must not leave the child running unobserved.
       }
     };
-    child.stdout?.on("data", (chunk: Buffer) => {
-      buffer += chunk.toString("utf8");
+    const onStdout = (text: string) => {
+      buffer += text;
       const lines = buffer.split("\n");
       buffer = lines.pop() ?? "";
       for (const line of lines) emit(line);
       if (buffer.length > MAX_LINE_CHARS) buffer = "";
-    });
-    child.stderr?.on("data", (chunk: Buffer) => {
-      stderr += chunk.toString("utf8");
+    };
+    const onStderr = (text: string) => {
+      stderr += text;
       if (stderr.length > STDERR_TAIL_CHARS * 2) stderr = stderr.slice(stderr.length - STDERR_TAIL_CHARS);
-    });
+    };
+    child.stdout?.on("data", (chunk: Buffer) => onStdout(stdoutDecoder.write(chunk)));
+    child.stderr?.on("data", (chunk: Buffer) => onStderr(stderrDecoder.write(chunk)));
 
     const onAbort = () => {
       aborted = true;
@@ -233,6 +246,9 @@ export const defaultLauncher: Launcher = (spec, onLine) =>
       clearTimeout(timer);
       if (grace) clearTimeout(grace);
       spec.signal?.removeEventListener("abort", onAbort);
+      // Flush: bytes of a character the stream ended inside come out as U+FFFD.
+      onStdout(stdoutDecoder.end());
+      onStderr(stderrDecoder.end());
       if (buffer) emit(buffer);
       const outcome: LaunchOutcome = {
         exitCode: spawnError || timedOut || aborted ? null : code,
@@ -441,7 +457,8 @@ export function createSpawnTool(ctx: AssociateContext, deps: SpawnDeps = {}) {
   const env: Env = { ...(deps.env ?? process.env) };
   const registry = ctx.contract.models;
   const parent = resolveActiveModel(env, registry);
-  const allowed: string[] = [...(parent.entry?.may_spawn ?? [])];
+  // A spawned child spawns nobody, whatever its registry entry lists.
+  const allowed: string[] = parent.spawnedChild ? [] : [...(parent.entry?.may_spawn ?? [])];
   const launch = deps.launch ?? defaultLauncher;
   const which = deps.which ?? whichOnPath;
   const contractBudget = spawnBudget(ctx);
@@ -518,6 +535,8 @@ export function createSpawnTool(ctx: AssociateContext, deps: SpawnDeps = {}) {
       ASSOCIATE_CHECKOUT_ROOT: ctx.checkoutRoot,
       ASSOCIATE_INJECT_PROMPT: "1",
       [PI_TRUST_ENV]: isCheckoutTrusted(env) ? TRUSTED : "untrusted",
+      // Marks the child as one: it gets no tool that starts another run.
+      [SPAWNED_BY_ENV]: ctx.session.sessionId,
     });
 
     // The child's walk path, by the function the child itself will run.
@@ -682,6 +701,9 @@ export function createSpawnTool(ctx: AssociateContext, deps: SpawnDeps = {}) {
       );
     }
 
+    if (parent.spawnedChild) {
+      return refuse(model, "this session is itself a spawned child, and a child is never a spawner");
+    }
     if (!allowed.includes(model)) {
       return refuse(model, `'${model}' may not be spawned by '${parent.key ?? "no model"}'`);
     }

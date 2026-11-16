@@ -741,3 +741,50 @@ def test_the_text_output_has_a_tests_line(repo: Path, tmp_path: Path, fake, caps
     assert "failed" in tests_lines[0]
     assert "sys.exit(3)" in tests_lines[0]
     assert "{" not in tests_lines[0], "a summary, not a dict dump"
+
+
+# ------------------------------- review: one reading of a renamed path
+
+
+def test_status_paths_reads_a_work_tree_rename_with_spaces_and_an_arrow():
+    """``XY`` `` R``: the rename is on the work-tree side, and the source still follows.
+
+    The same bytes are given to the extension's parser (``parsePorcelainZ``) in
+    ``.pi/extensions/associate/tests/tests-tool.test.ts``; both must name the
+    same paths.
+    """
+    from associate.harness import testcmds
+
+    raw = " R a -> b.txt\0old name.txt\0?? new file\0"
+    assert testcmds._status_paths(raw) == ["a -> b.txt", "new file", "old name.txt"]
+    # The index-side forms, and a rename whose source field is missing.
+    assert testcmds._status_paths("R  new.txt\0old.txt\0C  dup.txt\0copy.txt\0 D gone.txt\0") == [
+        "copy.txt",
+        "dup.txt",
+        "gone.txt",
+        "new.txt",
+        "old.txt",
+    ]
+    assert testcmds._status_paths("R  new.txt\0") == ["new.txt"]
+
+
+def test_a_work_tree_rename_by_a_test_command_is_put_back(repo: Path):
+    from associate.harness import testcmds
+
+    (repo / "old name.txt").write_text("one\ntwo\nthree\n", encoding="utf-8")
+    git(repo, "add", "-A")
+    git(repo, "commit", "-q", "-m", "more")
+    rename = [
+        sys.executable,
+        "-c",
+        "import os, subprocess\n"
+        "os.rename('old name.txt', 'a -> b.txt')\n"
+        "subprocess.run(['git', 'add', '-N', 'a -> b.txt'], check=True)\n",
+    ]
+    # What git prints for it: the rename is in the Y column.
+    report = testcmds.run_test_commands([rename], repo, warn=lambda line: None)
+    assert report["passed"] is True, report
+    assert report["reverted"] == ["a -> b.txt", "old name.txt"]
+    assert (repo / "old name.txt").read_text(encoding="utf-8") == "one\ntwo\nthree\n"
+    assert not (repo / "a -> b.txt").exists()
+    assert git(repo, "status", "--porcelain") == ""

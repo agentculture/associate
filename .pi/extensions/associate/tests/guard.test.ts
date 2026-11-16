@@ -369,3 +369,40 @@ test("d20: the guard passes the change line to the gate for write, and none for 
     fx.dispose();
   }
 });
+
+// ------------------------------------------------ review: the state is built once
+
+import { buildGateState } from "../lib/gate.ts";
+import type { EvaluateOptions } from "../lib/gate.ts";
+
+test("review: the guard builds the gate state once and hands it to the gate", async () => {
+  const contract = loadContract({});
+  const config = compileGate(contract);
+  const seen: Array<{ request: GateRequest; options: EvaluateOptions | undefined }> = [];
+  const gate: Gate = {
+    config,
+    evaluate: async (request, options) => {
+      seen.push({ request, options });
+      return { id: "g1", ts: "2026-10-28T00:00:00.000Z", question_set_version: config.version, gated_tool: request.action, tier: "clef", decision: "allow" };
+    },
+  };
+  const controller = new AbortController();
+  const decision = await decideToolCall({
+    toolName: "edit",
+    input: { path: "f.txt", edits: [{ oldText: "a", newText: "b" }] },
+    model: resolveActiveModel({ ASSOCIATE_MODEL: "worker" }, contract.models),
+    registry: contract.models,
+    policy: contract.policy,
+    gate,
+    task: "t",
+    scratchDir,
+    cwd,
+    recordGate: () => {},
+    evaluateOptions: { signal: controller.signal },
+  });
+  assert.equal(decision, undefined);
+  assert.equal(seen.length, 1);
+  // The caller's own options still travel, beside the state.
+  assert.equal(seen[0]!.options?.signal, controller.signal);
+  assert.deepEqual(seen[0]!.options?.state, buildGateState(config, seen[0]!.request));
+});

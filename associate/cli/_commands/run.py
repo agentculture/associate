@@ -38,6 +38,16 @@ are reverted before any commit. See ``associate.harness.testcmds``. The same
 commands reach the extension as ``ASSOCIATE_TEST_COMMANDS`` for its
 ``run_tests`` tool.
 
+The checkout lock (review of d18)
+---------------------------------
+``--checkout-lock`` makes the run take the one-run-per-checkout lock before
+anything else and hold it until the process ends: a kernel ``flock`` on a file
+keyed by the checkout's real path, under ``$ASSOCIATE_RUNS_DIR`` (default the
+XDG state directory). While another run holds it this one exits ``2`` without
+starting. The extension's ``delegate_run`` passes the flag, so two delegated
+runs — from one session or from two processes — never race to merge the same
+checkout. See ``associate.harness.checkoutlock``.
+
 Everything the run *produced* goes to stdout; every diagnostic — the version
 warning, the "no lane configured" note — goes to stderr, so a caller can parse
 one without filtering the other.
@@ -47,6 +57,7 @@ from __future__ import annotations
 
 import argparse
 import inspect
+import os
 from pathlib import Path
 from typing import Any
 
@@ -122,8 +133,6 @@ def _resolve_model(requested: str | None) -> str:
 def cmd_run(args: argparse.Namespace) -> int:
     from associate.harness.pi import generate_session_id, resolve_export_root, sanitize_session_id
 
-    json_mode = bool(getattr(args, "json", False))
-
     harness_cls = _harness_class(args.harness)
 
     args.model = _resolve_model(args.model)
@@ -139,6 +148,54 @@ def cmd_run(args: argparse.Namespace) -> int:
     session_id = sanitize_session_id(args.session_id) if args.session_id else generate_session_id()
     export_root = _export_root(resolve_export_root, checkout, args.export_root)
 
+    # Held from here to the end of the run — the model, the tests and the
+    # merge — and dropped by the kernel if this process dies first.
+    lock = _lock_checkout(checkout, session_id) if args.checkout_lock else None
+    try:
+        return _run(args, harness_cls, checkout, session_id, export_root, test_commands)
+    finally:
+        if lock is not None:
+            os.close(lock)
+
+
+def _lock_checkout(checkout: Path, session_id: str) -> int:
+    """Take the one-run-per-checkout lock for this run; exit 2 when it is held or unusable."""
+    from associate.harness import checkoutlock
+
+    state = checkoutlock.state_dir()
+    if state == checkout or checkout in state.parents:
+        raise CliError(
+            code=EXIT_ENV_ERROR,
+            message=f"the runs state directory {state} is inside the checkout {checkout}",
+            remediation=f"set {checkoutlock.STATE_DIR_ENV} to a directory outside every checkout",
+        )
+    try:
+        return checkoutlock.acquire(checkout, session_id)
+    except checkoutlock.CheckoutBusy as busy:
+        holder = f"run {busy.holder}" if busy.holder else "another run"
+        raise CliError(
+            code=EXIT_ENV_ERROR,
+            message=f"{holder} holds the checkout lock for {checkout}; one run per checkout at "
+            "a time, so this run was not started",
+            remediation="start it again once that run has finished",
+        ) from None
+    except (OSError, ImportError) as err:
+        raise CliError(
+            code=EXIT_ENV_ERROR,
+            message=f"the checkout lock for {checkout} could not be taken: {err}",
+            remediation=f"check that {state} is writable, or set {checkoutlock.STATE_DIR_ENV}",
+        ) from err
+
+
+def _run(
+    args: argparse.Namespace,
+    harness_cls: Any,
+    checkout: Path,
+    session_id: str,
+    export_root: Path,
+    test_commands: list[list[str]],
+) -> int:
+    json_mode = bool(getattr(args, "json", False))
     harness = _build(harness_cls, args)
     run_wt = _isolate(checkout, session_id) if _may_mutate(args.model) else None
     run_checkout = run_wt.run_checkout if run_wt is not None else checkout
@@ -433,6 +490,14 @@ def register(sub: argparse._SubParsersAction) -> None:
         "finishes (split like a shell would, run without one). Repeatable; all run, in "
         "order. A worktree run merges only when every one exits 0; their side effects "
         "are reverted. Also offered to the model as the run_tests tool.",
+    )
+    p.add_argument(
+        "--checkout-lock",
+        action="store_true",
+        help="Hold the one-run-per-checkout lock for the whole run, and exit 2 without "
+        "starting when another run holds it (a flock under $ASSOCIATE_RUNS_DIR, default "
+        "the XDG state directory; see associate.harness.checkoutlock). delegate_run "
+        "passes it; off by default.",
     )
     p.add_argument(
         "--test-timeout",

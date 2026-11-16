@@ -99,7 +99,9 @@ run live):
   outside the checkout); `ledger_append` / `ledger_list` (`tools/ledger.ts`,
   over workledger-cli 0.8.0's `ledger append|list`); `spawn_subagent`
   (`tools/spawn.ts`, cortex only, children `worker` or `senses`, one writing
-  child per checkout at a time, child walk paths recorded in the parent walk);
+  child per checkout at a time, child walk paths recorded in the parent walk; a
+  child is marked `ASSOCIATE_SPAWNED_BY` and holds no tool that starts another
+  run — not `spawn_subagent`, not `delegate_run` / `delegate_status`);
   image blocks from `read` for models whose entry lists `image` input.
 - **Delegation from the read-only resident** (deviation d18, `tools/delegate.ts`):
   senses holds `delegate_run` and `delegate_status`, allowed targets from
@@ -117,7 +119,12 @@ run live):
   `ASSOCIATE_TEST_COMMANDS` as `--test-command` (and refuses to start with
   none configured), `--untrusted-checkout` unless `ASSOCIATE_PI_TRUST` is
   `approve`, and `--timeout` from `policy.json` `budgets.delegate.timeout_ms`.
-  One delegated run per checkout at a time; it refuses a checkout outside git.
+  One delegated run per checkout at a time, across processes: the run holds a
+  kernel `flock` for its whole life (`--checkout-lock`,
+  `associate/harness/checkoutlock.py`, a lock file keyed by the checkout's real
+  path under `ASSOCIATE_RUNS_DIR`), and `delegate_run` asks whether it is held
+  before starting anything. It refuses a checkout outside git, and it refuses
+  in a session `spawn_subagent` started (a child is never a spawner).
   Its export root is `<session root>/delegated`, its session id the run id, its
   stdout/stderr beside it; a `child` line in the session walk names its walk.
   `delegate_run` is in `gated_tools` (CLEF-gated for every model, effect line in
@@ -266,7 +273,8 @@ associate/                  # Python package (top level — no src/ wrapper)
 │   └── catalog.py          # ENTRIES: dict[tuple[str, ...], str] of markdown
 ├── contract/               # the portable contract: models.json, gate.json,
 │                           #   role.json, policy.json, schemas/, validate.py
-├── harness/                # adapters (pi.py, stub.py), worktree.py, testcmds.py
+├── harness/                # adapters (pi.py, stub.py), worktree.py, testcmds.py,
+│                           #   checkoutlock.py
 └── bench/                  # public suites (suites.json, public.py), walkstats
 .pi/extensions/associate/   # the Pi extension (TypeScript, no npm deps)
 ├── index.ts                # loader: registry model, tool surface, guard, gate
@@ -540,6 +548,9 @@ value is not inherited.
 | `ASSOCIATE_TEST_COMMANDS` | absent | `tools/tests.ts`, `tools/delegate.ts`; set by `associate run --test-command` | The operator's test commands as a JSON array of argv lists, for the `run_tests` tool. The harness runs the same commands itself after the model (deviation d12). For the mesh resident the operator sets it in the unit's environment: `delegate_run` passes each one to the delegated run as `--test-command` and refuses to start any run while it names none (d18). |
 | `ASSOCIATE_PI_TRUST` | absent (read as untrusted) | `lib/trust.ts`, read by `tools/spawn.ts`, `tools/delegate.ts` and `lib/prompt.ts`; set by `associate run` | `approve` or `untrusted`, from how the parent pi was launched (deviation d5); only the exact value `approve` is trust. It gives a child `--approve` and a delegated run no `--untrusted-checkout` (neither is ever more trusting than its parent) and lets the examined checkout's `AGENTS.md` be injected as repository context (d17); anything else skips that file. |
 | `ASSOCIATE_RUN_DEADLINE` | absent (no cap beyond `budgets.spawn.timeout_ms`) | `tools/spawn.ts`; set by `associate run` from `--timeout`, never inherited | The parent run's deadline as absolute epoch milliseconds. Each child's wall clock is the contract's `timeout_ms` capped at what is left of the run minus a safety margin, measured after any wait for the writer lock; a spawn with too little time left is refused (`run_deadline`) rather than started to be killed. |
+| `ASSOCIATE_SPAWNED_BY` | absent | `lib/toolset.ts`; set by `spawn_subagent` for a child, removed by `associate run` from the pi it starts | The parent's session id, marking a spawned child. In a marked session `spawn_subagent`, `delegate_run` and `delegate_status` are not in the model's tool set and refuse by themselves: a child is never a spawner. |
+| `ASSOCIATE_DELEGATED_RUN` | absent | `associate/harness/pi.py`; set by `delegate_run` on the delegated `associate run` process, removed from the pi that run starts | The delegated run's id. A run timeout kills every descendant of pi except a process started with this variable: a delegated run outlives the session that started it. |
+| `ASSOCIATE_RUNS_DIR` | `$XDG_STATE_HOME/associate/runs`, else `$HOME/.local/state/associate/runs` | `associate/harness/checkoutlock.py` | The state directory holding `locks/<sha256 of the checkout's real path>.lock`, the one-run-per-checkout lock `associate run --checkout-lock` holds (a kernel `flock`). Must be outside every checkout. |
 | `ASSOCIATE_EIDETIC_DIR` | `$HOME/.eidetic/memory` | `tools/eidetic.ts` | The eidetic store the memory tools pin (`EIDETIC_DATA_DIR`); must be absolute and outside the examined checkout. |
 | `ASSOCIATE_LEDGER_PATH` | `$HOME/.workledger/associate.jsonl` | `tools/ledger.ts` | The workledger file the ledger tools pin (`WORKLEDGER_PATH`); must be absolute and outside the examined checkout. |
 | `ASSOCIATE_BENCH_SUITES` | `associate/bench/suites.json` | `associate/bench/public.py` | An alternative suites file for `associate bench`. |

@@ -33,6 +33,11 @@
  *     pre-test state, and listed in `reverted`. Ignored files are untouched.
  *     Outside a git work tree there is nothing to restore against: the command
  *     runs and the result says it was unprotected.
+ *   * **Nothing a command started outlives it.** Each command runs in its own
+ *     process group, and the group is killed when the command exits as well as
+ *     when it times out, so a background process it left cannot write after
+ *     the revert. The output pipes are then waited for a bounded time only: a
+ *     process that left the group and still holds them does not hold the tool.
  *
  * What is NOT protected: the git index of a path that was already dirty before
  * the run (its working-tree bytes are restored; a test that `git add`s is not
@@ -78,7 +83,11 @@ export const MAX_PROTECTED_BYTES = 64 * 1024 * 1024;
 /** Wall clock for each git call the protection makes. */
 const GIT_TIMEOUT_MS = 60_000;
 
-/** After a timeout kill, how long to wait for the pipes to close before giving up on them. */
+/**
+ * After the process group is killed — at the timeout, or once the command has
+ * exited — how long to wait for the output pipes to close before giving up on
+ * them (a process that left the group can hold them open).
+ */
 const KILL_GRACE_MS = 5_000;
 
 /** Paths handed to one `git checkout` / `git ls-tree` call. */
@@ -157,6 +166,8 @@ interface RunOptions {
   timeoutMs: number;
   tailChars: number;
   redaction: RedactionFilter;
+  /** See {@link KILL_GRACE_MS}. */
+  killGraceMs: number;
 }
 
 /**
@@ -243,6 +254,9 @@ function runCommand(index: number, argv: string[], options: RunOptions, env: Rec
       settled = true;
       clearTimeout(timer);
       clearTimeout(grace);
+      // Whoever still holds the pipes is not waited for, and no longer read.
+      child.stdout?.destroy();
+      child.stderr?.destroy();
       const { text, dropped } = tail.text();
       const window = text.length > windowChars ? text.slice(text.length - windowChars) : text;
       const redacted = options.redaction.apply(window);
@@ -267,12 +281,22 @@ function runCommand(index: number, argv: string[], options: RunOptions, env: Rec
       timedOut = true;
       killTree();
       // A grandchild that escaped the group could hold the pipes open: stop waiting.
-      grace = setTimeout(() => finish(null, "SIGKILL"), KILL_GRACE_MS);
+      grace ??= setTimeout(() => finish(null, "SIGKILL"), options.killGraceMs);
     }, options.timeoutMs);
 
     child.on("error", (error) => {
       spawnError = error.message;
       finish(null, null);
+    });
+    // The command itself is gone: whatever it left running in its process
+    // group must not write after the revert, nor hold the pipes this waits on.
+    // The group is killed now, and `close` (the pipes' end) is waited for only
+    // as long as after a timeout kill.
+    child.on("exit", (code, signal) => {
+      if (settled || timedOut) return;
+      clearTimeout(timer);
+      killTree();
+      grace ??= setTimeout(() => finish(code, signal), options.killGraceMs);
     });
     child.on("close", (code, signal) => finish(code, signal));
   });
@@ -496,7 +520,14 @@ async function restore(protection: Protection, env: Record<string, string>): Pro
     if (out.code === 0) report.reverted.push(...batch);
     else for (const rel of batch) report.errors.push({ path: rel, error: `git checkout failed: ${out.stderr.trim()}` });
   }
-  for (const rel of cleanBefore.filter((rel) => !tracked.has(rel))) {
+  // A path the tests created and staged (even as intent-to-add) leaves the
+  // index too, as the harness does it (`testcmds.py` `_restore_head`).
+  const created = cleanBefore.filter((rel) => !tracked.has(rel));
+  for (let i = 0; i < created.length; i += GIT_PATH_BATCH) {
+    const batch = created.slice(i, i + GIT_PATH_BATCH);
+    await gitCall(gitBin, top, ["--literal-pathspecs", "rm", "-q", "--cached", "--ignore-unmatch", "--", ...batch], env);
+  }
+  for (const rel of created) {
     try {
       rmSync(resolve(top, rel), { recursive: true, force: true });
       report.reverted.push(rel);
@@ -530,6 +561,8 @@ export interface TestsDeps {
   env?: Record<string, string | undefined>;
   timeoutMs?: number;
   maxProtectedBytes?: number;
+  /** Override {@link KILL_GRACE_MS} (tests). */
+  killGraceMs?: number;
   /** Where the one malformed-configuration line goes; defaults to `console.error`. */
   log?: (line: string) => void;
 }
@@ -565,6 +598,7 @@ export function createTestsTool(ctx: AssociateContext, deps: TestsDeps = {}) {
   const commands = parsed.commands;
   const stripped = childEnvironment(env);
   const timeoutMs = deps.timeoutMs ?? DEFAULT_TEST_TIMEOUT_MS;
+  const killGraceMs = deps.killGraceMs ?? KILL_GRACE_MS;
   const maxBytes = deps.maxProtectedBytes ?? MAX_PROTECTED_BYTES;
   const tailBudget = outputBudget(ctx);
   const redaction = compileRedaction(ctx.policy);
@@ -619,7 +653,7 @@ export function createTestsTool(ctx: AssociateContext, deps: TestsDeps = {}) {
     try {
       for (const i of selected) {
         results.push(
-          await runCommand(i, commands[i]!, { cwd: ctx.checkoutRoot, env: stripped, timeoutMs, tailChars, redaction }, env),
+          await runCommand(i, commands[i]!, { cwd: ctx.checkoutRoot, env: stripped, timeoutMs, tailChars, redaction, killGraceMs }, env),
         );
       }
     } finally {

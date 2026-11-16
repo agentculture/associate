@@ -189,3 +189,39 @@ test("the read-only subset is a subset of the allowlist and excludes every writi
   assert.deepEqual(subset.get("eidetic")!.subcommands, ["recall"]);
   assert.deepEqual(subset.get("ledger")!.subcommands, ["list"]);
 });
+
+// ------------------------------------------- review: a child is never a spawner
+
+import { CHILD_DENIED_TOOLS, isSpawnedChild, SPAWNED_BY_ENV } from "../lib/toolset.ts";
+import { SPAWN_TOOL_NAME } from "../tools/spawn.ts";
+import { DELEGATE_RUN_TOOL, DELEGATE_STATUS_TOOL } from "../tools/delegate.ts";
+
+test("review: the tools a spawned child never holds are the ones that start another run", () => {
+  assert.deepEqual([...CHILD_DENIED_TOOLS].sort(), [DELEGATE_RUN_TOOL, DELEGATE_STATUS_TOOL, SPAWN_TOOL_NAME].sort());
+  for (const name of CHILD_DENIED_TOOLS) assert.ok(REGISTRY.tool_names.includes(name), name);
+});
+
+test("review: a spawned child's tool set has no tool that starts another run, whatever its model", () => {
+  for (const key of ["worker", "senses", "cortex"]) {
+    const top = resolveActiveModel({ ASSOCIATE_MODEL: key }, REGISTRY);
+    assert.equal(top.spawnedChild, false);
+    assert.deepEqual([...top.tools], REGISTRY.models[key]!.tools);
+    const child = resolveActiveModel({ ASSOCIATE_MODEL: key, [SPAWNED_BY_ENV]: "parent-session" }, REGISTRY);
+    assert.equal(child.spawnedChild, true);
+    assert.deepEqual(
+      [...child.tools],
+      REGISTRY.models[key]!.tools.filter((name) => !CHILD_DENIED_TOOLS.includes(name)),
+    );
+    for (const name of CHILD_DENIED_TOOLS) assert.equal(child.tools.has(name), false, `${key} child holds ${name}`);
+    assert.equal(child.mayMutate, top.mayMutate);
+  }
+  // senses is the model that matters: at the top it delegates, as a child it does not.
+  assert.ok(resolveActiveModel({ ASSOCIATE_MODEL: "senses" }, REGISTRY).tools.has(DELEGATE_RUN_TOOL));
+});
+
+test("review: only a non-blank ASSOCIATE_SPAWNED_BY marks a child", () => {
+  assert.equal(isSpawnedChild({}), false);
+  assert.equal(isSpawnedChild({ [SPAWNED_BY_ENV]: "" }), false);
+  assert.equal(isSpawnedChild({ [SPAWNED_BY_ENV]: "  " }), false);
+  assert.equal(isSpawnedChild({ [SPAWNED_BY_ENV]: "sess-1" }), true);
+});
