@@ -71,6 +71,8 @@ def _build_parser() -> argparse.ArgumentParser:
     from associate.cli._commands import overview as _overview_cmd
     from associate.cli._commands import run as _run_cmd
     from associate.cli._commands import runs as _runs_group
+    from associate.cli._commands import serve as _serve_cmd
+    from associate.cli._commands import tokens as _tokens_group
     from associate.cli._commands import whoami as _whoami_cmd
 
     parser = _CliArgumentParser(
@@ -95,6 +97,8 @@ def _build_parser() -> argparse.ArgumentParser:
     _bench_cmd.register(sub)
     _runs_group.register(sub)
     _mcp_cmd.register(sub)
+    _serve_cmd.register(sub)
+    _tokens_group.register(sub)
     _cli_group.register(sub)
     # Register your own noun groups here:
     #   from associate.cli._commands import my_noun as _my_noun_group

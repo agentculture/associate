@@ -440,6 +440,69 @@ a verb lacks a CLI command, an MCP tool or an HTTP operation.
 """
 
 
+_SERVE = """\
+# associate serve
+
+Run the runs HTTP API under uvicorn (the `server` extra): `POST /runs` (admin),
+`GET /runs/{run_id}` and `GET /runs` (viewer), and the public `GET /health`.
+
+## Usage
+
+    associate serve [--host H] [--port N] [--lan-host H] [--lan-port N] [--tokens PATH]
+                    [--log-level LEVEL] [--json]
+
+Two listeners:
+
+- **loopback**, always on, `127.0.0.1:8794` by default, and always a loopback address (anything
+  else is refused, exit 1): it is the one that trusts a Cloudflare Access assertion.
+- **lan**, off unless `--lan-host` is given (`ASSOCIATE_LAN_HOST`), port `8795` by default:
+  service tokens only; an Access header is ignored there. The two cannot share an address.
+
+Environment: `ASSOCIATE_HOST`, `ASSOCIATE_PORT`, `ASSOCIATE_LAN_HOST`, `ASSOCIATE_LAN_PORT`
+(flags win), `ASSOCIATE_ACCESS_LISTEN` + `ASSOCIATE_ACCESS_TEAM_DOMAIN` + `ASSOCIATE_ACCESS_AUD`
+(all three or none; Access on the loopback listener), `ASSOCIATE_ADMINS` / `ASSOCIATE_EDITORS`
+(comma-separated identities Access lets through; others are viewers),
+`ASSOCIATE_SERVER_TOKENS` (the token file) and `ASSOCIATE_RUNS_ROOTS` / `ASSOCIATE_RUNS_DIR`.
+
+The server starts even while `ASSOCIATE_RUNS_ROOTS` is empty; every `POST /runs` is then
+refused (403). The startup line says so. "listening" is printed once every listener has bound
+its socket; SIGINT or SIGTERM stops them together.
+
+## Exit codes
+
+- `0` stopped by a signal
+- `1` a bad address or port, a non-loopback loopback host, a partial Access configuration
+- `2` the `server` extra is not installed (`pip install 'associate[server]'`), or a port is taken
+"""
+
+_TOKENS = """\
+# associate tokens
+
+Issue, list and revoke the service tokens the HTTP API (`associate serve`) checks.
+
+## Usage
+
+    associate tokens issue --name NAME --role viewer|editor|admin [--tokens PATH] [--json]
+    associate tokens list [--tokens PATH] [--json]
+    associate tokens revoke ID [--tokens PATH] [--json]
+    associate tokens overview [--json]
+
+`issue` prints the plain token (`asc_<id>.<secret>`) **once**; it is never stored (only a hash
+is) and never logged. `list` shows id, identity, roles and state, never a token or a hash.
+`revoke` stops a token working at once. The store is one `0600` file: `--tokens`, else
+`ASSOCIATE_SERVER_TOKENS`, else `$XDG_STATE_HOME/associate/service_tokens.json`. Whoever can
+write that file administers the tokens, so these verbs need no server and no extra.
+
+Roles: `viewer` reads (`GET /runs`), `editor` is above it, `admin` starts runs (`POST /runs`).
+
+## Exit codes
+
+- `0` done
+- `1` a bad name or role, an unknown or already revoked id
+- `2` the token file cannot be read or written
+"""
+
+
 ENTRIES: dict[tuple[str, ...], str] = {
     (): _ROOT,
     ("associate",): _ROOT,
@@ -456,6 +519,12 @@ ENTRIES: dict[tuple[str, ...], str] = {
     ("runs", "show"): _RUNS_SHOW,
     ("runs", "list"): _RUNS_LIST,
     ("mcp",): _MCP,
+    ("serve",): _SERVE,
+    ("tokens",): _TOKENS,
+    ("tokens", "issue"): _TOKENS,
+    ("tokens", "list"): _TOKENS,
+    ("tokens", "revoke"): _TOKENS,
+    ("tokens", "overview"): _TOKENS,
     ("cli",): _CLI,
     ("cli", "overview"): _CLI,
 }

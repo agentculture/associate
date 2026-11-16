@@ -36,12 +36,12 @@ from fastapi.routing import APIRoute  # noqa: E402
 from fastapi.testclient import TestClient  # noqa: E402
 
 from associate.bridge import mcpserver  # noqa: E402
+from associate.bridge.filetokens import FileTokenStore  # noqa: E402
 from associate.bridge.tokens import ServiceTokens  # noqa: E402
 from associate.cli import _build_parser  # noqa: E402
 from associate.runs import mcp_tools, service  # noqa: E402
 from associate.runs.service import RunsConfig, Verb  # noqa: E402
 from associate.server.app import TOKEN_PREFIX, create_app  # noqa: E402
-from associate.server.tokenstore import FileTokenStore  # noqa: E402
 from tests.test_runs import HOSTILE, fake, make_repo  # noqa: E402
 
 NOUN = mcp_tools.NOUN
@@ -50,6 +50,22 @@ NOUN = mcp_tools.NOUN
 LOCAL_ONLY_CLI = frozenset({"overview"})
 #: HTTP operations that are not registry verbs.
 LOCAL_ONLY_HTTP = frozenset({"GET /health"})
+
+#: Top-level CLI commands that are not bridge verbs, by name, each with its reason. The
+#: parity check above looks only at the ``runs`` noun, so a new top-level command must be
+#: classified here explicitly (``test_every_top_level_cli_command_is_classified``); none is
+#: exempted by loosening the check.
+#: Operator verbs: they run or administer the service itself, they are not operations the
+#: service offers, so they have no MCP tool and no HTTP operation by design.
+OPERATOR_ONLY_CLI = frozenset(
+    {
+        "serve",  # starts the HTTP listener that serves the verbs
+        "tokens",  # issues the credentials the HTTP surface checks (the token file, no server)
+        "mcp",  # starts the MCP server that serves the verbs
+    }
+)
+#: The agent-first identity and self-description verbs, and the harness's own run and bench.
+OTHER_CLI = frozenset({"whoami", "learn", "explain", "overview", "doctor", "cli", "run", "bench"})
 
 Params = dict[str, bool]  # accepted name -> required
 
@@ -244,6 +260,22 @@ def test_the_introspection_sees_the_real_params(http):
 def test_the_local_only_exemptions_are_not_stale():
     assert LOCAL_ONLY_CLI <= set(collect_cli(_build_parser()))
     assert LOCAL_ONLY_CLI.isdisjoint({v.name for v in service.VERBS})
+
+
+def test_every_top_level_cli_command_is_classified():
+    """A new top-level command must be a bridge noun, or named as operator-only or other."""
+    top = next(
+        a for a in _build_parser()._actions if isinstance(a, argparse._SubParsersAction)
+    ).choices
+    assert set(top) == {NOUN} | OPERATOR_ONLY_CLI | OTHER_CLI
+
+
+def test_the_operator_only_commands_are_not_registry_verbs_or_stale():
+    top = next(
+        a for a in _build_parser()._actions if isinstance(a, argparse._SubParsersAction)
+    ).choices
+    assert OPERATOR_ONLY_CLI <= set(top)
+    assert OPERATOR_ONLY_CLI.isdisjoint({v.name for v in service.VERBS} | {NOUN})
 
 
 # ----- mutation checks: remove a surface for a real verb, and the check fails for that reason
