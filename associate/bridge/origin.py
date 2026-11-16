@@ -31,7 +31,14 @@ from collections.abc import Mapping
 from dataclasses import dataclass
 from urllib.parse import urlsplit
 
-__all__ = ["SAFE_METHODS", "Refusal", "check_write", "is_json_media", "same_origin"]
+__all__ = [
+    "SAFE_METHODS",
+    "Refusal",
+    "check_origin",
+    "check_write",
+    "is_json_media",
+    "same_origin",
+]
 
 #: Methods that never change state here and so are never checked.
 SAFE_METHODS = frozenset({"GET", "HEAD", "OPTIONS"})
@@ -77,7 +84,14 @@ def same_origin(origin: str, scheme: str, host: str | None) -> bool:
     return theirs is not None and theirs == _origin_of(f"{scheme}://{host}")
 
 
-def _cross_site(headers: Mapping[str, str], scheme: str) -> Refusal | None:
+def check_origin(method: str, headers: Mapping[str, str], scheme: str) -> Refusal | None:
+    """The refusal for a write a browser sent for another site, or ``None``.
+
+    Only the ``Sec-Fetch-Site`` and ``Origin`` rules (no media type rule): for a host app that
+    checks the body's type itself. Safe methods (:data:`SAFE_METHODS`) are never refused.
+    """
+    if method.upper() in SAFE_METHODS:
+        return None
     site = headers.get("sec-fetch-site", "").strip().lower()
     if site == "same-origin":
         return None
@@ -104,7 +118,7 @@ def check_write(method: str, headers: Mapping[str, str], scheme: str) -> Refusal
     """
     if method.upper() in SAFE_METHODS:
         return None
-    refusal = _cross_site(headers, scheme)
+    refusal = check_origin(method, headers, scheme)
     if refusal is not None:
         return refusal
     if not is_json_media(headers.get("content-type")):
