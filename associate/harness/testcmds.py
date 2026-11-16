@@ -219,7 +219,8 @@ def _restore_head(top: Path, rel: str, head: str | None) -> None:
             shutil.rmtree(target)
         _git(["checkout", head, "--", rel], top)
         return
-    _git(["rm", "-q", "--cached", "--ignore-unmatch", "--", rel], top, check=False)
+    # -f: a staged file the tests then changed again is still dropped from the index
+    _git(["rm", "-q", "-f", "--cached", "--ignore-unmatch", "--", rel], top, check=False)
     _remove(top / rel)
 
 

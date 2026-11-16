@@ -525,7 +525,9 @@ async function restore(protection: Protection, env: Record<string, string>): Pro
   const created = cleanBefore.filter((rel) => !tracked.has(rel));
   for (let i = 0; i < created.length; i += GIT_PATH_BATCH) {
     const batch = created.slice(i, i + GIT_PATH_BATCH);
-    await gitCall(gitBin, top, ["--literal-pathspecs", "rm", "-q", "--cached", "--ignore-unmatch", "--", ...batch], env);
+    // -f: a staged file the tests then changed again is still dropped from the index
+    const out = await gitCall(gitBin, top, ["--literal-pathspecs", "rm", "-q", "-f", "--cached", "--ignore-unmatch", "--", ...batch], env);
+    if (out.code !== 0) for (const rel of batch) report.errors.push({ path: rel, error: `git rm --cached failed: ${out.stderr.trim()}` });
   }
   for (const rel of created) {
     try {

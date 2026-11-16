@@ -788,3 +788,22 @@ def test_a_work_tree_rename_by_a_test_command_is_put_back(repo: Path):
     assert (repo / "old name.txt").read_text(encoding="utf-8") == "one\ntwo\nthree\n"
     assert not (repo / "a -> b.txt").exists()
     assert git(repo, "status", "--porcelain") == ""
+
+
+def test_a_file_a_test_command_staged_and_then_changed_leaves_the_index(repo: Path):
+    from associate.harness import testcmds
+
+    stage = [
+        sys.executable,
+        "-c",
+        "import pathlib, subprocess\n"
+        "p = pathlib.Path('made.txt')\n"
+        "p.write_text('one\\n')\n"
+        "subprocess.run(['git', 'add', 'made.txt'], check=True)\n"
+        "p.write_text('two\\n')\n",
+    ]
+    # git refuses a plain `rm --cached` here (staged content differs from both HEAD and the file)
+    report = testcmds.run_test_commands([stage], repo, warn=lambda line: None)
+    assert report["passed"] is True, report
+    assert not (repo / "made.txt").exists()
+    assert git(repo, "status", "--porcelain") == ""

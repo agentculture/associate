@@ -237,3 +237,12 @@ def test_a_state_directory_inside_the_checkout_is_refused(
     assert _run(checkout, tmp_path, "--checkout-lock") == 2
     assert "inside the checkout" in json.loads(capsys.readouterr().err)["message"]
     assert not (checkout / ".state").exists()
+
+
+def test_a_link_planted_at_the_locks_name_is_not_followed(state: Path, checkout: Path):
+    path = checkoutlock.lock_path(checkout)
+    path.parent.mkdir(parents=True)
+    path.symlink_to(checkout / "elsewhere.lock")
+    with pytest.raises(OSError):
+        checkoutlock.acquire(checkout, "run-a")
+    assert not (checkout / "elsewhere.lock").exists()

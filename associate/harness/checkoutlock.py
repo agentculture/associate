@@ -103,7 +103,8 @@ def acquire(checkout: Path | str, holder: str) -> int:
 
     path = lock_path(checkout)
     path.parent.mkdir(parents=True, exist_ok=True, mode=0o700)
-    fd = os.open(path, os.O_RDWR | os.O_CREAT, 0o600)
+    # O_NOFOLLOW: a link planted at the lock's name must not move the lock elsewhere
+    fd = os.open(path, os.O_RDWR | os.O_CREAT | os.O_NOFOLLOW, 0o600)
     try:
         fcntl.flock(fd, fcntl.LOCK_EX | fcntl.LOCK_NB)
     except BlockingIOError:
