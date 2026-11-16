@@ -33,6 +33,11 @@ _GIT_TIMEOUT = 60
 _COMMIT = re.compile(r"[0-9a-f]{40}(?:[0-9a-f]{24})?")
 
 
+def _hex(digits: str) -> str:
+    """The same hex digits, rebuilt from their number: what reaches git is only ever hex."""
+    return f"{int(digits, 16):0{len(digits)}x}"
+
+
 def _now() -> str:
     return datetime.now(UTC).isoformat(timespec="seconds")
 
@@ -87,6 +92,7 @@ def _merge_commit(checkout: str, run_id: str) -> str | None:
     """The merge ``associate.harness.worktree`` made on ``main`` for this run (session id)."""
     if not (isinstance(run_id, str) and RUN_ID.fullmatch(run_id)):
         return None
+    run_id = "run-" + _hex(run_id.removeprefix("run-"))
     out = _git(
         checkout,
         "log",
@@ -100,7 +106,7 @@ def _merge_commit(checkout: str, run_id: str) -> str | None:
     if out is None:
         return None
     commit = out.strip()
-    return commit if _COMMIT.fullmatch(commit) else None
+    return _hex(commit) if _COMMIT.fullmatch(commit) else None
 
 
 def git_facts(request: dict[str, Any], result: dict[str, Any] | None) -> dict[str, Any]:
@@ -116,8 +122,7 @@ def git_facts(request: dict[str, Any], result: dict[str, Any] | None) -> dict[st
     checkout = request["checkout"]
     base = request.get("base_commit")
     # the base goes to git as an argument: only a full commit id, never an option or a path
-    if not (isinstance(base, str) and _COMMIT.fullmatch(base)):
-        base = None
+    base = _hex(base) if isinstance(base, str) and _COMMIT.fullmatch(base) else None
     facts: dict[str, Any] = {"base_commit": base, "changed_paths": [], "changed_paths_error": None}
     merge = (result or {}).get("merge")
     if merge == "merged":
