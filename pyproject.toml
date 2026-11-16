@@ -1,6 +1,6 @@
 [project]
 name = "associate"
-version = "0.10.0"
+version = "0.11.0"
 description = "A multi-model agent harness on Pi: runs one fleet model (worker, senses or cortex, addressed by lobes role) on one task with its own tools and prompt, every mutating call behind a CLEF safety gate, and hands back an evidenced result."
 readme = "README.md"
 license = "Apache-2.0"
