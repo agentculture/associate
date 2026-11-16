@@ -189,3 +189,16 @@ def test_a_run_whose_request_cannot_be_read_is_skipped_not_shown(cfg):
     (cfg.state_dir / "runs" / ids[2] / "request.json").write_text("{not json", "utf-8")
     listed = service.list_runs(config=cfg, limit=2)
     assert [r["run_id"] for r in listed["runs"]] == [ids[1], ids[0]]
+
+
+@pytest.mark.parametrize(
+    "name", ["runs/not-a-run", "elsewhere/run-" + "0" * 32, "runs/run-" + "0" * 32]
+)
+def test_the_supervisor_refuses_anything_that_is_not_a_run_directory(tmp_path, name):
+    from associate.runs import supervisor
+
+    target = tmp_path / name
+    if "elsewhere" in name or "not-a-run" in name:
+        target.mkdir(parents=True)  # exists, but is not laid out as a run; the third is missing
+    assert supervisor.main([str(target), "-"]) == 2
+    assert not (target / "result.json").exists()

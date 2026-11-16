@@ -42,7 +42,7 @@ describe("the runs list", () => {
     const items = within(screen.getByRole("list", { name: "Runs" })).getAllByRole("listitem");
     expect(items).toHaveLength(7);
     for (const id of Object.values(ids)) cardOf(id);
-    expect(document.title).toBe("Runs - associate");
+    await waitFor(() => expect(document.title).toBe("Runs - associate"));
   });
 
   it("shows each card's pill, timing, model, title, repo and outcome", async () => {

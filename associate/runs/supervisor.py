@@ -18,7 +18,7 @@ from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any
 
-from associate.runs.state import atomic_write_json, read_json
+from associate.runs.state import RUN_ID, atomic_write_json, read_json
 
 #: Changed paths kept in ``result.json`` (``runs show`` cuts further, to its reply limit).
 STORED_PATHS = 5000
@@ -196,7 +196,11 @@ def supervise(run: Path, lock_fd: int | None) -> int:
 
 
 def main(argv: list[str]) -> int:
-    run = Path(argv[0])
+    run = Path(argv[0]).resolve()
+    # only a run directory as ``start`` lays it out: <state>/runs/run-<32 hex>
+    if RUN_ID.fullmatch(run.name) is None or run.parent.name != "runs" or not run.is_dir():
+        print("not a run directory", file=sys.stderr)
+        return 2
     lock_fd = int(argv[1]) if len(argv) > 1 and argv[1] != "-" else None
     try:
         return supervise(run, lock_fd)

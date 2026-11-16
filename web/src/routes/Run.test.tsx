@@ -1,4 +1,4 @@
-import { act, screen, within } from "@testing-library/react";
+import { act, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import fixtures from "../fixtures/runs.json";
@@ -48,7 +48,10 @@ describe("one finished run that was not merged", () => {
     const commit = within(head).getByText("6f85313");
     expect(commit.tagName).toBe("CODE");
     expect(commit).toHaveAttribute("title", "6f85313c0ffee0000000000000000000000000ab");
-    expect(document.title).toBe("Add a compliance guideline for secrets in logs - associate");
+    // the title is set by an effect after the heading renders
+    await waitFor(() =>
+      expect(document.title).toBe("Add a compliance guideline for secrets in logs - associate"),
+    );
   });
 
   it("says why it was not merged in the API's own words, and where the work is kept", async () => {
