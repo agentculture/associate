@@ -33,6 +33,12 @@ Commands
   associate run [prompt]       Run one task on a harness adapter (--model,
                                --test-command), or fail closed.
   associate bench              Run a public suite (--suite NAME --model KEY) or list suites.
+  associate runs start         Start a detached run on a checkout (--checkout, --model,
+                               --test-command, instruction); prints a run id at once.
+  associate runs show <id>     Status, and when finished: ok, outcome, merge, tests,
+                               base commit and changed paths. Nothing is ever pushed.
+  associate runs list          The most recent runs with their status.
+  associate runs overview      Describe the runs verbs (also served over HTTP).
   associate cli overview       Describe the CLI surface itself.
 
 Machine-readable output
@@ -80,6 +86,22 @@ def _as_json_payload() -> dict[str, object]:
                 "path": ["bench"],
                 "summary": "Run a public suite (--suite NAME --model KEY) or list suites.",
             },
+            {
+                "path": ["runs", "start"],
+                "summary": (
+                    "Start a detached associate run on a checkout (one per checkout at a time); "
+                    "returns a run id at once."
+                ),
+            },
+            {
+                "path": ["runs", "show"],
+                "summary": (
+                    "A run's status and, when finished, ok (outcome ok AND merged AND tests "
+                    "passed), merge, tests, base commit and changed paths."
+                ),
+            },
+            {"path": ["runs", "list"], "summary": "The most recent runs with their status."},
+            {"path": ["runs", "overview"], "summary": "Describe the runs verbs."},
             {"path": ["cli", "overview"], "summary": "Describe the CLI surface."},
         ],
         "exit_codes": {

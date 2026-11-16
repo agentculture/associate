@@ -27,6 +27,11 @@ VERBS = [
     ["explain", "whoami"],
     ["run", "--help"],
     ["bench", "--help"],
+    ["runs", "overview"],
+    ["runs", "list"],
+    ["runs", "start", "--help"],
+    ["runs", "show", "--help"],
+    ["explain", "runs", "start"],
 ]
 
 
@@ -65,7 +70,9 @@ print(json.dumps({{'results': results, 'loaded': loaded}}))
     results = payload["results"]
     for verb in ("whoami", "learn", "overview", "cli overview", "explain whoami"):
         assert results[verb] == 0, (verb, results)
-    for verb in ("run --help", "bench --help"):
+    for verb in ("run --help", "bench --help", "runs start --help", "runs show --help"):
+        assert results[verb] == 0, (verb, results)
+    for verb in ("runs overview", "runs list", "explain runs start"):
         assert results[verb] == 0, (verb, results)
     assert results["doctor"] in (0, 1), results  # a health verdict, not a crash
 

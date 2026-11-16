@@ -30,6 +30,7 @@ _VERBS = [
     "explain <path> — markdown docs for a topic",
     "overview — this descriptive snapshot",
     "doctor — check the agent-identity invariants",
+    "runs start|show|list — start a detached run on a checkout, read its result by id",
 ]
 
 
