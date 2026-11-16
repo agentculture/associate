@@ -124,8 +124,8 @@ run live):
   `gate.json` version 9), not in `mutating_tools`; `delegate_status` is a read,
   and its result taints later memory records `untrusted:child`.
 - **The bridge** (0.11.0; page `docs/operations/bridge.md`). *Bridge* here means one
-  app with a CLI, an HTTP API and an MCP server over the same verbs; a web UI is
-  planned and **not built**. Another service starts a detached
+  app with a CLI, an HTTP API and an MCP server over the same verbs, plus a
+  read-only web UI (see [Web UI](#web-ui-web)). Another service starts a detached
   `associate run` on a checkout and reads the result:
   - `associate/runs/` holds the verbs: `service.py` (`start`, `show`,
     `list_runs`, and `VERBS`, the one table every surface reads), `state.py`
@@ -136,7 +136,8 @@ run live):
     `GET /runs/{run_id}` and `GET /runs` viewer, public `GET /health`;
     `serve.py`: a loopback listener on `127.0.0.1:8794` that trusts Cloudflare
     Access, and an optional LAN listener, port `8795`, service tokens only;
-    `tokenstore.py`: the token file);
+    `tokenstore.py`: the token file); `create_app` mounts the built UI from
+    `associate/web_dist` when the package holds one;
   - `associate/bridge/` is the app-agnostic framework (auth, route policy,
     Access JWTs, service tokens, MCP server), cited from qodo-cli, which cited
     it from culture-rules; it names no app. This repo owns its copy (cite, don't
@@ -146,7 +147,9 @@ run live):
     `mcp` extra; the base package stays dependency-free;
   - `tests/test_surface_parity.py` fails when a runs verb is missing from the
     CLI, the MCP tools or the HTTP routes. A new verb goes in `VERBS` and needs
-    no edit there;
+    no edit there. It runs against the API-only app and the app serving a UI;
+    the UI's routes (the SPA fallback `static.install` adds) and the no-UI root
+    404 are classified explicitly, not exempted by loosening the check;
   - a run **merges into the checkout's local `main`** when it is clean and its
     tests pass, and never pushes, so the checkout is a dedicated clone;
     `ASSOCIATE_RUNS_ROOTS` empty refuses every start over HTTP and MCP;
@@ -302,8 +305,11 @@ associate/                  # Python package (top level — no src/ wrapper)
 ├── harness/                # adapters (pi.py, stub.py), worktree.py, testcmds.py
 ├── runs/                   # the bridge's verbs: service, state, supervisor, mcp_tools
 ├── server/                 # the bridge's HTTP API: app, serve, tokenstore (server extra)
-├── bridge/                 # cited framework: auth, policy, Access, tokens, MCP server
+├── bridge/                 # cited framework: auth, policy, Access, tokens, MCP server,
+│                           #   static UI serving
 └── bench/                  # public suites (suites.json, public.py), walkstats
+web/                        # the web UI (Vite + React + TS); built into the wheel as
+                            #   associate/web_dist by hatch_build.py (never committed)
 .pi/extensions/associate/   # the Pi extension (TypeScript, no npm deps)
 ├── index.ts                # loader: registry model, tool surface, guard, gate
 ├── lib/                    # provider, guard, gate, walk, session, contain, …
@@ -369,6 +375,32 @@ is never a one-file change:
 **Adding a *noun* (a verb group) additionally requires an `overview` sub-verb
 under it** — the rubric's `overview_cli_noun_exists` check. `_commands/cli.py`
 exists purely to satisfy this and is the pattern to copy.
+
+## Web UI (`web/`)
+
+A Vite + React + TypeScript app with two read-only screens, Runs (`/runs`) and one
+run (`/runs/<id>`), whose toolchain, design tokens (`web/src/culture-design/`,
+checked by `npm run check`) and conventions are cited from qodo-cli's `web/`
+(which cited culture-rules'); every cited file carries a provenance header with the
+source path and commit. The confirmed artboards ("associate: Runs" and "associate:
+One run" on the shared design canvas) are the visual source of truth; the UI shows
+only fields the API returns (`list_runs`, `show`) and invents none. Commands, from
+`web/`: `npm ci`, `npm run typecheck`, `npm test`, `npm run check` (the design
+tokens), `npm run build`. The browser calls the same-origin `/api` prefix, which
+`associate serve` strips (`associate/bridge/static.py`); in dev `npm run dev`
+proxies it to `ASSOCIATE_API_URL` (default `http://127.0.0.1:8794`). This app has
+no pinned OpenAPI file: the client's routes live in `web/src/api/routes.json`, and
+`tests/test_web_contract.py` binds them to `VERBS` and the fixtures
+(`web/src/fixtures/runs.json`) to the real `list_runs`/`show` fields.
+
+`hatch_build.py` packages an existing `web/dist` as `associate/web_dist`
+(git-ignored build output) and never runs Node, so a wheel built without Node is
+API-only. Release order: `npm ci && npm run build` in `web/`, then `uv build` with
+`ASSOCIATE_REQUIRE_WEB=1` (a missing build then fails the build);
+`ASSOCIATE_SKIP_WEB=1` leaves the UI out on purpose. `.github/workflows/publish.yml`
+does exactly this, and the `web` job in `tests.yml` runs install, typecheck,
+vitest, the tokens check and the build. `web/package.json` is the UI's own
+manifest; the root `package.json` stays the Pi manifest with no dependencies.
 
 ## Build, test, lint, publish
 
@@ -587,6 +619,9 @@ value is not inherited.
 | `ASSOCIATE_LAN_HOST`, `ASSOCIATE_LAN_PORT` | unset (no LAN listener), `8795` | `associate/server/serve.py` | `associate serve`'s optional LAN listener (service tokens only). Flags `--lan-host`/`--lan-port` win; it cannot share the loopback address. |
 | `ASSOCIATE_ACCESS_LISTEN`, `ASSOCIATE_ACCESS_TEAM_DOMAIN`, `ASSOCIATE_ACCESS_AUD` | unset | `associate/bridge/access.py` (`AccessListenerConfig.from_env`) | Cloudflare Access on the loopback listener: all three or none (a partial set is refused, exit 1); `ASSOCIATE_ACCESS_LISTEN` is a loopback `host:port`. |
 | `ASSOCIATE_ADMINS`, `ASSOCIATE_EDITORS` | empty | `associate/server/serve.py` (`names`) | Comma-separated identities Access lets through as admin or editor; any other Access person is a viewer. |
+| `ASSOCIATE_REQUIRE_WEB`, `ASSOCIATE_SKIP_WEB` | unset | `hatch_build.py` | At build time: `1` fails a build with no `web/dist`, or leaves the UI out of the wheel on purpose. |
+| `ASSOCIATE_API_URL` | `http://127.0.0.1:8794` | `web/vite.config.ts` | The API the UI's dev server (`npm run dev`) proxies `/api` to. |
+| `ASSOCIATE_DESIGN_SOURCE_REPO` | unset | `web/scripts/check-tokens.mjs` | A culture-rules checkout; when set, the tokens check also compares `tokens.css` with it at the pinned commit. |
 | `ASSOCIATE_BENCH_SUITES` | `associate/bench/suites.json` | `associate/bench/public.py` | An alternative suites file for `associate bench`. |
 | `ASSOCIATE_PROVIDER`, `ASSOCIATE_REASONING_EFFORT`, `ASSOCIATE_REASONING` | — | `associate/bench/config.py` | Only labels in a bench row's configuration stamp (provider falls back to `ASSOCIATE_BASE_URL`); they change nothing on the wire. Reasoning is per model in `models.json`. |
 
@@ -655,8 +690,9 @@ root key** — see invariant 3 under "Adding a verb".
 ## What not to invent
 
 - **Don't add a runtime dependency.** `dependencies = []` is deliberate: the
-  harness must install and start fast. The same holds for `package.json`: it is
-  a Pi project manifest with no `dependencies` and no `scripts`. `culture.yaml` is parsed by hand in
+  harness must install and start fast. The same holds for the root `package.json`: it is
+  a Pi project manifest with no `dependencies` and no `scripts` (the web UI's npm
+  packages live in `web/package.json` and never reach the Python package). `culture.yaml` is parsed by hand in
   `_commands/whoami.py` specifically to avoid a YAML dependency. If you think you
   need a dep, that is a conversation, not a commit.
 - **Don't edit a vendored skill** to fix a bug in it. Fix it upstream.

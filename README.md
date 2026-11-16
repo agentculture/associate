@@ -68,7 +68,8 @@ delegated run has been started live.
 
 Another service can start an associate run and read the result. In this repo a
 **bridge** is one app with a CLI, an HTTP API and an MCP server over the same
-verbs; a web UI is planned and not built yet. The verbs are `runs start`,
+verbs, plus a read-only web UI (a runs list and one run's page) that ships in
+the wheel and is served by `associate serve`. The verbs are `runs start`,
 `runs show` and `runs list`. This is not the cultureagent agent-session bridge.
 
 A caller, such as a rules engine, names a git checkout, a registry model, an
@@ -84,6 +85,10 @@ later: its `status`, and once finished `ok`, `merge`, `tests.passed`,
   run may use. Empty, every start over HTTP and MCP is refused.
 - **One run per checkout** at a time.
 - **Roles.** Only `admin` starts a run; `viewer` and above read one.
+- **The web UI only reads.** It lists runs with their status and outcome and
+  shows one run's tests, changed paths and final reply; it has no start button.
+  Open it behind Cloudflare Access (the browser sends no token itself). See
+  [`docs/operations/bridge.md`](docs/operations/bridge.md#the-web-ui).
 - **Not measured.** The bridge's tests use a stand-in for the run; no real run
   has been started through it. Built and unit-tested only.
 

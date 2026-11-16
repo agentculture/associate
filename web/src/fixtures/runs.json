@@ -1,0 +1,369 @@
+{
+  "now": "2026-11-16T12:00:00+00:00",
+  "ids": {
+    "running": "run-aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+    "merged": "run-bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+    "nochange": "run-cccccccccccccccccccccccccccccccc",
+    "testsfail": "run-dddddddddddddddddddddddddddddddd",
+    "refused": "run-eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee",
+    "lost": "run-ffffffffffffffffffffffffffffffff",
+    "failed": "run-11111111111111111111111111111111"
+  },
+  "list": {
+    "runs": [
+      {
+        "ok": false,
+        "model": "cortex",
+        "finished_at": null,
+        "merge": null,
+        "outcome": null,
+        "exit_code": null,
+        "tests": null,
+        "changed_paths_total": null,
+        "test_command_count": 2,
+        "run_id": "run-aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+        "status": "running",
+        "started_at": "2026-11-16T11:56:00+00:00",
+        "checkout": "/srv/checkouts/culture-rules",
+        "title": "Tell the reviewer about one-time codes"
+      },
+      {
+        "ok": true,
+        "model": "cortex",
+        "finished_at": "2026-11-15T10:06:00+00:00",
+        "merge": "merged",
+        "outcome": "ok",
+        "exit_code": 0,
+        "tests": {
+          "passed": true,
+          "commands": 1,
+          "failed": 0
+        },
+        "changed_paths_total": 1,
+        "test_command_count": 1,
+        "run_id": "run-bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+        "status": "finished",
+        "started_at": "2026-11-15T10:00:00+00:00",
+        "checkout": "/srv/checkouts/culture-rules",
+        "title": "Raise inline comments from medium severity"
+      },
+      {
+        "ok": true,
+        "model": "cortex",
+        "finished_at": "2026-11-14T09:03:00+00:00",
+        "merge": "nothing_to_merge",
+        "outcome": "ok",
+        "exit_code": 0,
+        "tests": {
+          "passed": true,
+          "commands": 1,
+          "failed": 0
+        },
+        "changed_paths_total": 0,
+        "test_command_count": 1,
+        "run_id": "run-cccccccccccccccccccccccccccccccc",
+        "status": "finished",
+        "started_at": "2026-11-14T09:00:00+00:00",
+        "checkout": "/srv/checkouts/culture-rules",
+        "title": "Review the configuration after #148 merged"
+      },
+      {
+        "ok": false,
+        "model": "cortex",
+        "finished_at": "2026-11-13T08:09:00+00:00",
+        "merge": "not_attempted",
+        "outcome": "ok",
+        "exit_code": 0,
+        "tests": {
+          "passed": false,
+          "commands": 2,
+          "failed": 1
+        },
+        "changed_paths_total": 2,
+        "test_command_count": 2,
+        "run_id": "run-dddddddddddddddddddddddddddddddd",
+        "status": "finished",
+        "started_at": "2026-11-13T08:00:00+00:00",
+        "checkout": "/srv/checkouts/qodo-cli",
+        "title": "Add a compliance guideline for secrets in logs"
+      },
+      {
+        "ok": false,
+        "model": "cortex",
+        "finished_at": "2026-11-12T08:04:00+00:00",
+        "merge": "refused",
+        "outcome": "ok",
+        "exit_code": 0,
+        "tests": {
+          "passed": true,
+          "commands": 1,
+          "failed": 0
+        },
+        "changed_paths_total": 1,
+        "test_command_count": 1,
+        "run_id": "run-eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee",
+        "status": "finished",
+        "started_at": "2026-11-12T08:00:00+00:00",
+        "checkout": "/srv/checkouts/qodo-cli",
+        "title": "Document the review rules"
+      },
+      {
+        "ok": false,
+        "model": "cortex",
+        "finished_at": null,
+        "merge": null,
+        "outcome": null,
+        "exit_code": null,
+        "tests": null,
+        "changed_paths_total": null,
+        "test_command_count": 2,
+        "run_id": "run-ffffffffffffffffffffffffffffffff",
+        "status": "lost",
+        "started_at": "2026-11-11T08:00:00+00:00",
+        "checkout": "/srv/checkouts/culture-rules",
+        "title": "Tighten the rule on imports between extensions"
+      },
+      {
+        "ok": false,
+        "model": "cortex",
+        "finished_at": "2026-11-10T08:00:01+00:00",
+        "merge": null,
+        "outcome": null,
+        "exit_code": null,
+        "tests": null,
+        "changed_paths_total": null,
+        "test_command_count": 2,
+        "run_id": "run-11111111111111111111111111111111",
+        "status": "failed-to-start",
+        "started_at": "2026-11-10T08:00:00+00:00",
+        "checkout": "/srv/checkouts/culture-rules",
+        "title": "Summarise last week's merges"
+      }
+    ],
+    "total": 7
+  },
+  "show": {
+    "run-aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa": {
+      "run_id": "run-aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+      "status": "running",
+      "ok": false,
+      "checkout": "/srv/checkouts/culture-rules",
+      "model": "cortex",
+      "started_at": "2026-11-16T11:56:00+00:00",
+      "base_commit": "6f85313c0ffee0000000000000000000000000ab",
+      "pushed": false,
+      "instruction_truncated": false,
+      "test_command_count": 2,
+      "instruction": "Tell the reviewer about one-time codes.\n\nRead docs/operations/green-pr-merge.md and add a short note for reviewers."
+    },
+    "run-bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb": {
+      "run_id": "run-bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+      "status": "finished",
+      "ok": true,
+      "checkout": "/srv/checkouts/culture-rules",
+      "model": "cortex",
+      "started_at": "2026-11-15T10:00:00+00:00",
+      "base_commit": "6f85313c0ffee0000000000000000000000000ab",
+      "pushed": false,
+      "instruction_truncated": false,
+      "test_command_count": 1,
+      "finished_at": "2026-11-15T10:06:00+00:00",
+      "exit_code": 0,
+      "signal": null,
+      "not_ok_because": null,
+      "outcome": "ok",
+      "merge": "merged",
+      "merge_reason": null,
+      "worktree": null,
+      "run_branch": null,
+      "tests": {
+        "passed": true,
+        "commands": 1,
+        "failed": 0,
+        "error": null,
+        "results": [
+          {
+            "command": "uv run pytest -q",
+            "exit_code": 0,
+            "timed_out": false
+          }
+        ],
+        "results_truncated": false
+      },
+      "changed_paths_total": 1,
+      "changed_paths_error": null,
+      "final_reply": "I raised the inline comment threshold to medium.",
+      "error": null,
+      "changed_paths": [
+        ".pr_agent.toml"
+      ],
+      "changed_paths_truncated": false,
+      "instruction": "Raise inline comments from medium severity"
+    },
+    "run-cccccccccccccccccccccccccccccccc": {
+      "run_id": "run-cccccccccccccccccccccccccccccccc",
+      "status": "finished",
+      "ok": true,
+      "checkout": "/srv/checkouts/culture-rules",
+      "model": "cortex",
+      "started_at": "2026-11-14T09:00:00+00:00",
+      "base_commit": "6f85313c0ffee0000000000000000000000000ab",
+      "pushed": false,
+      "instruction_truncated": false,
+      "test_command_count": 1,
+      "finished_at": "2026-11-14T09:03:00+00:00",
+      "exit_code": 0,
+      "signal": null,
+      "not_ok_because": null,
+      "outcome": "ok",
+      "merge": "nothing_to_merge",
+      "merge_reason": null,
+      "worktree": null,
+      "run_branch": null,
+      "tests": {
+        "passed": true,
+        "commands": 1,
+        "failed": 0,
+        "error": null,
+        "results": [
+          {
+            "command": "qodo-cli config validate",
+            "exit_code": 0,
+            "timed_out": false
+          }
+        ],
+        "results_truncated": false
+      },
+      "changed_paths_total": 0,
+      "changed_paths_error": null,
+      "final_reply": "The configuration already matches; nothing to change.",
+      "error": null,
+      "changed_paths": [],
+      "changed_paths_truncated": false,
+      "instruction": "Review the configuration after #148 merged"
+    },
+    "run-dddddddddddddddddddddddddddddddd": {
+      "run_id": "run-dddddddddddddddddddddddddddddddd",
+      "status": "finished",
+      "ok": false,
+      "checkout": "/srv/checkouts/qodo-cli",
+      "model": "cortex",
+      "started_at": "2026-11-13T08:00:00+00:00",
+      "base_commit": "6f85313c0ffee0000000000000000000000000ab",
+      "pushed": false,
+      "instruction_truncated": false,
+      "test_command_count": 2,
+      "finished_at": "2026-11-13T08:09:00+00:00",
+      "exit_code": 0,
+      "signal": null,
+      "not_ok_because": "the tests did not pass; the merge is not_attempted",
+      "outcome": "ok",
+      "merge": "not_attempted",
+      "merge_reason": "tests failed: `markdownlint-cli2 REVIEW.md` (exit 1)",
+      "worktree": "/srv/checkouts/.worktrees.qodo-cli/run-dddd",
+      "run_branch": "associate-run/run-dddd",
+      "tests": {
+        "passed": false,
+        "commands": 2,
+        "failed": 1,
+        "error": null,
+        "results": [
+          {
+            "command": "qodo-cli config validate",
+            "exit_code": 0,
+            "timed_out": false
+          },
+          {
+            "command": "markdownlint-cli2 REVIEW.md",
+            "exit_code": 1,
+            "timed_out": false
+          }
+        ],
+        "results_truncated": false
+      },
+      "changed_paths_total": 2,
+      "changed_paths_error": null,
+      "final_reply": "Three of the last ten pull requests had an accepted suggestion about a token printed in a log line.\n\nI added a compliance guideline to .pr_agent.toml and a short section to REVIEW.md.\n\nThe configuration validates. I did not run the Markdown check.",
+      "error": null,
+      "changed_paths": [
+        ".pr_agent.toml",
+        "REVIEW.md"
+      ],
+      "changed_paths_truncated": false,
+      "instruction": "Add a compliance guideline for secrets in logs\n\nRead the last ten merged pull requests' accepted and rejected suggestions. If reviewers keep catching secrets written to logs, add one compliance guideline about it. Change only Qodo's configuration files."
+    },
+    "run-eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee": {
+      "run_id": "run-eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee",
+      "status": "finished",
+      "ok": false,
+      "checkout": "/srv/checkouts/qodo-cli",
+      "model": "cortex",
+      "started_at": "2026-11-12T08:00:00+00:00",
+      "base_commit": "6f85313c0ffee0000000000000000000000000ab",
+      "pushed": false,
+      "instruction_truncated": false,
+      "test_command_count": 1,
+      "finished_at": "2026-11-12T08:04:00+00:00",
+      "exit_code": 0,
+      "signal": null,
+      "not_ok_because": "the merge is refused",
+      "outcome": "ok",
+      "merge": "refused",
+      "merge_reason": "main is checked out at /srv/checkouts/qodo-cli with uncommitted changes; not merging",
+      "worktree": "/srv/checkouts/.worktrees.qodo-cli/run-eeee",
+      "run_branch": "associate-run/run-eeee",
+      "tests": {
+        "passed": true,
+        "commands": 1,
+        "failed": 0,
+        "error": null,
+        "results": [
+          {
+            "command": "true",
+            "exit_code": 0,
+            "timed_out": false
+          }
+        ],
+        "results_truncated": false
+      },
+      "changed_paths_total": 1,
+      "changed_paths_error": null,
+      "final_reply": "I documented the rules.",
+      "error": null,
+      "changed_paths": [
+        "docs/review-rules.md"
+      ],
+      "changed_paths_truncated": false,
+      "instruction": "Document the review rules"
+    },
+    "run-ffffffffffffffffffffffffffffffff": {
+      "run_id": "run-ffffffffffffffffffffffffffffffff",
+      "status": "lost",
+      "ok": false,
+      "checkout": "/srv/checkouts/culture-rules",
+      "model": "cortex",
+      "started_at": "2026-11-11T08:00:00+00:00",
+      "base_commit": "6f85313c0ffee0000000000000000000000000ab",
+      "pushed": false,
+      "instruction_truncated": false,
+      "test_command_count": 2,
+      "instruction": "Tighten the rule on imports between extensions",
+      "error": "the run is no longer running and left no result (its supervisor ended first); its checkout is free again"
+    },
+    "run-11111111111111111111111111111111": {
+      "run_id": "run-11111111111111111111111111111111",
+      "status": "failed-to-start",
+      "ok": false,
+      "checkout": "/srv/checkouts/culture-rules",
+      "model": "cortex",
+      "started_at": "2026-11-10T08:00:00+00:00",
+      "base_commit": "6f85313c0ffee0000000000000000000000000ab",
+      "pushed": false,
+      "instruction_truncated": false,
+      "test_command_count": 2,
+      "instruction": "Summarise last week's merges",
+      "error": "the run could not be started: No such file or directory",
+      "finished_at": "2026-11-10T08:00:01+00:00"
+    }
+  }
+}

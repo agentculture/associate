@@ -3,8 +3,9 @@
 # (cite-don't-import: this repo owns its copy and may change it.)
 # Adapted: ENV_PREFIX is ASSOCIATE_ and the default ports are 8794 (loopback) and 8795 (LAN);
 #          the app is the runs API, so create_app takes runs_config/child_command and there is
-#          no web_dist or registry; the extra's name is 'associate[server]'; uvicorn's access
-#          log is sent to stderr so stdout stays the result channel.
+#          no registry; web_dist is passed through as in qodo-cli (default: the packaged UI);
+#          the extra's name is 'associate[server]'; uvicorn's access log is sent to stderr so
+#          stdout stays the result channel.
 """``serve``: the listeners and uvicorn. FastAPI and uvicorn are imported lazily, here only.
 
 Two listeners, on purpose (see :mod:`associate.bridge.resolve`):
@@ -169,6 +170,10 @@ def require_extra() -> None:
         ) from exc
 
 
+#: ``build_listeners(web_dist=...)`` left out: the built UI inside the installed package.
+_PACKAGED_UI = object()
+
+
 def build_listeners(
     specs: list[ListenerSpec],
     tokens: Any,
@@ -177,10 +182,17 @@ def build_listeners(
     fetch_jwks: Callable[[], Any] | None = None,
     runs_config: Any = None,
     child_command: list[str] | None = None,
+    web_dist: Any = _PACKAGED_UI,
 ) -> list[Listener]:
-    """One app per spec: Access JWTs only on the loopback listener that has Access pinned."""
+    """One app per spec: Access JWTs only on the loopback listener that has Access pinned.
+
+    ``web_dist`` is the built UI each app serves (default: the one inside the installed
+    package, if any; ``None``: API only), as :func:`~associate.server.app.create_app` takes it.
+    """
     require_extra()
-    from associate.server.app import create_app  # noqa: PLC0415
+    from associate.server.app import DEFAULT_UI, create_app  # noqa: PLC0415
+
+    ui = DEFAULT_UI if web_dist is _PACKAGED_UI else web_dist
 
     common = {
         "admins": names(env, f"{ENV_PREFIX}ADMINS"),
@@ -200,6 +212,7 @@ def build_listeners(
             settings=settings,
             runs_config=runs_config,
             child_command=child_command,
+            web_dist=ui,
         )
         built.append(Listener(spec.name, spec.host, spec.port, app))
     return built

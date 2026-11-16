@@ -42,6 +42,7 @@ from __future__ import annotations
 import json
 import os
 import re
+import shlex
 import subprocess
 import sys
 from dataclasses import dataclass, field
@@ -79,7 +80,16 @@ SHOWN_PATHS = 200
 SHOWN_PATH_CHARS = 512
 SHOWN_TEXT_CHARS = 2000
 SHOWN_REPLY_CHARS = 4000
+#: ``runs show``: characters of the instruction (the run page's title and full text).
+SHOWN_INSTRUCTION_CHARS = 4000
+#: ``runs show``: per-command results (the command line and its exit code, never its output).
+SHOWN_TEST_RESULTS = MAX_TEST_COMMANDS
+SHOWN_TEST_COMMAND_CHARS = 512
 LIST_LIMIT = 100
+#: ``runs list``: characters of a run's title (the instruction's first non-empty line).
+LIST_TITLE_CHARS = 120
+#: ``runs list``: characters of the short words a card shows (model, timestamps, outcome).
+LIST_WORD_CHARS = 64
 
 #: Variables ``associate run`` sets per run (or a parent session would leak), never inherited.
 NOT_INHERITED = frozenset(
@@ -608,6 +618,7 @@ def _finished(reply: dict[str, Any], result: dict[str, Any]) -> None:
                     1 for c in commands if isinstance(c, dict) and c.get("exit_code") != 0
                 ),
                 "error": _cut(tests.get("error"), SHOWN_TEXT_CHARS) if tests else None,
+                **_test_results(commands),
             },
             "base_commit": result.get("base_commit"),
             "changed_paths_total": result.get("changed_paths_total", 0),
@@ -619,6 +630,39 @@ def _finished(reply: dict[str, Any], result: dict[str, Any]) -> None:
     _bound_paths(reply, result.get("changed_paths"))
 
 
+def _test_results(commands: list[Any]) -> dict[str, Any]:
+    """Each stored test command's line and exit code (capped), never its output or env.
+
+    The stored entry (``associate.harness.testcmds``) also holds ``output_tail`` and timing;
+    only the argv (joined as a shell would quote it) and how it ended are shown.
+    """
+    results = []
+    for command in commands:
+        argv = command.get("argv") if isinstance(command, dict) else None
+        if not isinstance(argv, list) or not argv or not all(isinstance(a, str) for a in argv):
+            continue
+        code = command.get("exit_code")
+        results.append(
+            {
+                "command": _cut(shlex.join(argv), SHOWN_TEST_COMMAND_CHARS),
+                "exit_code": _int_or_none(code),
+                "timed_out": command.get("timed_out") is True,
+            }
+        )
+    return {
+        "results": results[:SHOWN_TEST_RESULTS],
+        "results_truncated": len(results) > SHOWN_TEST_RESULTS,
+    }
+
+
+def _int_or_none(value: Any) -> int | None:
+    return value if isinstance(value, int) and not isinstance(value, bool) else None
+
+
+def _count(value: Any) -> int:
+    return value if isinstance(value, int) and not isinstance(value, bool) and value > 0 else 0
+
+
 def _size(reply: dict[str, Any]) -> int:
     # ensure_ascii=True is the larger encoding (non-ASCII becomes \\uXXXX), so it bounds both.
     return len(json.dumps(reply, ensure_ascii=True).encode("ascii"))
@@ -626,7 +670,7 @@ def _size(reply: dict[str, Any]) -> int:
 
 def _bound_paths(reply: dict[str, Any], stored: Any) -> None:
     paths = [p for p in stored if isinstance(p, str)] if isinstance(stored, list) else []
-    total = max(int(reply.get("changed_paths_total") or 0), len(paths))
+    total = max(_count(reply.get("changed_paths_total")), len(paths))
     shown = [_cut(p, SHOWN_PATH_CHARS) for p in paths[:SHOWN_PATHS]]
     cut_any = len(shown) < total or any(s != p for s, p in zip(shown, paths))
     reply["changed_paths"] = shown
@@ -638,13 +682,53 @@ def _bound_paths(reply: dict[str, Any], stored: Any) -> None:
     if _size(reply) >= _REPLY_BUDGET:
         reply["final_reply"] = None
         reply["final_reply_dropped"] = True
+    tests = reply.get("tests") if isinstance(reply.get("tests"), dict) else {}
+    if _size(reply) >= _REPLY_BUDGET and tests.get("results"):
+        tests["results"] = [{**r, "command": _cut(r["command"], 80)} for r in tests["results"]]
+        tests["results_truncated"] = True
+    if _size(reply) >= _REPLY_BUDGET and isinstance(reply.get("instruction"), str):
+        _cut_instruction(reply, 500)
     if _size(reply) >= _REPLY_BUDGET:  # the last resort: every free-text detail goes
         for key in ("merge_reason", "changed_paths_error", "error", "not_ok_because"):
             reply[key] = None
         reply["worktree"] = reply["run_branch"] = None
-        if isinstance(reply.get("tests"), dict):
-            reply["tests"]["error"] = None
+        if tests:
+            tests["error"] = None
+            tests["results"] = None
+            tests["results_truncated"] = True
+        if isinstance(reply.get("instruction"), str):
+            _cut_instruction(reply, 200)
         reply["details_dropped"] = True
+
+
+def _cut_instruction(reply: dict[str, Any], chars: int) -> None:
+    text = reply["instruction"]
+    if len(text) > chars:
+        reply["instruction"] = text[: chars - 1].rstrip("…") + "…"
+        reply["instruction_truncated"] = True
+
+
+def _instruction(value: Any) -> dict[str, Any]:
+    if not isinstance(value, str):
+        return {"instruction": None, "instruction_truncated": False}
+    return {
+        "instruction": _cut(value, SHOWN_INSTRUCTION_CHARS),
+        "instruction_truncated": len(value) > SHOWN_INSTRUCTION_CHARS,
+    }
+
+
+def _command_count(value: Any) -> int:
+    return len(value) if isinstance(value, list) else 0
+
+
+def _title(value: Any) -> str | None:
+    """The instruction's first non-empty line, stripped and cut (a card's title)."""
+    if not isinstance(value, str):
+        return None
+    for line in value.splitlines():
+        if line.strip():
+            return _cut(line.strip(), LIST_TITLE_CHARS)
+    return None
 
 
 def show(run_id: Any, *, config: RunsConfig | None = None) -> dict[str, Any]:
@@ -667,6 +751,8 @@ def show(run_id: Any, *, config: RunsConfig | None = None) -> dict[str, Any]:
         "started_at": request.get("started_at"),
         "base_commit": request.get("base_commit"),
         "pushed": False,
+        **_instruction(request.get("instruction")),
+        "test_command_count": _command_count(request.get("test_commands")),
     }
     if status == "finished" and result is not None:
         _finished(reply, result)
@@ -697,11 +783,56 @@ def list_runs(*, config: RunsConfig | None = None, limit: Any = 20) -> dict[str,
             continue
         request = state.read_json(entry / "request.json")
         if isinstance(request, dict):
-            found.append((str(request.get("started_at", "")), entry.name))
+            started = str(request.get("started_at", ""))
+            found.append((started, entry.name, _title(request.get("instruction"))))
     found.sort(reverse=True)
-    runs = []
-    for _started, run_id in found[:limit]:
-        shown = show(run_id, config=config)
-        runs.append({k: shown.get(k) for k in ("run_id", "status", "ok", "model", "started_at")})
-        runs[-1]["checkout"] = _cut(shown.get("checkout"), 256)
-    return {"runs": runs, "total": len(found)}
+    runs = [_card(show(run_id, config=config), title) for _s, run_id, title in found[:limit]]
+    return _bound_list({"runs": runs, "total": len(found)})
+
+
+def _word(value: Any, chars: int = LIST_WORD_CHARS) -> Any:
+    """A short value a card shows: a string cut to ``chars``, an int, a bool or None."""
+    if isinstance(value, str):
+        return _cut(value, chars)
+    return value if isinstance(value, (int, bool)) or value is None else None
+
+
+def _card(shown: dict[str, Any], title: str | None) -> dict[str, Any]:
+    """One run in ``runs list``: what a card shows, every value short."""
+    tests = shown.get("tests")
+    return {
+        "run_id": shown.get("run_id"),
+        "status": _word(shown.get("status"), 32),
+        "ok": shown.get("ok") is True,
+        "model": _word(shown.get("model")),
+        "started_at": _word(shown.get("started_at")),
+        "finished_at": _word(shown.get("finished_at")),
+        "checkout": _cut(shown.get("checkout"), 256),
+        "title": title,
+        "merge": _word(shown.get("merge"), 32),
+        "outcome": _word(shown.get("outcome"), 32),
+        "exit_code": _int_or_none(shown.get("exit_code")),
+        "tests": (
+            {k: tests.get(k) for k in ("passed", "commands", "failed")}
+            if isinstance(tests, dict)
+            else None
+        ),
+        "changed_paths_total": shown.get("changed_paths_total"),
+        "test_command_count": shown.get("test_command_count", 0),
+    }
+
+
+def _bound_list(reply: dict[str, Any]) -> dict[str, Any]:
+    """Keep ``runs list`` under :data:`REPLY_LIMIT_BYTES`: shorter titles and checkouts, and
+    only as a last resort fewer runs (``truncated``)."""
+    runs = reply["runs"]
+    for chars in (48, 16):
+        if _size(reply) < _REPLY_BUDGET:
+            break
+        for run in runs:
+            run["title"] = _cut(run["title"], chars)
+            run["checkout"] = _cut(run["checkout"], chars * 2)
+    while _size(reply) >= _REPLY_BUDGET and runs:
+        runs.pop()
+        reply["truncated"] = True
+    return reply

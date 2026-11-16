@@ -7,11 +7,11 @@ the run merged and whether its tests passed.
 
 In this repo, **bridge** means one app with three surfaces over the same verbs:
 a CLI, an HTTP API and an MCP server. The verbs are `runs start`, `runs show`
-and `runs list`. A web UI is planned and is not built; nothing in the repo
-serves one today.
+and `runs list`. A read-only web UI (a runs list and one run's page) ships in
+the wheel and is served by `associate serve`; see [The web UI](#the-web-ui).
 
-This page has three parts: [operators](#for-operators) (install, serve, tokens,
-the checkout allowlist, state), [agents](#for-agents) (the CLI and MCP tools)
+This page has three parts: [operators](#for-operators) (install, serve, the web
+UI, tokens, the checkout allowlist, state), [agents](#for-agents) (the CLI and MCP tools)
 and [integrators](#for-integrators) (the HTTP routes). The
 [run lifecycle](#the-run-lifecycle-and-its-result) and
 [known limits](#known-limits) apply to all three.
@@ -124,6 +124,68 @@ A flag wins over its variable. Notes:
 - `ASSOCIATE_ADMINS` match a principal's identity, whether an Access person's
   or a token's `--name`. `ASSOCIATE_EDITORS` raises Access identities only.
   An Access person who is in neither list is a `viewer`.
+
+### The web UI
+
+`associate serve` serves a read-only web UI when the installed package holds a
+built one (`associate/web_dist`). It has two screens:
+
+- **Runs** (`/runs`; `/` goes there): one card per run from `GET /runs`, with
+  a status pill (Running, Merged, No change, Not merged, Lost, Failed to
+  start), when it started or finished and how long it took, the model, the
+  instruction's first line, the checkout's directory name and an outcome line
+  (the test counts, the merge word, or what went wrong). A filter shows all
+  runs, the runs in progress, or the runs that need a look (not merged, lost,
+  failed to start). The header counts the runs in progress in that list.
+- **One run** (`/runs/<run id>`): from `GET /runs/{run_id}`: the pill and
+  timing, the instruction (its first line as the title), the checkout path and
+  base commit, a "Why it was not merged" panel (`not_ok_because`,
+  `merge_reason`, the kept branch and worktree, the run's error) when `ok` is
+  false, each test command with its exit code, the changed paths with the
+  truncation note, and the final reply as paragraphs.
+
+There is no start button: runs are started by a workflow or the CLI. A list
+with a running run, and a running run's page, are read again every 5 seconds,
+not at all once nothing is running, and not while the browser tab is hidden.
+
+How it is served:
+
+- every UI file sits behind the same authentication as the API; with a build,
+  `GET` on any path needs `viewer` (the UI's files and its client-side routes),
+  while `POST /runs` still needs `admin`. Without a build, `/` is a JSON 404 and
+  an unlisted route needs `admin`;
+- the browser calls the same-origin `/api` prefix: `/api/runs` reaches
+  `/runs` with the same role check (`/api/runs` with no credential is 401). A
+  browser navigation (`Accept: text/html`) to `/runs` or `/runs/<id>` gets the
+  UI; an API client on the same path keeps the API;
+- the UI never sends a credential itself. Open it **behind Cloudflare Access**
+  on the loopback listener (the browser carries the Access cookie, and any
+  Access person is at least a `viewer`). A browser cannot add a Bearer token,
+  so on the LAN listener it needs a proxy that adds one.
+
+How it ships: `hatch_build.py` packages an existing `web/dist` into the wheel
+(and the sdist) as `associate/web_dist`, which is never committed. It never
+runs Node, so a wheel built without a UI build is API-only.
+`ASSOCIATE_REQUIRE_WEB=1` makes a missing build fail the build;
+`ASSOCIATE_SKIP_WEB=1` leaves the UI out on purpose. The release order, which
+`.github/workflows/publish.yml` follows:
+
+```bash
+cd web && npm ci && npm run build && cd ..
+ASSOCIATE_REQUIRE_WEB=1 uv build
+```
+
+For development, run the API and the Vite dev server side by side; the dev
+server proxies `/api` to `ASSOCIATE_API_URL` (default `http://127.0.0.1:8794`)
+with the prefix stripped:
+
+```bash
+associate serve                 # the API on 127.0.0.1:8794
+cd web && npm ci && npm run dev # the UI, proxying /api
+```
+
+The dev proxy adds no credential either: put Access, or a local proxy that adds
+`Authorization: Bearer <viewer token>`, in front of the API for it to read runs.
 
 ### Tokens and roles
 
@@ -249,6 +311,8 @@ A `finished` reply adds these fields to `run_id`, `status`, `checkout`,
 | `tests.passed` | `true`, `false`, or `null` when there is no test result |
 | `tests.commands`, `tests.failed` | how many commands ran, and how many exited non-zero |
 | `tests.error` | the tests' own error text, if any |
+| `tests.results` | each test command's line (its argv, quoted as a shell would, cut at 512 characters), `exit_code` and `timed_out`, at most 16; never its output. `null` when left out to fit |
+| `tests.results_truncated` | `true` when a command line was cut or results were left out |
 | `base_commit` | when merged, the merge base of the merge commit; otherwise the commit `HEAD` was at when the run started |
 | `changed_paths` | the files the run changed (below) |
 | `changed_paths_total` | how many files changed, before any cut |
@@ -257,6 +321,10 @@ A `finished` reply adds these fields to `run_id`, `status`, `checkout`,
 | `final_reply` | the model's final reply, cut at 4000 characters |
 | `error` | an error from the supervisor or from the child's stderr |
 | `finished_at` | when the child ended |
+
+Every reply, whatever the status, also holds `instruction` (cut at 4000
+characters; `instruction_truncated` says so) and `test_command_count` (how many
+test commands the start named).
 
 The four `merge` values:
 
@@ -280,8 +348,9 @@ A `runs show` reply, over the CLI or HTTP, is always smaller than 64 KiB
 (65,536 bytes). Free text is cut first (`final_reply` at 4000 characters, other
 texts at 2000, paths at 512, at most 200 paths). If the reply is still too
 large, the path list is halved until it fits, then `final_reply` is dropped
-(`final_reply_dropped: true`), then every free-text detail is dropped
-(`details_dropped: true`). `result.json` keeps up to 5000 paths of up to 4096
+(`final_reply_dropped: true`), then the test command lines are cut to 80
+characters, then the instruction to 500, then every free-text detail is dropped
+and the instruction cut to 200 (`details_dropped: true`). `result.json` keeps up to 5000 paths of up to 4096
 characters, so the full record stays on disk.
 
 ### One run per checkout
@@ -372,9 +441,14 @@ The start reply (202) holds `run_id`, `status` (`running`), `checkout` (its real
 path), `model`, `base_commit` (`HEAD` when the run started), `started_at`,
 `pushed` (`false`) and a `note`.
 
-The list reply holds, per run, `run_id`, `status`, `ok`, `model`, `started_at`
-and `checkout` (cut at 256 characters), newest first. `total` counts every run
-in the state directory, not only those returned.
+The list reply holds, per run, `run_id`, `status`, `ok`, `model`, `started_at`,
+`finished_at`, `checkout` (cut at 256 characters), `title` (the instruction's
+first non-empty line, cut at 120 characters), `merge`, `outcome`, `exit_code`,
+`tests` (`passed`, `commands`, `failed`), `changed_paths_total` and
+`test_command_count`, newest first. `total` counts every run in the state
+directory, not only those returned. The reply stays under 64 KiB: titles and
+checkouts are cut shorter first, and only then are the oldest runs left out
+(`truncated: true`).
 
 A start in full:
 
@@ -416,8 +490,10 @@ A 401 or 403 from authentication comes before any handler runs.
 - **Linux only.** The checkout lock uses `fcntl.flock`, and liveness checks read
   `/proc/<pid>/cmdline` to guard against pid reuse. Where `/proc` is missing,
   the check falls back to a bare signal probe.
-- **No web UI.** It is planned, pending a confirmed design. The cited framework
-  carries a static-file helper, but the app does not serve a web build.
+- **The web UI shows only what the API returns.** The checkout is a path, so
+  a card names its last directory, not an `owner/name`; the agent's words are
+  its one final reply (shortened), not separate statements; a test command's
+  output is never shown. The UI has no browser tests in CI (unit tests only).
 - **No retention.** Run directories are never pruned.
 - **No cancel.** There is no verb to stop a run. A run ends when the model
   finishes, when the timeout elapses, or when you kill its processes.
@@ -436,7 +512,8 @@ A 401 or 403 from authentication comes before any handler runs.
 | the detached supervisor | `associate/runs/supervisor.py` |
 | MCP tools | `associate/runs/mcp_tools.py` |
 | HTTP app, listeners, token file | `associate/server/` (`app.py`, `serve.py`, `tokenstore.py`) |
-| the cited framework (auth, role policy, Access, tokens, MCP server) | `associate/bridge/` |
+| the cited framework (auth, role policy, Access, tokens, MCP server, static UI serving) | `associate/bridge/` |
+| the web UI | `web/` (built into the wheel as `associate/web_dist` by `hatch_build.py`) |
 | CLI verbs | `associate/cli/_commands/` (`runs.py`, `serve.py`, `tokens.py`, `mcp.py`) |
 
 `associate/bridge/` is cited, not imported: it comes from qodo-cli, which cited

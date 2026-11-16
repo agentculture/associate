@@ -6,11 +6,15 @@ on:
     paths:
       - "pyproject.toml"
       - "associate/**"
+      - "web/**"
+      - "hatch_build.py"
   pull_request:
     branches: [main]
     paths:
       - "pyproject.toml"
       - "associate/**"
+      - "web/**"
+      - "hatch_build.py"
 
 jobs:
   test:
@@ -25,6 +29,19 @@ jobs:
       - run: uv python install 3.12
 
       - run: uv sync
+
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4
+        with:
+          node-version: '20'
+          cache: npm
+          cache-dependency-path: web/package-lock.json
+
+      - name: Web unit tests, then the build the wheel test packages
+        working-directory: web
+        run: |
+          npm ci
+          npm test
+          npm run build
 
       - run: uv run pytest -n auto -v
 
@@ -55,7 +72,21 @@ jobs:
           echo "DEV_VERSION=${DEV_VERSION}" >> "$GITHUB_ENV"
           echo "Publishing ${DEV_VERSION} to TestPyPI"
 
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4
+        with:
+          node-version: '20'
+          cache: npm
+          cache-dependency-path: web/package-lock.json
+
+      - name: Build the web UI (shipped in the wheel as associate/web_dist)
+        working-directory: web
+        run: |
+          npm ci
+          npm run build
+
       - name: Build and publish to TestPyPI
+        env:
+          ASSOCIATE_REQUIRE_WEB: "1"
         run: |
           uv build
           uv publish --publish-url https://test.pypi.org/legacy/ --trusted-publishing always --check-url https://test.pypi.org/simple/
@@ -82,7 +113,21 @@ jobs:
 
       - run: uv sync
 
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4
+        with:
+          node-version: '20'
+          cache: npm
+          cache-dependency-path: web/package-lock.json
+
+      - name: Build the web UI (shipped in the wheel as associate/web_dist)
+        working-directory: web
+        run: |
+          npm ci
+          npm run build
+
       - name: Build and publish to PyPI
+        env:
+          ASSOCIATE_REQUIRE_WEB: "1"
         run: |
           uv build
           uv publish --trusted-publishing always --check-url https://pypi.org/simple/

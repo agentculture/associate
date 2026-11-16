@@ -10,6 +10,15 @@ cited bridge's :class:`~associate.bridge.policy.RoutePolicy`; anything unlisted 
   start is refused (403).
 - ``GET /runs/{run_id}`` — ``viewer``; the ``runs show`` reply (under 64 KiB).
 - ``GET /runs`` — ``viewer``; the ``runs list`` reply.
+- ``GET /`` — ``viewer``; a JSON 404 saying there is no web UI, unless the package holds a
+  built UI (``associate/web_dist``, shipped in the wheel by ``hatch_build.py``).
+
+The web UI (when built): :func:`associate.bridge.static.install` serves ``web_dist`` with an
+SPA fallback, lets a browser navigation to ``/runs`` or ``/runs/<id>`` reach the UI and maps the
+same-origin ``/api`` prefix onto the routes above (``/api/runs`` -> ``/runs``) before the role
+check, so the prefix reaches the same routes at the same roles. Only then does the policy make
+``GET /**`` viewer-readable (the UI's own files and client-side routes); without a build an
+unlisted route still needs admin. The UI adds no runs verb and no API route of its own.
 
 Authentication is the bridge's: ``Authorization: Bearer <service token>`` resolved by
 :class:`~associate.bridge.resolve.Resolver` over :class:`~associate.bridge.tokens.ServiceTokens`
@@ -24,13 +33,22 @@ not wired here.
 # No `from __future__ import annotations`: FastAPI reads the handlers' annotations at
 # runtime, and `Request` is imported inside create_app (the lazy `server` extra).
 import json
+from pathlib import Path
 from typing import Any
 
 from associate.bridge.policy import RoutePolicy
 from associate.bridge.principal import AuthError
 from associate.bridge.resolve import AuthSettings, Resolver, TokenAuthenticator
 
-__all__ = ["MAX_BODY_BYTES", "STATUS_BY_KIND", "TOKEN_PREFIX", "build_policy", "create_app"]
+__all__ = [
+    "DEFAULT_UI",
+    "MAX_BODY_BYTES",
+    "STATUS_BY_KIND",
+    "TOKEN_PREFIX",
+    "build_policy",
+    "create_app",
+    "default_web_dist",
+]
 
 #: The service-token prefix for this app's tokens.
 TOKEN_PREFIX = "asc_"  # nosec B105 - a public token prefix, not a secret
@@ -38,14 +56,25 @@ TOKEN_PREFIX = "asc_"  # nosec B105 - a public token prefix, not a secret
 MAX_BODY_BYTES = 512 * 1024
 #: ``RunsError.kind`` -> HTTP status.
 STATUS_BY_KIND = {"invalid": 400, "forbidden": 403, "not_found": 404, "busy": 409, "env": 500}
+#: ``create_app(web_dist=DEFAULT_UI)``: the built UI inside the installed package, if any.
+DEFAULT_UI = object()
+
+
+def default_web_dist() -> Path:
+    """Where the built web UI lives inside the installed package (it may not exist)."""
+    return Path(__file__).resolve().parent.parent / "web_dist"
 
 
 def build_policy() -> RoutePolicy:
-    """``/health`` public, each runs verb at its role, everything else admin."""
+    """``/health`` public, ``GET /`` viewer, each runs verb at its role, everything else admin.
+
+    :func:`create_app` appends ``GET /** -> viewer`` only when it mounts a built UI.
+    """
     from associate.runs.service import VERBS
 
     policy = RoutePolicy(default="admin")
     policy.public("/health", "GET")
+    policy.add("GET", "/", "viewer")
     for verb in VERBS:
         policy.add(verb.http[0], verb.http[1], verb.role)
     return policy
@@ -57,13 +86,20 @@ def create_app(
     settings: AuthSettings | None = None,
     runs_config: Any = None,
     child_command: list[str] | None = None,
+    web_dist: Any = DEFAULT_UI,
 ) -> Any:
-    """The FastAPI app. ``child_command`` replaces ``python -m associate`` (tests only)."""
+    """The FastAPI app. ``child_command`` replaces ``python -m associate`` (tests only).
+
+    ``web_dist`` is the built web UI directory (default: the one inside the installed package;
+    ``None``, or a directory without ``index.html``: API only). ``app.state.web_ui`` says which.
+    """
     from fastapi import FastAPI, Request
     from fastapi.responses import JSONResponse
     from starlette.concurrency import run_in_threadpool
 
     from associate import __version__
+    from associate.bridge import static
+    from associate.bridge.caching import NoStoreByDefault
     from associate.runs import service
 
     policy = build_policy()
@@ -144,4 +180,27 @@ def create_app(
         except service.RunsError as err:
             return refused(err)
 
+    ui_dir = default_web_dist() if web_dist is DEFAULT_UI else web_dist
+    mounted = static.install(app, Path(ui_dir) if ui_dir is not None else None)
+    app.state.web_ui = mounted
+    if mounted:
+        # the UI's own files and its client-side routes are read by any viewer
+        policy.add("GET", "/**", "viewer")
+    else:
+
+        @app.get("/", include_in_schema=False)
+        def no_ui() -> Any:
+            return JSONResponse(
+                {
+                    "code": "not_found",
+                    "message": "this server has no web UI; the API is at /runs and /health",
+                    "remediation": "install a wheel built with the UI (web/dist), see "
+                    "docs/operations/bridge.md",
+                },
+                status_code=404,
+            )
+
+    # outermost: every answer, the 401 and 403 included, says it may not be cached (the UI's
+    # own files set their own policy)
+    app.add_middleware(NoStoreByDefault)
     return app
