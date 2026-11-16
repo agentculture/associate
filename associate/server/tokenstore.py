@@ -1,125 +1,46 @@
-"""A file-backed store for the bridge's service tokens (``associate.bridge.tokens.TokenStore``).
+"""Where this app's service tokens live, and the one way the CLI and the API open them.
 
-One JSON file, ``{collection: {id: document}}``, written whole to a temporary file and renamed
-into place (``0600``, directory ``0700``). A transaction holds an exclusive ``flock`` on a
-sibling ``.lock`` file for its whole read-modify-write, so two processes issuing or revoking
-at once never lose a write. Only token hashes are stored (``ServiceTokens`` never hands the
-store a plaintext secret). Stdlib only.
+The store is one file (:class:`associate.bridge.filetokens.FileTokenStore`, mode 0600, hashes
+only): ``--tokens PATH`` on the commands, else ``$ASSOCIATE_SERVER_TOKENS``, else
+``$XDG_STATE_HOME/associate/service_tokens.json`` (``~/.local/state`` when unset). The CLI that
+issues a token and the server that checks it must read the same file. Standard library only.
 
-This is the minimal implementation the runs API needs; a deployment that wants tokens in a
-database supplies its own object with the same five methods.
+There is one store implementation, the cited generic one in the bridge folder; this module is
+only the app's wiring around it (the path and the token prefix).
 """
 
 from __future__ import annotations
 
-import copy
-import fcntl
 import os
-from collections.abc import Iterator, Mapping
-from contextlib import contextmanager
-from dataclasses import dataclass
+from collections.abc import Mapping
 from pathlib import Path
-from typing import Any
 
-from associate.runs.state import atomic_write_json, read_json
+from associate.bridge.filetokens import FileTokenStore
+from associate.bridge.tokens import ServiceTokens
+from associate.server.app import TOKEN_PREFIX
 
-__all__ = ["FileTokenStore", "default_token_path"]
+__all__ = ["ENV_TOKENS", "default_token_path", "open_tokens"]
 
-Document = dict[str, Any]
+ENV_TOKENS = "ASSOCIATE_SERVER_TOKENS"
 
 
-def default_token_path() -> Path:
-    """``ASSOCIATE_SERVER_TOKENS``, else ``$XDG_STATE_HOME/associate/service_tokens.json``."""
-    explicit = os.environ.get("ASSOCIATE_SERVER_TOKENS", "").strip()
+def default_token_path(
+    path: str | Path | None = None, env: Mapping[str, str] | None = None
+) -> Path:
+    """``path``, else ``$ASSOCIATE_SERVER_TOKENS``, else the XDG state default."""
+    if path:
+        return Path(path)
+    env = os.environ if env is None else env
+    explicit = (env.get(ENV_TOKENS) or "").strip()
     if explicit:
         return Path(explicit)
-    xdg = os.environ.get("XDG_STATE_HOME", "").strip()
-    base = Path(xdg) if xdg and os.path.isabs(xdg) else Path.home() / ".local" / "state"
+    state = (env.get("XDG_STATE_HOME") or "").strip()
+    base = Path(state) if state and os.path.isabs(state) else Path.home() / ".local" / "state"
     return base / "associate" / "service_tokens.json"
 
 
-@dataclass
-class UpdateResult:
-    won: bool
-    document: Document | None
-
-
-class _Ops:
-    """The reads and writes of one transaction, over the loaded data."""
-
-    def __init__(self, data: dict[str, dict[str, Document]]) -> None:
-        self.data = data
-        self.dirty = False
-
-    def get(self, collection: str, id: str) -> Document | None:
-        doc = self.data.get(collection, {}).get(id)
-        return copy.deepcopy(doc) if doc is not None else None
-
-    def find(self, collection: str, where: Mapping[str, Any] | None = None) -> list[Document]:
-        docs = [copy.deepcopy(d) for d in self.data.get(collection, {}).values()]
-        return [d for d in docs if all(d.get(k) == v for k, v in (where or {}).items())]
-
-    def insert(self, collection: str, document: Mapping[str, Any]) -> Document:
-        doc = copy.deepcopy(dict(document))
-        docs = self.data.setdefault(collection, {})
-        if doc["id"] in docs:
-            raise ValueError(f"{collection} {doc['id']!r} already exists")
-        docs[doc["id"]] = doc
-        self.dirty = True
-        return copy.deepcopy(doc)
-
-    def update_if(
-        self, collection: str, id: str, expected: Mapping[str, Any], changes: Mapping[str, Any]
-    ) -> UpdateResult:
-        doc = self.data.get(collection, {}).get(id)
-        if doc is None or any(doc.get(k) != v for k, v in expected.items()):
-            return UpdateResult(False, None)
-        doc.update(copy.deepcopy(dict(changes)))
-        self.dirty = True
-        return UpdateResult(True, copy.deepcopy(doc))
-
-
-class FileTokenStore:
-    """``TokenStore`` over one JSON file."""
-
-    def __init__(self, path: Path | str) -> None:
-        self.path = Path(path)
-
-    def _load(self) -> dict[str, dict[str, Document]]:
-        data = read_json(self.path)
-        if data is None:
-            if self.path.exists():
-                raise ValueError(f"the token store {self.path} is not valid JSON")
-            return {}
-        if not isinstance(data, dict):
-            raise ValueError(f"the token store {self.path} is not a JSON object")
-        return data
-
-    def get(self, collection: str, id: str) -> Document | None:
-        return _Ops(self._load()).get(collection, id)
-
-    def find(self, collection: str, where: Mapping[str, Any] | None = None) -> list[Document]:
-        return _Ops(self._load()).find(collection, where)
-
-    def insert(self, collection: str, document: Mapping[str, Any]) -> Document:
-        with self.transaction() as tx:
-            return tx.insert(collection, document)
-
-    def update_if(
-        self, collection: str, id: str, expected: Mapping[str, Any], changes: Mapping[str, Any]
-    ) -> UpdateResult:
-        with self.transaction() as tx:
-            return tx.update_if(collection, id, expected, changes)
-
-    @contextmanager
-    def transaction(self) -> Iterator[_Ops]:
-        self.path.parent.mkdir(parents=True, exist_ok=True, mode=0o700)
-        fd = os.open(self.path.with_name(self.path.name + ".lock"), os.O_RDWR | os.O_CREAT, 0o600)
-        try:
-            fcntl.flock(fd, fcntl.LOCK_EX)
-            ops = _Ops(self._load())
-            yield ops
-            if ops.dirty:
-                atomic_write_json(self.path, ops.data)
-        finally:
-            os.close(fd)
+def open_tokens(
+    path: str | Path | None = None, env: Mapping[str, str] | None = None
+) -> ServiceTokens:
+    """The service tokens stored at :func:`default_token_path`."""
+    return ServiceTokens(FileTokenStore(default_token_path(path, env)), prefix=TOKEN_PREFIX)

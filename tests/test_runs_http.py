@@ -13,11 +13,11 @@ pytest.importorskip("httpx")
 
 from fastapi.testclient import TestClient  # noqa: E402
 
+from associate.bridge.filetokens import FileTokenStore  # noqa: E402
 from associate.bridge.tokens import ServiceTokens  # noqa: E402
 from associate.runs import service  # noqa: E402
 from associate.runs.service import RunsConfig  # noqa: E402
 from associate.server.app import TOKEN_PREFIX, create_app  # noqa: E402
-from associate.server.tokenstore import FileTokenStore  # noqa: E402
 from tests.test_runs import HOSTILE, fake, make_repo  # noqa: E402
 
 

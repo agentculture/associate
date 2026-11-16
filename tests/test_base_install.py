@@ -3,11 +3,16 @@
 from __future__ import annotations
 
 import json
+import os
 import re
 import shutil
+import socket
 import subprocess
 import sys
+import time
 import tomllib
+import urllib.error
+import urllib.request
 from pathlib import Path
 
 import pytest
@@ -34,6 +39,10 @@ VERBS = [
     ["explain", "runs", "start"],
     ["explain", "mcp"],
     ["mcp", "--help"],
+    ["serve", "--help"],
+    ["tokens", "overview"],
+    ["explain", "serve"],
+    ["explain", "tokens", "issue"],
 ]
 
 
@@ -76,6 +85,9 @@ print(json.dumps({{'results': results, 'loaded': loaded}}))
         assert results[verb] == 0, (verb, results)
     for verb in ("runs overview", "runs list", "explain runs start", "explain mcp", "mcp --help"):
         assert results[verb] == 0, (verb, results)
+    for verb in ("serve --help", "tokens overview", "explain serve"):
+        assert results[verb] == 0, (verb, results)
+    assert results["explain tokens issue"] == 0
     assert results["doctor"] in (0, 1), results  # a health verdict, not a crash
 
 
@@ -114,3 +126,81 @@ def test_a_clean_base_install_holds_no_third_party_package(tmp_path):
         allowed = (0, 1) if verb == ["doctor"] else (0,)
         assert done.returncode in allowed, (verb, done.stderr)
         assert "Traceback" not in done.stderr, (verb, done.stderr)
+
+
+def _free_port() -> int:
+    with socket.socket() as sock:
+        sock.bind(("127.0.0.1", 0))
+        return sock.getsockname()[1]
+
+
+def _get(url: str, headers: dict[str, str] | None = None) -> tuple[int, str]:
+    request = urllib.request.Request(url, headers=headers or {})
+    try:
+        with urllib.request.urlopen(request, timeout=3) as resp:  # nosec B310 - loopback only
+            return resp.status, resp.read().decode()
+    except urllib.error.HTTPError as err:
+        return err.code, err.read().decode()
+
+
+def test_the_wheel_with_the_server_extra_serves_health_and_a_token_opens_runs(tmp_path):
+    """Build the wheel, install it with the ``server`` extra into a new environment, issue a
+    token and run ``associate serve`` from there: ``/health`` answers, ``/runs`` needs the
+    token. Adapted from qodo-cli's wheel test @ 9ac0a9c4f1d7a93507ccc15295f565123025e1e1."""
+    uv = shutil.which("uv")
+    if uv is None:
+        pytest.skip("uv is not installed")
+
+    def run(*argv, **kw):
+        return subprocess.run(argv, capture_output=True, text=True, check=False, **kw)
+
+    built = run(uv, "build", "--wheel", "--out-dir", str(tmp_path / "dist"), str(ROOT))
+    if built.returncode != 0:
+        pytest.skip(f"the build needs the network: {built.stderr.strip()[-200:]}")
+    wheel = next((tmp_path / "dist").glob("associate-*.whl"))
+    venv = tmp_path / "venv"
+    python = venv / "bin" / "python"
+    assert run(uv, "venv", "-q", str(venv)).returncode == 0
+    installed = run(uv, "pip", "install", "-q", "--python", str(python), f"{wheel}[server]")
+    if installed.returncode != 0:
+        pytest.skip(f"the extra's packages need the network: {installed.stderr.strip()[-200:]}")
+
+    env = {
+        "PATH": str(venv / "bin"),
+        "HOME": str(tmp_path / "home"),
+        "ASSOCIATE_SERVER_TOKENS": str(tmp_path / "tokens.json"),
+        "ASSOCIATE_RUNS_DIR": str(tmp_path / "runs-state"),
+    }
+    os.makedirs(env["HOME"])
+    command = venv / "bin" / "associate"
+    issued = run(str(command), "tokens", "issue", "--name", "t", "--role", "viewer", "--json",
+                 env=env)  # fmt: skip
+    assert issued.returncode == 0, issued.stderr
+    bearer = {"Authorization": f"Bearer {json.loads(issued.stdout)['token']}"}
+
+    port = _free_port()
+    proc = subprocess.Popen(
+        [str(command), "serve", "--port", str(port)],
+        env=env, stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True,
+    )  # fmt: skip
+    try:
+        deadline = time.monotonic() + 30
+        while True:
+            try:
+                health = _get(f"http://127.0.0.1:{port}/health")
+                break
+            except (urllib.error.URLError, ConnectionError, TimeoutError):
+                if proc.poll() is not None or time.monotonic() > deadline:
+                    raise AssertionError(f"serve did not answer: {proc.stderr.read()[-800:]}")
+                time.sleep(0.2)
+        assert health[0] == 200 and json.loads(health[1])["service"] == "associate-runs"
+        assert _get(f"http://127.0.0.1:{port}/runs")[0] == 401
+        assert _get(f"http://127.0.0.1:{port}/runs", bearer)[0] == 200
+        proc.terminate()
+        assert proc.wait(timeout=15) == 0
+    finally:
+        if proc.poll() is None:
+            proc.kill()
+            proc.wait()
+        proc.stdout.close()
+        proc.stderr.close()
