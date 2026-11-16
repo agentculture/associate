@@ -13,6 +13,7 @@ from __future__ import annotations
 
 import json
 import os
+import time
 from pathlib import Path
 
 import pytest
@@ -123,6 +124,18 @@ def test_a_request_without_a_start_deadline_keeps_the_old_reading(cfg):
     run = cfg.state_dir / "runs" / f"run-{1:032x}"
     run.mkdir(parents=True)
     (run / "request.json").write_text(json.dumps({"run_id": run.name}), "utf-8")
+    assert service.show(run.name, config=cfg)["status"] == "lost"
+
+
+@pytest.mark.parametrize("record", ["supervisor.json", "child.json"])
+def test_a_recorded_process_that_is_gone_reads_lost_inside_the_start_grace(cfg, record):
+    # the grace covers only a run with no record at all: once a supervisor or child was
+    # recorded and is no longer alive, a deadline still in the future does not hide the loss
+    run = cfg.state_dir / "runs" / f"run-{3:032x}"
+    run.mkdir(parents=True)
+    request = {"run_id": run.name, "start_deadline": time.time() + 3600}
+    (run / "request.json").write_text(json.dumps(request), "utf-8")
+    (run / record).write_text(json.dumps({"pid": 2**22 + 12345}), "utf-8")
     assert service.show(run.name, config=cfg)["status"] == "lost"
 
 

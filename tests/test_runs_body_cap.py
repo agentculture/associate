@@ -19,7 +19,13 @@ pytest.importorskip("fastapi")
 from associate.bridge.filetokens import FileTokenStore  # noqa: E402
 from associate.bridge.tokens import ServiceTokens  # noqa: E402
 from associate.runs.service import RunsConfig  # noqa: E402
-from associate.server.app import MAX_BODY_BYTES, TOKEN_PREFIX, create_app  # noqa: E402
+from associate.server.app import (  # noqa: E402
+    MAX_BODY_BYTES,
+    TOKEN_PREFIX,
+    BodyRefused,
+    _declared_length,
+    create_app,
+)
 from tests.rawasgi import raw_stream  # noqa: E402
 from tests.test_runs import fake, make_repo  # noqa: E402
 
@@ -101,6 +107,18 @@ def test_a_declared_length_over_the_cap_is_refused_before_reading(setup):
     assert reply.status_code == 413, reply.text
     assert reply.pulled == 0
     assert started(cfg) == []
+
+
+@pytest.mark.parametrize("declared", ["9" * 5000, "0" * 5000 + "9" * 12])
+def test_a_declared_length_too_long_for_int_is_413_not_an_error(declared):
+    # int() refuses a run of more than 4300 digits with a ValueError
+    with pytest.raises(BodyRefused) as refused:
+        _declared_length(declared, MAX_BODY_BYTES)
+    assert refused.value.status == 413
+
+
+def test_a_declared_length_padded_with_zeros_is_read_as_its_value():
+    assert _declared_length("0" * 5000 + "7", MAX_BODY_BYTES) is None
 
 
 def test_a_body_of_exactly_the_cap_is_read(setup):

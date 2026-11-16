@@ -1,6 +1,5 @@
 # Original to this repo (no cited source): written for a code review finding on the bridge's
-# HTTP API (a write forged from another site). The 415 rule's shape follows qodo-cli
-# qodo/server/app.py @ ef231828f72da019f1f6904a31ea168582cdf3e8 (read_params).
+# HTTP API (a write forged from another site).
 """Refuse a state-changing request that a browser sent on behalf of another site.
 
 Behind Cloudflare Access a browser's cookie is the credential, and a page on another site can
@@ -10,9 +9,12 @@ other than ``GET``, ``HEAD`` and ``OPTIONS``:
 
 - a request whose ``Sec-Fetch-Site`` header is ``cross-site`` is refused (403
   ``cross_site_request``);
-- a request with an ``Origin`` header is refused unless it names the request's own origin: the
-  scheme the server saw and the ``Host`` header (403 ``cross_origin_request``); a forwarded host
-  header is never consulted;
+- a request whose ``Sec-Fetch-Site`` is ``same-origin`` is the browser's own word that the page
+  and the server share an origin (a page cannot set that header), so its ``Origin`` is not
+  compared: a proxy that hides the outer scheme cannot break this app's own pages;
+- any other request with an ``Origin`` header is refused unless it names the request's own
+  origin: the scheme the server saw and the ``Host`` header (403 ``cross_origin_request``); a
+  forwarded host header is never consulted;
 - the body must be declared ``application/json`` (parameters such as ``; charset=utf-8`` are
   allowed), which a browser cannot send cross-site without a preflight (415
   ``unsupported_media_type``).
@@ -76,7 +78,10 @@ def same_origin(origin: str, scheme: str, host: str | None) -> bool:
 
 
 def _cross_site(headers: Mapping[str, str], scheme: str) -> Refusal | None:
-    if headers.get("sec-fetch-site", "").strip().lower() == "cross-site":
+    site = headers.get("sec-fetch-site", "").strip().lower()
+    if site == "same-origin":
+        return None
+    if site == "cross-site":
         return Refusal(
             403,
             "cross_site_request",

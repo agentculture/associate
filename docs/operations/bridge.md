@@ -454,7 +454,9 @@ send its body as `Content-Type: application/json` (a parameter such as
 `; charset=utf-8` is fine; anything else is 415 before the body is read), and
 is refused 403 when its `Sec-Fetch-Site` header is `cross-site` or its `Origin`
 header names another origin than the request's own (the scheme the server saw
-and the `Host` header; no forwarded host header is read). These checks run
+and the `Host` header; no forwarded host header is read). A request the
+browser itself marks `Sec-Fetch-Site: same-origin` is accepted without that
+comparison. These checks run
 before authentication, so a forged request gets the same answer with or
 without a credential. A caller that sends neither header (curl, a rules
 engine, the CLI) is unaffected. The API sends no CORS headers, so a browser

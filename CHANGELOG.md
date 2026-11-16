@@ -83,7 +83,8 @@ run, and no real run has been started through it (built and unit-tested only).
   than GET, HEAD and OPTIONS now goes through the new `associate/bridge/origin.py` before
   authentication (one answer, credential or not): 403 `cross_site_request` when
   `Sec-Fetch-Site` is `cross-site`, 403 `cross_origin_request` when `Origin` is not the
-  request's own scheme and `Host`, and 415 `unsupported_media_type` unless the body is
+  request's own scheme and `Host` (not compared when the browser itself says
+  `Sec-Fetch-Site: same-origin`), and 415 `unsupported_media_type` unless the body is
   declared `application/json` (the shape of qodo-cli's 415 rule). Callers with neither header
   (curl, a rules engine, the CLI) are unaffected; the API sends no CORS header.
 - **The start body is capped while it is read.** A body without `Content-Length` (chunked)

@@ -93,7 +93,9 @@ def _declared_length(value: str | None, limit: int) -> None:
     # isascii: str.isdigit() also accepts a superscript digit, which int() rejects
     if not (value.isascii() and value.isdigit()):
         raise BodyRefused(400, "invalid", "the Content-Length header is not a whole number")
-    if int(value) > limit:
+    # the digit count first: int() refuses a very long run of digits with a ValueError
+    digits = value.lstrip("0") or "0"
+    if len(digits) > len(str(limit)) or int(digits) > limit:
         raise BodyRefused(413, "body_too_large", f"the body must be at most {limit} bytes")
 
 

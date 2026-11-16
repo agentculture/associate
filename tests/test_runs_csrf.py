@@ -233,3 +233,30 @@ def test_an_origin_without_a_host_header_is_refused():
     refusal = origin.check_write("POST", headers, "https")
     assert refusal is not None
     assert refusal.status == 403
+
+
+def test_the_browsers_same_origin_word_stands_when_a_proxy_hid_the_scheme():
+    # behind a TLS-ending proxy the server may see http while the page is https: the browser's
+    # own Sec-Fetch-Site (a page cannot set it) settles it, and no Origin comparison is made
+    headers = {
+        "host": "bridge.example",
+        "content-type": "application/json",
+        "origin": "https://bridge.example",
+    }
+    refusal = origin.check_write("POST", headers, "http")
+    assert refusal is not None
+    assert refusal.status == 403
+    assert origin.check_write("POST", {**headers, "sec-fetch-site": "same-origin"}, "http") is None
+
+
+@pytest.mark.parametrize("site", ["same-site", "none", "cross-site"])
+def test_any_other_sec_fetch_site_still_needs_a_matching_origin(site):
+    headers = {
+        "host": "bridge.example",
+        "content-type": "application/json",
+        "origin": "https://other.example",
+        "sec-fetch-site": site,
+    }
+    refusal = origin.check_write("POST", headers, "https")
+    assert refusal is not None
+    assert refusal.status == 403
