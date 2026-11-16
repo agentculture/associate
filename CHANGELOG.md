@@ -5,6 +5,48 @@ All notable changes to this project will be documented in this file.
 Format follows [Keep a Changelog](https://keepachangelog.com/). This project
 adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.11.0] - 2026-11-16
+
+The bridge: another service can start an `associate run` on a checkout and read
+its result, over a CLI, an HTTP API or an MCP server. A web UI is planned and is
+not built. This is the bridge's first release: its tests use a stand-in for the
+run, and no real run has been started through it (built and unit-tested only).
+
+### Added
+
+- **The runs API** (`associate/runs/`): `associate runs start|show|list`. A start
+  validates the checkout, model, instruction and test commands, takes a
+  per-checkout lock (one run per checkout), starts a detached supervisor and
+  returns a run id at once. `runs show` reports `status` (`running`, `finished`,
+  `failed-to-start`, `lost`) and, once finished, `ok`, `outcome`, `merge`
+  (`merged`, `refused`, `nothing_to_merge`, `not_attempted`), `tests`,
+  `base_commit` and `changed_paths`, always in under 64 KiB. A clean run whose
+  tests pass is merged into the checkout's local `main`; nothing is pushed.
+  State lives in `ASSOCIATE_RUNS_DIR`, and `ASSOCIATE_RUNS_ROOTS` is the
+  checkout allowlist (empty: every start over HTTP and MCP is refused).
+- **`associate serve`** (`associate/server/`, the `server` extra): the runs HTTP
+  API (`POST /runs`, `GET /runs/{run_id}`, `GET /runs`, public `GET /health`).
+  A loopback listener (`127.0.0.1:8794`) that trusts Cloudflare Access when
+  `ASSOCIATE_ACCESS_*` is set, and an optional LAN listener (port `8795`)
+  that takes service tokens only.
+- **`associate tokens issue|list|revoke`**: service tokens (`asc_...`) in a
+  `0600` file of hashes, with the roles `viewer`, `editor` and `admin`. Only
+  `admin` starts a run.
+- **`associate mcp`** (the `mcp` extra): the `runs_start`, `runs_show` and
+  `runs_list` tools over stdio, calling the same functions as the CLI and HTTP.
+- **The cited framework** (`associate/bridge/`): auth, route policy, Access JWT
+  verification, service tokens and the MCP server, cited from qodo-cli, which
+  cited it from culture-rules. It names no app.
+- **A surface parity test** (`tests/test_surface_parity.py`): every runs verb
+  must exist, with the same parameters, on the CLI, the MCP server and the HTTP
+  API.
+- **Docs**: `docs/operations/bridge.md` for operators, agents and integrators;
+  the README and `CLAUDE.md` describe the bridge.
+
+### Changed
+
+- The package version is 0.11.0 (`pyproject.toml`, `uv.lock`).
+
 ## [0.10.0] - 2026-10-27
 
 The multi-model associate on Pi 1.1.0 (plan

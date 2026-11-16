@@ -123,6 +123,40 @@ run live):
   `delegate_run` is in `gated_tools` (CLEF-gated for every model, effect line in
   `gate.json` version 9), not in `mutating_tools`; `delegate_status` is a read,
   and its result taints later memory records `untrusted:child`.
+- **The bridge** (0.11.0; page `docs/operations/bridge.md`). *Bridge* here means one
+  app with a CLI, an HTTP API and an MCP server over the same verbs; a web UI is
+  planned and **not built**. It is not the cultureagent agent-session bridge
+  (the README says so once; do not repeat it). Another service starts a detached
+  `associate run` on a checkout and reads the result:
+  - `associate/runs/` holds the verbs: `service.py` (`start`, `show`,
+    `list_runs`, and `VERBS`, the one table every surface reads), `state.py`
+    (state layout, atomic JSON, the `flock` checkout lock), `supervisor.py` (the
+    detached process that runs `python -m associate run --json
+    --untrusted-checkout` and writes `result.json`) and `mcp_tools.py`;
+  - `associate/server/` is the HTTP API (`app.py`: `POST /runs` admin,
+    `GET /runs/{run_id}` and `GET /runs` viewer, public `GET /health`;
+    `serve.py`: a loopback listener on `127.0.0.1:8794` that trusts Cloudflare
+    Access, and an optional LAN listener, port `8795`, service tokens only;
+    `tokenstore.py`: the token file);
+  - `associate/bridge/` is the app-agnostic framework (auth, route policy,
+    Access JWTs, service tokens, MCP server), cited from qodo-cli, which cited
+    it from culture-rules; it names no app. This repo owns its copy (cite, don't
+    import); each file's header names the source and commit;
+  - the CLI verbs are `runs start|show|list`, `serve`, `tokens
+    issue|list|revoke` and `mcp`. `serve` needs the `server` extra and `mcp` the
+    `mcp` extra; the base package stays dependency-free;
+  - `tests/test_surface_parity.py` fails when a runs verb is missing from the
+    CLI, the MCP tools or the HTTP routes. A new verb goes in `VERBS` and needs
+    no edit there;
+  - a run **merges into the checkout's local `main`** when it is clean and its
+    tests pass, and never pushes, so the checkout is a dedicated clone;
+    `ASSOCIATE_RUNS_ROOTS` empty refuses every start over HTTP and MCP;
+  - `ok` is true only when the exit code is 0, the outcome is `ok`, the tests
+    passed and `merge` is `merged` or `nothing_to_merge`. A read-only model
+    (`senses`) makes no merge, so its run is never `ok`;
+  - **built and unit-tested only**: every test run uses the stand-in child
+    `tests/runs_fake_child.py`; no real run has been started through the
+    bridge. Known gaps are listed in `docs/operations/bridge.md`.
 - **The run result** names the model and lobes role that ran, the isolation and
   merge outcome, the test results, and how the task turn ended (final reply,
   stop reason, lane error).
@@ -267,6 +301,9 @@ associate/                  # Python package (top level — no src/ wrapper)
 ├── contract/               # the portable contract: models.json, gate.json,
 │                           #   role.json, policy.json, schemas/, validate.py
 ├── harness/                # adapters (pi.py, stub.py), worktree.py, testcmds.py
+├── runs/                   # the bridge's verbs: service, state, supervisor, mcp_tools
+├── server/                 # the bridge's HTTP API: app, serve, tokenstore (server extra)
+├── bridge/                 # cited framework: auth, policy, Access, tokens, MCP server
 └── bench/                  # public suites (suites.json, public.py), walkstats
 .pi/extensions/associate/   # the Pi extension (TypeScript, no npm deps)
 ├── index.ts                # loader: registry model, tool surface, guard, gate
@@ -279,6 +316,7 @@ tests/                      # pytest — CLI, contract, run, worktree, gate, …
 .claude/skills/<name>/      # SKILL.md + scripts/ per skill (cite-don't-import)
 docs/skill-sources.md       # skill provenance ledger — authoritative
 docs/notes/                 # pi-1.1.0 migration, gate calibration, resident model
+docs/operations/            # the bridge: operators, agents and integrators
 culture.yaml                # agent suffix + backend + model (a registry key)
 sonar-project.properties    # SonarCloud key agentculture_associate
 ```
@@ -335,7 +373,8 @@ exists purely to satisfy this and is the pattern to copy.
 
 ## Build, test, lint, publish
 
-- **Dev install:** `uv sync`
+- **Dev install:** `uv sync` (add `--extra server --extra mcp` for the bridge's
+  HTTP API and MCP server; their tests skip without them)
 - **Run from source:** `uv run associate --version` / `uv run python -m associate ...`
 - **Tests:** `uv run pytest -n auto -v`
 - **Single test:** `uv run pytest tests/test_cli.py::test_whoami_json -v`
@@ -623,8 +662,8 @@ root key** — see invariant 3 under "Adding a verb".
   need a dep, that is a conversation, not a commit.
 - **Don't edit a vendored skill** to fix a bug in it. Fix it upstream.
 - **Don't skip the version bump** because the change is "just docs".
-- **Don't describe a model, the mesh path, the gate's fallbacks, or delegation
-  as working** in docs, commits, or PR bodies until a live run measures it
+- **Don't describe a model, the mesh path, the gate's fallbacks, delegation, or
+  the bridge as working** in docs, commits, or PR bodies until a live run measures it
   (t20) — and don't quote a benchmark number until t21 commits one. The worker
   live runs listed under "Measured vs. not measured" are the only live evidence;
   say exactly what exists and what doesn't; don't round up.

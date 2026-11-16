@@ -64,6 +64,38 @@ operator's test commands (`ASSOCIATE_TEST_COMMANDS`, required), merged to
 `main` only when clean, nothing pushed. Built and unit-tested only; no
 delegated run has been started live.
 
+## The bridge
+
+Another service can start an associate run and read the result. In this repo a
+**bridge** is one app with a CLI, an HTTP API and an MCP server over the same
+verbs; a web UI is planned and not built yet. The verbs are `runs start`,
+`runs show` and `runs list`. This is not the cultureagent agent-session bridge.
+
+A caller, such as a rules engine, names a git checkout, a registry model, an
+instruction and at least one test command. associate starts a detached
+`associate run` on it and returns a run id at once. The caller reads the run
+later: its `status`, and once finished `ok`, `merge`, `tests.passed`,
+`base_commit` and `changed_paths`.
+
+- **A run changes the checkout.** A writing model's clean run, with its tests
+  passing, is merged into the checkout's local `main`. Nothing is pushed. Use a
+  dedicated clone.
+- **Checkouts are allowlisted.** `ASSOCIATE_RUNS_ROOTS` lists the directories a
+  run may use. Empty, every start over HTTP and MCP is refused.
+- **One run per checkout** at a time.
+- **Roles.** Only `admin` starts a run; `viewer` and above read one.
+- **Not measured.** The bridge's tests use a stand-in for the run; no real run
+  has been started through it. Built and unit-tested only.
+
+```bash
+uv sync --extra server --extra mcp          # the HTTP API and the MCP server
+uv run associate tokens issue --name rules-engine --role admin
+ASSOCIATE_RUNS_ROOTS=/srv/associate-clones uv run associate serve
+```
+
+The operator, agent and integrator guide is
+[`docs/operations/bridge.md`](docs/operations/bridge.md).
+
 ## What is measured, and what is not
 
 **Measured live, one run each:**
@@ -83,6 +115,7 @@ delegated run has been started live.
 - the resident's first reply on the mesh;
 - a writing model on the mesh (mesh sessions get no run worktree, so the
   resident runs `senses`);
+- a real run started through the bridge (its tests use a stand-in child);
 - **every** benchmark. The public suites (BFCL, MMMU, LiveCodeBench, in
   [`associate/bench/suites.json`](associate/bench/suites.json)) are wired but
   unverified and have produced no score.
@@ -124,12 +157,16 @@ ASSOCIATE_API_KEY=... uv run associate run "Fix the failing parser test" \
 | `cli overview` | Describe the CLI surface itself. |
 | `run [prompt]` | Run one task on a harness adapter (`pi` by default) with `--model`, `--test-command`, `--untrusted-checkout`. Exits `2` without serving unless a preflight proves the extension loaded correctly. |
 | `bench` | List the public suites, or run one (`--suite NAME --model KEY`) through its upstream runner and scorer. |
+| `runs start\|show\|list` | Start a detached run on a checkout and read its result (the bridge). |
+| `serve` | Run the bridge's HTTP API on a loopback listener, and a LAN one if set (needs the `server` extra). |
+| `tokens issue\|list\|revoke` | Manage the HTTP API's service tokens. |
+| `mcp` | Serve the `runs` verbs as MCP tools over stdio (needs the `mcp` extra). |
 
 Every command takes `--json`. **Results go to stdout, errors and diagnostics go
 to stderr — never mixed.** Errors in JSON mode are `{code, message,
 remediation}`. Exit codes: `0` success, `1` user error, `2` environment error,
-`3+` reserved. The Python package has **no third-party dependencies**, and the
-Pi extension declares no npm dependency.
+`3+` reserved. The Python package has **no third-party dependencies** (the `server` and `mcp`
+extras are optional), and the Pi extension declares no npm dependency.
 
 ## Environment
 
@@ -137,7 +174,9 @@ All configuration is through `ASSOCIATE_*` environment variables — the endpoin
 (`ASSOCIATE_BASE_URL`, default the local lobes gateway), the bearer
 (`ASSOCIATE_API_KEY`, never committed or logged), the model
 (`ASSOCIATE_MODEL`, a registry key), and the session, isolation, test-command,
-memory and ledger plumbing. The full table, each row tied to the code that
+memory and ledger plumbing, and the bridge's (`ASSOCIATE_RUNS_DIR`,
+`ASSOCIATE_RUNS_ROOTS`, `ASSOCIATE_SERVER_TOKENS`, the listener and Access
+variables). The full table, each row tied to the code that
 reads it, is in [`CLAUDE.md`](CLAUDE.md)'s Tooling prerequisites, with the exact
 `pi` / `pi-acp` / Node pins.
 
