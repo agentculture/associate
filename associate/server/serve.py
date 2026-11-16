@@ -107,7 +107,8 @@ def names(env: Mapping[str, str], key: str) -> frozenset[str]:
 
 def _port(value: Any, what: str) -> int:
     text = str(value).strip()
-    if not text.isdigit() or not 0 < int(text) < 65536:
+    # isascii: str.isdigit() also accepts a superscript digit, which int() rejects
+    if not (text.isascii() and text.isdigit()) or not 0 < int(text) < 65536:
         raise ListenerConfigError(f"{what} must be a port from 1 to 65535, not {text!r}")
     return int(text)
 

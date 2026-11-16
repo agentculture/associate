@@ -123,7 +123,8 @@ class AccessListenerConfig:
                 "or unset all three"
             )
         host, sep, port = values[env_listen].rpartition(":")
-        if not sep or not port.isdigit() or not 0 < int(port) < 65536:
+        # isascii: str.isdigit() also accepts a superscript digit, which int() rejects
+        if not sep or not (port.isascii() and port.isdigit()) or not 0 < int(port) < 65536:
             raise AccessConfigError(f"{env_listen} must be host:port or :port")
         return cls(host or _ALL_INTERFACES, int(port), values[env_team], values[env_aud])
 

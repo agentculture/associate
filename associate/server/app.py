@@ -118,7 +118,9 @@ def create_app(
 
     @app.middleware("http")
     async def authorize(request: Request, call_next: Any) -> Any:
-        method, path = request.method, request.url.path
+        # scope["path"] is the decoded path the router matches; request.url.path may be cut at a
+        # decoded "?" or "#" on older Starlette, which would judge another route's rule
+        method, path = request.method, request.scope["path"]
         try:
             if policy.required_role(method, path) is not None:
                 principal = resolver.resolve(dict(request.headers.items()))
@@ -135,7 +137,8 @@ def create_app(
     @app.post("/runs")
     async def post_runs(request: Request) -> Any:
         declared = request.headers.get("content-length", "0")
-        if not declared.isdigit() or int(declared) > MAX_BODY_BYTES:
+        # isascii: str.isdigit() also accepts a superscript digit, which int() rejects
+        if not (declared.isascii() and declared.isdigit()) or int(declared) > MAX_BODY_BYTES:
             return bad_request(f"the body must be at most {MAX_BODY_BYTES} bytes")
         raw = await request.body()
         if len(raw) > MAX_BODY_BYTES:

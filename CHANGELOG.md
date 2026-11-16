@@ -65,6 +65,19 @@ run, and no real run has been started through it (built and unit-tested only).
 - **Docs**: `docs/operations/bridge.md` for operators, agents and integrators;
   the README and `CLAUDE.md` describe the bridge.
 
+### Security
+
+- **The role check reads the path the router matches.** `authorize` looked up the route
+  policy on `request.url.path`, which older Starlette (the `fastapi>=0.115` bound still allows
+  it) cuts at a `?` or `#` inside the decoded path, so an unauthenticated
+  `GET /health%3F/../assets/a.js` was judged as the public `/health` and the static handler
+  then served a built UI file. It now reads `scope["path"]`, and `bridge/static.py` refuses
+  (JSON 404, before anything is resolved) a path with a `..` segment, `?`, `#`, a backslash
+  or a control character. Ported from qodo-cli; the tests drive a raw ASGI scope
+  (`tests/rawasgi.py`). Whole-number parsing (ports, the Access listen port, a
+  `Content-Length`) now requires ASCII digits, so a superscript digit is a refusal, not a
+  crash.
+
 ### Changed
 
 - The package version is 0.11.0 (`pyproject.toml`, `uv.lock`).

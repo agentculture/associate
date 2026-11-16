@@ -160,6 +160,10 @@ How it is served:
   `/runs` with the same role check (`/api/runs` with no credential is 401). A
   browser navigation (`Accept: text/html`) to `/runs` or `/runs/<id>` gets the
   UI; an API client on the same path keeps the API;
+- the role is looked up on the decoded path the router matches, never on a path cut at a `?`
+  or `#`, and a path with a `..` segment, `?`, `#`, a backslash or a control character is a
+  JSON 404 before any file is resolved: `/health%3F/../assets/a.js` is 401 without a
+  credential and 404 with one;
 - the UI never sends a credential itself. Open it **behind Cloudflare Access**
   on the loopback listener (the browser carries the Access cookie, and any
   Access person is at least a `viewer`). A browser cannot add a Bearer token,

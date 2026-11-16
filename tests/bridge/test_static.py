@@ -111,3 +111,35 @@ def test_openapi_is_unchanged_by_serving_the_web(dist):
         a.get("/whoami")(lambda: {})
     static.install(served, dist)
     assert served.openapi() == plain.openapi()
+
+
+@pytest.mark.parametrize(
+    "raw",
+    (
+        "/assets/../index.html",
+        "/assets/%2e%2e/index.html",
+        "/x%3F/../assets/app.js",
+        "/x%23/../index.html",
+        "/assets%5capp.js",
+        "/assets/app.js%00",
+        "/assets/app%0a.js",
+        "/assets/app%7f.js",
+        "/assets/app%c2%85.js",
+    ),
+)
+def test_a_dot_dot_query_fragment_backslash_or_control_path_is_refused_not_resolved(dist, raw):
+    from tests.rawasgi import raw_get
+
+    app = FastAPI()
+    static.install(app, dist)
+    for accept in ("*/*", "text/html"):
+        r = raw_get(app, raw, {"Accept": accept})
+        # 404 (a newline never even matches the route: the framework's own 404), never a file
+        assert r.status_code == 404, (raw, accept)
+        assert "spa" not in r.text and "console.log" not in r.text
+
+
+def test_an_ordinary_dotted_file_name_is_still_served(dist):
+    (dist / "assets" / "app..min.js").write_text("ok", encoding="utf-8")
+    client, _ = build(dist)
+    assert client.get("/assets/app..min.js").text == "ok"

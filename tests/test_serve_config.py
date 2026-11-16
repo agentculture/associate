@@ -127,3 +127,8 @@ def test_without_the_server_extra_serve_names_it(monkeypatch):
 def test_the_default_ports_are_this_apps_own():
     """8792/8793 belong to qodo-cli; this app's pair is 8794 (loopback) and 8795 (LAN)."""
     assert (srv.DEFAULT_PORT, srv.DEFAULT_LAN_PORT) == (8794, 8795)
+
+
+def test_a_port_of_superscript_digits_is_a_config_error_not_a_crash():
+    with pytest.raises(srv.ListenerConfigError):
+        srv.plan_listeners({"ASSOCIATE_PORT": "²"})
