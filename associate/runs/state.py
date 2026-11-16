@@ -47,6 +47,9 @@ __all__ = [
 
 #: ``run-`` and 128 random bits in hex: unguessable, and one safe path segment.
 RUN_ID = re.compile(r"run-[0-9a-f]{32}")
+#: The files of a run directory: what was asked, and how it ended.
+REQUEST_FILE = "request.json"
+RESULT_FILE = "result.json"
 
 
 class CheckoutBusy(Exception):

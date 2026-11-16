@@ -168,11 +168,15 @@ def test_runs_start_refuses_bad_arguments_and_a_busy_checkout(setup):
         return missing, extra, badmodel, first, second
 
     missing, extra, badmodel, first, second = session_call(tools, fn)
-    assert missing.isError and "missing required" in missing.content[0].text
-    assert extra.isError and "unexpected argument" in extra.content[0].text
-    assert badmodel.isError and "invalid" in badmodel.content[0].text
+    assert missing.isError
+    assert "missing required" in missing.content[0].text
+    assert extra.isError
+    assert "unexpected argument" in extra.content[0].text
+    assert badmodel.isError
+    assert "invalid" in badmodel.content[0].text
     assert not first.isError
-    assert second.isError and "busy" in second.content[0].text
+    assert second.isError
+    assert "busy" in second.content[0].text
     run_id = json.loads(first.content[0].text)["run_id"]
     (cfg.state_dir / "runs" / run_id / "release").write_text("")
     deadline = time.monotonic() + 60

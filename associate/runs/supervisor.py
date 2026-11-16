@@ -19,7 +19,7 @@ from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any
 
-from associate.runs.state import RUN_ID, atomic_write_json, read_json
+from associate.runs.state import REQUEST_FILE, RESULT_FILE, RUN_ID, atomic_write_json, read_json
 
 #: Changed paths kept in ``result.json`` (``runs show`` cuts further, to its reply limit).
 STORED_PATHS = 5000
@@ -124,29 +124,40 @@ def git_facts(request: dict[str, Any], result: dict[str, Any] | None) -> dict[st
     # the base goes to git as an argument: only a full commit id, never an option or a path
     base = _hex(base) if isinstance(base, str) and _COMMIT.fullmatch(base) else None
     facts: dict[str, Any] = {"base_commit": base, "changed_paths": [], "changed_paths_error": None}
-    merge = (result or {}).get("merge")
+    result = result or {}
+    merge = result.get("merge")
+    worktree = result.get("worktree")
     if merge == "merged":
-        commit = _merge_commit(checkout, request["run_id"])
-        merged_base = _git(checkout, "merge-base", f"{commit}^1", f"{commit}^2") if commit else None
-        if commit and merged_base:
-            facts["base_commit"] = merged_base.strip()
-            facts["changed_paths"] = _z(
-                _git(checkout, "diff", "--name-only", "-z", merged_base.strip(), f"{commit}^2")
-            )
-        else:
-            facts["changed_paths_error"] = "the merge commit for this run was not found on main"
-    elif merge == "kept" and isinstance((result or {}).get("worktree"), str) and base:
-        worktree = result["worktree"]  # type: ignore[index]
-        tracked = _git(worktree, "diff", "--name-only", "-z", base)
-        untracked = _git(worktree, "ls-files", "--others", "--exclude-standard", "-z")
-        if tracked is None or untracked is None:
-            facts["changed_paths_error"] = f"the kept worktree {worktree} could not be read"
-        else:
-            facts["changed_paths"] = sorted(set(_z(tracked)) | set(_z(untracked)))
+        _merged_facts(facts, checkout, request["run_id"])
+    elif merge == "kept" and isinstance(worktree, str) and base:
+        _kept_facts(facts, worktree, base)
     paths = facts["changed_paths"]
     facts["changed_paths_total"] = len(paths)
     facts["changed_paths"] = [p[:STORED_PATH_CHARS] for p in paths[:STORED_PATHS]]
     return facts
+
+
+def _merged_facts(facts: dict[str, Any], checkout: str, run_id: str) -> None:
+    """A merged run: the base and the paths come from its merge commit on ``main``."""
+    commit = _merge_commit(checkout, run_id)
+    merged_base = _git(checkout, "merge-base", f"{commit}^1", f"{commit}^2") if commit else None
+    if commit and merged_base:
+        facts["base_commit"] = merged_base.strip()
+        facts["changed_paths"] = _z(
+            _git(checkout, "diff", "--name-only", "-z", merged_base.strip(), f"{commit}^2")
+        )
+    else:
+        facts["changed_paths_error"] = "the merge commit for this run was not found on main"
+
+
+def _kept_facts(facts: dict[str, Any], worktree: str, base: str) -> None:
+    """A kept run: the worktree's tracked changes against ``base`` plus its untracked files."""
+    tracked = _git(worktree, "diff", "--name-only", "-z", base)
+    untracked = _git(worktree, "ls-files", "--others", "--exclude-standard", "-z")
+    if tracked is None or untracked is None:
+        facts["changed_paths_error"] = f"the kept worktree {worktree} could not be read"
+    else:
+        facts["changed_paths"] = sorted(set(_z(tracked)) | set(_z(untracked)))
 
 
 def _tail(path: Path) -> str:
@@ -161,10 +172,10 @@ def _tail(path: Path) -> str:
 
 
 def supervise(run: Path, lock_fd: int | None) -> int:
-    request = read_json(run / "request.json")
+    request = read_json(run / REQUEST_FILE)
     if not isinstance(request, dict):
         atomic_write_json(
-            run / "result.json",
+            run / RESULT_FILE,
             {"status": "failed-to-start", "error": "request.json is missing or unreadable"},
         )
         return 1
@@ -182,7 +193,7 @@ def supervise(run: Path, lock_fd: int | None) -> int:
             )
     except OSError as exc:
         atomic_write_json(
-            run / "result.json",
+            run / RESULT_FILE,
             {
                 "status": "failed-to-start",
                 "finished_at": _now(),
@@ -206,7 +217,7 @@ def supervise(run: Path, lock_fd: int | None) -> int:
         record.update(git_facts(request, result))
     except Exception as exc:  # noqa: BLE001 - the result file is always written
         record["error"] = f"the run's result could not be read: {exc.__class__.__name__}: {exc}"
-    atomic_write_json(run / "result.json", record)
+    atomic_write_json(run / RESULT_FILE, record)
     return 0
 
 

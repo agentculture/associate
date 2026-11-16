@@ -40,5 +40,7 @@ def test_an_explicit_policy_is_kept(client):
 
 def test_constants():
     assert NO_STORE == "no-store"
-    assert "no-cache" in SHELL and "private" in SHELL
-    assert "immutable" in ASSET and "private" in ASSET
+    assert "no-cache" in SHELL
+    assert "private" in SHELL
+    assert "immutable" in ASSET
+    assert "private" in ASSET

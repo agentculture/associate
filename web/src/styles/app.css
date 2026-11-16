@@ -133,6 +133,17 @@ main:focus {
   color: var(--ink-soft);
 }
 
+/* a status line is an <output> (its role is status), laid out as the paragraph it stands for */
+output {
+  display: block;
+  margin: 0 0 1.1em;
+  text-wrap: pretty;
+}
+
+output:last-child {
+  margin-bottom: 0;
+}
+
 .muted {
   color: var(--ink-soft);
 }
@@ -191,11 +202,16 @@ code {
   outline-offset: 3px;
 }
 
+/* a <fieldset> (the group the buttons belong to), without the browser's own frame */
 .filter {
   display: flex;
   flex-wrap: wrap;
   gap: 8px;
   align-items: center;
+  min-width: 0;
+  margin: 0;
+  padding: 0;
+  border: 0;
 }
 
 .back-link {

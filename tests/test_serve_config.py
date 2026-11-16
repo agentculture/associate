@@ -65,13 +65,15 @@ def test_loopback_addresses_are_accepted(host):
 def test_access_makes_the_loopback_listener_trust_access_headers():
     spec = srv.plan_listeners(ACCESS)[0]
     assert (spec.name, spec.host, spec.port) == ("loopback", "127.0.0.1", 9100)
-    assert spec.access is not None and spec.access.team_domain == "team.example.com"
+    assert spec.access is not None
+    assert spec.access.team_domain == "team.example.com"
     assert spec.access.audience == "aud-tag"
 
 
 def test_access_never_attaches_to_the_lan_listener():
     specs = srv.plan_listeners({**ACCESS, "ASSOCIATE_LAN_HOST": "0.0.0.0"})
-    assert specs[0].access is not None and specs[1].access is None
+    assert specs[0].access is not None
+    assert specs[1].access is None
 
 
 def test_access_on_a_non_loopback_address_is_refused():

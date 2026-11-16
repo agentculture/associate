@@ -20,12 +20,12 @@ function Section({
   title,
   children,
   tone,
-}: {
+}: Readonly<{
   id: string;
   title: string;
   children: ReactNode;
   tone?: "alert";
-}) {
+}>) {
   return (
     <section
       className={`panel${tone === "alert" ? " panel--alert" : ""}`}
@@ -39,7 +39,7 @@ function Section({
   );
 }
 
-function WhyNotMerged({ run }: { run: RunDetail }) {
+function WhyNotMerged({ run }: Readonly<{ run: RunDetail }>) {
   return (
     <Section id="why" title="Why it was not merged" tone="alert">
       {run.not_ok_because ? <p>Not ok because {run.not_ok_because}.</p> : null}
@@ -68,7 +68,7 @@ function WhyNotMerged({ run }: { run: RunDetail }) {
   );
 }
 
-function NoResult({ run }: { run: RunDetail }) {
+function NoResult({ run }: Readonly<{ run: RunDetail }>) {
   return (
     <Section id="noresult" title="Why there is no result" tone="alert">
       <p>{run.error ?? "The API gave no reason."}</p>
@@ -76,7 +76,7 @@ function NoResult({ run }: { run: RunDetail }) {
   );
 }
 
-function Tests({ tests }: { tests: TestsDetail | null | undefined }) {
+function Tests({ tests }: Readonly<{ tests: TestsDetail | null | undefined }>) {
   return (
     <Section id="tests" title="Tests">
       <p className={tests?.passed === true ? "" : "warn-text"}>{testsSummary(tests)}</p>
@@ -104,7 +104,7 @@ function Tests({ tests }: { tests: TestsDetail | null | undefined }) {
   );
 }
 
-function ChangedPaths({ run }: { run: RunDetail }) {
+function ChangedPaths({ run }: Readonly<{ run: RunDetail }>) {
   const paths = run.changed_paths ?? [];
   return (
     <Section id="paths" title="Changed paths">
@@ -125,17 +125,24 @@ function ChangedPaths({ run }: { run: RunDetail }) {
   );
 }
 
-function Reply({ run }: { run: RunDetail }) {
+function Reply({ run }: Readonly<{ run: RunDetail }>) {
   const paragraphs = (run.final_reply ?? "")
     .split(/\n\s*\n/)
     .map((p) => p.trim())
     .filter(Boolean);
+  // a key per paragraph that does not depend on its position: its text and which repeat it is
+  const repeats = new Map<string, number>();
+  const keyed = paragraphs.map((text) => {
+    const nth = (repeats.get(text) ?? 0) + 1;
+    repeats.set(text, nth);
+    return { key: `${nth}:${text}`, text };
+  });
   return (
     <Section id="reply" title="What the agent said">
       {paragraphs.length ? (
         <div className="reply">
-          {paragraphs.map((p, i) => (
-            <p key={i}>{p}</p>
+          {keyed.map((paragraph) => (
+            <p key={paragraph.key}>{paragraph.text}</p>
           ))}
         </div>
       ) : (
@@ -152,7 +159,7 @@ function Reply({ run }: { run: RunDetail }) {
   );
 }
 
-function RunView({ run }: { run: RunDetail }) {
+function RunView({ run }: Readonly<{ run: RunDetail }>) {
   const title = firstLine(run.instruction) ?? `Run ${run.run_id}`;
   useTitle(title);
   const finished = run.status === "finished";
@@ -183,10 +190,10 @@ function RunView({ run }: { run: RunDetail }) {
       {finished && !run.ok ? <WhyNotMerged run={run} /> : null}
       {run.status === "lost" || run.status === "failed-to-start" ? <NoResult run={run} /> : null}
       {run.status === "running" ? (
-        <p className="notice" role="status">
+        <output className="notice">
           The result appears here when the run finishes; this page reads it again every few
           seconds.
-        </p>
+        </output>
       ) : null}
 
       {finished ? (
@@ -217,7 +224,7 @@ function RunView({ run }: { run: RunDetail }) {
   );
 }
 
-function NotFound({ message }: { message: string }) {
+function NotFound({ message }: Readonly<{ message: string }>) {
   useTitle("No such run");
   return (
     <div className="run-head">
@@ -230,16 +237,14 @@ function NotFound({ message }: { message: string }) {
   );
 }
 
-function Loaded({ runId }: { runId: string }) {
+function Loaded({ runId }: Readonly<{ runId: string }>) {
   const load = useCallback((signal: AbortSignal) => showRun(runId, signal), [runId]);
   const { state, reload, refresh } = useLoad(load, runId);
   usePolling(state.status === "ok" && state.data.status === "running", refresh);
 
   if (state.status === "loading") {
     return (
-      <p role="status" className="muted">
-        Loading the run…
-      </p>
+      <output className="muted">Loading the run…</output>
     );
   }
   if (state.status === "error") {

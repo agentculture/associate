@@ -499,7 +499,7 @@ def _launch(
     argv += ["--", instruction]
     started_at = _now()
     state.atomic_write_json(
-        run / "request.json",
+        run / state.REQUEST_FILE,
         {
             "run_id": run_id,
             "checkout": str(real),
@@ -531,7 +531,7 @@ def _launch(
             )
     except OSError as err:
         state.atomic_write_json(
-            run / "result.json",
+            run / state.RESULT_FILE,
             {"status": "failed-to-start", "finished_at": _now(), "error": str(err)},
         )
         raise RunsError("env", f"run {run_id} could not be started: {err}") from err
@@ -554,7 +554,7 @@ def _launch(
 
 
 def _status(run: Path, run_id: str, request: dict[str, Any]) -> tuple[str, dict[str, Any] | None]:
-    result = state.read_json(run / "result.json")
+    result = state.read_json(run / state.RESULT_FILE)
     if isinstance(result, dict):
         return str(result.get("status", "finished")), result
     recorded = False
@@ -564,7 +564,7 @@ def _status(run: Path, run_id: str, request: dict[str, Any]) -> tuple[str, dict[
         if isinstance(record, dict) and state.pid_alive(record.get("pid"), run_id):
             return "running", None
     # the supervisor may have written its result and exited between the two reads
-    result = state.read_json(run / "result.json")
+    result = state.read_json(run / state.RESULT_FILE)
     if isinstance(result, dict):
         return str(result.get("status", "finished")), result
     if recorded:
@@ -613,16 +613,17 @@ def _merge_word(raw: Any, outcome: Any, tests_passed: Any) -> str:
     return "not_attempted"
 
 
-def _finished(reply: dict[str, Any], result: dict[str, Any]) -> None:
-    run_result = result.get("run_result")
-    run_result = run_result if isinstance(run_result, dict) else {}
-    tests = run_result.get("tests") if isinstance(run_result.get("tests"), dict) else None
+def _stored_tests(stored: Any) -> tuple[dict[str, Any] | None, bool | None, list[Any]]:
+    """The stored tests record (if it is one), whether they passed, and the command entries."""
+    tests = stored if isinstance(stored, dict) else None
     passed = tests.get("passed") if tests else None
     passed = passed if isinstance(passed, bool) else None
     commands = tests.get("commands") if tests and isinstance(tests.get("commands"), list) else []
-    outcome = _cut(run_result.get("outcome"), 64)  # a short word; never trusted to be one
-    exit_code = result.get("exit_code")
-    merge = _merge_word(run_result.get("merge"), outcome, passed)
+    return tests, passed, commands
+
+
+def _not_ok_reasons(exit_code: Any, outcome: Any, passed: bool | None, merge: str) -> list[str]:
+    """Why a finished run is not ``ok`` (empty: it is)."""
     reasons = []
     if exit_code != 0:
         reasons.append(f"the run exited with {exit_code if exit_code is not None else 'a signal'}")
@@ -632,6 +633,17 @@ def _finished(reply: dict[str, Any], result: dict[str, Any]) -> None:
         reasons.append("the tests did not pass" if passed is False else "no test result")
     if merge not in ("merged", "nothing_to_merge"):  # nothing to merge: a clean run, no change
         reasons.append(f"the merge is {merge}")
+    return reasons
+
+
+def _finished(reply: dict[str, Any], result: dict[str, Any]) -> None:
+    run_result = result.get("run_result")
+    run_result = run_result if isinstance(run_result, dict) else {}
+    tests, passed, commands = _stored_tests(run_result.get("tests"))
+    outcome = _cut(run_result.get("outcome"), 64)  # a short word; never trusted to be one
+    exit_code = result.get("exit_code")
+    merge = _merge_word(run_result.get("merge"), outcome, passed)
+    reasons = _not_ok_reasons(exit_code, outcome, passed, merge)
     reply.update(
         {
             "finished_at": result.get("finished_at"),
@@ -722,16 +734,20 @@ def _bound_paths(reply: dict[str, Any], stored: Any) -> None:
     if _size(reply) >= _REPLY_BUDGET and isinstance(reply.get("instruction"), str):
         _cut_instruction(reply, 500)
     if _size(reply) >= _REPLY_BUDGET:  # the last resort: every free-text detail goes
-        for key in ("merge_reason", "changed_paths_error", "error", "not_ok_because"):
-            reply[key] = None
-        reply["worktree"] = reply["run_branch"] = None
-        if tests:
-            tests["error"] = None
-            tests["results"] = None
-            tests["results_truncated"] = True
-        if isinstance(reply.get("instruction"), str):
-            _cut_instruction(reply, 200)
-        reply["details_dropped"] = True
+        _drop_details(reply, tests)
+
+
+def _drop_details(reply: dict[str, Any], tests: dict[str, Any]) -> None:
+    for key in ("merge_reason", "changed_paths_error", "error", "not_ok_because"):
+        reply[key] = None
+    reply["worktree"] = reply["run_branch"] = None
+    if tests:
+        tests["error"] = None
+        tests["results"] = None
+        tests["results_truncated"] = True
+    if isinstance(reply.get("instruction"), str):
+        _cut_instruction(reply, 200)
+    reply["details_dropped"] = True
 
 
 def _cut_instruction(reply: dict[str, Any], chars: int) -> None:
@@ -774,7 +790,7 @@ def show(run_id: Any, *, config: RunsConfig | None = None) -> dict[str, Any]:
         run = state.run_dir(Path(config.state_dir), run_id)
     except ValueError as err:
         raise RunsError("invalid", str(err), "pass the run id `runs start` returned") from None
-    request = state.read_json(run / "request.json")
+    request = state.read_json(run / state.REQUEST_FILE)
     if not isinstance(request, dict):
         raise RunsError("not_found", f"no run {run_id}", "list runs with `associate runs list`")
     return _show(run, run_id, request)
@@ -823,7 +839,7 @@ def _newest_first(runs_dir: Path) -> list[tuple[int, str]]:
         if not RUN_ID.fullmatch(entry.name):
             continue
         try:
-            stamp = os.stat(os.path.join(entry.path, "request.json")).st_mtime_ns
+            stamp = os.stat(os.path.join(entry.path, state.REQUEST_FILE)).st_mtime_ns
         except OSError:
             continue
         found.append((stamp, entry.name))
@@ -848,7 +864,7 @@ def list_runs(*, config: RunsConfig | None = None, limit: Any = 20) -> dict[str,
     for _stamp, run_id in ordered:
         if len(runs) == limit:
             break
-        request = state.read_json(runs_dir / run_id / "request.json")
+        request = state.read_json(runs_dir / run_id / state.REQUEST_FILE)
         if isinstance(request, dict):
             shown = _show(runs_dir / run_id, run_id, request)
             runs.append(_card(shown, _title(request.get("instruction"))))

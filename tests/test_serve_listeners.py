@@ -179,7 +179,8 @@ def test_serve_starts_both_listeners_answers_and_stops_on_sigterm(tmp_path):
     try:
         for port in (loop, lan):
             status, body = wait_for(f"http://127.0.0.1:{port}/health")
-            assert status == 200 and body["service"] == "associate-runs"  # public, no token
+            assert status == 200  # public, no token
+            assert body["service"] == "associate-runs"
             assert request("GET", f"http://127.0.0.1:{port}/runs")[0] == 401
     finally:
         code, out, _ = stop(proc)
@@ -199,7 +200,8 @@ def test_serve_does_not_say_listening_when_a_port_is_taken(tmp_path):
         held.close()
     assert done.returncode == 2, (done.returncode, done.stderr[-400:])  # an environment error
     assert "Traceback" not in done.stderr
-    assert "listening" not in done.stdout and "listening" not in done.stderr
+    assert "listening" not in done.stdout
+    assert "listening" not in done.stderr
 
 
 def test_a_cli_issued_token_authorises_a_served_app_until_it_is_revoked(tmp_path):
@@ -211,7 +213,8 @@ def test_a_cli_issued_token_authorises_a_served_app_until_it_is_revoked(tmp_path
     try:
         wait_for(f"{base}/health")
         status, body = request("GET", f"{base}/runs", viewer)
-        assert status == 200 and body["runs"] == []
+        assert status == 200
+        assert body["runs"] == []
         late_id, late = issue(env, "viewer")  # issued while it runs: the same file is read
         assert request("GET", f"{base}/runs", late)[0] == 200
         assert cli(env, "tokens", "revoke", token_id, "--json").returncode == 0
@@ -252,7 +255,8 @@ def test_a_served_app_with_an_empty_allowlist_starts_says_so_and_refuses_every_s
     finally:
         code, out, _ = stop(proc)
     assert code == 0
-    assert "allowlist is EMPTY" in out and "ASSOCIATE_RUNS_ROOTS" in out
+    assert "allowlist is EMPTY" in out
+    assert "ASSOCIATE_RUNS_ROOTS" in out
 
 
 def test_the_startup_line_names_a_configured_allowlist(tmp_path):
@@ -265,5 +269,6 @@ def test_the_startup_line_names_a_configured_allowlist(tmp_path):
         code, out, _ = stop(proc)
     assert code == 0
     payload = json.loads(out)  # one document: the access log is not on stdout
-    assert payload["allowlist_empty"] is False and payload["runs_roots"] == [str(tmp_path)]
+    assert payload["allowlist_empty"] is False
+    assert payload["runs_roots"] == [str(tmp_path)]
     assert payload["listening"] == [{"name": "loopback", "host": "127.0.0.1", "port": port}]

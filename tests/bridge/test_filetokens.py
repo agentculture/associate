@@ -24,7 +24,8 @@ def test_an_issued_token_authenticates_through_a_new_store_object(tmp_path):
     path = tmp_path / "state" / "tokens.json"
     issued = _tokens(path).issue("admin", name="ci", roles=["viewer"])
     principal = _tokens(path).authenticate(issued.token)
-    assert principal is not None and principal.identity == "ci"
+    assert principal is not None
+    assert principal.identity == "ci"
     assert principal.roles == {"viewer"}
 
 
@@ -35,7 +36,8 @@ def test_the_file_is_0600_in_a_0700_directory_and_holds_only_hashes(tmp_path):
     assert stat.S_IMODE(path.parent.stat().st_mode) == 0o700
     text = path.read_text(encoding="utf-8")
     secret = issued.token.split(".", 1)[1]
-    assert secret not in text and issued.token not in text
+    assert secret not in text
+    assert issued.token not in text
     doc = json.loads(text)[SERVICE_TOKENS][issued.id]
     assert len(doc["hash"]) == 64
 
@@ -52,15 +54,17 @@ def test_revoke_persists_and_the_token_stops_working(tmp_path):
 def test_a_corrupt_file_is_an_error_not_an_empty_store(tmp_path):
     path = tmp_path / "tokens.json"
     path.write_text("{not json", encoding="utf-8")
+    store = _tokens(path)
     with pytest.raises(ValueError, match="not valid JSON"):
-        _tokens(path).list()
+        store.list()
 
 
 def test_a_file_that_is_not_an_object_is_an_error(tmp_path):
     path = tmp_path / "tokens.json"
     path.write_text("[]", encoding="utf-8")
+    store = _tokens(path)
     with pytest.raises(ValueError, match="not a JSON object"):
-        _tokens(path).list()
+        store.list()
 
 
 def test_a_missing_file_is_an_empty_store_and_reading_creates_nothing(tmp_path):

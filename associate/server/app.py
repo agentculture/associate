@@ -40,13 +40,14 @@ Authentication is the bridge's: ``Authorization: Bearer <service token>`` resolv
 (prefix :data:`TOKEN_PREFIX`). No credential or a bad one is 401, too low a role 403, both
 before any handler runs. Errors are ``{code, message[, remediation]}``.
 
-FastAPI is the ``server`` extra and is imported inside :func:`create_app` only, so importing
+FastAPI is the ``server`` extra and is imported inside :func:`create_app` and its helpers only, so
 this module costs nothing on a base install. Serving (a listener, uvicorn, issuing tokens) is
 not wired here.
 """
 
 # No `from __future__ import annotations`: FastAPI reads the handlers' annotations at
-# runtime, and `Request` is imported inside create_app (the lazy `server` extra).
+# runtime, and `Request` is imported inside the functions that add them (the lazy `server`
+# extra).
 import json
 from pathlib import Path
 from typing import Any
@@ -137,41 +138,24 @@ def build_policy() -> RoutePolicy:
     return policy
 
 
-def create_app(
-    *,
-    tokens: TokenAuthenticator,
-    settings: AuthSettings | None = None,
-    runs_config: Any = None,
-    child_command: list[str] | None = None,
-    web_dist: Any = DEFAULT_UI,
-) -> Any:
-    """The FastAPI app. ``child_command`` replaces ``python -m associate`` (tests only).
+def _start_body(raw: bytes, known: set[str]) -> dict[str, Any]:
+    """The start request's JSON object, or :class:`BodyRefused` (400) saying what is wrong."""
+    try:
+        body = json.loads(raw)
+    except ValueError:
+        body = None
+    if not isinstance(body, dict):
+        raise BodyRefused(400, "invalid", "the body must be a JSON object")
+    unknown = sorted(set(body) - known)
+    if unknown:
+        raise BodyRefused(400, "invalid", f"unknown field(s): {', '.join(unknown)}")
+    return body
 
-    ``web_dist`` is the built web UI directory (default: the one inside the installed package;
-    ``None``, or a directory without ``index.html``: API only). ``app.state.web_ui`` says which.
-    """
-    from fastapi import FastAPI, Request
+
+def _add_authorization(app: Any, policy: RoutePolicy, resolver: Resolver) -> None:
+    """The middleware that refuses a forged write, then checks the route's role."""
+    from fastapi import Request
     from fastapi.responses import JSONResponse
-    from starlette.concurrency import run_in_threadpool
-
-    from associate import __version__
-    from associate.bridge import static
-    from associate.bridge.caching import NoStoreByDefault
-    from associate.runs import service
-
-    policy = build_policy()
-    resolver = Resolver(settings or AuthSettings(), tokens)
-    start_props = set(service.VERBS[0].params["properties"])
-
-    app = FastAPI(title="associate runs", docs_url=None, redoc_url=None, openapi_url=None)
-    app.state.runs_config = runs_config or service.RunsConfig.from_env()
-    app.state.child_command = child_command
-
-    def refused(err: service.RunsError) -> Any:
-        return JSONResponse(err.to_dict(), status_code=STATUS_BY_KIND.get(err.kind, 500))
-
-    def bad_request(message: str) -> Any:
-        return JSONResponse({"code": "invalid", "message": message}, status_code=400)
 
     @app.middleware("http")
     async def authorize(request: Request, call_next: Any) -> Any:
@@ -195,25 +179,26 @@ def create_app(
             return JSONResponse({"code": err.code, "message": err.message}, status_code=err.status)
         return await call_next(request)
 
-    @app.get("/health")
-    def health() -> dict[str, str]:
-        return {"status": "ok", "service": "associate-runs", "version": __version__}
+
+def _add_runs_routes(app: Any) -> None:
+    """``POST /runs``, ``GET /runs/{run_id}`` and ``GET /runs`` over the runs service."""
+    from fastapi import Request
+    from fastapi.responses import JSONResponse
+    from starlette.concurrency import run_in_threadpool
+
+    from associate.runs import service
+
+    start_props = set(service.VERBS[0].params["properties"])
+
+    def refused(err: service.RunsError) -> Any:
+        return JSONResponse(err.to_dict(), status_code=STATUS_BY_KIND.get(err.kind, 500))
 
     @app.post("/runs")
     async def post_runs(request: Request) -> Any:
         try:
-            raw = await read_capped(request, MAX_BODY_BYTES)
+            body = _start_body(await read_capped(request, MAX_BODY_BYTES), start_props)
         except BodyRefused as err:
             return JSONResponse({"code": err.code, "message": err.message}, status_code=err.status)
-        try:
-            body = json.loads(raw)
-        except ValueError:
-            return bad_request("the body must be a JSON object")
-        if not isinstance(body, dict):
-            return bad_request("the body must be a JSON object")
-        unknown = sorted(set(body) - start_props)
-        if unknown:
-            return bad_request(f"unknown field(s): {', '.join(unknown)}")
         try:
             reply = await run_in_threadpool(
                 lambda: service.start(
@@ -245,6 +230,59 @@ def create_app(
         except service.RunsError as err:
             return refused(err)
 
+
+def _add_no_ui_route(app: Any) -> None:
+    """``GET /`` on a server without a built UI: a JSON 404 that says so."""
+    from fastapi.responses import JSONResponse
+
+    @app.get("/", include_in_schema=False)
+    def no_ui() -> Any:
+        return JSONResponse(
+            {
+                "code": "not_found",
+                "message": "this server has no web UI; the API is at /runs and /health",
+                "remediation": "install a wheel built with the UI (web/dist), see "
+                "docs/operations/bridge.md",
+            },
+            status_code=404,
+        )
+
+
+def create_app(
+    *,
+    tokens: TokenAuthenticator,
+    settings: AuthSettings | None = None,
+    runs_config: Any = None,
+    child_command: list[str] | None = None,
+    web_dist: Any = DEFAULT_UI,
+) -> Any:
+    """The FastAPI app. ``child_command`` replaces ``python -m associate`` (tests only).
+
+    ``web_dist`` is the built web UI directory (default: the one inside the installed package;
+    ``None``, or a directory without ``index.html``: API only). ``app.state.web_ui`` says which.
+    """
+    from fastapi import FastAPI
+
+    from associate import __version__
+    from associate.bridge import static
+    from associate.bridge.caching import NoStoreByDefault
+    from associate.runs import service
+
+    policy = build_policy()
+    resolver = Resolver(settings or AuthSettings(), tokens)
+
+    app = FastAPI(title="associate runs", docs_url=None, redoc_url=None, openapi_url=None)
+    app.state.runs_config = runs_config or service.RunsConfig.from_env()
+    app.state.child_command = child_command
+
+    _add_authorization(app, policy, resolver)
+
+    @app.get("/health")
+    def health() -> dict[str, str]:
+        return {"status": "ok", "service": "associate-runs", "version": __version__}
+
+    _add_runs_routes(app)
+
     ui_dir = default_web_dist() if web_dist is DEFAULT_UI else web_dist
     mounted = static.install(app, Path(ui_dir) if ui_dir is not None else None)
     app.state.web_ui = mounted
@@ -252,18 +290,7 @@ def create_app(
         # the UI's own files and its client-side routes are read by any viewer
         policy.add("GET", "/**", "viewer")
     else:
-
-        @app.get("/", include_in_schema=False)
-        def no_ui() -> Any:
-            return JSONResponse(
-                {
-                    "code": "not_found",
-                    "message": "this server has no web UI; the API is at /runs and /health",
-                    "remediation": "install a wheel built with the UI (web/dist), see "
-                    "docs/operations/bridge.md",
-                },
-                status_code=404,
-            )
+        _add_no_ui_route(app)
 
     # outermost: every answer, the 401 and 403 included, says it may not be cached (the UI's
     # own files set their own policy)

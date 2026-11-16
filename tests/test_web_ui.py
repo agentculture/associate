@@ -119,7 +119,8 @@ def test_a_built_ui_is_served_behind_the_same_authentication(tokens, auth, confi
     assert client.app.state.web_ui is True
     assert client.get("/", headers=HTML).status_code == 401
     page = client.get("/", headers={**auth["viewer"], **HTML})
-    assert page.status_code == 200 and page.text == INDEX
+    assert page.status_code == 200
+    assert page.text == INDEX
     assert page.headers["cache-control"] == SHELL
 
 
@@ -129,13 +130,15 @@ def test_a_browser_navigation_to_a_client_side_route_gets_the_shell(
 ):
     client = client_for(tokens, config, dist)
     page = client.get(path, headers={**auth["viewer"], **HTML})
-    assert page.status_code == 200 and page.text == INDEX
+    assert page.status_code == 200
+    assert page.text == INDEX
 
 
 def test_an_api_client_keeps_the_api_on_the_same_paths(tokens, auth, config, dist):
     client = client_for(tokens, config, dist)
     listed = client.get("/runs", headers=auth["viewer"])
-    assert listed.status_code == 200 and listed.json()["runs"] == []
+    assert listed.status_code == 200
+    assert listed.json()["runs"] == []
     assert client.get("/runs/run-" + "0" * 32, headers=auth["viewer"]).status_code == 404
 
 

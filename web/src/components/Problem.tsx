@@ -18,7 +18,10 @@ export function readMessage(error: ApiError): string {
  * A failed read: an alert with the message, the remediation when the server gave one, and a
  * retry. Status is said in words (and a heading-weight line), never by colour alone.
  */
-export function Problem({ error, onRetry }: { error: ApiError; onRetry?: () => void }) {
+export function Problem({
+  error,
+  onRetry,
+}: Readonly<{ error: ApiError; onRetry?: () => void }>) {
   return (
     <div role="alert" className="problem">
       <p className="problem__message">{readMessage(error)}</p>

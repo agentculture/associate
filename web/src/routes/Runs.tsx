@@ -24,7 +24,7 @@ export const FILTERS = [
 
 type FilterKey = (typeof FILTERS)[number]["key"];
 
-function Card({ run, now }: { run: RunCard; now: Date }) {
+function Card({ run, now }: Readonly<{ run: RunCard; now: Date }>) {
   const pill = pillFor(run);
   const id = run.run_id;
   return (
@@ -90,9 +90,7 @@ export function Runs() {
   let body;
   if (state.status === "loading") {
     body = (
-      <p role="status" className="muted">
-        Loading runs…
-      </p>
+      <output className="muted">Loading runs…</output>
     );
   } else if (state.status === "error") {
     body = <Problem error={state.error} onRetry={reload} />;
@@ -131,7 +129,7 @@ export function Runs() {
         </p>
       </div>
       {state.status === "ok" && state.data.runs.length > 0 ? (
-        <div className="filter" role="group" aria-label="Show">
+        <fieldset className="filter" aria-label="Show">
           <span className="muted small" aria-hidden="true">
             Show
           </span>
@@ -146,7 +144,7 @@ export function Runs() {
               {f.label}
             </button>
           ))}
-        </div>
+        </fieldset>
       ) : null}
       {body}
       <p className="muted small">

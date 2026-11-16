@@ -266,16 +266,20 @@ def test_the_api_only_wheel_serves_health_and_a_token_opens_runs_with_no_node(tm
         command, env, _free_port(),
         [("/health", None), ("/runs", None), ("/runs", bearer), ("/", bearer)],
     )  # fmt: skip
-    assert health[0] == 200 and json.loads(health[1])["service"] == "associate-runs"
+    assert health[0] == 200
+    assert json.loads(health[1])["service"] == "associate-runs"
     assert anonymous[0] == 401
-    assert runs[0] == 200 and json.loads(runs[1])["runs"] == []
-    assert root[0] == 404 and json.loads(root[1])["code"] == "not_found"
+    assert runs[0] == 200
+    assert json.loads(runs[1])["runs"] == []
+    assert root[0] == 404
+    assert json.loads(root[1])["code"] == "not_found"
 
     dist = _package_dir(python, tmp_path) / "web_dist"
     dist.mkdir()
     (dist / "index.html").write_text("<!doctype html><title>ui</title>", encoding="utf-8")
     (page,) = _serve_and_get(command, env, _free_port(), [("/", {**bearer, "Accept": "text/html"})])
-    assert page[0] == 200 and "<title>ui</title>" in page[1]
+    assert page[0] == 200
+    assert "<title>ui</title>" in page[1]
 
 
 def test_the_wheel_ships_the_built_ui_and_serve_returns_it_with_no_node(tmp_path):
@@ -300,15 +304,19 @@ def test_the_wheel_ships_the_built_ui_and_serve_returns_it_with_no_node(tmp_path
         [("/", html), ("/runs", html), ("/runs/run-" + "0" * 32, html), (asset.group(1), bearer),
          ("/api/runs", bearer), ("/api/runs", None), ("/health", None)],
     )  # fmt: skip
-    assert root[0] == 200 and root[1] == index
-    assert route[0] == 200 and route[1] == index  # a client-side route falls back to the shell
-    assert run_page[0] == 200 and run_page[1] == index
-    assert script[0] == 200 and script[1] == (dist / asset.group(1).lstrip("/")).read_text(
-        encoding="utf-8"
-    )
-    assert api[0] == 200 and json.loads(api[1])["runs"] == []
+    assert root[0] == 200
+    assert root[1] == index
+    assert route[0] == 200
+    assert route[1] == index  # a client-side route falls back to the shell
+    assert run_page[0] == 200
+    assert run_page[1] == index
+    assert script[0] == 200
+    assert script[1] == (dist / asset.group(1).lstrip("/")).read_text(encoding="utf-8")
+    assert api[0] == 200
+    assert json.loads(api[1])["runs"] == []
     assert anonymous[0] == 401
-    assert health[0] == 200 and json.loads(health[1])["service"] == "associate-runs"
+    assert health[0] == 200
+    assert json.loads(health[1])["service"] == "associate-runs"
 
 
 def test_a_required_ui_build_that_is_missing_fails_the_build(tmp_path):

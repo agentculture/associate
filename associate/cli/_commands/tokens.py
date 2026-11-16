@@ -80,13 +80,13 @@ def cmd_list(args: argparse.Namespace) -> int:
     rows = _guard(_tokens(args).list)
     if getattr(args, "json", False):
         emit_result({"tokens": rows}, json_mode=True)
-        return 0
-    lines = [
-        f"{r['id']}  {', '.join(r['roles']):7}  {r['identity']}  "
-        f"{'revoked ' + r['revoked_at'] if r.get('revoked_at') else 'active'}"
-        for r in rows
-    ]
-    emit_result("\n".join(lines) if lines else "no tokens", json_mode=False)
+    else:
+        lines = [
+            f"{r['id']}  {', '.join(r['roles']):7}  {r['identity']}  "
+            f"{'revoked ' + r['revoked_at'] if r.get('revoked_at') else 'active'}"
+            for r in rows
+        ]
+        emit_result("\n".join(lines) if lines else "no tokens", json_mode=False)
     return 0
 
 

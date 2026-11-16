@@ -45,7 +45,7 @@ def test_every_client_verb_route_is_the_verbs_method_and_path():
     assert verbs, "the client calls at least one verb"
     for name, route in verbs.items():
         verb = VERB_BY_NAME[route["verb"]]
-        assert (route["method"], route["path"]) == verb.http, name
+        assert verb.http == (route["method"], route["path"]), name
 
 
 def test_the_client_only_reads_with_viewer_routes_and_never_starts_a_run():
@@ -128,5 +128,7 @@ def test_the_clients_page_size_and_run_id_pattern_are_the_servers():
     source = (ROOT / "web" / "src" / "api" / "runs.ts").read_text("utf-8")
     limit = re.search(r"export const LIST_LIMIT = (\d+);", source)
     pattern = re.search(r"export const RUN_ID = /\^(.+)\$/;", source)
-    assert limit and int(limit.group(1)) == service.LIST_LIMIT
-    assert pattern and pattern.group(1) == state.RUN_ID.pattern
+    assert limit
+    assert int(limit.group(1)) == service.LIST_LIMIT
+    assert pattern
+    assert pattern.group(1) == state.RUN_ID.pattern

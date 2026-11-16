@@ -19,6 +19,8 @@ from typing import Any
 from associate.cli._errors import EXIT_ENV_ERROR, EXIT_USER_ERROR, CliError
 from associate.cli._output import emit_result
 
+_JSON_HELP = "Emit structured JSON."
+
 _TEXT_ORDER = (
     "run_id",
     "status",
@@ -145,7 +147,7 @@ def register(sub: argparse._SubParsersAction) -> None:
         "runs",
         help="Start a detached run on a checkout and read its result (see 'runs overview').",
     )
-    p.add_argument("--json", action="store_true", help="Emit structured JSON.")
+    p.add_argument("--json", action="store_true", help=_JSON_HELP)
     p.set_defaults(func=cmd_overview, json=False)
     noun = p.add_subparsers(dest="runs_command", parser_class=type(p))
 
@@ -170,19 +172,19 @@ def register(sub: argparse._SubParsersAction) -> None:
         help="Seconds the model may run (default: the contract's budgets.delegate.timeout_ms).",
     )
     st.add_argument("instruction", help="The task, complete and self-contained.")
-    st.add_argument("--json", action="store_true", help="Emit structured JSON.")
+    st.add_argument("--json", action="store_true", help=_JSON_HELP)
     st.set_defaults(func=cmd_start)
 
     sh = noun.add_parser("show", help="A run's status and, once finished, its result.")
     sh.add_argument("run_id", help="The run id `runs start` printed.")
-    sh.add_argument("--json", action="store_true", help="Emit structured JSON.")
+    sh.add_argument("--json", action="store_true", help=_JSON_HELP)
     sh.set_defaults(func=cmd_show)
 
     ls = noun.add_parser("list", help="The most recent runs, newest first.")
     ls.add_argument("--limit", type=int, default=20, help="How many runs (1-100, default 20).")
-    ls.add_argument("--json", action="store_true", help="Emit structured JSON.")
+    ls.add_argument("--json", action="store_true", help=_JSON_HELP)
     ls.set_defaults(func=cmd_list)
 
     ov = noun.add_parser("overview", help="Describe the runs verbs.")
-    ov.add_argument("--json", action="store_true", help="Emit structured JSON.")
+    ov.add_argument("--json", action="store_true", help=_JSON_HELP)
     ov.set_defaults(func=cmd_overview)

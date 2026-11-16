@@ -54,7 +54,8 @@ def ui_app(tokens, tmp_path):
 def test_an_encoded_query_or_fragment_in_the_path_needs_a_credential(ui_app, raw):
     r = raw_get(ui_app, raw)
     assert r.status_code == 401, r.text
-    assert "console.log" not in r.text and "<title>ui</title>" not in r.text
+    assert "console.log" not in r.text
+    assert "<title>ui</title>" not in r.text
 
 
 @pytest.mark.parametrize("raw", ESCAPES)
@@ -83,17 +84,21 @@ def test_with_a_viewer_token_nothing_escapes_or_is_resolved(ui_app, auth, raw):
 
 def test_ui_files_and_the_spa_fallback_still_work_with_a_token(ui_app, auth):
     asset = raw_get(ui_app, "/assets/a.js", auth["viewer"])
-    assert asset.status_code == 200 and "console.log('ui')" in asset.text
+    assert asset.status_code == 200
+    assert "console.log('ui')" in asset.text
     assert raw_get(ui_app, "/assets/a.js").status_code == 401
     page = raw_get(ui_app, "/runs/x", {**auth["viewer"], "Accept": "text/html"})
-    assert page.status_code == 200 and "<title>ui</title>" in page.text
+    assert page.status_code == 200
+    assert "<title>ui</title>" in page.text
     root = raw_get(ui_app, "/", {**auth["viewer"], "Accept": "text/html"})
-    assert root.status_code == 200 and "<title>ui</title>" in root.text
+    assert root.status_code == 200
+    assert "<title>ui</title>" in root.text
 
 
 def test_health_is_still_public(ui_app):
     r = raw_get(ui_app, "/health")
-    assert r.status_code == 200 and "associate-runs" in r.text
+    assert r.status_code == 200
+    assert "associate-runs" in r.text
     assert raw_get(ui_app, "/api/health").status_code == 200
 
 

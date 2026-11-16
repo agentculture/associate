@@ -20,7 +20,7 @@ interface RunsListValue {
 
 const RunsListContext = createContext<RunsListValue | null>(null);
 
-export function RunsListProvider({ children }: { children: ReactNode }) {
+export function RunsListProvider({ children }: Readonly<{ children: ReactNode }>) {
   const { state, reload, refresh } = useLoad(listRuns, "runs");
   const inProgress =
     state.status === "ok" ? state.data.runs.filter((r) => r.status === "running").length : null;

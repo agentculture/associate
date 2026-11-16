@@ -318,14 +318,15 @@ def test_a_directory_that_is_not_a_git_work_tree_is_refused(cfg):
 
 @pytest.mark.parametrize("model", ["", "../x", "worker; id", "Worker", "nope", "super-vl"])
 def test_a_bad_model_is_refused(cfg, repo, model):
+    checkout, child_command = str(repo), fake("plain")
     with pytest.raises(RunsError) as err:
         service.start(
-            checkout=str(repo),
+            checkout=checkout,
             model=model,
             instruction="x",
             test_commands=["true"],
             config=cfg,
-            child_command=fake("plain"),
+            child_command=child_command,
         )
     assert err.value.kind == "invalid"
 
@@ -406,7 +407,8 @@ def test_a_run_does_not_inherit_the_runs_or_server_settings(cfg, repo, monkeypat
     monkeypatch.setenv("ASSOCIATE_SERVER_TOKENS", "/secret/path")
     monkeypatch.setenv("ASSOCIATE_SESSION_ID", "leak")
     env = service._child_env(Path("/tree"))
-    assert "ASSOCIATE_SERVER_TOKENS" not in env and "ASSOCIATE_SESSION_ID" not in env
+    assert "ASSOCIATE_SERVER_TOKENS" not in env
+    assert "ASSOCIATE_SESSION_ID" not in env
     assert env["PYTHONPATH"] == "/tree"
 
 
@@ -432,7 +434,8 @@ def test_cli_runs_start_and_show(cli_env, repo, capsys):
     wait_done(cli_env, started["run_id"])
     assert main(["runs", "show", started["run_id"], "--json"]) == 0
     shown = json.loads(capsys.readouterr().out)
-    assert shown["ok"] is True and shown["merge"] == "merged"
+    assert shown["ok"] is True
+    assert shown["merge"] == "merged"
     assert main(["runs", "show", started["run_id"]]) == 0
     assert "ok=True" in capsys.readouterr().out
     assert main(["runs", "list", "--json"]) == 0
@@ -446,7 +449,8 @@ def test_cli_busy_and_bad_input_exit_1_with_a_structured_error(cli_env, repo, ca
     run_id = json.loads(capsys.readouterr().out)["run_id"]
     assert main(argv + ["true", "--json", "go"]) == 1
     err = json.loads(capsys.readouterr().err)
-    assert run_id in err["message"] and err["remediation"]
+    assert run_id in err["message"]
+    assert err["remediation"]
     assert main(["runs", "show", "../etc", "--json"]) == 1
     capsys.readouterr()
     assert main(["runs", "show", "run-" + "0" * 32, "--json"]) == 1
@@ -463,7 +467,8 @@ def test_cli_runs_overview_and_explain(capsys):
         assert "runs" in capsys.readouterr().out
     assert main(["learn", "--json"]) == 0
     paths = [c["path"] for c in json.loads(capsys.readouterr().out)["commands"]]
-    assert ["runs", "start"] in paths and ["runs", "show"] in paths
+    assert ["runs", "start"] in paths
+    assert ["runs", "show"] in paths
 
 
 # --- review fixes -----------------------------------------------------------------------
@@ -474,7 +479,8 @@ def test_a_subdirectory_of_a_work_tree_is_refused(cfg, repo):
     sub.mkdir()
     with pytest.raises(RunsError) as err:
         start(cfg, sub)
-    assert err.value.kind == "invalid" and "root" in str(err.value)
+    assert err.value.kind == "invalid"
+    assert "root" in str(err.value)
 
 
 def test_an_instruction_is_limited_in_bytes_not_characters(cfg, repo):
@@ -498,7 +504,8 @@ def test_a_clean_run_with_nothing_to_merge_is_ok():
             },
         },
     )
-    assert reply["ok"] is True and reply["merge"] == "nothing_to_merge"
+    assert reply["ok"] is True
+    assert reply["merge"] == "nothing_to_merge"
     assert reply["changed_paths"] == []
 
 

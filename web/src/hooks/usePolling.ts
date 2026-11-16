@@ -19,7 +19,7 @@ export function usePolling(active: boolean, tick: () => void, ms: number = REFRE
     if (!active) return undefined;
     let timer: ReturnType<typeof setInterval> | null = null;
     const start = () => {
-      if (timer === null) timer = setInterval(() => tickRef.current(), ms);
+      timer ??= setInterval(() => tickRef.current(), ms);
     };
     const stop = () => {
       if (timer !== null) clearInterval(timer);

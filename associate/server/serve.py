@@ -163,7 +163,8 @@ def plan_listeners(
 def require_extra() -> None:
     """Raise :class:`ServerExtraMissing` unless FastAPI and uvicorn import."""
     try:
-        import fastapi  # noqa: F401, PLC0415 - optional extra, imported lazily
+        # the optional extra, imported lazily
+        import fastapi  # noqa: F401, PLC0415
         import uvicorn  # noqa: F401, PLC0415
     except ImportError as exc:
         raise ServerExtraMissing(
@@ -223,18 +224,34 @@ class ListenerFailed(RuntimeError):
     """A listener did not start (for example its port is taken)."""
 
 
-def serve(
-    listeners: list[Listener],
-    *,
-    log_level: str = "info",
-    ready: Callable[[], None] | None = None,
-) -> None:
-    """Serve every listener under uvicorn until SIGINT or SIGTERM, then stop them all."""
-    require_extra()
+class _Exit:
+    """A block that may call ``sys.exit``: the exit is kept (``exited``, ``code``), not raised.
+
+    uvicorn exits the process from inside ``Server.serve`` when its listener cannot start;
+    here that is one listener's outcome, which :func:`serve` reports as
+    :class:`ListenerFailed` once every other listener has stopped.
+    """
+
+    def __init__(self) -> None:
+        self.exited = False
+        self.code: Any = None
+
+    def __enter__(self) -> _Exit:
+        return self
+
+    def __exit__(self, exc_type: Any, exc: Any, traceback: Any) -> bool:
+        if exc_type is None or not issubclass(exc_type, SystemExit):
+            return False
+        self.exited = True
+        self.code = exc.code
+        return True
+
+
+def _servers(listeners: list[Listener], log_level: str) -> list[Any]:
+    """One uvicorn server per listener; ``server.bound`` is set once its socket is bound."""
     import asyncio  # noqa: PLC0415
     import contextlib  # noqa: PLC0415
     import copy  # noqa: PLC0415
-    import signal  # noqa: PLC0415
 
     import uvicorn  # noqa: PLC0415
 
@@ -246,6 +263,15 @@ def serve(
     class Server(uvicorn.Server):
         """uvicorn would let the last server to start own the signals; this process owns them."""
 
+        def __init__(self, config: Any) -> None:
+            super().__init__(config)
+            self.bound = asyncio.Event()
+
+        async def startup(self, sockets: Any = None) -> None:
+            await super().startup(sockets=sockets)
+            if self.started:
+                self.bound.set()
+
         @contextlib.contextmanager
         def capture_signals(self):  # newer uvicorn
             yield
@@ -253,7 +279,7 @@ def serve(
         def install_signal_handlers(self) -> None:  # older uvicorn
             return None
 
-    servers = [
+    return [
         Server(
             uvicorn.Config(
                 lst.app,
@@ -266,37 +292,60 @@ def serve(
         for lst in listeners
     ]
 
-    async def main() -> None:
-        loop = asyncio.get_running_loop()
 
-        def stop() -> None:
-            for server in servers:
-                server.should_exit = True
+def _stop(servers: list[Any]) -> None:
+    for server in servers:
+        server.should_exit = True
 
-        for sig in (signal.SIGINT, signal.SIGTERM):
-            loop.add_signal_handler(sig, stop)
 
-        async def run(server: Any) -> None:
-            try:
-                await server.serve()
-            except SystemExit as stop_now:  # uvicorn exits when its listener cannot start
-                failed.append(stop_now.code)
-                stop()
+async def _run(server: Any, servers: list[Any], failed: list[Any]) -> None:
+    """Serve one listener; if uvicorn exits because it cannot start, stop them all."""
+    with _Exit() as left:
+        await server.serve()
+    if left.exited:
+        failed.append(left.code)
+        _stop(servers)
 
-        tasks = [asyncio.ensure_future(run(server)) for server in servers]
-        # "ready" means every listener has bound its socket, not that startup began
-        while not all(server.started for server in servers):
-            if any(task.done() for task in tasks):  # one failed to start: stop the others
-                stop()
-                break
-            await asyncio.sleep(0.02)
-        else:
-            if ready is not None:
-                ready()
-        await asyncio.gather(*tasks)
+
+async def _all_bound(servers: list[Any]) -> None:
+    for server in servers:
+        await server.bound.wait()
+
+
+async def _serve_all(servers: list[Any], ready: Callable[[], None] | None) -> list[Any]:
+    """Run every server until a signal stops them; the exit codes of those that failed."""
+    import asyncio  # noqa: PLC0415
+    import signal  # noqa: PLC0415
 
     failed: list[Any] = []
-    asyncio.run(main())
+    loop = asyncio.get_running_loop()
+    for sig in (signal.SIGINT, signal.SIGTERM):
+        loop.add_signal_handler(sig, _stop, servers)
+    tasks = [asyncio.ensure_future(_run(server, servers, failed)) for server in servers]
+    # "ready" means every listener has bound its socket, not that startup began
+    all_bound = asyncio.ensure_future(_all_bound(servers))
+    await asyncio.wait([all_bound, *tasks], return_when=asyncio.FIRST_COMPLETED)
+    if all_bound.done():
+        if ready is not None:
+            ready()
+    else:  # one ended before every listener was up: stop the others
+        all_bound.cancel()
+        _stop(servers)
+    await asyncio.gather(*tasks)
+    return failed
+
+
+def serve(
+    listeners: list[Listener],
+    *,
+    log_level: str = "info",
+    ready: Callable[[], None] | None = None,
+) -> None:
+    """Serve every listener under uvicorn until SIGINT or SIGTERM, then stop them all."""
+    require_extra()
+    import asyncio  # noqa: PLC0415
+
+    failed = asyncio.run(_serve_all(_servers(listeners, log_level), ready))
     if any(code not in (0, None) for code in failed):
         raise ListenerFailed(
             "a listener could not start; the address may be in use (see the log above)"

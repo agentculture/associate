@@ -43,7 +43,8 @@ def test_an_editor_adding_changing_or_removing_is_denied():
         assert ei.value.code == "commands_admin_only"
         assert ei.value.status == 403
         assert isinstance(ei.value, Forbidden)
-        assert "ed" in ei.value.message and "r1" in ei.value.message
+        assert "ed" in ei.value.message
+        assert "r1" in ei.value.message
 
 
 def test_values_compare_json_normalised():
@@ -54,14 +55,17 @@ def test_false_zero_and_empty_are_values_not_absence():
     def with_value(value):
         return {"id": "r1", "kind": "runner", "params": {"commands": value}}
 
+    empty = doc()
     for value in (False, 0, {}, [], ""):
+        valued = with_value(value)
         with pytest.raises(GuardDenied):
-            COMMANDS.check(EDITOR, doc(), with_value(value))
+            COMMANDS.check(EDITOR, empty, valued)
         with pytest.raises(GuardDenied):
-            COMMANDS.check(EDITOR, with_value(value), doc())
-        COMMANDS.check(EDITOR, with_value(value), with_value(value))
+            COMMANDS.check(EDITOR, valued, empty)
+        COMMANDS.check(EDITOR, valued, with_value(value))
+    true, false = with_value(True), with_value(False)
     with pytest.raises(GuardDenied):
-        COMMANDS.check(EDITOR, with_value(True), with_value(False))
+        COMMANDS.check(EDITOR, true, false)
 
 
 def test_a_guard_that_does_not_apply_is_inert():
@@ -71,5 +75,6 @@ def test_a_guard_that_does_not_apply_is_inert():
 def test_save_check_runs_every_guard_for_the_kind():
     check = save_check(EDITOR, {"actors": [COMMANDS]})
     check("machines", None, doc({"x": ["rm"]}))  # no guard for this kind
+    changed = doc({"x": ["rm"]})
     with pytest.raises(GuardDenied):
-        check("actors", None, doc({"x": ["rm"]}))
+        check("actors", None, changed)

@@ -442,7 +442,8 @@ def test_a_surface_accepting_other_params_fails(http, surface, key):
     found[surface][key] = {**found[surface][key], "extra": False}
     failures = parity_failures(service.VERBS, **found)
     assert len(failures) == 1
-    assert failures[0].startswith("runs start: ") and "differ from" in failures[0]
+    assert failures[0].startswith("runs start: ")
+    assert "differ from" in failures[0]
 
 
 @pytest.mark.parametrize(
@@ -452,7 +453,8 @@ def test_a_surface_with_another_required_set_fails(http, surface, key):
     found = surfaces(http)
     found[surface][key] = {**found[surface][key], "timeout": True}
     failures = parity_failures(service.VERBS, **found)
-    assert len(failures) == 1 and "differ from" in failures[0]
+    assert len(failures) == 1
+    assert "differ from" in failures[0]
 
 
 def test_an_mcp_tool_no_verb_declares_fails(http, monkeypatch):

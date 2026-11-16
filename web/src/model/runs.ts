@@ -46,7 +46,7 @@ const plural = (n: number, one: string, many = `${one}s`) => `${n} ${n === 1 ? o
 
 /** The test counts in words (the same sentence on a card and on the run page). */
 export function testsSummary(tests: TestCounts | null | undefined): string {
-  if (!tests || tests.passed === null || tests.passed === undefined) return "No test result";
+  if (tests?.passed === null || tests?.passed === undefined) return "No test result";
   if (tests.passed) {
     return tests.commands === 1
       ? "The test command passed"
@@ -91,7 +91,7 @@ export function outcomeItems(run: RunCard): OutcomeItem[] {
 /** The checkout's last path segment: the API has a path, not an `owner/name`. */
 export function repoName(checkout: string | null | undefined): string {
   const parts = (checkout ?? "").split("/").filter(Boolean);
-  return parts.length ? parts[parts.length - 1] : "unknown checkout";
+  return parts.at(-1) ?? "unknown checkout";
 }
 
 const MINUTE = 60_000;
@@ -128,7 +128,8 @@ export function took(start: string | null | undefined, end: string | null | unde
   if (minutes < 60) return `took ${plural(minutes, "minute")}`;
   const hours = Math.floor(minutes / 60);
   const rest = minutes % 60;
-  return `took ${plural(hours, "hour")}${rest ? ` ${plural(rest, "minute")}` : ""}`;
+  const whole = `took ${plural(hours, "hour")}`;
+  return rest ? `${whole} ${plural(rest, "minute")}` : whole;
 }
 
 /** A run's timing: "Started 4 minutes ago", "Finished yesterday, took 6 minutes". */
@@ -140,7 +141,7 @@ export function timing(
   if (run.status === "finished") {
     const finished = ago(run.finished_at, now);
     const length = took(run.started_at, run.finished_at);
-    if (finished) return `Finished ${finished}${length ? `, ${length}` : ""}`;
+    if (finished) return length ? `Finished ${finished}, ${length}` : `Finished ${finished}`;
   }
   if (!started) return "Start time unknown";
   if (run.status === "failed-to-start") return `Tried to start ${started}`;

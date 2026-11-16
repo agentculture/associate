@@ -81,7 +81,8 @@ def test_list_gives_each_card_its_title_merge_finish_and_outcome(cfg, repo):
     assert row["title"] == "Raise inline comments"
     assert row["merge"] == "merged"
     assert row["ok"] is True
-    assert row["finished_at"] and row["started_at"]
+    assert row["finished_at"]
+    assert row["started_at"]
     assert row["outcome"] == "ok"
     assert row["exit_code"] == 0
     assert row["tests"] == {"passed": True, "commands": 1, "failed": 0}
@@ -139,7 +140,8 @@ def test_list_of_lost_and_failed_to_start_runs(cfg):
         {"status": "failed-to-start", "finished_at": "2026-11-16T11:00:01+00:00", "error": "x"},
     )
     rows = {r["run_id"]: r for r in service.list_runs(config=cfg)["runs"]}
-    assert rows[lost]["status"] == "lost" and rows[lost]["title"] == "Add a guideline"
+    assert rows[lost]["status"] == "lost"
+    assert rows[lost]["title"] == "Add a guideline"
     assert rows[failed]["status"] == "failed-to-start"
     assert rows[failed]["finished_at"] == "2026-11-16T11:00:01+00:00"
 
@@ -215,7 +217,8 @@ def test_list_carries_no_command_output_and_no_test_command_text(cfg, repo):
         ),
     )
     text = json.dumps(service.list_runs(config=cfg))
-    assert "TAILTEXT" not in text and "abc123" not in text
+    assert "TAILTEXT" not in text
+    assert "abc123" not in text
 
 
 # --- runs show ---------------------------------------------------------------------------------
@@ -240,7 +243,8 @@ def test_show_gives_the_instruction_and_each_test_commands_result(cfg):
         {"command": "markdownlint-cli2 'RE VIEW.md'", "exit_code": 1, "timed_out": False},
         {"command": "slow", "exit_code": None, "timed_out": True},
     ]
-    assert shown["tests"]["commands"] == 3 and shown["tests"]["failed"] == 2
+    assert shown["tests"]["commands"] == 3
+    assert shown["tests"]["failed"] == 2
 
 
 def test_show_never_carries_a_commands_output_or_environment(cfg, monkeypatch):
@@ -263,7 +267,8 @@ def test_show_never_carries_a_commands_output_or_environment(cfg, monkeypatch):
     )
     shown = service.show(run_id, config=cfg)
     text = json.dumps(shown)
-    assert "OUTPUT-TAIL" not in text and "sk-very-secret-value" not in text
+    assert "OUTPUT-TAIL" not in text
+    assert "sk-very-secret-value" not in text
     assert set(shown["tests"]["results"][0]) == {"command", "exit_code", "timed_out"}
 
 

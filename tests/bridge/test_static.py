@@ -136,7 +136,8 @@ def test_a_dot_dot_query_fragment_backslash_or_control_path_is_refused_not_resol
         r = raw_get(app, raw, {"Accept": accept})
         # 404 (a newline never even matches the route: the framework's own 404), never a file
         assert r.status_code == 404, (raw, accept)
-        assert "spa" not in r.text and "console.log" not in r.text
+        assert "spa" not in r.text
+        assert "console.log" not in r.text
 
 
 def test_an_ordinary_dotted_file_name_is_still_served(dist):
