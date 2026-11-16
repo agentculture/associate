@@ -404,6 +404,41 @@ The most recent runs, newest first, each with `run_id`, `status`, `ok`, `model`,
 - `1` a limit outside 1-100
 """
 
+_MCP = """\
+# associate mcp
+
+Serve the runs verbs as MCP tools over stdio, for an MCP client (an agent) to call.
+
+## Usage
+
+    associate mcp [--json]
+
+Needs the `mcp` extra: `pip install 'associate[mcp]'`. Without it the verb exits `2`
+with a message naming the extra; it never prints a traceback. Stdout is the protocol
+channel, so the verb writes nothing else there (a status line goes to stderr, and
+`--json` only shapes an error on stderr).
+
+## Tools
+
+One tool per runs verb, with the verb's own JSON schema as its input schema, calling the
+same code as the CLI and HTTP:
+
+- `runs_start` — `checkout`, `model`, `instruction`, `test_commands` (required),
+  `timeout`; a remote caller, so the checkout must be under `ASSOCIATE_RUNS_ROOTS`
+  (empty: every start is refused `forbidden`), exactly as `POST /runs`.
+- `runs_show` — `run_id` (required).
+- `runs_list` — `limit` (1-100).
+
+A refused request is a tool error `<kind>: <message> (hint: ...)` with kind `invalid`,
+`forbidden`, `not_found`, `busy` or `env`; no traceback is ever returned. A test fails if
+a verb lacks a CLI command, an MCP tool or an HTTP operation.
+
+## Exit codes
+
+- `0` the client disconnected
+- `2` the `mcp` extra is not installed
+"""
+
 
 ENTRIES: dict[tuple[str, ...], str] = {
     (): _ROOT,
@@ -420,6 +455,7 @@ ENTRIES: dict[tuple[str, ...], str] = {
     ("runs", "start"): _RUNS_START,
     ("runs", "show"): _RUNS_SHOW,
     ("runs", "list"): _RUNS_LIST,
+    ("mcp",): _MCP,
     ("cli",): _CLI,
     ("cli", "overview"): _CLI,
 }

@@ -39,6 +39,7 @@ Commands
                                base commit and changed paths. Nothing is ever pushed.
   associate runs list          The most recent runs with their status.
   associate runs overview      Describe the runs verbs (also served over HTTP).
+  associate mcp                Serve the runs verbs as MCP tools over stdio (mcp extra).
   associate cli overview       Describe the CLI surface itself.
 
 Machine-readable output
@@ -102,6 +103,10 @@ def _as_json_payload() -> dict[str, object]:
             },
             {"path": ["runs", "list"], "summary": "The most recent runs with their status."},
             {"path": ["runs", "overview"], "summary": "Describe the runs verbs."},
+            {
+                "path": ["mcp"],
+                "summary": "Serve the runs verbs as MCP tools over stdio (the mcp extra).",
+            },
             {"path": ["cli", "overview"], "summary": "Describe the CLI surface."},
         ],
         "exit_codes": {

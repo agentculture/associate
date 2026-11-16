@@ -10,7 +10,7 @@ from pathlib import Path
 import pytest
 
 BRIDGE = Path(__file__).resolve().parents[2] / "associate" / "bridge"
-CITED = ("access", "resolve", "tokens", "principal", "static", "caching", "guards")
+CITED = ("access", "resolve", "tokens", "principal", "static", "caching", "guards", "mcpserver")
 ORIGINAL = ("policy",)
 SOURCE_PATH = re.compile(r"culture_rules/[\w/]+\.py")
 COMMIT = re.compile(r"\b[0-9a-f]{40}\b")
@@ -72,7 +72,7 @@ def test_no_third_party_import_at_module_level_except_static_and_caching_free():
         "    sys.modules[m] = None\n"
         "import associate.bridge, associate.bridge.access, associate.bridge.principal\n"
         "import associate.bridge.tokens, associate.bridge.resolve, associate.bridge.policy\n"
-        "import associate.bridge.guards, associate.bridge.caching\n"
+        "import associate.bridge.guards, associate.bridge.caching, associate.bridge.mcpserver\n"
         "print('ok')\n"
     )
     done = subprocess.run([sys.executable, "-c", code], capture_output=True, text=True)
