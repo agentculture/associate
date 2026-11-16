@@ -145,8 +145,10 @@ built one (`associate/web_dist`). It has two screens:
   truncation note, and the final reply as paragraphs.
 
 There is no start button: runs are started by a workflow or the CLI. A list
-with a running run, and a running run's page, are read again every 5 seconds,
-not at all once nothing is running, and not while the browser tab is hidden.
+with a running run, and a running run's page, are read again every 5 seconds, and
+not while the browser tab is hidden. With nothing running, the list is read every
+30 seconds, so a run started elsewhere shows up without a reload; a finished
+run's page is not read again.
 
 How it is served:
 

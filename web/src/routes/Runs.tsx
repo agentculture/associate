@@ -75,7 +75,7 @@ function Empty() {
           associate runs start --checkout PATH --model worker --test-command "CMD" -- "INSTRUCTION"
         </code>
       </pre>
-      <p className="muted small">It appears here as soon as it starts.</p>
+      <p className="muted small">It appears here within half a minute of starting.</p>
     </section>
   );
 }

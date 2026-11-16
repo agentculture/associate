@@ -2,7 +2,7 @@ import { act, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import fixtures from "../fixtures/runs.json";
-import { REFRESH_MS } from "../hooks/usePolling";
+import { IDLE_REFRESH_MS, REFRESH_MS } from "../hooks/usePolling";
 import { deferred, envelope, setHidden, stubApi } from "../test/api";
 import { renderApp } from "../test/render";
 
@@ -259,15 +259,36 @@ describe("the list's refresh", () => {
     expect(api.calls("GET /runs")).toHaveLength(3);
     expect(screen.getByText("No run in progress")).toBeInTheDocument();
     await tick(REFRESH_MS * 4);
-    expect(api.calls("GET /runs")).toHaveLength(3); // nothing running: no more reads
+    expect(api.calls("GET /runs")).toHaveLength(3); // nothing running: back to the slow pace
   });
 
-  it("never refreshes a list with nothing running", async () => {
+  it("reads an idle list again at the slow pace, so a run started elsewhere shows up", async () => {
     const done = fixtures.list.runs.filter((r) => r.status !== "running");
-    const api = stubApi({ "GET /runs": { body: { runs: done, total: done.length } } });
+    const api = stubApi({
+      "GET /runs": (n) => ({ body: n < 2 ? { runs: done, total: done.length } : fixtures.list }),
+    });
     renderApp("/runs");
+    await tick(0); // the first read answers, and the slow interval starts from here
     await tick(REFRESH_MS * 5);
     expect(api.calls("GET /runs")).toHaveLength(1);
+    expect(screen.getByText("No run in progress")).toBeInTheDocument();
+    await tick(IDLE_REFRESH_MS - REFRESH_MS * 5);
+    expect(api.calls("GET /runs")).toHaveLength(2);
+    expect(screen.getByText("1 run in progress")).toBeInTheDocument();
+    await tick(REFRESH_MS); // a run is running now: the fast pace
+    expect(api.calls("GET /runs")).toHaveLength(3);
+  });
+
+  it("does not start another read, or abort the first, while one is in flight", async () => {
+    const hold = deferred<{ body: unknown }>();
+    const api = stubApi({ "GET /runs": (n) => (n === 1 ? { body: fixtures.list } : hold.promise) });
+    renderApp("/runs");
+    await tick(0);
+    await tick(REFRESH_MS * 4); // four polls pass while the second read is still out
+    expect(api.calls("GET /runs")).toHaveLength(2);
+    await act(async () => hold.resolve({ body: fixtures.list }));
+    await tick(REFRESH_MS);
+    expect(api.calls("GET /runs")).toHaveLength(3); // answered: polling carries on
   });
 
   it("pauses while the tab is hidden and reads at once when it is shown again", async () => {

@@ -3,6 +3,9 @@ import { useEffect, useRef } from "react";
 /** How often a screen with a running run reads again: modest, the run takes minutes. */
 export const REFRESH_MS = 5_000;
 
+/** How often the runs list reads again while nothing is running, so a new run shows up. */
+export const IDLE_REFRESH_MS = 30_000;
+
 /**
  * Call `tick` every `REFRESH_MS` while `active` and the tab is visible. Hiding the tab pauses
  * it; showing it again ticks at once (the screen may be stale) and resumes. Inactive (nothing

@@ -3,7 +3,8 @@ import { ApiError } from "../api/client";
 
 /**
  * Cited from qodo-cli web/src/hooks/useLoad.ts @ ee73d5682a02952a76567887995b4f2e3aca5ea2
- * (cite-don't-import: this repo owns its copy). Adapted: none beyond this header.
+ * (cite-don't-import: this repo owns its copy). Adapted: `refresh()` does nothing while a read
+ * is still in flight, so a slow answer is never aborted by the next poll.
  */
 
 /** One read's state: every state is its own value, so no view mistakes one for another. */
@@ -32,9 +33,12 @@ export function useLoad<T>(
   const loadRef = useRef(load);
   loadRef.current = load;
 
+  const inFlight = useRef(false);
+
   useEffect(() => {
     const ctl = new AbortController();
     if (!run.quiet) setState({ status: "loading" });
+    inFlight.current = true;
     loadRef
       .current(ctl.signal)
       .then((data) => {
@@ -42,11 +46,17 @@ export function useLoad<T>(
       })
       .catch((err: unknown) => {
         if (!ctl.signal.aborted) setState({ status: "error", error: asApiError(err) });
+      })
+      .finally(() => {
+        if (!ctl.signal.aborted) inFlight.current = false;
       });
     return () => ctl.abort();
   }, [key, run]);
 
   const reload = useCallback(() => setRun((r) => ({ n: r.n + 1, quiet: false })), []);
-  const refresh = useCallback(() => setRun((r) => ({ n: r.n + 1, quiet: true })), []);
+  const refresh = useCallback(() => {
+    if (inFlight.current) return; // the read under way will answer; never abort it for a poll
+    setRun((r) => ({ n: r.n + 1, quiet: true }));
+  }, []);
   return { state, reload, refresh };
 }
