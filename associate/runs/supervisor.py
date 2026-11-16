@@ -12,6 +12,7 @@ from __future__ import annotations
 
 import json
 import os
+import re
 import subprocess
 import sys
 from datetime import UTC, datetime
@@ -27,6 +28,9 @@ STORED_PATH_CHARS = 4096
 #: Characters of the child's stderr tail searched for its ``--json`` error object.
 STDERR_TAIL = 16_000
 _GIT_TIMEOUT = 60
+
+
+_COMMIT = re.compile(r"[0-9a-f]{40}(?:[0-9a-f]{24})?")
 
 
 def _now() -> str:
@@ -81,6 +85,8 @@ def cli_error(stderr: str) -> str | None:
 
 def _merge_commit(checkout: str, run_id: str) -> str | None:
     """The merge ``associate.harness.worktree`` made on ``main`` for this run (session id)."""
+    if not (isinstance(run_id, str) and RUN_ID.fullmatch(run_id)):
+        return None
     out = _git(
         checkout,
         "log",
@@ -93,7 +99,8 @@ def _merge_commit(checkout: str, run_id: str) -> str | None:
     )
     if out is None:
         return None
-    return out.strip() or None
+    commit = out.strip()
+    return commit if _COMMIT.fullmatch(commit) else None
 
 
 def git_facts(request: dict[str, Any], result: dict[str, Any] | None) -> dict[str, Any]:
@@ -108,6 +115,9 @@ def git_facts(request: dict[str, Any], result: dict[str, Any] | None) -> dict[st
     """
     checkout = request["checkout"]
     base = request.get("base_commit")
+    # the base goes to git as an argument: only a full commit id, never an option or a path
+    if not (isinstance(base, str) and _COMMIT.fullmatch(base)):
+        base = None
     facts: dict[str, Any] = {"base_commit": base, "changed_paths": [], "changed_paths_error": None}
     merge = (result or {}).get("merge")
     if merge == "merged":
