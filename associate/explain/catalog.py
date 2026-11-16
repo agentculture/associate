@@ -368,7 +368,8 @@ A run's status, and once it has finished, its result.
 ## Output
 
 - `status`: `running | finished | failed-to-start | lost` (lost: the run's
-  processes are gone and left no result).
+  processes are gone and left no result; a run still starting reads `running`, and one
+  whose supervisor was never recorded within 120 s reads `failed-to-start`).
 - `ok`: true only when the exit code is 0, `outcome` is `ok`, `tests.passed` is
   true and `merge` is `merged` or `nothing_to_merge` (a clean run that changed
   nothing); `not_ok_because` says why not. Read `merge` to know whether anything
@@ -470,6 +471,11 @@ Environment: `ASSOCIATE_HOST`, `ASSOCIATE_PORT`, `ASSOCIATE_LAN_HOST`, `ASSOCIAT
 The server starts even while `ASSOCIATE_RUNS_ROOTS` is empty; every `POST /runs` is then
 refused (403). The startup line says so. "listening" is printed once every listener has bound
 its socket; SIGINT or SIGTERM stops them together.
+
+A write (any method but GET, HEAD and OPTIONS) needs `Content-Type: application/json` (415
+otherwise) and is refused 403, before authentication, when `Sec-Fetch-Site` is `cross-site`
+or `Origin` is not the server's own; a body over 512 KiB is 413 as soon as it is counted. No
+CORS header is ever sent.
 
 ## Exit codes
 

@@ -45,6 +45,7 @@ import re
 import shlex
 import subprocess
 import sys
+import time
 from dataclasses import dataclass, field
 from datetime import UTC, datetime
 from pathlib import Path
@@ -58,6 +59,7 @@ __all__ = [
     "VERBS",
     "RunsConfig",
     "RunsError",
+    "START_GRACE_SECONDS",
     "Verb",
     "default_child_command",
     "list_runs",
@@ -86,6 +88,9 @@ SHOWN_INSTRUCTION_CHARS = 4000
 SHOWN_TEST_RESULTS = MAX_TEST_COMMANDS
 SHOWN_TEST_COMMAND_CHARS = 512
 LIST_LIMIT = 100
+#: A started run with no supervisor or child record yet reads ``running`` for this long after
+#: its ``request.json`` (the start window); past it, ``failed-to-start``.
+START_GRACE_SECONDS = 120.0
 #: ``runs list``: characters of a run's title (the instruction's first non-empty line).
 LIST_TITLE_CHARS = 120
 #: ``runs list``: characters of the short words a card shows (model, timestamps, outcome).
@@ -504,6 +509,8 @@ def _launch(
             "timeout": seconds,
             "base_commit": head,
             "started_at": started_at,
+            # until then a run with no supervisor or child record is starting, not lost
+            "start_deadline": time.time() + START_GRACE_SECONDS,
             "cwd": str(run),
             "argv": argv,
         },
@@ -546,19 +553,45 @@ def _launch(
 # ------------------------------------------------------------------ show and list
 
 
-def _status(run: Path, run_id: str) -> tuple[str, dict[str, Any] | None]:
+def _status(run: Path, run_id: str, request: dict[str, Any]) -> tuple[str, dict[str, Any] | None]:
     result = state.read_json(run / "result.json")
     if isinstance(result, dict):
         return str(result.get("status", "finished")), result
+    recorded = False
     for name in ("supervisor.json", "child.json"):
         record = state.read_json(run / name)
+        recorded = recorded or record is not None
         if isinstance(record, dict) and state.pid_alive(record.get("pid"), run_id):
             return "running", None
     # the supervisor may have written its result and exited between the two reads
     result = state.read_json(run / "result.json")
     if isinstance(result, dict):
         return str(result.get("status", "finished")), result
-    return "lost", None
+    if recorded:
+        return "lost", None
+    return _start_window(request)
+
+
+def _start_window(request: dict[str, Any]) -> tuple[str, dict[str, Any] | None]:
+    """A run with ``request.json`` but no supervisor or child record yet: starting or dead.
+
+    ``start`` writes ``request.json`` (with ``start_deadline``), then starts the supervisor,
+    then writes ``supervisor.json``: until the deadline the run reads ``running``. Past it the
+    supervisor was never recorded, so nothing ran: ``failed-to-start``. The starter held the
+    checkout lock and has let it go with its own process (or on the failed launch). A request
+    with no usable deadline (written by hand) reads ``lost``.
+    """
+    deadline = request.get("start_deadline")
+    if isinstance(deadline, bool) or not isinstance(deadline, (int, float)):
+        return "lost", None
+    if time.time() < deadline:
+        return "running", None
+    return "failed-to-start", {
+        "status": "failed-to-start",
+        "finished_at": None,
+        "error": "the run's supervisor was never recorded: the starting process ended before "
+        "the run began; nothing ran, and its checkout is free again",
+    }
 
 
 def _cut(value: Any, chars: int) -> Any:
@@ -732,7 +765,10 @@ def _title(value: Any) -> str | None:
 
 
 def show(run_id: Any, *, config: RunsConfig | None = None) -> dict[str, Any]:
-    """The run's status (``running | finished | failed-to-start | lost``) and its result."""
+    """The run's status (``running | finished | failed-to-start | lost``) and its result.
+
+    A run that is still starting (its supervisor not yet recorded) reads ``running``.
+    """
     config = config or RunsConfig.from_env()
     try:
         run = state.run_dir(Path(config.state_dir), run_id)
@@ -741,7 +777,12 @@ def show(run_id: Any, *, config: RunsConfig | None = None) -> dict[str, Any]:
     request = state.read_json(run / "request.json")
     if not isinstance(request, dict):
         raise RunsError("not_found", f"no run {run_id}", "list runs with `associate runs list`")
-    status, result = _status(run, run_id)
+    return _show(run, run_id, request)
+
+
+def _show(run: Path, run_id: str, request: dict[str, Any]) -> dict[str, Any]:
+    """``runs show``'s reply for a run whose ``request.json`` has been read."""
+    status, result = _status(run, run_id, request)
     reply: dict[str, Any] = {
         "run_id": run_id,
         "status": status,
@@ -767,27 +808,51 @@ def show(run_id: Any, *, config: RunsConfig | None = None) -> dict[str, Any]:
     return reply
 
 
-def list_runs(*, config: RunsConfig | None = None, limit: Any = 20) -> dict[str, Any]:
-    """The most recent runs (newest first), each with its status and ``ok``."""
-    config = config or RunsConfig.from_env()
-    if isinstance(limit, bool) or not isinstance(limit, int) or not 1 <= limit <= LIST_LIMIT:
-        raise RunsError("invalid", f"limit must be an integer from 1 to {LIST_LIMIT}")
-    runs_dir = Path(config.state_dir) / "runs"
+def _newest_first(runs_dir: Path) -> list[tuple[int, str]]:
+    """``(request.json mtime, run id)`` of every run, newest first, without opening a file.
+
+    ``request.json`` is written once, when the run starts, so its mtime is the start time (a
+    directory's own mtime moves as the run writes its other files).
+    """
     found = []
     try:
-        entries = list(runs_dir.iterdir())
+        entries = list(os.scandir(runs_dir))
     except OSError:
         entries = []
     for entry in entries:
         if not RUN_ID.fullmatch(entry.name):
             continue
-        request = state.read_json(entry / "request.json")
-        if isinstance(request, dict):
-            started = str(request.get("started_at", ""))
-            found.append((started, entry.name, _title(request.get("instruction"))))
+        try:
+            stamp = os.stat(os.path.join(entry.path, "request.json")).st_mtime_ns
+        except OSError:
+            continue
+        found.append((stamp, entry.name))
     found.sort(reverse=True)
-    runs = [_card(show(run_id, config=config), title) for _s, run_id, title in found[:limit]]
-    return _bound_list({"runs": runs, "total": len(found)})
+    return found
+
+
+def list_runs(*, config: RunsConfig | None = None, limit: Any = 20) -> dict[str, Any]:
+    """The most recent runs (newest first), each with its status and ``ok``.
+
+    Runs are ordered by when they started (their ``request.json``'s mtime, a ``stat``) and only
+    as many ``request.json`` files are read as the reply shows (plus any unreadable ones
+    skipped on the way); ``total`` counts every run with a ``request.json``. Nothing is ever
+    deleted here: retention is the operator's.
+    """
+    config = config or RunsConfig.from_env()
+    if isinstance(limit, bool) or not isinstance(limit, int) or not 1 <= limit <= LIST_LIMIT:
+        raise RunsError("invalid", f"limit must be an integer from 1 to {LIST_LIMIT}")
+    runs_dir = Path(config.state_dir) / "runs"
+    ordered = _newest_first(runs_dir)
+    runs = []
+    for _stamp, run_id in ordered:
+        if len(runs) == limit:
+            break
+        request = state.read_json(runs_dir / run_id / "request.json")
+        if isinstance(request, dict):
+            shown = _show(runs_dir / run_id, run_id, request)
+            runs.append(_card(shown, _title(request.get("instruction"))))
+    return _bound_list({"runs": runs, "total": len(ordered)})
 
 
 def _word(value: Any, chars: int = LIST_WORD_CHARS) -> Any:

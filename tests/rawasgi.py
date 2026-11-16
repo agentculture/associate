@@ -11,14 +11,18 @@ from __future__ import annotations
 import asyncio
 from urllib.parse import unquote
 
-__all__ = ["Reply", "raw_get", "raw_request"]
+__all__ = ["Reply", "raw_get", "raw_request", "raw_stream"]
 
 
 class Reply:
-    """The status, headers (lower-case names) and body of one ASGI response."""
+    """The status, headers (lower-case names) and body of one ASGI response.
 
-    def __init__(self, status: int, headers: dict[str, str], body: bytes) -> None:
+    ``pulled`` is how many request body chunks the app took with ``receive()``.
+    """
+
+    def __init__(self, status: int, headers: dict[str, str], body: bytes, pulled: int = 0) -> None:
         self.status_code, self.headers, self.content = status, headers, body
+        self.pulled = pulled
 
     @property
     def text(self) -> str:
@@ -34,6 +38,19 @@ def raw_request(
     app, method: str, raw_path: str, headers: dict[str, str] | None = None, body: bytes = b""
 ) -> Reply:
     """One request as a server would hand it to ``app``; header values go as latin-1 bytes."""
+    return raw_stream(app, method, raw_path, headers, [body])
+
+
+def raw_stream(
+    app,
+    method: str,
+    raw_path: str,
+    headers: dict[str, str] | None = None,
+    chunks: list[bytes] | None = None,
+) -> Reply:
+    """As :func:`raw_request`, with the body sent as ``chunks`` (``more_body`` until the last),
+    as a server hands over a chunked or a large body; no ``Content-Length`` is added."""
+    parts = list(chunks or [b""])
     sent = [(b"host", b"testserver")]
     sent += [(k.lower().encode("latin-1"), v.encode("latin-1")) for k, v in (headers or {}).items()]
     scope = {
@@ -50,17 +67,16 @@ def raw_request(
         "client": ("127.0.0.1", 50000),
         "server": ("testserver", 80),
     }
-    out: dict = {"status": 0, "headers": {}, "body": b""}
+    out: dict = {"status": 0, "headers": {}, "body": b"", "pulled": 0}
 
     async def run() -> None:
-        sent_body = False
         done = asyncio.Event()
 
         async def receive():
-            nonlocal sent_body
-            if not sent_body:
-                sent_body = True
-                return {"type": "http.request", "body": body, "more_body": False}
+            if out["pulled"] < len(parts):
+                out["pulled"] += 1
+                more = out["pulled"] < len(parts)
+                return {"type": "http.request", "body": parts[out["pulled"] - 1], "more_body": more}
             await done.wait()  # like a server: the client goes away once the reply is complete
             return {"type": "http.disconnect"}
 
@@ -76,4 +92,4 @@ def raw_request(
         await app(scope, receive, send)
 
     asyncio.run(run())
-    return Reply(out["status"], out["headers"], out["body"])
+    return Reply(out["status"], out["headers"], out["body"], out["pulled"])

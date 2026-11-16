@@ -141,7 +141,11 @@ run live):
   - `associate/bridge/` is the app-agnostic framework (auth, route policy,
     Access JWTs, service tokens, MCP server), cited from qodo-cli, which cited
     it from culture-rules; it names no app. This repo owns its copy (cite, don't
-    import); each file's header names the source and commit;
+    import); each file's header names the source and commit. `origin.py` is
+    original here: before authentication, every method but GET/HEAD/OPTIONS
+    needs a JSON body (415) and is refused 403 when `Sec-Fetch-Site` is
+    `cross-site` or `Origin` is foreign, so a page cannot ride an Access cookie
+    into a start;
   - the CLI verbs are `runs start|show|list`, `serve`, `tokens
     issue|list|revoke` and `mcp`. `serve` needs the `server` extra and `mcp` the
     `mcp` extra; the base package stays dependency-free;

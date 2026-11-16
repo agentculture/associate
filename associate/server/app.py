@@ -20,6 +20,21 @@ check, so the prefix reaches the same routes at the same roles. Only then does t
 ``GET /**`` viewer-readable (the UI's own files and client-side routes); without a build an
 unlisted route still needs admin. The UI adds no runs verb and no API route of its own.
 
+Forged writes: every method other than GET, HEAD and OPTIONS goes through
+:func:`associate.bridge.origin.check_write` **before** authentication, so a forged request gets
+the same answer whether or not it carries a credential (and learns nothing about one): 403
+``cross_site_request`` when ``Sec-Fetch-Site`` is ``cross-site``, 403 ``cross_origin_request``
+when an ``Origin`` header is not this server's own (the scheme the server saw, which uvicorn
+takes from ``X-Forwarded-Proto`` only from its trusted proxy address, and the ``Host`` header; no
+forwarded host is read), then 415 ``unsupported_media_type`` unless the body is declared
+``application/json``, before any body is read. A request with neither header (curl, a rules
+engine, the CLI) is unaffected. The app sends no ``Access-Control-*`` header, so a CORS
+preflight is never granted (it is answered 401, or 405 with a credential).
+
+The start body is read as a stream and refused 413 ``body_too_large`` as soon as it passes
+:data:`MAX_BODY_BYTES`, whatever ``Content-Length`` says or omits (a declared length over the cap
+is refused before reading; a malformed one is 400).
+
 Authentication is the bridge's: ``Authorization: Bearer <service token>`` resolved by
 :class:`~associate.bridge.resolve.Resolver` over :class:`~associate.bridge.tokens.ServiceTokens`
 (prefix :data:`TOKEN_PREFIX`). No credential or a bad one is 401, too low a role 403, both
@@ -36,11 +51,13 @@ import json
 from pathlib import Path
 from typing import Any
 
+from associate.bridge import origin
 from associate.bridge.policy import RoutePolicy
 from associate.bridge.principal import AuthError
 from associate.bridge.resolve import AuthSettings, Resolver, TokenAuthenticator
 
 __all__ = [
+    "BodyRefused",
     "DEFAULT_UI",
     "MAX_BODY_BYTES",
     "STATUS_BY_KIND",
@@ -48,6 +65,7 @@ __all__ = [
     "build_policy",
     "create_app",
     "default_web_dist",
+    "read_capped",
 ]
 
 #: The service-token prefix for this app's tokens.
@@ -58,6 +76,43 @@ MAX_BODY_BYTES = 512 * 1024
 STATUS_BY_KIND = {"invalid": 400, "forbidden": 403, "not_found": 404, "busy": 409, "env": 500}
 #: ``create_app(web_dist=DEFAULT_UI)``: the built UI inside the installed package, if any.
 DEFAULT_UI = object()
+
+
+class BodyRefused(Exception):
+    """A request body refused before it is parsed: ``status`` 400 or 413 and a stable code."""
+
+    def __init__(self, status: int, code: str, message: str) -> None:
+        super().__init__(message)
+        self.status, self.code, self.message = status, code, message
+
+
+def _declared_length(value: str | None, limit: int) -> None:
+    """Refuse a malformed ``Content-Length`` (400) or one over ``limit`` (413) before reading."""
+    if value is None:
+        return
+    # isascii: str.isdigit() also accepts a superscript digit, which int() rejects
+    if not (value.isascii() and value.isdigit()):
+        raise BodyRefused(400, "invalid", "the Content-Length header is not a whole number")
+    if int(value) > limit:
+        raise BodyRefused(413, "body_too_large", f"the body must be at most {limit} bytes")
+
+
+async def read_capped(request: Any, limit: int) -> bytes:
+    """The request body, read as a stream that stops as soon as it passes ``limit`` bytes.
+
+    A declared length over the cap is refused before anything is read; a body without a
+    ``Content-Length`` (chunked) or with one that is too small is counted as it arrives, so at
+    most ``limit`` bytes plus one chunk are ever held.
+    """
+    _declared_length(request.headers.get("content-length"), limit)
+    chunks: list[bytes] = []
+    size = 0
+    async for chunk in request.stream():
+        size += len(chunk)
+        if size > limit:
+            raise BodyRefused(413, "body_too_large", f"the body must be at most {limit} bytes")
+        chunks.append(chunk)
+    return b"".join(chunks)
 
 
 def default_web_dist() -> Path:
@@ -121,9 +176,17 @@ def create_app(
         # scope["path"] is the decoded path the router matches; request.url.path may be cut at a
         # decoded "?" or "#" on older Starlette, which would judge another route's rule
         method, path = request.method, request.scope["path"]
+        headers = dict(request.headers.items())
+        # before authentication: a forged write gets one answer, credential or not
+        forged = origin.check_write(method, headers, request.scope.get("scheme", "http"))
+        if forged is not None:
+            return JSONResponse(
+                {"code": forged.code, "message": forged.message, "remediation": forged.remediation},
+                status_code=forged.status,
+            )
         try:
             if policy.required_role(method, path) is not None:
-                principal = resolver.resolve(dict(request.headers.items()))
+                principal = resolver.resolve(headers)
                 policy.check(principal, method, path)
                 request.state.principal = principal
         except AuthError as err:
@@ -136,13 +199,10 @@ def create_app(
 
     @app.post("/runs")
     async def post_runs(request: Request) -> Any:
-        declared = request.headers.get("content-length", "0")
-        # isascii: str.isdigit() also accepts a superscript digit, which int() rejects
-        if not (declared.isascii() and declared.isdigit()) or int(declared) > MAX_BODY_BYTES:
-            return bad_request(f"the body must be at most {MAX_BODY_BYTES} bytes")
-        raw = await request.body()
-        if len(raw) > MAX_BODY_BYTES:
-            return bad_request(f"the body must be at most {MAX_BODY_BYTES} bytes")
+        try:
+            raw = await read_capped(request, MAX_BODY_BYTES)
+        except BodyRefused as err:
+            return JSONResponse({"code": err.code, "message": err.message}, status_code=err.status)
         try:
             body = json.loads(raw)
         except ValueError:

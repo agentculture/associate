@@ -98,7 +98,9 @@ def test_errors_map_to_status_codes(setup, tmp_path):
     assert client.post("/runs", json=body(outside), headers=h).status_code == 403
     assert client.post("/runs", json=body(repo, model="../x"), headers=h).status_code == 400
     assert client.post("/runs", json=body(repo, extra=1), headers=h).status_code == 400
-    assert client.post("/runs", content=b"not json", headers=h).status_code == 400
+    as_json = {**h, "Content-Type": "application/json"}
+    assert client.post("/runs", content=b"not json", headers=as_json).status_code == 400
+    assert client.post("/runs", content=b"not json", headers=h).status_code == 415
     assert client.post("/runs", json=[1], headers=h).status_code == 400
     assert client.get("/runs/run-zz", headers=h).status_code == 400
     assert client.get("/runs/run-" + "0" * 32, headers=h).status_code == 404

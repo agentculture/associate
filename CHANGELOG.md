@@ -77,6 +77,30 @@ run, and no real run has been started through it (built and unit-tested only).
   (`tests/rawasgi.py`). Whole-number parsing (ports, the Access listen port, a
   `Content-Length`) now requires ASCII digits, so a superscript digit is a refusal, not a
   crash.
+- **A write cannot be forged from another site.** Behind Cloudflare Access a browser's cookie
+  is the credential, and `POST /runs` accepted any body, so a page an admin opened could start
+  a run with its own test commands as a `text/plain` "simple" request. Every method other
+  than GET, HEAD and OPTIONS now goes through the new `associate/bridge/origin.py` before
+  authentication (one answer, credential or not): 403 `cross_site_request` when
+  `Sec-Fetch-Site` is `cross-site`, 403 `cross_origin_request` when `Origin` is not the
+  request's own scheme and `Host`, and 415 `unsupported_media_type` unless the body is
+  declared `application/json` (the shape of qodo-cli's 415 rule). Callers with neither header
+  (curl, a rules engine, the CLI) are unaffected; the API sends no CORS header.
+- **The start body is capped while it is read.** A body without `Content-Length` (chunked)
+  was buffered whole before the length check. It is now read as a stream and refused 413
+  `body_too_large` as soon as it passes 512 KiB, whatever `Content-Length` says; a declared
+  length over the cap is refused before reading (it was a 400).
+
+### Fixed
+
+- **A run that has just started is never reported `lost`.** Between `request.json` and
+  `supervisor.json` a reader saw `lost` (`ok: false`, "its checkout is free again") for a run
+  that was starting. `request.json` now carries a `start_deadline` (120 seconds): until it, a
+  run with no supervisor or child record reads `running`; past it, `failed-to-start` (the
+  starter died before the run began, and its checkout lock went with it). The status words
+  are unchanged.
+- **`runs list` no longer reads every run.** It orders runs by their `request.json`'s mtime
+  (a `stat`) and reads only the runs it returns; `total` still counts every run.
 
 ### Changed
 

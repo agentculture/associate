@@ -295,9 +295,9 @@ operator's tests pass.
 
 | `status` | Meaning |
 |----------|---------|
-| `running` | the supervisor or the child is alive and no result is written |
+| `running` | the supervisor or the child is alive and no result is written, or the run is still starting (its supervisor not yet recorded, for at most 120 seconds after the start) |
 | `finished` | the child ended and `result.json` exists; read `ok` |
-| `failed-to-start` | the supervisor or the child could not be started; `error` says why |
+| `failed-to-start` | the supervisor or the child could not be started, or the starting process ended before the supervisor was recorded (read once 120 seconds have passed; `finished_at` is then `null`); `error` says why. Nothing ran and the checkout is free again |
 | `lost` | no process is alive and no result was written; `error` explains. The checkout is free again |
 
 ### Result fields
@@ -372,7 +372,11 @@ checkout and leaves no stale lock.
 
 `lost` means the run is no longer running and left no `result.json`. This
 happens when the supervisor is killed: it is the only process that writes the
-result. While the child survives, `show` still says `running`; when the child
+result. A run that has only just been started is never `lost`: `runs start`
+writes `request.json` (with a start deadline), then starts the supervisor, then
+records it, and until the supervisor or the child is recorded the run reads
+`running`. If neither is recorded by the deadline (120 seconds), the starting
+process died before the run began, and the run reads `failed-to-start`. While the child survives, `show` still says `running`; when the child
 then ends, the status becomes `lost`. A `lost` run may still have changed or
 merged the checkout, because the child kept going; check the checkout's `git
 log` and any `associate-run/<run id>` branch. The bridge does not recover a
@@ -435,13 +439,30 @@ routes in step: a verb missing from one surface fails it.
 | Method and path | Role | Body or query | Reply |
 |-----------------|------|---------------|-------|
 | `GET /health` | none | | `{"status": "ok", "service": "associate-runs", "version": "..."}` |
-| `POST /runs` | `admin` | JSON body, at most 512 KiB: `checkout`, `model`, `instruction`, `test_commands`, optional `timeout` | 202 and the start reply |
+| `POST /runs` | `admin` | JSON body sent as `Content-Type: application/json`, at most 512 KiB: `checkout`, `model`, `instruction`, `test_commands`, optional `timeout` | 202 and the start reply |
 | `GET /runs/{run_id}` | `viewer` | | 200 and the show reply |
 | `GET /runs` | `viewer` | `?limit=` 1 to 100, default 20 | 200 and `{"runs": [...], "total": N}` |
 
 The API publishes no OpenAPI document and no docs page; the table above is the
 contract. Send `Authorization: Bearer <token>` on every route except
 `/health`.
+
+Writes are guarded against requests forged from another site. On the loopback
+listener behind Cloudflare Access a browser's cookie is a credential, so every
+method other than `GET`, `HEAD` and `OPTIONS` (today only `POST /runs`) must
+send its body as `Content-Type: application/json` (a parameter such as
+`; charset=utf-8` is fine; anything else is 415 before the body is read), and
+is refused 403 when its `Sec-Fetch-Site` header is `cross-site` or its `Origin`
+header names another origin than the request's own (the scheme the server saw
+and the `Host` header; no forwarded host header is read). These checks run
+before authentication, so a forged request gets the same answer with or
+without a credential. A caller that sends neither header (curl, a rules
+engine, the CLI) is unaffected. The API sends no CORS headers, so a browser
+preflight is never granted.
+
+The start body is read as a stream and refused 413 as soon as it passes 512
+KiB, whether or not `Content-Length` is sent; a declared length over the cap is
+refused before anything is read.
 
 The start reply (202) holds `run_id`, `status` (`running`), `checkout` (its real
 path), `model`, `base_commit` (`HEAD` when the run started), `started_at`,
@@ -451,8 +472,10 @@ The list reply holds, per run, `run_id`, `status`, `ok`, `model`, `started_at`,
 `finished_at`, `checkout` (cut at 256 characters), `title` (the instruction's
 first non-empty line, cut at 120 characters), `merge`, `outcome`, `exit_code`,
 `tests` (`passed`, `commands`, `failed`), `changed_paths_total` and
-`test_command_count`, newest first. `total` counts every run in the state
-directory, not only those returned. The reply stays under 64 KiB: titles and
+`test_command_count`, newest first (by when each run started: its
+`request.json`'s modification time). `total` counts every run in the state
+directory, not only those returned. A list reads the `request.json` of only
+the runs it returns. The reply stays under 64 KiB: titles and
 checkouts are cut shorter first, and only then are the oldest runs left out
 (`truncated: true`).
 
@@ -461,6 +484,7 @@ A start in full:
 ```bash
 curl -s -X POST http://127.0.0.1:8794/runs \
   -H "Authorization: Bearer $ASSOCIATE_TOKEN" \
+  -H "Content-Type: application/json" \
   -d '{"checkout": "/srv/associate-clones/app", "model": "worker",
        "instruction": "Fix the failing parser test",
        "test_commands": ["uv run pytest -q"]}'
@@ -473,11 +497,14 @@ bridge has one.
 
 | Status | `code` | When |
 |--------|--------|------|
-| 400 | `invalid` | bad input: an unknown field, a body that is not a JSON object or is over 512 KiB, an unknown model, a bad run id, a bad `limit` value, a checkout that is not a work tree root |
+| 400 | `invalid` | bad input: an unknown field, a body that is not a JSON object, a malformed `Content-Length`, an unknown model, a bad run id, a bad `limit` value, a checkout that is not a work tree root |
 | 401 | `no_credentials`, `bad_token` | no credential, or a token that is unknown or revoked |
+| 403 | `cross_site_request`, `cross_origin_request` | a write whose `Sec-Fetch-Site` is `cross-site`, or whose `Origin` is not this server's (checked before authentication) |
 | 403 | `forbidden` | the role is too low, the checkout is outside the allowlist, or the allowlist is empty |
 | 404 | `not_found` | no such run |
 | 409 | `busy` | the checkout already has a run |
+| 413 | `body_too_large` | the body is over 512 KiB (declared, or counted as it is read) |
+| 415 | `unsupported_media_type` | a write whose body is not sent as `Content-Type: application/json` (checked before authentication) |
 | 422 | none | a `limit` that is not an integer (FastAPI's own `detail` body) |
 | 500 | `env` | the state directory, git or the process could not be used |
 
@@ -500,7 +527,13 @@ A 401 or 403 from authentication comes before any handler runs.
   a card names its last directory, not an `owner/name`; the agent's words are
   its one final reply (shortened), not separate statements; a test command's
   output is never shown. The UI has no browser tests in CI (unit tests only).
-- **No retention.** Run directories are never pruned.
+- **No retention.** Run directories are never pruned; that is the operator's
+  decision. A list stays cheap as they accumulate (one `stat` per run, and only
+  the returned runs' files are read), but the state directory grows.
+- **A starter that hangs past the start grace.** A run whose supervisor is not
+  recorded within 120 seconds reads `failed-to-start`. If the starting process
+  is not dead but stuck that long, it still holds the checkout lock, so a new
+  start is refused `busy` until it lets go.
 - **No cancel.** There is no verb to stop a run. A run ends when the model
   finishes, when the timeout elapses, or when you kill its processes.
 - **Tokens are shown once** and cannot be recovered; issue a new one and revoke
