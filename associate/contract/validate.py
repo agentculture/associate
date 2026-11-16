@@ -197,6 +197,9 @@ PROMPT_DIR = ".pi/extensions/associate/prompts/"
 #: The delegation pair (deviation d18): start a delegated run, read its result.
 DELEGATE_TOOLS = ("delegate_run", "delegate_status")
 
+#: The key a contract object may carry as documentation; never a tool or a model.
+COMMENT_KEY = "$comment"
+
 
 def _check_model_tools(name: str, model: dict[str, Any], known: set[str], mutating: set[str]):
     errors: list[str] = []
@@ -217,6 +220,20 @@ def _check_model_tools(name: str, model: dict[str, Any], known: set[str], mutati
     return errors
 
 
+def _delegate_target_problem(models: dict[str, Any], name: str, target: str) -> str | None:
+    """What is wrong with *name* delegating to *target*, or ``None``."""
+    entry = models.get(target)
+    if entry is None:
+        return f"unknown model {target!r}"
+    if target == name:
+        return "itself"
+    if entry.get("may_mutate") is not True:
+        return f"{target!r}, which may not mutate"
+    if entry["may_delegate"]:
+        return f"{target!r}, which delegates"
+    return None
+
+
 def _check_delegation(doc: dict[str, Any]) -> list[str]:
     """``may_delegate`` (deviation d18): who may hand a task to a delegated run.
 
@@ -234,15 +251,9 @@ def _check_delegation(doc: dict[str, Any]) -> list[str]:
         if len(set(targets)) != len(targets):
             errors.append(f"models.{name}: may_delegate has duplicates")
         for target in targets:
-            entry = models.get(target)
-            if entry is None:
-                errors.append(f"models.{name}: may_delegate names unknown model {target!r}")
-            elif target == name:
-                errors.append(f"models.{name}: may_delegate names itself")
-            elif entry.get("may_mutate") is not True:
-                errors.append(f"models.{name}: may_delegate names {target!r}, which may not mutate")
-            elif entry["may_delegate"]:
-                errors.append(f"models.{name}: may_delegate names {target!r}, which delegates")
+            problem = _delegate_target_problem(models, name, target)
+            if problem is not None:
+                errors.append(f"models.{name}: may_delegate names {problem}")
     known = set(doc["tool_names"])
     if "delegate_run" in known and "delegate_run" not in doc["gated_tools"]:
         errors.append("gated_tools: delegate_run must be gated (deviation d18)")
@@ -413,7 +424,7 @@ def validate_gate(doc: dict[str, Any], models: dict[str, Any] | None = None) -> 
     errors.extend(
         f"isolation.applies_to: {tool!r} has no entry in effects"
         for tool in doc["isolation"]["applies_to"]
-        if tool not in doc["effects"] or tool == "$comment"
+        if tool not in doc["effects"] or tool == COMMENT_KEY
     )
     errors.extend(_gate_change_errors(doc["change"], doc["effects"]))
     return errors
@@ -424,7 +435,7 @@ def _gate_change_errors(change: dict[str, Any], effects: dict[str, Any]) -> list
     errors = [
         f"change.applies_to: {tool!r} has no entry in effects"
         for tool in change["applies_to"]
-        if tool not in effects or tool == "$comment"
+        if tool not in effects or tool == COMMENT_KEY
     ]
     errors.extend(
         f"change.{key}: must be a positive integer"
@@ -466,7 +477,7 @@ def _gate_large_state_errors(
 def _gate_effect_errors(effects: dict[str, Any], models: dict[str, Any]) -> list[str]:
     """d10: ``effects`` describes exactly the tools that can reach the gate."""
     reachable = set(models["mutating_tools"]) | set(models.get("gated_tools", []))
-    described = {name for name in effects if name != "$comment"}
+    described = {name for name in effects if name != COMMENT_KEY}
     errors = [
         f"effects: {tool!r} can reach the gate but has no effect"
         for tool in sorted(reachable - described)
@@ -486,19 +497,35 @@ def validate_walk_gate(line: dict[str, Any]) -> list[str]:
     if errors:
         return errors
     tier = line["tier"]
-    if tier == "clef" and "probabilities" not in line:
-        errors.append("$: a clef gate line needs probabilities")
-    if tier == "super" and "verdict" not in line:
-        errors.append("$: a super gate line needs a verdict")
-    if tier != "clef" and "probabilities" in line:
-        errors.append("$: probabilities belong to the clef tier only")
-    if tier == "large" and "verdict" not in line:
-        errors.append("$: a large gate line needs a verdict")
-    if tier == "large" and "evaluator" not in line:
-        errors.append("$: a large gate line needs the evaluator that judged it")
-    if tier not in ("super", "large") and "verdict" in line:
-        errors.append("$: verdict belongs to the super and large tiers only")
-    for field in ("evaluator", "self_evaluated"):
-        if tier != "large" and field in line:
-            errors.append(f"$: {field} belongs to the large tier only")
+    errors.extend(message for wrong, message in _walk_gate_rules(tier, frozenset(line)) if wrong)
     return errors
+
+
+def _walk_gate_rules(tier: str, fields: frozenset[str]) -> list[tuple[bool, str]]:
+    """Each tier-specific rule of a walk gate line as ``(violated, message)``, in order."""
+    large = tier == "large"
+    return [
+        (
+            tier == "clef" and "probabilities" not in fields,
+            "$: a clef gate line needs probabilities",
+        ),
+        (tier == "super" and "verdict" not in fields, "$: a super gate line needs a verdict"),
+        (
+            tier != "clef" and "probabilities" in fields,
+            "$: probabilities belong to the clef tier only",
+        ),
+        (large and "verdict" not in fields, "$: a large gate line needs a verdict"),
+        (
+            large and "evaluator" not in fields,
+            "$: a large gate line needs the evaluator that judged it",
+        ),
+        (
+            tier not in ("super", "large") and "verdict" in fields,
+            "$: verdict belongs to the super and large tiers only",
+        ),
+        (not large and "evaluator" in fields, "$: evaluator belongs to the large tier only"),
+        (
+            not large and "self_evaluated" in fields,
+            "$: self_evaluated belongs to the large tier only",
+        ),
+    ]

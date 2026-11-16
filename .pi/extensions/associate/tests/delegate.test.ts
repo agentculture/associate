@@ -19,7 +19,7 @@
 
 import test from "node:test";
 import assert from "node:assert/strict";
-import { execFileSync } from "node:child_process";
+import { execFileSync, spawn } from "node:child_process";
 import { chmodSync, existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
@@ -31,6 +31,8 @@ import { whichOnPath } from "../tools/_procs.ts";
 import {
   createDelegateTools,
   defaultDetachedLauncher,
+  defaultLockProbe,
+  DELEGATED_RUN_ENV,
   delegateEnvironment,
   inTreeCli,
   shellQuote,
@@ -152,6 +154,8 @@ function tools(r: Rig, launcher: FakeLauncher, extra: Parameters<typeof createDe
     recordChild: (link) => r.walk.recordChild(link),
     associateRoot: r.tree,
     isAlive: () => false,
+    // No other process holds the checkout unless a test says so.
+    probeLock: () => ({ held: false, holder: null }),
     ...extra,
   });
 }
@@ -404,6 +408,9 @@ test("d18: the argv runs the in-tree CLI with exactly the operator's tests, the 
     assert.equal(Number(flagValue(args, "--timeout")), POLICY_TIMEOUT_MS / 1000);
     assert.equal(out.timeout_s, POLICY_TIMEOUT_MS / 1000);
     assert.ok(args.includes("--untrusted-checkout"), "ASSOCIATE_PI_TRUST unset reads as untrusted");
+    // review: the run itself holds the one-run-per-checkout lock, and is marked as delegated.
+    assert.ok(args.indexOf("--checkout-lock") > 0 && args.indexOf("--checkout-lock") < args.indexOf("--"));
+    assert.equal(spec.env[DELEGATED_RUN_ENV], out.run_id);
     assert.equal(out.untrusted_checkout, true);
     // Exactly the operator's commands, in order, each quoted for shlex.split.
     assert.deepEqual(flagValues(args, "--test-command"), OPERATOR_COMMANDS.map((c) => c.map(shellQuote).join(" ")));
@@ -452,9 +459,13 @@ test("d18: the delegated env keeps the lane key, drops per-session variables, an
     }
     assert.equal(env.PYTHONPATH, r.tree);
     assert.equal(env.ASSOCIATE_EXTENSION_PATH, join(extensionDir, "index.ts"));
-    // Nothing that was not in the parent snapshot appears, beyond the two tree variables.
+    // Nothing that was not in the parent snapshot appears, beyond the two tree
+    // variables and the delegated run's own mark (review).
     for (const key of Object.keys(env)) {
-      assert.ok(key in r.env || key === "PYTHONPATH" || key === "ASSOCIATE_EXTENSION_PATH", key);
+      assert.ok(
+        key in r.env || key === "PYTHONPATH" || key === "ASSOCIATE_EXTENSION_PATH" || key === DELEGATED_RUN_ENV,
+        key,
+      );
     }
   } finally {
     r.dispose();
@@ -685,6 +696,159 @@ test("d18: a result over the contract budget is cut, final reply first", async (
   }
 });
 
+test("review: with no budgets.delegate in the contract, status refuses rather than use a number of its own", async () => {
+  const r = rig();
+  try {
+    const launcher = fakeLauncher();
+    const started = await call(tools(r, launcher).run, { model: "worker", task: TASK });
+    await launcher.runs[0]!.end({ exitCode: 0 }, { stdout: runResult({ final_reply: "y".repeat(60_000) }) });
+    // The same session, reloaded against a contract that defines no delegate budget.
+    const policy = structuredClone(r.ctx.policy) as any;
+    delete policy.budgets.delegate;
+    const bare = createDelegateTools({ ...r.ctx, policy }, {
+      env: r.env,
+      launch: launcher.launch,
+      which: fakeWhich,
+      recordChild: (link) => r.walk.recordChild(link),
+      associateRoot: r.tree,
+      isAlive: () => false,
+    });
+    const out = await call(bare.status, { run_id: started.run_id });
+    assert.equal(out.ok, false);
+    assert.equal(out.code, "contract_incomplete");
+    assert.equal(out.result, undefined, "a result was returned under a budget the contract does not define");
+  } finally {
+    r.dispose();
+  }
+});
+
+test("review: no policy number is written in delegate.ts", () => {
+  const source = readFileSync(join(extensionDir, "tools", "delegate.ts"), "utf8");
+  const max = (CONTRACT.policy.budgets as any).delegate.max_output_chars as number;
+  const spelled = [String(max), max.toLocaleString("en-US").replace(/,/g, "_")];
+  for (const literal of spelled) assert.ok(!source.includes(literal), `delegate.ts spells the contract's ${literal}`);
+});
+
+// ------------------------------------- review: the lock outlives this process
+
+test("review: a run another process started on this checkout refuses a new one, by the lock it holds", async () => {
+  const r = rig();
+  try {
+    const launcher = fakeLauncher();
+    const probed: Array<{ file: string; checkout: string; env: Record<string, string> }> = [];
+    // Nothing in this process knows of a run here: only the lock says so.
+    const t = tools(r, launcher, {
+      probeLock: (cli, checkout, env) => {
+        probed.push({ file: cli.file, checkout, env });
+        return { held: true, holder: "dlg-20261116T000000Z-0badc0de" };
+      },
+    });
+    const out = await call(t.run, { model: "worker", task: TASK });
+    assert.equal(out.code, "delegate_busy");
+    assert.equal(out.detail.running_run_id, "dlg-20261116T000000Z-0badc0de");
+    assert.match(out.message, /dlg-20261116T000000Z-0badc0de/);
+    assert.equal(launcher.runs.length, 0, "a run was started on a locked checkout");
+    assert.deepEqual(childLines(r.walk.walkPath), [], "a run that never started was linked in the walk");
+    assert.equal(existsSync(join(r.ctx.session.sessionRoot, "delegated")), false);
+    // Asked of the tree's own interpreter, about this checkout, with the delegated run's environment.
+    assert.equal(probed.length, 1);
+    assert.equal(probed[0]!.file, join(r.tree, ".venv", "bin", "python"));
+    assert.equal(probed[0]!.checkout, r.checkout);
+    assert.equal(probed[0]!.env.PYTHONPATH, r.tree);
+
+    // A holder whose id cannot be read is still a refusal.
+    const unnamed = await call(tools(r, launcher, { probeLock: () => ({ held: true, holder: null }) }).run, { model: "worker", task: TASK });
+    assert.equal(unnamed.code, "delegate_busy");
+    assert.equal(unnamed.detail.running_run_id, null);
+  } finally {
+    r.dispose();
+  }
+});
+
+test("review: when the lock cannot be read nothing is started", async () => {
+  const r = rig();
+  try {
+    const launcher = fakeLauncher();
+    const out = await call(tools(r, launcher, { probeLock: () => ({ error: "python exited 2" }) }).run, { model: "worker", task: TASK });
+    assert.equal(out.code, "lock_unavailable");
+    assert.match(out.message, /python exited 2/);
+    assert.equal(launcher.runs.length, 0);
+    assert.deepEqual(childLines(r.walk.walkPath), []);
+  } finally {
+    r.dispose();
+  }
+});
+
+test("review: the real probe sees a lock held by another process, and sees it gone when that process is killed", { skip: process.platform === "win32" }, async (t) => {
+  const cli = inTreeCli(associateRoot, process.env);
+  if ("problem" in cli) {
+    t.skip(cli.problem);
+    return;
+  }
+  const r = rig();
+  const state = join(r.root, "state");
+  const env = { ...delegateEnvironment({ ...process.env }, cli), ASSOCIATE_RUNS_DIR: state };
+  assert.deepEqual(defaultLockProbe(cli, r.checkout, env), { held: false, holder: null });
+  // Another process — what a delegated `associate run --checkout-lock` is to this one.
+  const holder = spawn(
+    cli.file,
+    [
+      "-c",
+      "import sys, time\nfrom associate.harness import checkoutlock\n" +
+        "checkoutlock.acquire(sys.argv[1], sys.argv[2])\nprint('held', flush=True)\ntime.sleep(120)\n",
+      r.checkout,
+      "dlg-20261116T000000Z-00c0ffee",
+    ],
+    { cwd: cli.cwd, env, stdio: ["ignore", "pipe", "inherit"] },
+  );
+  try {
+    await new Promise<void>((resolveHeld, reject) => {
+      holder.stdout!.once("data", () => resolveHeld());
+      holder.once("exit", () => reject(new Error("the lock holder exited before taking the lock")));
+    });
+    assert.deepEqual(defaultLockProbe(cli, r.checkout, env), { held: true, holder: "dlg-20261116T000000Z-00c0ffee" });
+
+    // The tool, with the real probe and the real tree, refuses — whatever this process remembers.
+    const launcher = fakeLauncher();
+    const real = createDelegateTools(r.ctx, {
+      env: { ...r.env, ASSOCIATE_RUNS_DIR: state },
+      launch: launcher.launch,
+      recordChild: (link) => r.walk.recordChild(link),
+    });
+    const busy = await call(real.run, { model: "worker", task: TASK });
+    assert.equal(busy.code, "delegate_busy", JSON.stringify(busy));
+    assert.equal(busy.detail.running_run_id, "dlg-20261116T000000Z-00c0ffee");
+    assert.equal(launcher.runs.length, 0);
+
+    // Killed, not finished: the kernel drops the lock with the process.
+    const gone = new Promise((resolveGone) => holder.once("exit", resolveGone));
+    holder.kill("SIGKILL");
+    await gone;
+    assert.deepEqual(defaultLockProbe(cli, r.checkout, env), { held: false, holder: null });
+    const started = await call(real.run, { model: "worker", task: TASK });
+    assert.equal(started.ok, true, JSON.stringify(started));
+    await launcher.runs[0]!.end({ exitCode: 0 }, { stdout: runResult() });
+  } finally {
+    holder.kill("SIGKILL");
+    r.dispose();
+  }
+});
+
+test("review: a probe that cannot run is an error, never 'not held'", () => {
+  const r = rig();
+  try {
+    const cli = { file: join(r.root, "no-such-python"), prefix: ["-m", "associate"], cwd: r.tree, pythonPath: r.tree };
+    const out = defaultLockProbe(cli, r.checkout, { PATH: process.env.PATH ?? "" });
+    assert.ok("error" in out, JSON.stringify(out));
+    // The fake tree's interpreter prints nothing: not an answer either.
+    const silent = { ...cli, file: join(r.tree, ".venv", "bin", "python") };
+    chmodSync(silent.file, 0o755);
+    assert.ok("error" in defaultLockProbe(silent, r.checkout, { PATH: process.env.PATH ?? "" }));
+  } finally {
+    r.dispose();
+  }
+});
+
 // ---------------------------------------------------------- the walk link
 
 test("d18: each delegated run is a child line in the session walk naming the delegated walk", async () => {
@@ -707,6 +871,23 @@ test("d18: each delegated run is a child line in the session walk naming the del
 
 // ------------------------------------------------ the real detached launcher
 
+/**
+ * Await a detached run's exit with the event loop held open. The launcher
+ * unrefs its child on purpose (a headless parent may exit while the run
+ * continues), so the pending exit alone does not keep this process alive: with
+ * nothing else pending, node ends the loop and the test runner reports
+ * "Promise resolution is still pending but the event loop has already
+ * resolved" (the CI failure on Node 22).
+ */
+async function exitOf(run: { exited: Promise<DetachedExit> }): Promise<DetachedExit> {
+  const keepAlive = setInterval(() => {}, 1_000);
+  try {
+    return await run.exited;
+  } finally {
+    clearInterval(keepAlive);
+  }
+}
+
 test("d18: the default launcher detaches, writes stdout/stderr to files and reports the exit", async () => {
   const dir = mkdtempSync(join(tmpdir(), "associate-d18-launch-"));
   try {
@@ -719,7 +900,7 @@ test("d18: the default launcher detaches, writes stdout/stderr to files and repo
       stderrPath: join(dir, "err"),
     });
     assert.equal(typeof run.pid, "number");
-    const exit = await run.exited;
+    const exit = await exitOf(run);
     assert.equal(exit.exitCode, 3);
     assert.equal(readFileSync(join(dir, "out"), "utf8"), '{"outcome":"ok"}');
     assert.equal(readFileSync(join(dir, "err"), "utf8"), "diag\n");
@@ -732,7 +913,7 @@ test("d18: the default launcher detaches, writes stdout/stderr to files and repo
       stdoutPath: join(dir, "out2"),
       stderrPath: join(dir, "err2"),
     });
-    const failed = await missing.exited;
+    const failed = await exitOf(missing);
     assert.equal(failed.exitCode, null);
     assert.match(failed.error ?? "", /ENOENT/);
   } finally {

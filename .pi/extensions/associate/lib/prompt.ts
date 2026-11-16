@@ -75,7 +75,7 @@ import { join, relative, resolve, isAbsolute } from "node:path";
 import type { ModelEntry } from "./contract.ts";
 import type { AssociateContext } from "./context.ts";
 import { associateRoot } from "./paths.ts";
-import { resolveActiveModel, type ActiveModel } from "./toolset.ts";
+import { CHILD_DENIED_TOOLS, resolveActiveModel, type ActiveModel } from "./toolset.ts";
 import { isCheckoutTrusted } from "./trust.ts";
 
 /** The environment variable that turns the injection on. */
@@ -234,6 +234,21 @@ export function installPromptInjection(
         "above: where they differ, this one applies to you.",
         "",
         model.text.trimEnd(),
+        "",
+      ].join("\n"),
+    );
+  }
+  // A spawned child holds no tool that starts another run (lib/toolset.ts),
+  // whatever its model prompt says for a session nobody spawned.
+  if (active.spawnedChild) {
+    parts.push(
+      [
+        "# Spawned child",
+        "",
+        "Another model started you on one sub-task. You cannot start a run of your",
+        `own: ${CHILD_DENIED_TOOLS.map((name) => `\`${name}\``).join(", ")} are not available to you,`,
+        "whatever the prompts above say. If the sub-task needs something you cannot",
+        "do, say so in `finish`.",
         "",
       ].join("\n"),
     );

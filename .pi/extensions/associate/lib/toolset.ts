@@ -34,12 +34,40 @@ export interface ActiveModel {
   /** The registry key (`worker`, `senses`, …), or undefined when none resolved. */
   readonly key: string | undefined;
   readonly entry: ModelEntry | undefined;
-  /** The model's `tools`, exactly as the registry lists them; empty without a model. */
+  /**
+   * The model's `tools` as the registry lists them — minus
+   * {@link CHILD_DENIED_TOOLS} in a spawned child; empty without a model.
+   */
   readonly tools: ReadonlySet<string>;
+  /** True when this session was started by `spawn_subagent` ({@link SPAWNED_BY_ENV}). */
+  readonly spawnedChild: boolean;
   /** The registry's `may_mutate`; false without a model. */
   readonly mayMutate: boolean;
   /** Why no model resolved (printed and returned as the block reason). */
   readonly problem?: string;
+}
+
+/**
+ * Set by `spawn_subagent` (`tools/spawn.ts`) in a child's environment, to the
+ * parent's session id. `associate run` removes it from the pi it starts, so
+ * only a spawned child ever carries it.
+ */
+export const SPAWNED_BY_ENV = "ASSOCIATE_SPAWNED_BY";
+
+/**
+ * The tools that start another model run. "A child is never a spawner" covers
+ * all of them: a spawned child that could delegate would start a writing run —
+ * one that merges into `main` — under a parent that is itself editing, one hop
+ * around the rule. So a spawned child never holds them, whatever its registry
+ * entry lists (senses lists the delegate tools for the mesh resident). These
+ * are the tools' registered names, not a policy value; `toolset.test.ts`
+ * holds them to the names the tool modules register.
+ */
+export const CHILD_DENIED_TOOLS: readonly string[] = ["spawn_subagent", "delegate_run", "delegate_status"];
+
+/** Whether `env` is that of a session `spawn_subagent` started. */
+export function isSpawnedChild(env: Env): boolean {
+  return (env[SPAWNED_BY_ENV] ?? "").trim() !== "";
 }
 
 /**
@@ -51,11 +79,13 @@ export interface ActiveModel {
  */
 export function resolveActiveModel(env: Env, registry: ContractModels): ActiveModel {
   const resolved = resolveProviderSettings({ ...env, ASSOCIATE_API_KEY: "unused" }, registry);
+  const spawnedChild = isSpawnedChild(env);
   if (!resolved.ok) {
     return {
       key: undefined,
       entry: undefined,
       tools: new Set(),
+      spawnedChild,
       mayMutate: false,
       problem:
         resolved.hint.replace(/; no associate provider registered\./, "") +
@@ -67,7 +97,8 @@ export function resolveActiveModel(env: Env, registry: ContractModels): ActiveMo
   return {
     key,
     entry,
-    tools: new Set(entry.tools),
+    tools: new Set(spawnedChild ? entry.tools.filter((name) => !CHILD_DENIED_TOOLS.includes(name)) : entry.tools),
+    spawnedChild,
     // Strictly `true`: a missing or malformed field is a model that may not mutate.
     mayMutate: entry.may_mutate === true,
   };

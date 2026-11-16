@@ -204,6 +204,16 @@ files are left alone. Restored paths are listed in `tests.reverted`. Above a
 checkout they run unprotected, with a stderr note. The same commands reach the
 extension as `ASSOCIATE_TEST_COMMANDS` for the model's `run_tests` tool.
 
+## The checkout lock
+
+`--checkout-lock` (off by default) makes the run take the one-run-per-checkout
+lock before anything else and hold it until its process ends: a kernel `flock`
+on `<state>/locks/<sha256 of the checkout's real path>.lock`, where `<state>`
+is `ASSOCIATE_RUNS_DIR` (default `$XDG_STATE_HOME/associate/runs`). While
+another run holds it, this one exits `2` without starting. The extension's
+`delegate_run` passes it, so two delegated runs never race to merge the same
+checkout, whichever process started them.
+
 ## Output
 
 `walk_path`, `statements_path`, `statements_md_path`, `export_dir`, `outcome`

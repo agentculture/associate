@@ -265,6 +265,12 @@ export interface EvaluateOptions {
   readonly modelRegistry?: ModelRegistryLike;
   /** Aborts both tiers; an abort counts as unreachable, never as allow. */
   readonly signal?: AbortSignal;
+  /**
+   * The result of {@link buildGateState} for this very request, when the
+   * caller has already built it (the `tool_call` guard does, to check for a
+   * cut state); the gate then does not build it a second time.
+   */
+  readonly state?: { readonly state: string; readonly truncated: boolean };
 }
 
 export interface Gate {
@@ -565,8 +571,23 @@ function cutToBytes(text: string, maxBytes: number, what: string): { text: strin
   return { text: out + marker, cut: true };
 }
 
+/** Short escapes for the characters that have one; every other is shown as `\uXXXX`. */
+const SHORT_ESCAPES: Readonly<Record<string, string>> = { "\n": "\\n", "\r": "\\r", "\t": "\\t" };
+
+/**
+ * One field on one line. A line break (`\r\n` or `\n`) becomes the two
+ * characters `\n`, and every other control or line-breaking character — the
+ * C0 and C1 controls (a lone CR, VT, FF, NEL, …), DEL, U+2028 and U+2029 —
+ * becomes a visible escape, so text a model wrote can never start what reads
+ * as another labelled line of the state.
+ */
 function oneLine(text: string): string {
-  return text.replace(/\r?\n/g, "\\n");
+  return text
+    .replace(/\r\n/g, "\\n")
+    .replace(
+      /[\u0000-\u001f\u007f-\u009f\u2028\u2029]/g,
+      (ch) => SHORT_ESCAPES[ch] ?? `\\u${ch.charCodeAt(0).toString(16).padStart(4, "0")}`,
+    );
 }
 
 /** gate.json describes `worktree` and `in-place`; anything else is in-place (d8). */
@@ -675,9 +696,33 @@ export function deciderBaseUrl(config: GateConfig, env: Env): string {
   return (env.ASSOCIATE_BASE_URL ?? "").trim() || config.models.endpoint.default_base_url;
 }
 
-/** Build the `POST /v1/systemone` request. `decider.path` is absolute, so it replaces the base's path. */
+/** A base URL's trailing API-version segment (`v1`, `v2`, …): the chat API's, not a path prefix. */
+const API_VERSION_SEGMENT = /^v\d+$/;
+
+/**
+ * The decider's URL: `decider.path` under whatever path prefix the base URL
+ * carries. `decider.path` is absolute on the gateway (`/v1/systemone`), and
+ * the base is an OpenAI-compatible one (`http://host:8001/v1`), so the base's
+ * trailing version segment, when it has one, is not part of the prefix:
+ * everything before it (a reverse proxy's `/prefix`) is kept, and a trailing
+ * slash changes nothing. `http://host/v1` and `http://host` both give
+ * `http://host/v1/systemone`; `http://host/prefix/v1`, `http://host/prefix/`
+ * and `http://host/prefix` all give `http://host/prefix/v1/systemone`.
+ */
+export function deciderUrl(config: GateConfig, env: Env): string {
+  const url = new URL(deciderBaseUrl(config, env));
+  const prefix = url.pathname.split("/").filter(Boolean);
+  if (prefix.length > 0 && API_VERSION_SEGMENT.test(prefix[prefix.length - 1]!)) prefix.pop();
+  const path = config.deciderPath.split("/").filter(Boolean);
+  url.pathname = `/${[...prefix, ...path].join("/")}`;
+  url.search = "";
+  url.hash = "";
+  return url.toString();
+}
+
+/** Build the `POST /v1/systemone` request, at {@link deciderUrl}. */
 export function buildClefRequest(config: GateConfig, state: string, env: Env): ClefRequest {
-  const url = new URL(config.deciderPath, deciderBaseUrl(config, env)).toString();
+  const url = deciderUrl(config, env);
   const key = (env.ASSOCIATE_API_KEY ?? "").trim();
   return {
     url,
@@ -1120,7 +1165,7 @@ export function createGate(options: GateOptions): Gate {
     let state: string;
     let truncated: boolean;
     try {
-      ({ state, truncated } = buildGateState(config, request));
+      ({ state, truncated } = evalOptions.state ?? buildGateState(config, request));
     } catch (error) {
       // Nothing was asked: record it at the last-resort tier, refusing.
       return { tier: "readonly", decision: "refuse", reason: `gate state could not be built: ${errorText(error)}` };

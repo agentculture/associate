@@ -491,3 +491,124 @@ test("ASSOCIATE_TEST_COMMANDS is snapshotted at load, never re-read at call time
     r.dispose();
   }
 });
+
+// ------------------------------------------------- review: rename parsing
+
+test("parsePorcelainZ: a rename seen only in the work tree (XY ' R') carries its source too", () => {
+  // `git mv`-less rename plus `git add -N`: status prints " R <to>\0<from>\0".
+  // The same bytes are given to the harness's parser in tests/test_worktree.py.
+  const out = Buffer.from(" R a -> b.txt\0old name.txt\0?? new file\0");
+  assert.deepEqual(parsePorcelainZ(out), ["a -> b.txt", "old name.txt", "new file"]);
+});
+
+test("a work-tree rename with spaces and an arrow-like name is put back by run_tests", async () => {
+  const r = repo();
+  try {
+    writeFileSync(join(r.checkout, "old name.txt"), "one\ntwo\nthree\n");
+    git(r.checkout, "-c", "user.name=t", "-c", "user.email=t@t", "add", "-A");
+    git(r.checkout, "-c", "user.name=t", "-c", "user.email=t@t", "commit", "-q", "-m", "more");
+    const t = tool(r, [
+      js(
+        "const fs = require('fs'), cp = require('child_process');" +
+          "fs.renameSync('old name.txt', 'a -> b.txt');" +
+          "cp.execFileSync('git', ['add', '-N', 'a -> b.txt']);",
+      ),
+    ]);
+    const out = payload(await t.execute("c", {}));
+    assert.equal(out.ok, true, JSON.stringify(out));
+    assert.deepEqual(out.reverted, ["a -> b.txt", "old name.txt"]);
+    assert.equal(readFileSync(join(r.checkout, "old name.txt"), "utf8"), "one\ntwo\nthree\n");
+    assert.equal(existsSync(join(r.checkout, "a -> b.txt")), false);
+    assert.equal(git(r.checkout, "status", "--porcelain"), "");
+  } finally {
+    r.dispose();
+  }
+});
+
+// --------------------------------- review: stragglers of a command that exited
+
+/** Whether `pid` is still a live process. */
+function alive(pid: number): boolean {
+  try {
+    process.kill(pid, 0);
+    return true;
+  } catch {
+    return false;
+  }
+}
+
+async function waitGone(pid: number, ms: number): Promise<boolean> {
+  const until = Date.now() + ms;
+  while (Date.now() < until) {
+    if (!alive(pid)) return true;
+    await new Promise((r) => setTimeout(r, 50));
+  }
+  return !alive(pid);
+}
+
+test("a background process left by a command that exited is killed, and the tool does not wait for it", { skip: process.platform === "win32" }, async () => {
+  const r = repo();
+  const pidFile = join(r.root, "straggler.pid");
+  try {
+    // The command starts a child that inherits its stdout/stderr and keeps
+    // writing into the checkout, then exits 0 at once.
+    const straggler =
+      "const fs = require('fs'); setInterval(() => fs.writeFileSync('late.txt', String(Date.now())), 50);";
+    const t = tool(r, [
+      js(
+        "const cp = require('child_process'), fs = require('fs');" +
+          `const child = cp.spawn(process.execPath, ['-e', ${JSON.stringify(straggler)}], { stdio: 'inherit' });` +
+          `fs.writeFileSync(${JSON.stringify(pidFile)}, String(child.pid)); child.unref(); console.log('done'); process.exit(0);`,
+      ),
+    ], { timeoutMs: 20_000 });
+    const started = Date.now();
+    const out = payload(await t.execute("c", {}));
+    assert.ok(Date.now() - started < 10_000, `the tool waited ${Date.now() - started} ms on the straggler's pipes`);
+    assert.equal(out.results[0].exit_code, 0);
+    assert.equal(out.results[0].timed_out, false);
+    assert.match(out.results[0].output_tail, /done/);
+    const pid = Number(readFileSync(pidFile, "utf8"));
+    assert.equal(await waitGone(pid, 5_000), true, "the straggler outlived the test command");
+    // Nothing writes after the revert: the checkout stays clean.
+    await new Promise((resolveWait) => setTimeout(resolveWait, 200));
+    assert.equal(existsSync(join(r.checkout, "late.txt")), false);
+  } finally {
+    try {
+      process.kill(Number(readFileSync(pidFile, "utf8")), "SIGKILL");
+    } catch {
+      // Already gone (the expected case).
+    }
+    r.dispose();
+  }
+});
+
+test("a straggler that left the process group and holds the pipes does not hold the tool", { skip: process.platform === "win32" }, async () => {
+  const r = repo();
+  const pidFile = join(r.root, "escaped.pid");
+  try {
+    // detached: its own session, so the group kill cannot reach it; it keeps the pipes open.
+    const t = tool(
+      r,
+      [
+        js(
+          "const cp = require('child_process'), fs = require('fs');" +
+            "const child = cp.spawn(process.execPath, ['-e', 'setTimeout(() => {}, 60000)'], { stdio: 'inherit', detached: true });" +
+            `fs.writeFileSync(${JSON.stringify(pidFile)}, String(child.pid)); child.unref(); console.log('done'); process.exit(0);`,
+        ),
+      ],
+      { killGraceMs: 300, timeoutMs: 20_000 },
+    );
+    const started = Date.now();
+    const out = payload(await t.execute("c", {}));
+    assert.ok(Date.now() - started < 10_000, `the tool waited ${Date.now() - started} ms on held pipes`);
+    assert.equal(out.results[0].exit_code, 0);
+    assert.match(out.results[0].output_tail, /done/);
+  } finally {
+    try {
+      process.kill(Number(readFileSync(pidFile, "utf8")), "SIGKILL");
+    } catch {
+      // Never started.
+    }
+    r.dispose();
+  }
+});

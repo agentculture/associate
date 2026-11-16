@@ -450,3 +450,19 @@ test("a checkout that plants its own prompts/worker.md does not get its text inj
     cleanup();
   }
 });
+
+// ------------------------------------------- review: a spawned child is told so
+
+test("review: a spawned child's prompt says the run-starting tools are not available to it", () => {
+  const top = injectedFor("senses");
+  assert.ok(!top.includes("# Spawned child"), "a session nobody spawned was told it is a child");
+  const pi = fakePi();
+  const env = { [INJECT_PROMPT_ENV]: "1", ASSOCIATE_MODEL: "senses", ASSOCIATE_SPAWNED_BY: "parent-session" };
+  assert.equal(installPromptInjection(pi, fakeCtx(REPO_ROOT), env), true);
+  const child = (pi.handlers[0]!.handler({}) as { message: { content: string } }).message.content;
+  // After the model prompt, which names delegate_run for the mesh resident.
+  assert.ok(child.indexOf("# Spawned child") > child.indexOf("# Model prompt"));
+  for (const name of ["delegate_run", "delegate_status", "spawn_subagent"]) {
+    assert.ok(child.slice(child.indexOf("# Spawned child")).includes(name), name);
+  }
+});

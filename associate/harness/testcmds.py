@@ -125,9 +125,15 @@ def _head(top: Path) -> str | None:
     return probe.stdout.strip() or None
 
 
-def _dirty(top: Path) -> list[str]:
-    """Every path ``git status`` lists, renames' original paths included."""
-    raw = _git(["status", "--porcelain=v1", "-z", "--untracked-files=all"], top).stdout
+def _status_paths(raw: str) -> list[str]:
+    """Every path one ``git status --porcelain=v1 -z`` output names, sorted.
+
+    A rename or copy entry is ``XY <to>`` with its source as the next NUL
+    field, and the letter is in ``X`` (staged) or in ``Y`` (seen only in the
+    work tree, e.g. after ``git add -N``): both columns are read, as the
+    extension's ``parsePorcelainZ`` (``tools/tests.ts``) reads them, so the two
+    name the same paths for the same output.
+    """
     entries = raw.split("\0")
     paths: list[str] = []
     index = 0
@@ -137,11 +143,18 @@ def _dirty(top: Path) -> list[str]:
         if len(entry) < 4:
             continue
         paths.append(entry[3:])
-        if entry[0] in "RC":  # the next NUL field is the rename/copy source
+        if "R" in entry[:2] or "C" in entry[:2]:  # the next NUL field is the source
             if index < len(entries) and entries[index]:
                 paths.append(entries[index])
             index += 1
     return sorted(set(paths))
+
+
+def _dirty(top: Path) -> list[str]:
+    """Every path ``git status`` lists, renames' original paths included."""
+    return _status_paths(
+        _git(["status", "--porcelain=v1", "-z", "--untracked-files=all"], top).stdout
+    )
 
 
 def _save(path: Path) -> _Saved:
@@ -206,7 +219,8 @@ def _restore_head(top: Path, rel: str, head: str | None) -> None:
             shutil.rmtree(target)
         _git(["checkout", head, "--", rel], top)
         return
-    _git(["rm", "-q", "--cached", "--ignore-unmatch", "--", rel], top, check=False)
+    # -f: a staged file the tests then changed again is still dropped from the index
+    _git(["rm", "-q", "-f", "--cached", "--ignore-unmatch", "--", rel], top, check=False)
     _remove(top / rel)
 
 

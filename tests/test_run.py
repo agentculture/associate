@@ -1199,3 +1199,98 @@ def test_an_inherited_checkout_root_never_reaches_the_extension(tmp_path: Path):
     harness = _bound_harness(tmp_path, {"ASSOCIATE_CHECKOUT_ROOT": "/home/op/main-checkout"})
     env = harness.environment(_task(tmp_path))
     assert env["ASSOCIATE_CHECKOUT_ROOT"] == str(tmp_path.resolve())
+
+
+# ------------------------------- review: a timeout takes every descendant
+
+
+_SLOW_PI = """#!/usr/bin/env python3
+import os, subprocess, sys, time
+from pathlib import Path
+
+out = Path({out!r})
+env = dict(os.environ)
+# A test command as the extension's run_tests starts it: its own session.
+quiet = dict(stdin=subprocess.DEVNULL, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+detached = subprocess.Popen(
+    [sys.executable, "-c", "import time; time.sleep(120)"], start_new_session=True, **quiet
+)
+(out / "detached.pid").write_text(str(detached.pid))
+# A delegated run (delegate_run): marked, and meant to outlive this pi.
+env["ASSOCIATE_DELEGATED_RUN"] = "dlg-20261116T000000Z-0123abcd"
+delegated = subprocess.Popen(
+    [sys.executable, "-c", "import time; time.sleep(120)"],
+    start_new_session=True,
+    env=env,
+    **quiet,
+)
+(out / "delegated.pid").write_text(str(delegated.pid))
+print("started", flush=True)
+time.sleep(120)
+"""
+
+
+def _alive(pid: int) -> bool:
+    try:
+        os.kill(pid, 0)
+    except ProcessLookupError:
+        return False
+    # A zombie still answers signal 0; it is not running.
+    try:
+        return Path(f"/proc/{pid}/stat").read_text().rsplit(")", 1)[1].split()[0] != "Z"
+    except OSError:
+        return True
+
+
+@pytest.mark.skipif(not Path("/proc/self/stat").exists(), reason="needs /proc")
+def test_a_timeout_kills_detached_descendants_but_not_a_delegated_run(tmp_path: Path, checkout):
+    from associate.harness.base import HarnessError
+    from associate.harness.pi import PiHarness
+
+    out = tmp_path / "pids"
+    out.mkdir()
+    script = tmp_path / "slow-pi"
+    script.write_text(_SLOW_PI.format(out=str(out)), encoding="utf-8")
+    script.chmod(0o755)
+    harness = PiHarness(executable=str(script))
+    harness.start(
+        checkout=checkout,
+        contract_dir=Path("associate/contract").resolve(),
+        session_id="timeout-tree",
+        export_dir=tmp_path / "runs",
+    )
+    pids: dict[str, int] = {}
+    try:
+        with pytest.raises(HarnessError) as err:
+            harness._run_pi(str(script), [], dict(os.environ), timeout=2.0)
+        assert "did not finish" in str(err.value)
+        for name in ("detached", "delegated"):
+            pids[name] = int((out / f"{name}.pid").read_text())
+        deadline = time.monotonic() + 5
+        while _alive(pids["detached"]) and time.monotonic() < deadline:
+            time.sleep(0.05)
+        assert not _alive(pids["detached"]), "a detached descendant outlived the timeout"
+        assert _alive(pids["delegated"]), "the delegated run was killed with its parent"
+    finally:
+        for name in ("detached", "delegated"):
+            try:
+                os.kill(int((out / f"{name}.pid").read_text()), 9)
+            except (OSError, ValueError):
+                pass
+
+
+def test_the_delegated_run_marker_never_reaches_pi(tmp_path: Path, checkout):
+    """Only the delegated ``associate run`` process itself carries the marker."""
+    from associate.harness.pi import PiHarness
+
+    harness = PiHarness(env={"ASSOCIATE_DELEGATED_RUN": "dlg-x", "ASSOCIATE_SPAWNED_BY": "parent"})
+    harness.start(
+        checkout=checkout,
+        contract_dir=Path("associate/contract").resolve(),
+        session_id="marker",
+        export_dir=tmp_path / "runs",
+    )
+    env = harness.environment({"id": "t", "prompt": "hi"})
+    assert "ASSOCIATE_DELEGATED_RUN" not in env
+    # A top-level `associate run` is nobody's spawned child.
+    assert "ASSOCIATE_SPAWNED_BY" not in env

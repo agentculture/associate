@@ -37,8 +37,16 @@
  *     refused: the hand-off's safety rests on that check.
  *   * **Never more trusting than this session.** `--untrusted-checkout` unless
  *     `ASSOCIATE_PI_TRUST` is exactly `approve` (`lib/trust.ts`).
- *   * **One delegated run per checkout at a time.** A second start while one
- *     runs is refused, naming the running run id.
+ *   * **One delegated run per checkout at a time, across processes.** The
+ *     run holds a kernel `flock` on a lock file keyed by the checkout's real
+ *     path for its whole life (`--checkout-lock`,
+ *     `associate/harness/checkoutlock.py`); the kernel drops it when the run's
+ *     process ends, crash included. A second start while one runs is refused,
+ *     naming the running run id — from this process's own memory, or from the
+ *     lock when another process (or an earlier life of this one) started it.
+ *   * **Never from a spawned child.** In a session `spawn_subagent` started
+ *     (`ASSOCIATE_SPAWNED_BY`), neither tool is in the model's tool set and
+ *     `delegate_run` refuses by itself: a child is never a spawner.
  *   * **Everything lands in this session's own directory.** The run's export
  *     root is `<session root>/delegated`, its session id is the run id, so its
  *     walk is `<session root>/delegated/<run id>/export/walk.jsonl`; its stdout
@@ -62,7 +70,7 @@
  * Node builtins only; no npm dependency. Never a shell.
  */
 
-import { spawn as nodeSpawn } from "node:child_process";
+import { spawn as nodeSpawn, spawnSync } from "node:child_process";
 import { randomBytes } from "node:crypto";
 import {
   closeSync,
@@ -116,6 +124,20 @@ const MAX_TASK_CHARS = 100_000;
 const STDERR_TAIL_CHARS = 4_000;
 
 /**
+ * Set on the delegated `associate run` process, to its run id. The Python
+ * launcher's timeout kill (`associate/harness/pi.py`) leaves a process
+ * started with it alone — a delegated run is meant to outlive the session
+ * that started it — and removes it from the pi that run starts.
+ */
+export const DELEGATED_RUN_ENV = "ASSOCIATE_DELEGATED_RUN";
+
+/** The in-tree module that answers whether a checkout's lock is held (see {@link defaultLockProbe}). */
+const LOCK_MODULE = "associate.harness.checkoutlock";
+
+/** Wall clock for one lock probe: an interpreter start and one `flock` attempt. */
+const LOCK_PROBE_TIMEOUT_MS = 15_000;
+
+/**
  * Parent variables the delegated run must not inherit. `associate run` sets
  * or clears most of these itself; removing them here as well means no stale
  * value — another session's checkout root, walk or ACP id — can leak in.
@@ -137,6 +159,8 @@ const NOT_INHERITED = [
   "ASSOCIATE_PI_TRUST",
   "ASSOCIATE_CONTRACT_DIR",
   "ASSOCIATE_EXTENSION_PATH",
+  "ASSOCIATE_SPAWNED_BY",
+  "ASSOCIATE_DELEGATED_RUN",
   "PI_ACP_SESSION_ID",
   "ACP_SESSION_ID",
   "PYTHONPATH",
@@ -307,6 +331,8 @@ export function runArguments(input: RunArgumentsInput): string[] {
     input.sessionId,
     "--timeout",
     String(input.timeoutSeconds),
+    // The run takes the one-run-per-checkout lock itself and holds it to its end.
+    "--checkout-lock",
   ];
   if (input.untrusted) args.push("--untrusted-checkout");
   for (const command of input.testCommands) args.push("--test-command", command.map(shellQuote).join(" "));
@@ -314,8 +340,12 @@ export function runArguments(input: RunArgumentsInput): string[] {
   return args;
 }
 
-/** The delegated run's environment: this session's snapshot minus {@link NOT_INHERITED}, plus the tree. */
-export function delegateEnvironment(env: Env, cli: CliInvocation): Record<string, string> {
+/**
+ * The delegated run's environment: this session's snapshot minus
+ * {@link NOT_INHERITED}, plus the tree and, for the run itself, its run id as
+ * {@link DELEGATED_RUN_ENV}.
+ */
+export function delegateEnvironment(env: Env, cli: CliInvocation, runId?: string): Record<string, string> {
   const out: Record<string, string> = {};
   for (const [key, value] of Object.entries(env)) {
     if (value === undefined) continue;
@@ -324,8 +354,54 @@ export function delegateEnvironment(env: Env, cli: CliInvocation): Record<string
   }
   out.PYTHONPATH = cli.pythonPath;
   out.ASSOCIATE_EXTENSION_PATH = join(extensionDir, "index.ts");
+  if (runId !== undefined) out[DELEGATED_RUN_ENV] = runId;
   return out;
 }
+
+// ---------------------------------------------------------------------------
+// The checkout lock, held by the delegated run itself
+// ---------------------------------------------------------------------------
+//
+// A delegated run is detached and outlives the call that started it — and the
+// process, when that process ends. So "one delegated run per checkout" cannot
+// live in this process's memory alone. The run takes a kernel `flock` on a
+// lock file keyed by the checkout's real path (`associate run
+// --checkout-lock`, `associate/harness/checkoutlock.py`) and holds it until
+// its process ends, however it ends. Node has no `flock`, so before starting
+// a run this tool asks the tree's interpreter whether the lock is held. Two
+// starts that both find it free are settled by the lock itself: the run that
+// loses exits at once, and `delegate_status` reports it failed.
+
+/** What a probe found: the lock's state, or why it could not be read. */
+export type LockProbe = { held: boolean; holder: string | null } | { error: string };
+
+/** Ask whether `checkout`'s lock is held, with the delegated run's interpreter and environment. */
+export type LockProber = (cli: CliInvocation, checkout: string, env: Record<string, string>) => LockProbe;
+
+/** The real probe: `<python> -m associate.harness.checkoutlock <checkout>`, which prints JSON. */
+export const defaultLockProbe: LockProber = (cli, checkout, env) => {
+  const run = spawnSync(cli.file, ["-m", LOCK_MODULE, checkout], {
+    cwd: cli.cwd,
+    env,
+    encoding: "utf8",
+    shell: false,
+    timeout: LOCK_PROBE_TIMEOUT_MS,
+    windowsHide: true,
+  });
+  if (run.error) return { error: run.error.message };
+  if (run.status !== 0) {
+    return { error: `the lock probe exited with status ${String(run.status)}: ${(run.stderr ?? "").trim().slice(-400)}` };
+  }
+  try {
+    const answer = JSON.parse(run.stdout);
+    if (answer && typeof answer === "object" && typeof answer.held === "boolean") {
+      return { held: answer.held, holder: typeof answer.holder === "string" ? answer.holder : null };
+    }
+  } catch {
+    // Not JSON: reported below.
+  }
+  return { error: "the lock probe printed no answer" };
+};
 
 /** True when `dir` is inside a git work tree (a `.git` entry here or above). */
 export function inGitWorkTree(dir: string): boolean {
@@ -427,6 +503,8 @@ export interface DelegateDeps {
   which?: (name: string, env: Env) => string | null;
   /** Append the child line; defaults to the session walk attached to `ctx`. */
   recordChild?: (link: ChildLink) => ChildEntry;
+  /** Whether another process's run holds the checkout; {@link defaultLockProbe} by default (tests). */
+  probeLock?: LockProber;
   /** Liveness of a pid recorded by an earlier process (status after a restart). */
   isAlive?: (pid: number) => boolean;
   /** The associate tree whose CLI is run; `lib/paths.ts` `associateRoot` by default (tests). */
@@ -475,9 +553,12 @@ export function createDelegateTools(ctx: AssociateContext, deps: DelegateDeps = 
   const registry = ctx.contract.models;
   const active = resolveActiveModel(env, registry);
   const problems = delegationProblems(registry);
-  const allowed: string[] = problems.length ? [] : [...(active.entry?.may_delegate ?? [])];
+  // A spawned child delegates to nobody: a child is never a spawner (lib/toolset.ts).
+  const allowed: string[] =
+    problems.length || active.spawnedChild ? [] : [...(active.entry?.may_delegate ?? [])];
   const launch = deps.launch ?? defaultDetachedLauncher;
   const which = deps.which ?? whichOnPath;
+  const probeLock = deps.probeLock ?? defaultLockProbe;
   const isAlive = deps.isAlive ?? processAlive;
   const root = deps.associateRoot ?? defaultAssociateRoot;
   const now = deps.now ?? Date.now;
@@ -556,6 +637,9 @@ export function createDelegateTools(ctx: AssociateContext, deps: DelegateDeps = 
         toolError("contract_incomplete", `models.json may_delegate is malformed, so no delegation is allowed: ${problems.join("; ")}`),
       );
     }
+    if (active.spawnedChild) {
+      return refuse(model, "this session is a spawned child, and a child never starts another run");
+    }
     if (!allowed.includes(model)) {
       return refuse(model, `'${model}' may not be delegated to by '${active.key ?? "no model"}'`);
     }
@@ -610,6 +694,28 @@ export function createDelegateTools(ctx: AssociateContext, deps: DelegateDeps = 
           "delegate_busy",
           `delegated run ${busy} is still running in this checkout; only one runs at a time — check it with ${DELEGATE_STATUS_TOOL}`,
           { running_run_id: busy, checkout: key },
+        ),
+      );
+    }
+    // A run started by another process (or by this session before a restart)
+    // is known only by the lock it holds.
+    const lock = probeLock(cli, ctx.checkoutRoot, delegateEnvironment(env, cli));
+    if ("error" in lock) {
+      return toolResult(
+        toolError(
+          "lock_unavailable",
+          `whether another run holds this checkout could not be read (${redaction.apply(lock.error)}), so nothing was started`,
+          { checkout: key },
+        ),
+      );
+    }
+    if (lock.held) {
+      return toolResult(
+        toolError(
+          "delegate_busy",
+          `${lock.holder ? `run ${lock.holder}` : "another run"} holds this checkout's lock; only one runs at a time — ` +
+            `try again once it has finished`,
+          { running_run_id: lock.holder, checkout: key },
         ),
       );
     }
@@ -668,7 +774,7 @@ export function createDelegateTools(ctx: AssociateContext, deps: DelegateDeps = 
         file: cli.file,
         args,
         cwd: cli.cwd,
-        env: delegateEnvironment(env, cli),
+        env: delegateEnvironment(env, cli, runId),
         stdoutPath: join(dir, RESULT_FILE),
         stderrPath: join(dir, STDERR_FILE),
       });
@@ -789,7 +895,17 @@ export function createDelegateTools(ctx: AssociateContext, deps: DelegateDeps = 
       );
     }
 
-    const bounded = boundedResult(redactValue(result!, redaction), budget?.maxChars ?? 25_000);
+    if (!budget) {
+      return toolResult(
+        toolError(
+          "contract_incomplete",
+          "the contract's policy.budgets.delegate (max_output_chars, timeout_ms) is missing; delegate_status defines no " +
+            "result budget of its own, so the result is not returned",
+          { ...base, state: "finished" },
+        ),
+      );
+    }
+    const bounded = boundedResult(redactValue(result!, redaction), budget.maxChars);
     return toolResult({
       ok: true,
       ...base,
