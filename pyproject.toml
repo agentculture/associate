@@ -34,6 +34,11 @@ build-backend = "hatchling.build"
 [tool.hatch.build.targets.wheel]
 packages = ["associate"]
 
+# The built web UI is git-ignored build output. In a wheel built from the sdist it is already in
+# the package tree, and without this line the sdist's own .gitignore would leave it out.
+[tool.hatch.build]
+artifacts = ["associate/web_dist/**"]
+
 # hatch_build.py force-includes the built web UI (web/dist) as associate/web_dist (wheel and
 # sdist). It packages an existing build and never runs Node; release CI builds web/ first.
 [tool.hatch.build.hooks.custom]
