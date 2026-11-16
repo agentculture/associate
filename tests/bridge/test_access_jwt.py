@@ -300,7 +300,7 @@ def test_the_jwks_fetch_runs_outside_the_lock():
 
 def test_a_listen_port_of_superscript_digits_is_a_config_error_not_a_crash():
     env = {
-        "ASSOCIATE_ACCESS_LISTEN": "127.0.0.1:²",
+        "ASSOCIATE_ACCESS_LISTEN": "127.0.0.1:\u00b2",
         "ASSOCIATE_ACCESS_TEAM_DOMAIN": TEAM,
         "ASSOCIATE_ACCESS_AUD": AUD,
     }

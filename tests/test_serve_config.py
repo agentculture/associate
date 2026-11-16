@@ -131,4 +131,4 @@ def test_the_default_ports_are_this_apps_own():
 
 def test_a_port_of_superscript_digits_is_a_config_error_not_a_crash():
     with pytest.raises(srv.ListenerConfigError):
-        srv.plan_listeners({"ASSOCIATE_PORT": "²"})
+        srv.plan_listeners({"ASSOCIATE_PORT": "\u00b2"})

@@ -126,7 +126,7 @@ def test_a_content_length_of_superscript_digits_is_a_400_not_a_crash(ui_app, aut
         ui_app,
         "POST",
         "/runs",
-        {**auth["admin"], "Content-Length": "²", "Content-Type": "application/json"},
+        {**auth["admin"], "Content-Length": "\u00b2", "Content-Type": "application/json"},
         b"{}",
     )
     assert r.status_code == 400, r.text
