@@ -242,6 +242,14 @@ skills.local.yaml
 node_modules/
 .associate-runs/
 
+# The web UI's build output (web/), and the copy a wheel build ships as associate/web_dist
+# (hatch_build.py force-includes web/dist; neither is ever committed). The generic `dist/`
+# rule above already covers web/dist; these lines say so on purpose.
+web/dist/
+associate/web_dist/
+web/coverage/
+web/node_modules/.tmp/
+
 # The Pi extension's own TypeScript modules live in `.pi/extensions/*/lib/`,
 # which the Python `lib/` rule above (setuptools build output) would otherwise
 # swallow. Re-include that tree explicitly — the directory itself has to be

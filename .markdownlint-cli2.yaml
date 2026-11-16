@@ -16,6 +16,12 @@ config:
 
 ignores:
   - "node_modules/**"
+  # The web UI's packages and build output (web/): installed or generated, never authored.
+  - "web/node_modules/**"
+  - "web/dist/**"
+  - "web/coverage/**"
+  - "associate/web_dist/**"
+  - ".venv/**"
   - ".local/**"
   - ".afi/**"
   - ".teken/**"

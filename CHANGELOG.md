@@ -8,8 +8,8 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 ## [0.11.0] - 2026-11-16
 
 The bridge: another service can start an `associate run` on a checkout and read
-its result, over a CLI, an HTTP API or an MCP server. A web UI is planned and is
-not built. This is the bridge's first release: its tests use a stand-in for the
+its result, over a CLI, an HTTP API or an MCP server, and see runs in a
+read-only web UI. This is the bridge's first release: its tests use a stand-in for the
 run, and no real run has been started through it (built and unit-tested only).
 
 ### Added
@@ -40,6 +40,28 @@ run, and no real run has been started through it (built and unit-tested only).
 - **A surface parity test** (`tests/test_surface_parity.py`): every runs verb
   must exist, with the same parameters, on the CLI, the MCP server and the HTTP
   API.
+- **The web UI** (`web/`, Vite + React + TypeScript, the culture-design tokens
+  and conventions cited from qodo-cli): **Runs** (`/runs`; a card per run with
+  a status pill, timing, model, title, checkout and outcome; a filter for all,
+  in progress and needs a look) and **one run** (`/runs/<id>`: why it was not
+  merged, each test command's exit code, the changed paths with the truncation
+  note, the instruction and the final reply). Read-only; it refreshes every 5
+  seconds while something runs and pauses while the tab is hidden. `create_app`
+  mounts it through `associate/bridge/static.py` when the package holds
+  `associate/web_dist`; then `GET /**` is viewer-readable and the same-origin
+  `/api` prefix reaches the same routes at the same roles. Without a build, `/`
+  is a JSON 404. Every API answer now says `Cache-Control: no-store`.
+- **`hatch_build.py`** ships `web/dist` in the wheel as `associate/web_dist`
+  (never committed; never runs Node). `ASSOCIATE_REQUIRE_WEB=1` fails a build
+  without it, `ASSOCIATE_SKIP_WEB=1` leaves it out. CI has a `web` job
+  (install, typecheck, vitest, the tokens check, build), and `publish.yml`
+  builds the UI before `uv build` and triggers on `web/**` and `hatch_build.py`.
+- **More fields for the UI, bounded**: `runs list` adds `finished_at`, `title`,
+  `merge`, `outcome`, `exit_code`, `tests` counts, `changed_paths_total` and
+  `test_command_count` (the reply stays under 64 KiB, cutting text first, then
+  leaving out the oldest runs with `truncated`); `runs show` adds `instruction`
+  (cut at 4000 characters), `test_command_count` and `tests.results` (each
+  command's line and exit code, at most 16, never its output).
 - **Docs**: `docs/operations/bridge.md` for operators, agents and integrators;
   the README and `CLAUDE.md` describe the bridge.
 

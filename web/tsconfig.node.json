@@ -1,0 +1,25 @@
+// Cited from qodo-cli web/tsconfig.node.json @ ee73d5682a02952a76567887995b4f2e3aca5ea2, which cited culture-rules web/tsconfig.node.json @ b7f861f690b57c4355f81371cc02ad1dd2ae9cac (cite-don't-import: this repo owns its copy).
+// Adapted: include lists only vite.config.ts (no Playwright here).
+{
+  "compilerOptions": {
+    "target": "ES2022",
+    "lib": ["ES2023", "DOM"],
+    "module": "ESNext",
+    "skipLibCheck": true,
+
+    "moduleResolution": "bundler",
+    "allowImportingTsExtensions": true,
+    "isolatedModules": true,
+    "moduleDetection": "force",
+    "noEmit": true,
+
+    "strict": true,
+    "noUnusedLocals": true,
+    "noUnusedParameters": true,
+    "noFallthroughCasesInSwitch": true,
+    "types": ["node"],
+
+    "tsBuildInfoFile": "./node_modules/.tmp/tsconfig.node.tsbuildinfo"
+  },
+  "include": ["vite.config.ts"]
+}

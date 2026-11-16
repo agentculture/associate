@@ -444,7 +444,10 @@ _SERVE = """\
 # associate serve
 
 Run the runs HTTP API under uvicorn (the `server` extra): `POST /runs` (admin),
-`GET /runs/{run_id}` and `GET /runs` (viewer), and the public `GET /health`.
+`GET /runs/{run_id}` and `GET /runs` (viewer), and the public `GET /health`. When the
+installed package holds a built web UI (`associate/web_dist`, shipped in the wheel), it also
+serves that read-only UI (the runs list and one run) to any viewer, and the same routes under
+the same-origin `/api` prefix; without one, `/` is a JSON 404.
 
 ## Usage
 

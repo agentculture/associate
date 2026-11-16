@@ -17,6 +17,13 @@ lacking it fails.
   route's dependant. ``POST /runs`` reads its body by hand, so its accepted fields are probed:
   one request per declared field and per omitted field against the real app, and an
   undeclared field must be refused.
+
+The web UI adds no verb. Its routes are classified explicitly, never by loosening the check:
+an API-only app has exactly one route that is not a verb besides ``/health``, the JSON 404 at
+``GET /`` (:data:`NO_UI_HTTP`); an app serving a built UI has exactly the routes
+``associate.bridge.static.install`` adds (:data:`UI_HTTP`, checked against a bare app), and the
+same-origin ``/api`` prefix is an ASGI shim, not a route, so it cannot add an operation. Every
+check runs against both apps.
 """
 
 from __future__ import annotations
@@ -35,7 +42,7 @@ pytest.importorskip("mcp")
 from fastapi.routing import APIRoute  # noqa: E402
 from fastapi.testclient import TestClient  # noqa: E402
 
-from associate.bridge import mcpserver  # noqa: E402
+from associate.bridge import mcpserver, static  # noqa: E402
 from associate.bridge.filetokens import FileTokenStore  # noqa: E402
 from associate.bridge.tokens import ServiceTokens  # noqa: E402
 from associate.cli import _build_parser  # noqa: E402
@@ -48,8 +55,13 @@ NOUN = mcp_tools.NOUN
 
 #: CLI commands under the noun that are not registry verbs (self-description only).
 LOCAL_ONLY_CLI = frozenset({"overview"})
-#: HTTP operations that are not registry verbs.
+#: HTTP operations that are not registry verbs, on every app.
 LOCAL_ONLY_HTTP = frozenset({"GET /health"})
+#: The one more non-verb operation of an app with no built UI: the JSON 404 at the root.
+NO_UI_HTTP = frozenset({"GET /"})
+#: The non-verb operations of an app serving a built UI: the SPA fallback that
+#: ``associate.bridge.static.install`` adds (``test_ui_http_is_exactly_what_static_adds``).
+UI_HTTP = frozenset({"GET /{path:path}", "GET /_ui/{path:path}"})
 
 #: Top-level CLI commands that are not bridge verbs, by name, each with its reason. The
 #: parity check above looks only at the ``runs`` noun, so a new top-level command must be
@@ -120,18 +132,33 @@ def _valid_body(repo: Path) -> dict[str, Any]:
     }
 
 
+def write_dist(tmp_path: Path) -> Path:
+    """A minimal built UI: what ``static.install`` needs to mount (an ``index.html``)."""
+    dist = tmp_path / "web_dist"
+    (dist / "assets").mkdir(parents=True)
+    (dist / "index.html").write_text("<!doctype html><title>ui</title>", encoding="utf-8")
+    return dist
+
+
 class Http:
     """The real app, an admin token and a recorded way to probe a hand-read body."""
 
-    def __init__(self, tmp_path: Path) -> None:
+    def __init__(self, tmp_path: Path, web_dist: Path | None = None) -> None:
         self.repo = make_repo(tmp_path / "probe-repo")
         tokens = ServiceTokens(FileTokenStore(tmp_path / "tokens.json"), prefix=TOKEN_PREFIX)
         self.headers = {
             "Authorization": f"Bearer {tokens.issue('test', name='ops', roles=['admin']).token}"
         }
         config = RunsConfig(state_dir=tmp_path / "probe-state", allowed_roots=())
-        self.app = create_app(tokens=tokens, runs_config=config, child_command=fake("plain"))
+        self.app = create_app(
+            tokens=tokens, runs_config=config, child_command=fake("plain"), web_dist=web_dist
+        )
         self.client = TestClient(self.app)
+
+    @property
+    def non_verb(self) -> frozenset[str]:
+        """The operations this app may have that are not verbs, by what it serves."""
+        return LOCAL_ONLY_HTTP | (UI_HTTP if self.app.state.web_ui else NO_UI_HTTP)
 
     def post(self, path: str, body: dict[str, Any]) -> Any:
         return self.client.post(path, json=body, headers=self.headers)
@@ -186,6 +213,7 @@ def parity_failures(
     cli: dict[str, Params],
     mcp: dict[str, Params],
     http: dict[str, Params],
+    non_verb_http: frozenset[str] = LOCAL_ONLY_HTTP | NO_UI_HTTP,
 ) -> list[str]:
     """Every way a verb is missing from, or differs on, a surface, and every operation a
     surface has that no verb declares. Empty means parity holds."""
@@ -209,21 +237,23 @@ def parity_failures(
     for tool in sorted(set(mcp) - tool_names):
         failures.append(f"MCP tool '{tool}' has no registry verb")
     operations = {f"{v.http[0]} {v.http[1]}" for v in verbs}
-    for op in sorted(set(http) - operations - LOCAL_ONLY_HTTP):
+    for op in sorted(set(http) - operations - non_verb_http):
         failures.append(f"HTTP operation '{op}' has no registry verb")
     return failures
 
 
-@pytest.fixture
-def http(tmp_path):
-    return Http(tmp_path)
+@pytest.fixture(params=["api-only", "with-ui"])
+def http(request, tmp_path):
+    """Every check runs against the API-only app and the app serving a built UI."""
+    return Http(tmp_path, write_dist(tmp_path) if request.param == "with-ui" else None)
 
 
-def surfaces(http: Http) -> dict[str, dict[str, Params]]:
+def surfaces(http: Http) -> dict[str, Any]:
     return {
         "cli": collect_cli(_build_parser()),
         "mcp": collect_mcp(mcp_tools.tools()),
         "http": collect_http(http, service.VERBS),
+        "non_verb_http": http.non_verb,
     }
 
 
@@ -254,7 +284,43 @@ def test_the_introspection_sees_the_real_params(http):
     assert found["http"]["POST /runs"]["checkout"] is True
     assert found["http"]["GET /runs/{run_id}"] == {"run_id": True}
     assert found["http"]["GET /runs"] == {"limit": False}
-    assert set(found["http"]) == {"GET /health", "POST /runs", "GET /runs/{run_id}", "GET /runs"}
+    verbs = {"GET /health", "POST /runs", "GET /runs/{run_id}", "GET /runs"}
+    extra = UI_HTTP if http.app.state.web_ui else NO_UI_HTTP
+    assert set(found["http"]) == verbs | extra
+
+
+def test_ui_http_is_exactly_what_static_adds(tmp_path):
+    """The UI exemption is what the cited static module adds to a bare app, nothing more, and
+    none of it is in the schema; an API-only app has the root 404 and none of it."""
+    from fastapi import FastAPI
+
+    bare = FastAPI()
+    before = {id(r) for r in bare.routes}
+    assert static.install(bare, write_dist(tmp_path)) is True
+    added = [r for r in bare.routes if id(r) not in before]
+    ops = {f"{m} {r.path}" for r in added for m in r.methods - {"HEAD", "OPTIONS"}}
+    assert ops == UI_HTTP
+    assert all(r.include_in_schema is False for r in added)
+    assert UI_HTTP.isdisjoint({f"{v.http[0]} {v.http[1]}" for v in service.VERBS})
+    assert NO_UI_HTTP.isdisjoint(UI_HTTP | {f"{v.http[0]} {v.http[1]}" for v in service.VERBS})
+
+
+def test_an_app_serving_the_ui_still_fails_on_an_undeclared_runs_route(tmp_path):
+    http = Http(tmp_path, write_dist(tmp_path))
+    assert http.app.state.web_ui is True
+    http.app.add_api_route("/runs/frob", lambda: {}, methods=["GET"])
+    assert parity_failures(service.VERBS, **surfaces(http)) == [
+        "HTTP operation 'GET /runs/frob' has no registry verb"
+    ]
+
+
+def test_the_root_404_is_not_exempt_on_an_app_serving_the_ui(tmp_path):
+    http = Http(tmp_path, write_dist(tmp_path))
+    found = surfaces(http)
+    found["http"]["GET /"] = {}
+    assert parity_failures(service.VERBS, **found) == [
+        "HTTP operation 'GET /' has no registry verb"
+    ]
 
 
 def test_the_local_only_exemptions_are_not_stale():
@@ -335,7 +401,7 @@ def _fake_verb() -> Verb:
     )
 
 
-def _complete_surfaces(http: Http, verb: Verb) -> dict[str, dict[str, Params]]:
+def _complete_surfaces(http: Http, verb: Verb) -> dict[str, Any]:
     found = surfaces(http)
     found["cli"][verb.name] = {"thing": True}
     found["mcp"][f"{NOUN}_{verb.name}"] = {"thing": True}
