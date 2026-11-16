@@ -215,7 +215,7 @@ def surfaces(http: Http) -> dict[str, dict[str, Params]]:
 
 
 def test_the_registry_is_not_empty_and_names_are_unique():
-    assert [v.name for v in service.VERBS] == ["start", "show", "list"]
+    assert service.VERBS  # data-driven: a new verb needs no edit here
     assert len({v.name for v in service.VERBS}) == len(service.VERBS)
 
 
