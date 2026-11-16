@@ -22,7 +22,8 @@
  *
  * Locating the vendored binaries: Pi keeps `rg` and `fd` under its agent
  * directory's `bin/` (pi-coding-agent's `getBinDir()` — measured against pi
- * 0.84.2 in `node_modules/@earendil-works/pi-coding-agent/dist/config.js` —
+ * 0.84.2, and unchanged on 1.1.0, in
+ * `node_modules/@earendil-works/pi-coding-agent/dist/config.js` —
  * joins `getAgentDir()` with `"bin"`, and `getAgentDir()` prefers
  * `$PI_CODING_AGENT_DIR`, falling back to `~/.pi/agent`). This module mirrors
  * that resolution rather than hardcoding a home path: `$PI_CODING_AGENT_DIR`
@@ -48,6 +49,7 @@ import { spawn as nodeSpawn, type ChildProcessWithoutNullStreams } from "node:ch
 import { existsSync, readdirSync } from "node:fs";
 import { homedir } from "node:os";
 import { join } from "node:path";
+import { StringDecoder } from "node:string_decoder";
 import {
   confine,
   makeStructuredError,
@@ -213,9 +215,15 @@ export function runProcess(
       finish(null);
     };
 
-    child.stdout?.on("data", (chunk: Buffer | string) => {
+    // Streaming decoders: a character split across two chunks is decoded whole.
+    const stdoutDecoder = new StringDecoder("utf8");
+    const stderrDecoder = new StringDecoder("utf8");
+    const decode = (decoder: StringDecoder, chunk: Buffer | string) =>
+      typeof chunk === "string" ? chunk : decoder.write(chunk);
+
+    const onStdout = (decoded: string) => {
       if (settled) return;
-      let text = chunk.toString("utf8");
+      let text = decoded;
       while (text.length > 0) {
         const newline = text.indexOf("\n");
         if (newline === -1) {
@@ -258,11 +266,13 @@ export function runProcess(
           return;
         }
       }
-    });
+    };
+    child.stdout?.on("data", (chunk: Buffer | string) => onStdout(decode(stdoutDecoder, chunk)));
 
     child.stderr?.on("data", (chunk: Buffer | string) => {
+      const text = decode(stderrDecoder, chunk);
       if (settled || stderr.length >= limits.maxLineChars) return;
-      stderr += chunk.toString("utf8").slice(0, limits.maxLineChars - stderr.length);
+      stderr += text.slice(0, limits.maxLineChars - stderr.length);
     });
 
     child.on("error", (err: Error) => {
@@ -270,7 +280,11 @@ export function runProcess(
       settled = true;
       reject(err);
     });
-    child.on("close", (code: number | null) => finish(code));
+    child.on("close", (code: number | null) => {
+      // Flush: bytes of a character the stream ended inside come out as U+FFFD.
+      onStdout(stdoutDecoder.end());
+      finish(code);
+    });
   });
 }
 

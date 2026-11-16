@@ -31,7 +31,7 @@
  * multibyte content — the lapse this task's acceptance criteria calls out.
  */
 
-import { lstatSync, readFileSync, realpathSync, statSync } from "node:fs";
+import { closeSync, lstatSync, openSync, readSync, readFileSync, realpathSync, statSync } from "node:fs";
 import { createHmac, randomBytes, timingSafeEqual } from "node:crypto";
 import { basename, relative, resolve, sep } from "node:path";
 import {
@@ -47,6 +47,7 @@ import {
   type StructuredError,
 } from "../lib/contain.ts";
 import type { AssociateContext, ToolModule } from "../lib/context.ts";
+import { resolveActiveModel, type ActiveModel } from "../lib/toolset.ts";
 
 // ---------------------------------------------------------------------------
 // typebox — provided by the pi runtime as a bare "typebox" specifier.
@@ -110,13 +111,102 @@ interface ReadArgs {
   cursor?: string;
 }
 
+/** pi's tool-result image block (`ImageContent` in pi-ai): base64 `data` plus `mimeType`. */
+interface ImageBlock {
+  type: "image";
+  data: string;
+  mimeType: string;
+}
+
 interface ToolResult {
-  content: Array<{ type: "text"; text: string }>;
+  content: Array<{ type: "text"; text: string } | ImageBlock>;
   details: Record<string, unknown>;
 }
 
 function errorResult(error: StructuredError): ToolResult {
   return { content: [{ type: "text", text: JSON.stringify(error) }], details: error as unknown as Record<string, unknown> };
+}
+
+/**
+ * Largest image file `read` will hand to a model, in bytes. Conservative on
+ * purpose (vLLM lanes reject large request bodies). TODO: belongs in
+ * `policy.json` (`read.image_max_bytes`) once the contract task can own it;
+ * kept as a named constant here until then.
+ */
+export const IMAGE_MAX_BYTES = 5 * 1024 * 1024;
+
+/** The image type of *head* (a file's leading bytes) by magic number, or null. */
+function sniffImageMime(head: Buffer): string | null {
+  if (head.length >= 8 && head.subarray(0, 8).equals(Buffer.from("89504e470d0a1a0a", "hex"))) return "image/png";
+  if (head.length >= 3 && head[0] === 0xff && head[1] === 0xd8 && head[2] === 0xff) return "image/jpeg";
+  if (head.length >= 6 && /^GIF8[79]a$/.test(head.subarray(0, 6).toString("latin1"))) return "image/gif";
+  if (
+    head.length >= 12 &&
+    head.subarray(0, 4).toString("latin1") === "RIFF" &&
+    head.subarray(8, 12).toString("latin1") === "WEBP"
+  ) {
+    return "image/webp";
+  }
+  return null;
+}
+
+/**
+ * Why an image read is refused for `active`, or null when its model declares
+ * image input.
+ *
+ * `active` is resolved ONCE, at register (= extension load), by the same
+ * `resolveActiveModel` `index.ts` uses for the tool_call guard — never from
+ * `process.env` at call time, so read can never disagree with the model whose
+ * tool set is being enforced. A pending or unknown key declares nothing.
+ */
+function imageRefusal(active: ActiveModel): string | null {
+  if (active.key === undefined || active.entry === undefined) {
+    return `no active model resolved (${(active.problem ?? "").trim()})`;
+  }
+  return active.entry.input.includes("image") ? null : `the active model '${active.key}' does not declare image input`;
+}
+
+function readImage(active: ActiveModel, absPath: string, rel: string, mime: string, size: number): ToolResult {
+  const refusal = imageRefusal(active);
+  if (refusal !== null) {
+    return errorResult(
+      makeStructuredError(
+        "image_input_unsupported",
+        `'${rel}' is an image (${mime}) but ${refusal}; ` +
+          "this read is refused. Describe the file by name/metadata only, or run with a vision model.",
+        "path",
+      ),
+    );
+  }
+  if (size > IMAGE_MAX_BYTES) {
+    return errorResult(
+      makeStructuredError(
+        "image_too_large",
+        `image '${rel}' is ${size} bytes, over the ${IMAGE_MAX_BYTES}-byte image limit`,
+        "path",
+      ),
+    );
+  }
+  const data = readFileSync(absPath).toString("base64");
+  return {
+    content: [
+      { type: "text", text: `Read image file [${mime}] ${rel} (${size} bytes)` },
+      { type: "image", data, mimeType: mime },
+    ],
+    details: { path: rel, mime_type: mime, bytes: size, image: true },
+  };
+}
+
+/** The first bytes of *path*, enough to sniff a magic number. */
+function readHead(path: string): Buffer {
+  const fd = openSync(path, "r");
+  try {
+    const buf = Buffer.alloc(12);
+    const n = readSync(fd, buf, 0, 12, 0);
+    return buf.subarray(0, n);
+  } finally {
+    closeSync(fd);
+  }
 }
 
 /** The largest prefix of *text* whose UTF-8 encoding is at most *maxBytes*. */
@@ -406,7 +496,7 @@ export function validateContinuationCursor(
 }
 
 const DESCRIPTION =
-  "Read a file's contents, or a line range of it. Every returned line is prefixed with its " +
+  "Read a file's contents, or a line range of it. An image file (png, jpeg, gif, webp) is returned as an image when the active model accepts images, and refused otherwise. Every returned line is prefixed with its " +
   "absolute line number in the file (never renumbered from 1), so `start_line`/`end_line` can " +
   "be used to jump straight to a known location. Output is bounded by the read budget; a " +
   "truncated result carries a `cursor` — pass it back (with no other argument) to fetch the " +
@@ -415,6 +505,8 @@ const DESCRIPTION =
 
 export const register: ToolModule["register"] = async (pi, ctx: AssociateContext) => {
   const Type = await resolveTypeBuilder();
+  // Snapshotted at load, like index.ts's own resolution (see imageRefusal).
+  const active = resolveActiveModel({ ...process.env }, ctx.contract.models);
   // `path` is Optional at the SCHEMA level (still type-checked when present)
   // because a continuation call passes only `cursor`; presence of `path` when
   // there is no `cursor` is enforced by hand below, so the missing-`path`
@@ -460,7 +552,7 @@ export const register: ToolModule["register"] = async (pi, ctx: AssociateContext
       if (args.path === undefined) {
         return errorResult(makeStructuredError("invalid_argument", "missing required property 'path'", "path"));
       }
-      return startRead(ctx, args as ReadArgs & { path: string });
+      return startRead(ctx, active, args as ReadArgs & { path: string });
     },
   });
 };
@@ -494,7 +586,7 @@ function continueRead(ctx: AssociateContext, rawCursor: string): ToolResult {
   return { content: [{ type: "text", text: chunk.text }], details };
 }
 
-function startRead(ctx: AssociateContext, args: ReadArgs): ToolResult {
+function startRead(ctx: AssociateContext, active: ActiveModel, args: ReadArgs): ToolResult {
   const confined = confine(ctx.checkoutRoot, args.path);
   if (!confined.ok) return errorResult(confined);
 
@@ -523,6 +615,9 @@ function startRead(ctx: AssociateContext, args: ReadArgs): ToolResult {
   if (!stat.isFile()) {
     return errorResult(makeStructuredError("not_a_file", `'${args.path}' is not a regular file`, "path"));
   }
+
+  const imageMime = sniffImageMime(readHead(confined.path));
+  if (imageMime) return readImage(active, confined.path, rel, imageMime, stat.size);
 
   const stampedOrError = stampWindow(confined.path, args.start_line, args.end_line);
   if ("ok" in stampedOrError) return errorResult(stampedOrError);

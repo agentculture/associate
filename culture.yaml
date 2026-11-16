@@ -1,27 +1,31 @@
-# `model:` is a lobes ROLE name, not a checkpoint id. The lane is served by the
-# local lobes gateway (http://localhost:8001/v1), which resolves
-# `associate` to whichever box currently hosts that role — today the Jetson AGX
-# Orin 64GB, proxied over the tailnet (ASSOCIATE_PEER_ORIGIN + _PEER_PROXY),
-# serving nvidia/NVIDIA-Nemotron-3.5-Lightning-30B-A3B-NVFP4. Addressing the
-# role rather than the checkpoint is the whole point of the gateway: the lane
-# can move boxes or change checkpoints without touching this file.
+# `model:` is a key of the contract's model registry
+# (associate/contract/models.json): `worker` (Pi label "bolt"), `senses` or
+# `cortex`. Each entry names a lobes ROLE, never a checkpoint id; the local
+# lobes gateway (http://localhost:8001/v1) resolves the role to whichever box
+# and checkpoint currently serves it, so a lane can move or re-checkpoint
+# without touching this file. `worker` is the registry default.
 #
-# The lobes `associate` role is `worker` MINUS `repo_action` — it executes,
-# drafts, inspects and calls tools, then hands the result BACK rather than
-# enacting it. That is exactly this agent's remit.
+# This key does NOT by itself choose the resident's model: pi-acp ignores the
+# `model` in ACP session/new and culture never sends session/set_model
+# (docs/notes/resident-model-resolution.md). The extension pins the session to
+# the registry model on session_start instead (ASSOCIATE_MODEL, else the
+# registry default) — only when ASSOCIATE_API_KEY is set; without it no
+# associate provider is registered and pi's own default model applies. This key
+# is kept equal to the registry default so whoami and the bench config stamp
+# report the model the resident is meant to run.
 #
 # The mesh backend is `acp`: culture spawns `acp_command` and speaks the Agent
 # Client Protocol to it. `pi-acp` (npm) bridges ACP stdio to `pi --mode rpc`, so
 # the resident runs the same Pi binary and the same `.pi/extensions/associate`
-# tool set as a headless `pi -p` run. Without this key culture_core falls back
-# to its default `["opencode", "acp"]` — a different agent entirely.
+# tool set as a headless `associate run`. Without this key culture_core falls
+# back to its default `["opencode", "acp"]` — a different agent entirely.
 #
 # `backend: acp` also selects the runtime prompt file: culture's
 # backend-consistency invariant maps acp -> AGENTS.md, and Pi loads AGENTS.md as
 # its context file in preference to CLAUDE.md. AGENTS.colleague.md is retained
-# through the transition so this cutover is a single clean `git revert`.
+# until the ACP path is verified live (plan task t20).
 agents:
 - suffix: associate
   backend: acp
   acp_command: ["pi-acp"]
-  model: associate
+  model: worker

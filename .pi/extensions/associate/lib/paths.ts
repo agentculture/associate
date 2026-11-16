@@ -7,13 +7,22 @@
  * temp directory and still discover the real `lib/` and `tools/`.
  */
 
-import { dirname, join } from "node:path";
+import { dirname, join, resolve } from "node:path";
 
 /** `.pi/extensions/associate/lib` */
 export const libDir: string = import.meta.dirname;
 
 /** `.pi/extensions/associate` */
 export const extensionDir: string = dirname(libDir);
+
+/**
+ * The associate repository (or installed pi package) that holds this
+ * extension: the directory `.pi/extensions/associate` lives under. Paths the
+ * contract states repo-relative to associate itself — `models.json`
+ * `prompt_file` — resolve against this, never against the checkout under
+ * examination, which may be any repo and is not trusted to supply them.
+ */
+export const associateRoot: string = resolve(extensionDir, "..", "..", "..");
 
 /** `.pi/extensions/associate/tools` — one module per registered tool. */
 export const toolsDir: string = join(extensionDir, "tools");

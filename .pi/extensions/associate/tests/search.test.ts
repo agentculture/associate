@@ -81,7 +81,7 @@ interface FakeState {
 // pipe does when the reader goes away. That is what makes "it stopped early"
 // observable.
 function chunkSpawner(
-  chunks: () => Iterable<string>,
+  chunks: () => Iterable<string | Buffer>,
   code: number,
 ): { spawner: Spawner; calls: RecordedCall[]; state: FakeState } {
   const calls: RecordedCall[] = [];
@@ -95,7 +95,7 @@ function chunkSpawner(
           for (const chunk of chunks()) {
             if (stopped()) break;
             state.emittedChunks += 1;
-            cb(Buffer.from(chunk, "utf8"));
+            cb(typeof chunk === "string" ? Buffer.from(chunk, "utf8") : chunk);
           }
         }
         return stdout;
@@ -641,6 +641,25 @@ test("ls caps entries at policy.caps.max_results and reports truncated:true over
     assert.equal(result.entries.length, 200);
     assert.equal(result.count, 210);
     assert.equal(result.truncated, true);
+  } finally {
+    c.dispose();
+  }
+});
+
+// ---------------------------------------------------------------------------
+// review: a multi-byte character split across two chunks is decoded whole
+// ---------------------------------------------------------------------------
+
+test("runGrep decodes a UTF-8 character split across two stdout chunks", async () => {
+  const c = context();
+  try {
+    // "\u05e9\u05dc\u05d5\u05dd" is Hebrew (two bytes a letter); the cut lands inside the first letter.
+    const line = Buffer.from("a.py:1:needle \u05e9\u05dc\u05d5\u05dd\n", "utf8");
+    const cut = line.indexOf(0xd7) + 1;
+    const { spawner } = chunkSpawner(() => [line.subarray(0, cut), line.subarray(cut)], 0);
+    const out = (await runGrep(c.ctx, { pattern: "needle", path: "." }, spawner)) as any;
+    assert.equal(JSON.stringify(out).includes("\ufffd"), false, "a replacement character leaked into the result");
+    assert.ok(JSON.stringify(out).includes("needle \u05e9\u05dc\u05d5\u05dd"), JSON.stringify(out));
   } finally {
     c.dispose();
   }

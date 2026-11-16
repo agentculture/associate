@@ -1,88 +1,93 @@
 # associate
 
-associate is a non-coding agent harness — a fast, reliable worker for **read,
-summarize, and find** work across local files and the web. It exists to take
-non-coding tool work off [`colleague`](https://github.com/agentculture/colleague)
-so colleague can spend its budget on coding and thinking.
+associate is a **multi-model agent harness** on [Pi](https://pi.dev) (pinned
+1.1.0). It runs one of the fleet's models on one task — reading, finding,
+summarizing, and, for the models allowed to, changing the checkout — and hands
+back what it saw, what it did, and where, with every statement tied to the
+recorded tool calls it rests on.
 
-Modelled on the Pi harness, merged from colleague's base tools.
+It serves the operator (headless `associate run`, or the mesh resident via
+`culture start associate`) and mesh peers such as
+[`colleague`](https://github.com/agentculture/colleague) that hand it work over
+IRC.
 
-The name is not incidental: **`associate` is a first-class role in
-[lobes](https://github.com/agentculture/lobes-cli)** — the tenth Colleague-facing
-lobe, backed by `nvidia/NVIDIA-Nemotron-3.5-Lightning-30B-A3B-NVFP4` and defined
-there as `worker` **minus** `repo_action`: it executes, drafts, inspects and calls
-tools, then hands the result *back* rather than enacting it. This repo is the
-agent harness for that role. The lane is live — a lobes gateway proxies it over
-the tailnet to a Jetson AGX Orin 64GB running the `orin-associate` shape.
+## Models
 
-## The boundary: an opinionated Pi extension, not a fork
+Models come from a registry in the portable contract,
+[`associate/contract/models.json`](associate/contract/models.json). Each is
+addressed by its [lobes](https://github.com/agentculture/lobes-cli) **role**
+through the local lobes gateway — never by a checkpoint id — and gets its own
+tool set, prompt (`.pi/extensions/associate/prompts/`) and permissions:
 
-associate commits to [Pi](https://pi.dev) as its runtime rather than building
-or forking a harness loop. The unit that gets optimized is **model + harness +
-tools + context policy, together** — so what stays harness-independent is kept
-small and portable, and everything else is tailored to Pi and to the served
-model:
+| Key | lobes role | May change the checkout | Notes |
+|-----|------------|-------------------------|-------|
+| `worker` (default; Pi label "bolt") | `worker` | yes, behind the safety gate | the bounded executor |
+| `senses` | `senses` | no | read, search, web, memory |
+| `cortex` | `cortex` | yes, behind the safety gate | may spawn `worker` / `senses` sub-agents |
+| `super-vl` | — | — | **pending**: no lobes role yet, not usable |
 
-- **Portable (lives in the Python package, `associate/contract/`):** the role
-  and permission boundaries (`role.json`'s capabilities/forbidden tokens,
-  `policy.json`'s read denylist / shell allowlist / output budgets), the task
-  input and handback JSON shapes, the evidence artifacts and their provenance
-  (the walk and statements schemas), and the behavioral evaluation cases
-  (`tests/behavioral/`).
-- **Pi-and-model-tailored (lives with the Pi extension,
-  `.pi/extensions/associate/`):** tool descriptions and schemas, result
-  presentation, prompt construction and context selection, compaction,
-  recovery and stopping behavior, and reasoning/provider settings.
+The role descriptions are lobes' own (`lobes/roles.py`); see
+[`CLAUDE.md`](CLAUDE.md)'s "The runtime lanes" for the citations. The earlier
+single lane (the lobes `associate` role on Nemotron 3.5 Lightning, never
+changing anything) is retired; `worker` replaces it.
 
-A second harness is added only after a measured benefit — not speculatively,
-and not because forking felt easier. Harness diversity, if it's ever needed,
-lives at the Culture mesh's node boundary (a different agent runs a different
-harness), not duplicated inside this one.
+## How a run is kept safe
 
-This is a change of plan from this repo's `culture-agent-template` origin.
-**At the pre-change HEAD (commit `2f24585`)**, `culture.yaml` still declared
-`backend: colleague`, no `.pi/` directory was tracked at all, and this section
-literally read "Status: scaffold, not yet a harness" — that snapshot is
-checkable with `git show 2f24585:README.md` from this repo's history. What has
-landed since (the contract, the extension core, the containment library,
-`associate bench --harness stub`) is real progress against that starting
-point; what has **not** landed yet is a `pi` harness adapter that a live run
-has measured end to end, so this repo does not yet claim the harness works —
-see [`CLAUDE.md`](CLAUDE.md)'s "Current state vs. target" for the precise
-landed-versus-pending split and the measured topology of the model lane.
+- **Tool surface per model.** A model is offered only its registry tools, and
+  a guard refuses anything else; `senses` has no writer at all.
+- **CLEF safety gate.** Every mutating call — and every memory write and web
+  call — is scored by the lobes decider (CLEF) against a versioned question set
+  in [`associate/contract/gate.json`](associate/contract/gate.json); below
+  threshold it is refused. With CLEF unreachable the gate tries Super (pending
+  today, so it counts as unreachable), then refuses every mutating call while
+  reads continue. The thresholds are **tentative**, set from one task's probes
+  ([`docs/notes/gate-calibration.md`](docs/notes/gate-calibration.md)); issue
+  #13 is the benchmark meant to replace them.
+- **A worktree per mutating run.** A model that may change things runs in its
+  own git worktree beside the repo; only a clean run whose operator test
+  commands (`--test-command`) all pass is merged to `main`, locally. Nothing is
+  ever pushed.
+- **Fail closed at launch.** `associate run` refuses to serve (exit `2`) unless
+  a preflight proves the extension loaded — and, for a model that may not
+  change things, that no writer tool is active.
 
-### Three audiences, three invocation paths
+Writing models also get `run_tests` (the operator's test commands, gated),
+eidetic memory (`eidetic_recall` / `eidetic_remember`) and a workledger ledger
+(`ledger_append` / `ledger_list`); `cortex` gets `spawn_subagent`.
 
-Every reader of this repo needing to *use* the lane falls into one of three
-buckets, each with one invocation meant to work from a clean clone:
+`senses` — the model the mesh resident runs — never writes itself. It hands a
+task that needs a change to a separate `worker` run with `delegate_run`
+(deviation d18), which returns a run id at once; `delegate_status` reports the
+run's outcome, merge and test results. The delegated run is an ordinary
+`associate run` of the tree that holds the extension: its own worktree, the
+operator's test commands (`ASSOCIATE_TEST_COMMANDS`, required), merged to
+`main` only when clean, nothing pushed. Built and unit-tested only; no
+delegated run has been started live.
 
-1. **The mesh resident** — reached through Culture, `culture start associate`.
-   That resolves `backend: acp`: culture spawns `pi-acp`, which bridges ACP
-   stdio to `pi --mode rpc`, so the resident runs the same Pi binary and the
-   same `.pi/extensions/associate` tool set a headless run does, with
-   `AGENTS.md` as the runtime prompt. `AGENTS.colleague.md` is kept only until
-   that path is fully verified.
-2. **colleague, or an operator, driving it headlessly** — the intended
-   invocation is `associate run --harness pi "<task>"`, but the `run` verb and
-   the `pi` adapter are not wired yet (a later task in the same plan). What
-   *does* work today is `uv run associate bench --harness stub`, which
-   exercises the same behavioral corpus the `pi` adapter will run, against a
-   plumbing-only stub — useful for verifying the wiring, not for getting real
-   work done yet.
-3. **A developer with `pi` on PATH** — from a checkout with the `ASSOCIATE_*`
-   environment variables set (see [`CLAUDE.md`](CLAUDE.md)'s Tooling
-   prerequisites for the full list and the exact `pi` / `pi-acp` / Node pins),
-   running `pi` directly in the repo picks up the tracked `.pi/` project
-   config and the associate extension.
+## What is measured, and what is not
 
-### The lane boundary
+**Measured live, one run each:**
 
-Whichever invocation is used, the lane **reads, finds, summarizes, and
-verifies — it never edits, writes, or opens a PR.** That is enforced
-structurally, not just by prompt: the Pi extension's `defaultTools` omits
-`edit`/`write` entirely, and a `tool_call` hook refuses any write outside a
-per-session scratch directory. It mirrors the lobes `associate` role
-(`worker` MINUS `repo_action`) described above.
+- worker (bolt) runs on this repository under the gate: one drafted the fix for
+  bug F2, another wrote three tests and ran them with `run_tests`. Each was
+  reviewed, and fixed where needed, before merge;
+- the plan's acceptance runs on pi 1.1.0
+  ([`docs/notes/t20-live-acceptance.md`](docs/notes/t20-live-acceptance.md)):
+  a walk each for `worker`, `senses` and `cortex`, a gate verdict on every
+  write, the read-only fallback with the decider unreachable, a `cortex` run
+  that spawned a `senses` and a `worker` child, and the mesh resident starting
+  through `pi-acp`.
+
+**Not measured yet:**
+
+- the resident's first reply on the mesh;
+- a writing model on the mesh (mesh sessions get no run worktree, so the
+  resident runs `senses`);
+- **every** benchmark. The public suites (BFCL, MMMU, LiveCodeBench, in
+  [`associate/bench/suites.json`](associate/bench/suites.json)) are wired but
+  unverified and have produced no score.
+
+Treat these as built and unit-tested, not as working.
 
 ## Quickstart
 
@@ -90,11 +95,21 @@ per-session scratch directory. It mirrors the lobes `associate` role
 git clone https://github.com/agentculture/associate && cd associate
 uv sync
 
-uv run associate whoami               # who this agent is
-uv run associate learn                # self-teaching prompt (add --json)
-uv run associate bench --harness stub # behavioral-suite plumbing check
-uv run pytest -n auto                 # the test suite
-uv run teken cli doctor . --strict    # the agent-first rubric gate CI runs
+uv run associate whoami                     # who this agent is
+uv run associate learn                      # self-teaching prompt (add --json)
+uv run associate run --harness stub         # plumbing check, no model
+uv run associate bench                      # list the public suites
+uv run pytest -n auto                       # Python tests
+bash .pi/extensions/associate/tests/run.sh  # extension tests (Node >= 22)
+uv run teken cli doctor . --strict          # the agent-first rubric gate
+```
+
+A real run needs `pi` 1.1.0 on PATH and a lane key:
+
+```bash
+ASSOCIATE_API_KEY=... uv run associate run --model senses "Summarize the gate design"
+ASSOCIATE_API_KEY=... uv run associate run "Fix the failing parser test" \
+  --test-command "uv run pytest -q"
 ```
 
 ## CLI
@@ -107,134 +122,47 @@ uv run teken cli doctor . --strict    # the agent-first rubric gate CI runs
 | `overview` | Read-only descriptive snapshot of the agent. |
 | `doctor` | Check the agent-identity invariants (prompt-file-present, backend-consistency). |
 | `cli overview` | Describe the CLI surface itself. |
-| `run [prompt]` | Run one task on a harness adapter (`pi` by default). Exits `2` **without serving** unless a preflight proves the extension loaded with no active writer tool. |
-| `bench --harness <name>` | Run the behavioral suite against one adapter (`pi` or `stub`) and print a per-category pass/fail table. |
+| `run [prompt]` | Run one task on a harness adapter (`pi` by default) with `--model`, `--test-command`, `--untrusted-checkout`. Exits `2` without serving unless a preflight proves the extension loaded correctly. |
+| `bench` | List the public suites, or run one (`--suite NAME --model KEY`) through its upstream runner and scorer. |
 
 Every command takes `--json`. **Results go to stdout, errors and diagnostics go
-to stderr — never mixed**, so an agent parsing the output can rely on it. Errors
-in JSON mode are `{code, message, remediation}`; in text mode they are an
-`error:` line and a `hint:` line. Exit codes: `0` success, `1` user error, `2`
-environment error, `3+` reserved.
-
-The runtime package has **no third-party dependencies** — it installs and starts
-fast, which is the whole point of a harness.
-
-### How `associate run` proves the lane is contained
-
-Readiness is proven by a **preflight**, never by hoping the model calls a
-sentinel tool mid-task. Each run is two `pi` invocations: the first adds
-`-e <extension>/lib/preflight.ts`, an extension whose only handler ends the
-process on `before_agent_start`, so pi loads every extension, fires
-`session_start` — where the associate extension writes its readiness report to
-`<export dir>/ready.json` — and exits before a single model request. The
-launcher reads that file, refuses with exit `2` if it is missing or names an
-active writer tool, and only then runs the real task turn. The extension is
-passed explicitly with `-e <index.ts>` in both invocations, so the lane loads in
-**any** checkout — a fixture repo, an unrelated project — instead of depending on
-the examined checkout carrying its own `.pi/`; `ASSOCIATE_EXTENSION_PATH`
-overrides which `index.ts` that is.
-
-## What you get
-
-- **An agent-first CLI** cited from [teken](https://github.com/agentculture/teken)
-  (`afi-cli`), with the stdout/stderr, `--json`, error-shape, and
-  learnability contract above enforced in CI by `teken cli doctor --strict`.
-- **A mesh identity** — `culture.yaml` (`suffix` + `backend` + `model`) and the
-  matching resident prompt file. associate runs `backend: acp`, launched
-  through `pi-acp` (which bridges ACP stdio to `pi --mode rpc`), so the runtime
-  prompt is [`AGENTS.md`](AGENTS.md) — the same context file Pi itself loads.
-  [`AGENTS.colleague.md`](AGENTS.colleague.md) is retained only until the ACP
-  path is fully verified, so backing the cutover out stays a single clean
-  revert. [`CLAUDE.md`](CLAUDE.md) is the prompt for Claude Code sessions
-  working *on* the repo. Both audiences are real.
-- **19 skills** under `.claude/skills/`, vendored cite-don't-import. Provenance
-  for every one is tracked in [`docs/skill-sources.md`](docs/skill-sources.md).
-- **A build + deploy baseline** — pytest, four linters, markdownlint, the rubric
-  gate, SonarCloud, and PyPI Trusted Publishing wired into GitHub Actions.
-
-## Skills
-
-Eight of the vendored skills form one workflow, not eight independent tools.
-They come from [`devague`](https://github.com/agentculture/devague) and carry an
-idea from vague to accounted-for:
-
-```mermaid
-flowchart TB
-  subgraph spec [spec]
-    direction LR
-    S[1 scope] --> T[2 think] --> C[3 challenge]
-  end
-  subgraph plan [plan]
-    direction LR
-    P[4 spec-to-plan] --> A[5 assign-to-workforce]
-  end
-  subgraph delivery [delivery]
-    direction LR
-    D[6 deviate] --> V[7 validate-delivery] --> Z[8 summarize-delivery]
-  end
-  spec --> G1{{Gate 1 — you approve the spec}} --> plan
-  plan --> G2{{Gate 2 — you approve the split plan}} --> delivery
-  delivery --> G3{{Gate 3 — you review the PR}}
-```
-
-Three gates are yours: the spec, the split plan, the PR. Inside them you also
-adjudicate — every proposal the agent files waits for your confirm, and a mid-run
-deviation waits for your approval. Everything else is the agent's, and all of it
-is written down. Nothing is deleted to go green: unknowns are parked, questions
-are resolved, failures are reported faithfully.
-
-The other eleven cover the day-to-day:
-
-| Skill | What it's for |
-|-------|---------------|
-| `cicd` | The PR lane — open, read review comments, reply, and gate on SonarCloud. |
-| `communicate` | File issues on sibling repos and send messages to Culture mesh channels. |
-| `ask-colleague` | Hand a scoped task to a *different* model for a genuinely independent second opinion. |
-| `remember` / `recall` | Write to and search the shared eidetic memory store. |
-| `run-tests` | pytest with parallel execution and coverage. |
-| `version-bump` | Bump semver and prepend a CHANGELOG entry — required on every PR. |
-| `sonarclaude` | Query the SonarCloud API directly. |
-| `agent-config` | Show a Culture agent's full configuration in one read-only view. |
-| `pypi-maintainer` | Switch a package install between PyPI, TestPyPI, and local editable. |
-| `doc-test-alignment` | Verify committed docs still describe what the code does (stub today). |
+to stderr — never mixed.** Errors in JSON mode are `{code, message,
+remediation}`. Exit codes: `0` success, `1` user error, `2` environment error,
+`3+` reserved. The Python package has **no third-party dependencies**, and the
+Pi extension declares no npm dependency.
 
 ## Environment
 
-These `ASSOCIATE_*` variables are the whole external interface to the lane's
-endpoint and session plumbing — no committed file names a host, a port, or a
-bearer. All of them are optional; the defaults below are what applies when a
-variable is unset.
+All configuration is through `ASSOCIATE_*` environment variables — the endpoint
+(`ASSOCIATE_BASE_URL`, default the local lobes gateway), the bearer
+(`ASSOCIATE_API_KEY`, never committed or logged), the model
+(`ASSOCIATE_MODEL`, a registry key), and the session, isolation, test-command,
+memory and ledger plumbing. The full table, each row tied to the code that
+reads it, is in [`CLAUDE.md`](CLAUDE.md)'s Tooling prerequisites, with the exact
+`pi` / `pi-acp` / Node pins.
 
-| Variable | Default | Purpose |
-|----------|---------|---------|
-| `ASSOCIATE_BASE_URL` | `http://localhost:8001/v1` | OpenAI-compatible base URL the Pi provider and the bench talk to. |
-| `ASSOCIATE_API_KEY` | — | Bearer for that endpoint. With it unset the extension registers no provider and prints one hint; `associate run` then says pi's own default model applies. Never committed, never logged. |
-| `ASSOCIATE_MODEL` | `associate` | The lobes **role** name sent as `model` — never a checkpoint id. |
-| `ASSOCIATE_REASONING_OFF` | `chat_template_kwargs` | Which reasoning-off field is injected on the wire: `chat_template_kwargs`, `reasoning_effort`, `both`, or `off`. |
-| `ASSOCIATE_CONTRACT_DIR` | repo-relative `associate/contract/` | Where the extension and the Python adapter both load `role.json`, `policy.json`, and the schemas from. Set per run by `associate run`. |
-| `ASSOCIATE_SESSION_ID` | generated | Pins the session id that keys the scratch and export directories, so concurrent runs never collide. |
-| `ASSOCIATE_EXPORT_ROOT` | `.associate-runs` beside the checkout | Where the run's session directory (`<root>/<session id>/export`) is created — always outside the examined checkout. |
-| `ASSOCIATE_CONTINUE_FROM` | — | A prior run's export directory, loaded as this session's first context instead of re-walking it. Set by `associate run --continue-from`. |
-| `ASSOCIATE_INJECT_PROMPT` | — | Set to `1` by `associate run`: with pi's ancestor context-file discovery turned off, the extension injects the checkout's own `AGENTS.md` and nothing above it. |
-| `ASSOCIATE_EXTENSION_PATH` | the `.pi/extensions/associate/index.ts` above the installed package | The extension entry point `associate run` hands pi with `-e`, in both the preflight and the task turn. |
+## Identity and skills
 
-The launcher checks the installed `pi` against the tested pin (**0.84.2**) and
-warns on stderr naming that version — it never refuses on a version number
-alone.
+`culture.yaml` declares `backend: acp` launched through `pi-acp`, so the
+resident's runtime prompt is [`AGENTS.md`](AGENTS.md) plus the active model's
+prompt; [`CLAUDE.md`](CLAUDE.md) is for Claude Code sessions working on the
+repo. `AGENTS.colleague.md` is kept until the ACP path is verified live.
 
-## Optional tooling
-
-The CLI needs none of this. Individual skills do, and each degrades with a clear
-install hint rather than blocking a clone that never uses it:
-`devex` (>=0.21) for `cicd`, `agtag` (>=0.1) for `communicate`, `devague`
-(>=0.24) for the eight-skill chain, `colleague` for `ask-colleague`, and
-`eidetic` (>=0.10.0) for `remember` / `recall`.
+19 skills are vendored cite-don't-import under `.claude/skills/`, with
+provenance in [`docs/skill-sources.md`](docs/skill-sources.md). Eight of them
+are the [`devague`](https://github.com/agentculture/devague) chain — scope,
+think, challenge, spec-to-plan, assign-to-workforce, deviate,
+validate-delivery, summarize-delivery — which carried this work from idea to
+delivery with three human gates (the spec, the split plan, the PR). The rest
+cover the PR lane (`cicd`), cross-repo messages (`communicate`), second
+opinions (`ask-colleague`), memory (`remember` / `recall`), tests, version
+bumps, SonarCloud, agent config, PyPI source switching, and doc alignment.
 
 ## Contributing
 
-Every PR bumps the version — including docs-only and CI-only changes. CI enforces
-it. Vendored skills are never patched in place; fixes go upstream and come back
-on the next sync. Both rules, and the CLI contract you must not break, are in
+Every PR bumps the version — including docs-only and CI-only changes; CI
+enforces it. Vendored skills are never patched in place; fixes go upstream.
+Both rules, and the CLI contract you must not break, are in
 [`CLAUDE.md`](CLAUDE.md).
 
 ## License

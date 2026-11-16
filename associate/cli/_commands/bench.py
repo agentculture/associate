@@ -1,75 +1,78 @@
-"""``associate bench`` — run the behavioral suite against one adapter (claim c48).
+"""``associate bench`` — run a public benchmark suite against a registry model.
 
-Prints one table row per behavioral category, each stamped with the complete
-configuration it was measured on, and exits non-zero if any category failed. A
-stub run is labelled ``plumbing-only``: it verifies the wiring and says nothing
-about model reliability.
-
-Contract notes: the table is the *result* and goes to stdout; per-case failure
-detail is a diagnostic and goes to stderr. An unknown adapter or a missing
-corpus raises :class:`CliError` (exit 1 and 2 respectively) — a failing case is
-not an error in that sense, it is a reported result with exit code 1.
+Suites are data (``associate/bench/suites.json``): upstream runner, upstream
+scorer, and the models it applies to. ``--suite`` with no name lists them;
+``--suite NAME --model KEY`` runs the upstream runner against the gateway and
+prints one row carrying suite, version, scorer, score and the config stamp.
+Bare ``bench`` also lists the suites (exit 0).
 """
 
 from __future__ import annotations
 
 import argparse
 
-from associate.bench.corpus import CorpusError
-from associate.bench.runner import run_suite
-from associate.bench.table import render
-from associate.cli._errors import EXIT_ENV_ERROR, EXIT_USER_ERROR, CliError
-from associate.cli._output import emit_diagnostic, emit_result
-from associate.harness import available_harnesses
+from associate.bench import public
+from associate.cli._errors import EXIT_USER_ERROR, CliError
+from associate.cli._output import emit_result
+
+
+def _listing(suites: dict) -> dict:
+    return {
+        "suites": [
+            {
+                "name": s["name"],
+                "version": s["version"],
+                "homepage": s["homepage"],
+                "scorer": s["scorer"]["name"],
+                "models": s["models"],
+                "verified": bool(s.get("verified", True)),
+            }
+            for s in suites.values()
+        ]
+    }
+
+
+def _listing_text(listing: dict) -> str:
+    lines = ["Public benchmark suites:"]
+    for s in listing["suites"]:
+        flag = "" if s["verified"] else " [unverified entry point]"
+        lines.append(
+            f"  {s['name']:<14} {s['version']}  scorer: {s['scorer']}  "
+            f"models: {', '.join(s['models'])}{flag}"
+        )
+    lines.append("Run: associate bench --suite <name> --model <key>")
+    return "\n".join(lines)
 
 
 def cmd_bench(args: argparse.Namespace) -> int:
-    json_mode = bool(getattr(args, "json", False))
-    try:
-        suite = run_suite(args.harness, cases_dir=args.cases, workdir=args.workdir)
-    except KeyError as err:
+    if not args.suite:
+        listing = _listing(public.load_suites())
+        emit_result(listing if args.json else _listing_text(listing), json_mode=args.json)
+        return 0
+    if not args.model:
         raise CliError(
             code=EXIT_USER_ERROR,
-            message=f"unknown harness {args.harness!r}",
-            remediation=f"available adapters: {', '.join(available_harnesses())}",
-        ) from err
-    except CorpusError as err:
-        raise CliError(
-            code=EXIT_ENV_ERROR,
-            message=str(err),
-            remediation="run bench from a source checkout, or pass --cases <dir>",
-        ) from err
-
-    if json_mode:
-        emit_result(suite.as_dict(), json_mode=True)
-    else:
-        emit_result(render(suite), json_mode=False)
-
-    for row in suite.rows:
-        for failure in row.failures:
-            emit_diagnostic(f"{row.case_id}: {failure}")
-    return 0 if suite.passed else 1
+            message="--model is required with --suite NAME",
+            remediation="e.g. associate bench --suite bfcl --model worker",
+        )
+    row = public.run_suite(args.suite, args.model, args.output_dir)
+    emit_result(row if args.json else public.render(row), json_mode=args.json)
+    return 0
 
 
 def register(sub: argparse._SubParsersAction) -> None:
     p = sub.add_parser(
         "bench",
-        help="Run the behavioral suite against a harness adapter and print the table.",
+        help="Run a public suite (--suite NAME --model KEY); lists suites without a name.",
     )
     p.add_argument(
-        "--harness",
-        default="stub",
-        help=f"Adapter to evaluate (default: stub). Available: {', '.join(available_harnesses())}.",
-    )
-    p.add_argument(
-        "--cases",
+        "--suite",
+        nargs="?",
+        const="",
         default=None,
-        help="Corpus directory (default: tests/behavioral/cases in this checkout).",
+        help="Suite name; omit the value to list suites.",
     )
-    p.add_argument(
-        "--workdir",
-        default=None,
-        help="Directory for fixture checkouts and exports (default: a temporary directory).",
-    )
+    p.add_argument("--model", help="Registry model key (see models.json).")
+    p.add_argument("--output-dir", help="Where the upstream runner writes (default: temp dir).")
     p.add_argument("--json", action="store_true", help="Emit structured JSON.")
     p.set_defaults(func=cmd_bench)

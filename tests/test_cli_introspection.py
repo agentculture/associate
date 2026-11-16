@@ -91,6 +91,16 @@ def test_doctor_json_shape(capsys: pytest.CaptureFixture[str]) -> None:
         assert {"id", "passed", "severity", "message", "remediation"} <= set(check)
 
 
+def test_explain_run_mentions_turn_fields(capsys: pytest.CaptureFixture[str]) -> None:
+    """`associate explain run` documents the run result's turn fields."""
+    rc = main(["explain", "run"])
+    assert rc == 0
+    out = capsys.readouterr().out
+    assert "final_reply" in out
+    assert "stop_reason" in out
+    assert "lane_error" in out
+
+
 def test_doctor_recognizes_declared_backend(capsys: pytest.CaptureFixture[str]) -> None:
     """The repo's own declared backend must be a known one — doctor stays healthy.
 

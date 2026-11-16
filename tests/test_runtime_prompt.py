@@ -148,3 +148,29 @@ def test_backend_maps_to_the_prompt_file_on_disk():
     expected = _PROMPT_FILE[_agent_backend()]
     assert expected == "AGENTS.md"
     assert (REPO_ROOT / expected).is_file()
+
+
+# --- per-model prompts (t11) ----------------------------------------------
+
+
+def _models() -> dict:
+    path = REPO_ROOT / "associate" / "contract" / "models.json"
+    return json.loads(path.read_text("utf-8"))
+
+
+def test_every_registry_model_has_a_prompt_file_naming_exactly_its_tools():
+    registry = _models()
+    names = set(registry["tool_names"])
+    for key, entry in registry["models"].items():
+        path = REPO_ROOT / entry["prompt_file"]
+        assert path.is_file(), f"{key}: {entry['prompt_file']} is missing"
+        named = {t for t in re.findall(r"`([a-z_]+)`", path.read_text("utf-8")) if t in names}
+        assert named == set(entry["tools"]), f"{key}: prompt tools differ from models.json"
+
+
+def test_cortex_prompt_names_spawn_tool_and_children_and_super_vl_is_pending():
+    cortex = (REPO_ROOT / _models()["models"]["cortex"]["prompt_file"]).read_text("utf-8")
+    for token in ("`spawn_subagent`", "`senses`", "`worker`"):
+        assert token in cortex
+    super_vl = (REPO_ROOT / _models()["models"]["super-vl"]["prompt_file"]).read_text("utf-8")
+    assert "PENDING" in super_vl.split("##")[0]

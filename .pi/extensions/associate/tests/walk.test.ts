@@ -291,6 +291,74 @@ test("the final line is the run record with duration, calls, outcome and truncat
   });
 });
 
+test("the run record carries the active model's registry key and lobes role", () => {
+  withDir((dir) => {
+    const recorder = recorderIn(dir, { model: "worker", lobes_role: "worker" });
+    callAndResult(recorder, "read", { path: "a.ts" }, "a");
+    const run = recorder.finalize();
+
+    const lines = readLines(dir);
+    const record = lines[lines.length - 1].run as Record<string, unknown>;
+    assert.equal(record.model, "worker");
+    assert.equal(record.lobes_role, "worker");
+    assert.deepEqual(record, run);
+  });
+});
+
+test("the run record omits model and lobes_role when no model resolved", () => {
+  withDir((dir) => {
+    const recorder = recorderIn(dir);
+    callAndResult(recorder, "read", { path: "a.ts" }, "a");
+    const run = recorder.finalize();
+
+    const lines = readLines(dir);
+    const record = lines[lines.length - 1].run as Record<string, unknown>;
+    assert.equal(record.model, undefined);
+    assert.equal(record.lobes_role, undefined);
+    assert.deepEqual(record, run);
+  });
+});
+
+test("L4: a call the guard blocked is recorded with its refusal and does not make the run an error", () => {
+  withDir((dir) => {
+    const recorder = recorderIn(dir);
+    recorder.noteToolCall({ toolCallId: "tc-1", toolName: "bash", input: { argv: ["id", "-u"] } });
+    recorder.recordBlocked("tc-1", "associate: 'id' is not on the allowlist");
+    const run = recorder.finalize()!;
+
+    const lines = readLines(dir);
+    const entry = lines[0] as Record<string, any>;
+    assert.equal(entry.id, "w1");
+    assert.equal(entry.tool, "bash");
+    assert.deepEqual(entry.args, { argv: ["id", "-u"] });
+    assert.match(entry.error, /^refused: associate: 'id' is not on the allowlist/);
+    assert.equal(run.tool_calls, 1);
+    assert.equal(run.outcome, "ok", "a refusal is the guard working, not a run error");
+  });
+});
+
+test("L4: a tool_result pi sends anyway for a blocked call is not recorded twice", () => {
+  withDir((dir) => {
+    const recorder = recorderIn(dir);
+    recorder.noteToolCall({ toolCallId: "tc-1", toolName: "write", input: { path: "x" } });
+    recorder.recordBlocked("tc-1", "blocked");
+    recorder.recordToolResult({ toolCallId: "tc-1", toolName: "write", content: "blocked", isError: true });
+    recorder.finalize();
+    assert.equal(readLines(dir).filter((line) => "id" in line).length, 1);
+  });
+});
+
+test("L4: a call whose result never arrives and was not blocked still makes the run an error", () => {
+  withDir((dir) => {
+    const recorder = recorderIn(dir);
+    recorder.recordBlocked("tc-unknown", "nothing pending under this id");
+    recorder.noteToolCall({ toolCallId: "tc-2", toolName: "read", input: { path: "a" } });
+    const run = recorder.finalize()!;
+    assert.equal(run.outcome, "error");
+    assert.equal(readLines(dir).filter((line) => "id" in line).length, 1);
+  });
+});
+
 test("finalize is idempotent: two shutdown paths write one run record", () => {
   withDir((dir) => {
     const recorder = recorderIn(dir);
@@ -406,5 +474,43 @@ test("appending to an existing walk keeps ids monotonic across recorders", () =>
       lines.slice(0, -1).map((line) => line.id),
       ["w1", "w2"],
     );
+  });
+});
+
+// --------------------------------------------------- child-walk links (t16)
+
+test("recordChild appends {child} lines c1, c2, … that take no walk id and are not tool calls", () => {
+  withDir((dir) => {
+    const recorder = recorderIn(dir);
+    callAndResult(recorder, "ls", { path: "." }, "a\nb");
+    const first = recorder.recordChild({ child_model: "senses", child_walk: "/r/s-1/export/walk.jsonl", child_session_id: "s-1" });
+    const second = recorder.recordChild({ child_model: "worker", child_walk: "/r/s-2/export/walk.jsonl", child_session_id: "s-2" });
+    callAndResult(recorder, "ls", { path: "." }, "c");
+    assert.equal(first.id, "c1");
+    assert.equal(second.id, "c2");
+    assert.equal(typeof first.ts, "string");
+    const run = recorder.finalize()!;
+    assert.equal(run.tool_calls, 2);
+    assert.deepEqual(recorder.entryIds(), ["w1", "w2"]);
+    const children = readLines(dir).filter((line) => "child" in line).map((line) => line.child as Record<string, unknown>);
+    assert.deepEqual(children, [first, second]);
+  });
+});
+
+test("a second recorder on the same walk continues child ids instead of re-issuing c1", () => {
+  withDir((dir) => {
+    const one = recorderIn(dir);
+    one.recordChild({ child_model: "senses", child_walk: "/a", child_session_id: "a" });
+    const two = recorderIn(dir);
+    assert.equal(two.recordChild({ child_model: "senses", child_walk: "/b", child_session_id: "b" }).id, "c2");
+    assert.equal(two.entryCount, 0, "a child line never occupies a walk id");
+  });
+});
+
+test("recordChild refuses once the walk is finalized", () => {
+  withDir((dir) => {
+    const recorder = recorderIn(dir);
+    recorder.finalize();
+    assert.throws(() => recorder.recordChild({ child_model: "senses", child_walk: "/a", child_session_id: "a" }), /finalized/);
   });
 });
