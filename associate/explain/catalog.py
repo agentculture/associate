@@ -31,6 +31,8 @@ measured.
 - `associate doctor` — check the agent-identity invariants.
 - `associate run` — run one task on a harness adapter, or fail closed.
 - `associate bench` — run a public benchmark suite (BFCL, MMMU, LiveCodeBench) or list them.
+- `associate runs start|show|list|overview` — start a detached run on a checkout and read
+  its result by id (also an HTTP API).
 - `associate cli overview` — describe the CLI surface.
 
 ## Exit-code policy
@@ -290,6 +292,119 @@ itself (distinct from the global `overview`, which describes the agent).
 """
 
 
+_RUNS = """\
+# associate runs
+
+Start a **detached** `associate run` on a checkout and read its result by run id,
+from the CLI or over HTTP (`associate.server.app`, the `server` extra). One module,
+`associate/runs/service.py`, holds the logic; both surfaces call it.
+
+## Verbs
+
+- `associate runs start` — validate, take the checkout's lock, start the run in a
+  new session and print its run id at once (HTTP `POST /runs`, role `admin`).
+- `associate runs show <run id>` — status and result (HTTP `GET /runs/{run_id}`,
+  role `viewer`).
+- `associate runs list` — the most recent runs (HTTP `GET /runs`, role `viewer`).
+- `associate runs overview` — describe these verbs.
+
+`GET /health` needs no token and returns no secret.
+
+## Rules
+
+- **One run per checkout at a time**, keyed by the checkout's real path (a symlink
+  names the same checkout). A crashed run frees its checkout by itself: the lock is
+  an `flock` held by the run's processes, released by the kernel when they die.
+- The run is `associate run --json --untrusted-checkout --session-id <run id>`,
+  started as an argv list (never a shell); the instruction is one argument after
+  `--` and each test command one `--test-command`.
+- A clean run whose tests pass is **merged into the checkout's local `main`**;
+  nothing is ever pushed. `associate run` exits 0 even when the merge is refused,
+  so `ok` is true only when the exit code is 0, the outcome is `ok`, the merge
+  happened and the tests passed.
+- State lives in `ASSOCIATE_RUNS_DIR` (default `$XDG_STATE_HOME/associate/runs`),
+  never inside a checkout. A checkout must be a git work tree under a root in
+  `ASSOCIATE_RUNS_ROOTS`; while that is empty the HTTP API refuses every start.
+"""
+
+_RUNS_START = """\
+# associate runs start
+
+Start a detached `associate run` on a git checkout and return its run id at once.
+
+## Usage
+
+    associate runs start --checkout DIR --model worker \\
+        --test-command "uv run pytest -q" [--timeout SECONDS] [--json] -- "the task"
+
+The checkout must be a git work tree with a commit, under a root listed in
+`ASSOCIATE_RUNS_ROOTS` when that is set (the HTTP API requires it set). The model
+is an active registry key. At least one `--test-command` is required: the run
+merges only when every one passes. `--timeout` defaults to the contract's
+`budgets.delegate.timeout_ms`. The checkout is always treated as untrusted.
+
+## Output
+
+`run_id`, `status` (`running`), `checkout` (its real path), `model`,
+`base_commit` (the checkout's HEAD), `started_at`, `pushed: false`.
+
+## Exit codes
+
+- `0` started
+- `1` bad input, a checkout outside the allowed roots or not a git work tree, or a
+  checkout with a run in progress (the error names that run)
+- `2` the state directory, git or the process could not be used
+"""
+
+_RUNS_SHOW = """\
+# associate runs show
+
+A run's status, and once it has finished, its result.
+
+## Usage
+
+    associate runs show RUN_ID [--json]
+
+## Output
+
+- `status`: `running | finished | failed-to-start | lost` (lost: the run's
+  processes are gone and left no result).
+- `ok`: true only when the exit code is 0, `outcome` is `ok`, `tests.passed` is
+  true and `merge` is `merged` or `nothing_to_merge` (a clean run that changed
+  nothing); `not_ok_because` says why not. Read `merge` to know whether anything
+  changed.
+- `merge`: `merged`, `refused` (a clean run whose merge was refused),
+  `not_attempted` (the outcome was not ok or the tests failed) or
+  `nothing_to_merge`; `merge_reason` is `associate run`'s own.
+- `tests`: `passed`, `commands`, `failed`.
+- `base_commit` and `changed_paths` (read from git: the merge commit for a merged
+  run, the kept worktree otherwise), `changed_paths_total` and
+  `changed_paths_truncated`. The whole reply stays under 64 KiB.
+- `pushed`: always false.
+
+## Exit codes
+
+- `0` the run was found (whatever its status)
+- `1` a malformed or unknown run id
+"""
+
+_RUNS_LIST = """\
+# associate runs list
+
+The most recent runs, newest first, each with `run_id`, `status`, `ok`, `model`,
+`started_at` and `checkout`.
+
+## Usage
+
+    associate runs list [--limit N] [--json]
+
+## Exit codes
+
+- `0` listed (possibly none)
+- `1` a limit outside 1-100
+"""
+
+
 ENTRIES: dict[tuple[str, ...], str] = {
     (): _ROOT,
     ("associate",): _ROOT,
@@ -300,6 +415,11 @@ ENTRIES: dict[tuple[str, ...], str] = {
     ("doctor",): _DOCTOR,
     ("run",): _RUN,
     ("bench",): _BENCH,
+    ("runs",): _RUNS,
+    ("runs", "overview"): _RUNS,
+    ("runs", "start"): _RUNS_START,
+    ("runs", "show"): _RUNS_SHOW,
+    ("runs", "list"): _RUNS_LIST,
     ("cli",): _CLI,
     ("cli", "overview"): _CLI,
 }
