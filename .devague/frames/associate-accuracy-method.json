@@ -4,7 +4,7 @@
   "schema_version": 6,
   "status": "exported",
   "created": "2026-11-17T18:03:08Z",
-  "updated": "2026-11-18T00:13:07Z",
+  "updated": "2026-11-18T04:46:52Z",
   "claims": [
     {
       "id": "c1",
@@ -1602,7 +1602,7 @@
         "briefs t13 t14 t15"
       ],
       "origin": "llm",
-      "status": "proposed"
+      "status": "approved"
     },
     {
       "id": "l3",
@@ -1614,7 +1614,7 @@
         "tests/test_accuracy_check.py"
       ],
       "origin": "llm",
-      "status": "proposed"
+      "status": "approved"
     },
     {
       "id": "l4",
@@ -1626,7 +1626,7 @@
         "t21"
       ],
       "origin": "llm",
-      "status": "proposed"
+      "status": "approved"
     }
   ],
   "obligations": [

@@ -2,7 +2,7 @@
   "plan_slug": "associate-accuracy-method",
   "schema_version": 2,
   "created": "2026-11-17T21:34:16Z",
-  "updated": "2026-11-17T21:42:45Z",
+  "updated": "2026-11-18T04:46:52Z",
   "deviations": [
     {
       "id": "d1",
@@ -39,7 +39,7 @@
       "reason": "The t8 instruction says an unknown argument is reported in used-args as dropped. The builder kept the existing refusal for these four tools because their tests and their security intent require it; a refusal with a fix is not a silent drop. Reported by the task agent, not yet approved.",
       "affects": [],
       "origin": "llm",
-      "status": "proposed",
+      "status": "approved",
       "classification": "acceptable",
       "seq": 3
     },
@@ -50,9 +50,20 @@
       "reason": "The acceptance criterion asks for the true total and a saved full result; the builder met it by scanning further. Cost: a large repository is searched longer and up to 2,000,000 characters are held in memory. Reported by the task agent, not yet approved.",
       "affects": [],
       "origin": "llm",
-      "status": "proposed",
+      "status": "approved",
       "classification": "risky",
       "seq": 4
+    },
+    {
+      "id": "d5",
+      "what": "the finished work was moved from its integration branch onto origin/main as one change (branch accuracy/issue-20-on-main), and its version became 0.12.0 instead of 0.11.0",
+      "task_ref": "t21",
+      "reason": "The integration branch was created from a local base that predates PR #19 on origin/main (the bridge, also 0.11.0), which edits many of the same files; found only at PR time (lapse l4). The branch diff was applied onto origin/main with a three-way apply; 12 files conflicted and were resolved by keeping both sides; five merge fallouts in tests were fixed; the bridge surface-parity test learned the check verb. Both suites and every gate pass on the combined tree, and one live worker run from it was accepted. Not yet approved by the operator.",
+      "affects": [],
+      "origin": "llm",
+      "status": "approved",
+      "classification": "risky",
+      "seq": 5
     }
   ],
   "evidence": [],
