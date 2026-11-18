@@ -157,6 +157,20 @@ confirmed and fixed with shared test vectors.
   the cap, carried on, was accepted, and was still labelled `refused`. Fixed
   before the twelve runs; the fix is the change reviewed above.
 
+## After the move onto main
+
+The twelve runs above were made on harness commit `0ccca36`, on a branch that
+did not yet contain the bridge (PR #19). The work was then applied onto `main`
+as one change. From that combined tree, one more run:
+
+| Session | Result |
+|---|---|
+| `acc20-onmain-worker-read-budget` | worker, reasoning off, report mode: handed back, 4 facts made, 4 passed, Python re-check `accepted`, walk outcome `ok`. |
+
+No other run was repeated on the combined tree. The bridge's own surfaces
+(`associate runs`, the HTTP API, the web UI) were not exercised with a run
+under the accuracy method.
+
 ## senses
 
 **Not measured.** `acc20-senses-forbidden-decisions` ended at once with a lane

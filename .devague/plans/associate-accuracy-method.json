@@ -5,7 +5,7 @@
   "schema_version": 5,
   "status": "exported",
   "created": "2026-11-17T20:26:08Z",
-  "updated": "2026-11-17T22:11:50Z",
+  "updated": "2026-11-18T00:22:22Z",
   "targets": [
     {
       "id": "c1",
@@ -1161,6 +1161,14 @@
       "text": "associate check reads only the current run: it does not load a prior run or child walks, so a fact citing prior:wN or cN:wN is not re-checked by the Python side even though check_handback supports it (reported by the t16 builder).",
       "kind": "unknown_nonblocking",
       "task_id": "t16",
+      "resolved": false,
+      "resolution": ""
+    },
+    {
+      "id": "r13",
+      "text": "The bridge on main (associate runs show, the HTTP API, the web UI) does not surface handback_outcome or the accuracy counts, and reports a run that exited 3 only as \"the run exited with 3\".",
+      "kind": "follow_up",
+      "task_id": null,
       "resolved": false,
       "resolution": ""
     }
