@@ -357,3 +357,19 @@ def test_the_repository_check_output_is_recorded_for_all_24_tasks():
         line = next((ln for ln in text.splitlines() if f"`{task_id}`" in ln), None)
         assert line is not None, task_id
         assert "missing: none" in line, line
+
+
+@pytest.mark.parametrize("task_id", _ids())
+def test_each_task_has_a_second_check_that_did_not_see_the_first(task_id):
+    path = CHECKS_DIR / f"{task_id}.second.md"
+    assert path.is_file(), path
+    text = path.read_text(encoding="utf-8")
+    assert "## What I was given" in text
+    assert "did not see the first check" in text
+
+
+def test_no_disagreement_between_the_two_checks_is_left_unsettled():
+    text = (CHECKS_DIR / "disagreements.md").read_text(encoding="utf-8")
+    assert "## Disagreements" in text
+    assert "unsettled" in text
+    assert "not settled" not in text
