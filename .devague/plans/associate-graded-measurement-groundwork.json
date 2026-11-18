@@ -5,7 +5,7 @@
   "schema_version": 5,
   "status": "exported",
   "created": "2026-11-18T15:43:53Z",
-  "updated": "2026-11-18T21:03:12Z",
+  "updated": "2026-11-18T21:31:43Z",
   "targets": [
     {
       "id": "c1",
@@ -711,8 +711,8 @@
       "text": "Any run graded on its final reply keeps only the last 2000 characters: every run of the older arm, and a run on main that ends without finish. Pilot 1: 1 of 8 older-arm answers at the cap. Pilot 2: 3 of 16 answers at the cap (1 older-arm cortex, 2 main worker without finish), and the cap changed one grade: cortex before PR 27 on coh-investiture-formula was marked not matching because the sentence saying the score is a product was cut off; the run's statements.json holds it.",
       "kind": "unknown_nonblocking",
       "task_id": "t12",
-      "resolved": false,
-      "resolution": ""
+      "resolved": true,
+      "resolution": "Operator, 2026-11-18: keep the reading as decided; report per arm how many answers were at the 2000-character cap; re-read by hand every capped answer marked not matching, using the run's statements.json; show the grader's count and the hand-corrected count."
     },
     {
       "id": "r8",
