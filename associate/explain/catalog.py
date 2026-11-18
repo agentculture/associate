@@ -229,7 +229,7 @@ pi version warning, the no-lane note) go to stderr.
 ## The hand-back result (issue #20)
 
 After the model stops, the launcher re-checks the hand-back itself
-(`associate.accuracy.check`, the same code as `associate check`) over the export
+(`associate.accuracy`, the same code as `associate check`) over the export
 directory, the prior run named by `--continue-from` (label `prior`) and each child
 run the walk links (`c1`, `c2`, ...). The result carries:
 
