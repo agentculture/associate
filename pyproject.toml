@@ -13,7 +13,9 @@ classifiers = [
     "Topic :: Software Development",
     "Intended Audience :: Developers",
 ]
-dependencies = []
+dependencies = [
+    "evidence-cli>=0.7.0",
+]
 
 # Optional extras: the base install stays dependency-free.
 [project.optional-dependencies]

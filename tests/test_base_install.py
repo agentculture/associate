@@ -1,4 +1,9 @@
-"""The base install has zero third-party runtime dependencies; extras hold the rest."""
+"""The base install has no third-party runtime dependency; extras hold the rest.
+
+The rule (CLAUDE.md, "What not to invent"): associate's runtime dependencies are
+only the first-party AgentCulture packages named in ``FIRST_PARTY_RUNTIME``, each
+with a version floor and each with no dependency of its own.
+"""
 
 from __future__ import annotations
 
@@ -13,12 +18,19 @@ import time
 import tomllib
 import urllib.error
 import urllib.request
+from importlib import metadata
 from pathlib import Path
 
 import pytest
 
 ROOT = Path(__file__).resolve().parent.parent
 PYPROJECT = tomllib.loads((ROOT / "pyproject.toml").read_text(encoding="utf-8"))
+
+#: The named first-party list: package -> the version floor associate requires. A package joins
+#: it only when it is an AgentCulture package with no runtime dependency of its own.
+FIRST_PARTY_RUNTIME = {"evidence-cli": "0.7.0"}
+
+_REQUIREMENT = re.compile(r"^([A-Za-z0-9][A-Za-z0-9._-]*)\s*>=\s*(\d+(?:\.\d+)*)$")
 
 # every distribution the extras may pull in, plus what they bring along
 THIRD_PARTY = ("fastapi", "starlette", "pydantic", "uvicorn", "mcp", "httpx", "anyio", "h11")
@@ -46,9 +58,71 @@ VERBS = [
 ]
 
 
-def test_runtime_dependencies_are_empty_and_extras_exist():
+def dependency_rule_violations(dependencies, requires_of) -> list[str]:
+    """What breaks the rule in *dependencies* (``[project].dependencies``).
+
+    *requires_of(name)* returns that package's own declared requirements. Each
+    dependency must be on ``FIRST_PARTY_RUNTIME`` as ``name>=floor`` with exactly
+    the listed floor, and must declare no requirement of its own.
+    """
+    problems = []
+    for spec in dependencies:
+        match = _REQUIREMENT.match(spec.strip())
+        if match is None:
+            problems.append(f"{spec!r} is not written as name>=floor")
+            continue
+        name = match.group(1).lower()
+        if name not in FIRST_PARTY_RUNTIME:
+            problems.append(f"{spec!r} is not on the named first-party list")
+            continue
+        if match.group(2) != FIRST_PARTY_RUNTIME[name]:
+            problems.append(f"{spec!r} does not carry the floor {FIRST_PARTY_RUNTIME[name]}")
+        own = requires_of(name)
+        if own:
+            problems.append(f"{name} declares dependencies of its own: {own}")
+    return problems
+
+
+def _installed_requires(name: str) -> list[str]:
+    return list(metadata.requires(name) or [])
+
+
+def test_runtime_dependencies_are_only_named_first_party_packages_without_their_own():
+    dependencies = PYPROJECT["project"]["dependencies"]
+    assert dependency_rule_violations(dependencies, _installed_requires) == []
+    assert sorted(_REQUIREMENT.match(d).group(1) for d in dependencies) == sorted(
+        FIRST_PARTY_RUNTIME
+    )
+
+
+def test_the_locked_first_party_packages_have_no_dependencies_either():
+    lock = tomllib.loads((ROOT / "uv.lock").read_text(encoding="utf-8"))
+    locked = {p["name"]: p for p in lock["package"]}
+    for name in FIRST_PARTY_RUNTIME:
+        assert name in locked, f"{name} is not in uv.lock"
+        assert not locked[name].get("dependencies"), locked[name]["dependencies"]
+
+
+@pytest.mark.parametrize(
+    "dependencies, requires, expected",
+    [
+        (["evidence-cli>=0.7.0"], [], []),
+        (["requests>=2"], [], ["'requests>=2' is not on the named first-party list"]),
+        (["evidence-cli"], [], ["'evidence-cli' is not written as name>=floor"]),
+        (["evidence-cli>=0.6.0"], [], ["'evidence-cli>=0.6.0' does not carry the floor 0.7.0"]),
+        (
+            ["evidence-cli>=0.7.0"],
+            ["typing-extensions>=4"],
+            ["evidence-cli declares dependencies of its own: ['typing-extensions>=4']"],
+        ),
+    ],
+)
+def test_the_rule_refuses_what_it_should(dependencies, requires, expected):
+    assert dependency_rule_violations(dependencies, lambda _name: requires) == expected
+
+
+def test_extras_exist():
     project = PYPROJECT["project"]
-    assert project["dependencies"] == []
     extras = project["optional-dependencies"]
     assert any(d.startswith("fastapi") for d in extras["server"])
     assert any(d.startswith("mcp") for d in extras["mcp"])
@@ -102,8 +176,9 @@ def test_no_third_party_import_in_the_base_package():
 
 
 def test_a_clean_base_install_holds_no_third_party_package(tmp_path):
-    """Install the project alone into a new environment: it is the only distribution there,
-    and every existing verb runs from that environment's own command."""
+    """Install the project alone into a new environment: it and the named first-party packages
+    are the only distributions there, and every existing verb runs from that environment's own
+    command."""
     uv = shutil.which("uv")
     if uv is None:
         pytest.skip("uv is not installed")
@@ -118,7 +193,8 @@ def test_a_clean_base_install_holds_no_third_party_package(tmp_path):
     if installed.returncode != 0:
         pytest.skip(f"the build needs the network: {installed.stderr.strip()[-200:]}")
     listed = run(uv, "pip", "list", "--python", str(python), "--format", "json")
-    assert [d["name"] for d in json.loads(listed.stdout)] == [PYPROJECT["project"]["name"]]
+    names = sorted(d["name"] for d in json.loads(listed.stdout))
+    assert names == sorted([PYPROJECT["project"]["name"], *FIRST_PARTY_RUNTIME])
     command = venv / "bin" / "associate"
     for verb in VERBS:
         argv = verb if "--help" in verb else [*verb, "--json"]

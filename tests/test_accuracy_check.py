@@ -1,102 +1,19 @@
-"""The Python re-check, the counts and the ``associate check`` verb (issue #20, t16)."""
+"""The ``associate check`` verb and walkstats (issue #20, t16).
+
+The checker, the counts and the matcher behind the verb moved to evidence-cli
+and are tested there; this file tests associate's own verb over exports built
+by hand, and walkstats.
+"""
 
 from __future__ import annotations
 
 import json
 import re
 
-import pytest
-
-from associate.accuracy import check as check_mod
-from associate.accuracy.check import check_handback, literal_of
-from associate.accuracy.counts import count_fact, empty_counts
 from associate.bench import walkstats
 from associate.cli import main
 from associate.cli._commands import learn
-from associate.contract import contract_dir, load_accuracy
 from associate.explain import catalog
-
-ACCURACY = load_accuracy()
-VECTORS = json.loads((contract_dir() / "matcher_vectors.json").read_text(encoding="utf-8"))
-
-
-def project(got):
-    """The fields the shared vectors compare (fix texts are not compared)."""
-    return {
-        "accepted": got["accepted"],
-        "facts": [
-            {
-                k: f[k]
-                for k in (
-                    "id",
-                    "run",
-                    "verdict",
-                    "reason",
-                    "check",
-                    "nearest",
-                    "source_kind",
-                    "first_hand",
-                )
-            }
-            for f in got["facts"]
-        ],
-        "verdicts": [
-            {k: v[k] for k in ("id", "outcome", "reason", "check")} for v in got["verdicts"]
-        ],
-        "open_items": [
-            {k: v[k] for k in ("id", "outcome", "reason", "check")} for v in got["open_items"]
-        ],
-        "report": got["report"],
-    }
-
-
-@pytest.mark.parametrize("case", VECTORS["handback_cases"], ids=lambda c: c["name"][:50])
-def test_python_checker_reproduces_every_handback_vector(case):
-    assert project(check_handback(case["input"], ACCURACY)) == case["expect"]
-
-
-# --- review fixes: number and boolean literals, a broken contract, malformed children --------
-
-
-@pytest.mark.parametrize("case", VECTORS["literal_cases"], ids=lambda c: repr(c["value"]))
-def test_literal_of_matches_the_shared_literal_cases(case):
-    assert literal_of(case["value"]) == case["literal"]
-
-
-def test_literal_of_treats_non_finite_and_overflowing_numbers_as_no_literal():
-    assert literal_of(float("inf")) is None
-    assert literal_of(float("nan")) is None
-    assert literal_of(10**400) is None
-
-
-@pytest.mark.parametrize("case", VECTORS["contract_cases"], ids=lambda c: c["name"])
-def test_a_broken_min_quote_length_fails_closed_as_in_typescript(case):
-    contract = dict(ACCURACY)
-    if "min_quote_length" in case:
-        contract["min_quote_length"] = case["min_quote_length"]
-    else:
-        del contract["min_quote_length"]
-    got = check_handback(VECTORS["contract_input"], contract)
-    summary = {
-        "accepted": got["accepted"],
-        "facts": [{k: f[k] for k in ("id", "verdict", "reason", "check")} for f in got["facts"]],
-        "verdicts": [
-            {k: v[k] for k in ("id", "outcome", "reason", "check")} for v in got["verdicts"]
-        ],
-        "flags": got["report"]["flags"],
-    }
-    assert summary == case["expect"]
-
-
-def test_a_child_label_with_a_trailing_newline_is_skipped():
-    handback = {
-        "payload": {"facts": []},
-        "entries": [],
-        "results": {},
-        "children": [{"label": "c1\n", "payload": {}, "entries": [], "results": {}}],
-    }
-    assert check_handback(handback, ACCURACY)["report"]["children"] == []
-
 
 # --- a fixture export with a hand count -------------------------------------------
 
@@ -144,7 +61,7 @@ def write_export(root, entries, results, facts=None, *, marker=True, name="expor
     for n, text in results.items():
         (export / "results" / f"w{n}.txt").write_text(text, encoding="utf-8")
     if facts is not None:
-        (export / check_mod.FACTS_FILENAME).write_text(json.dumps(facts), encoding="utf-8")
+        (export / "facts.json").write_text(json.dumps(facts), encoding="utf-8")
     return export
 
 
@@ -244,13 +161,6 @@ def test_calls_report_purpose_and_outcome(tmp_path, capsys):
     assert "unchecked" in text
 
 
-def test_count_fact_never_adds_unchecked_to_passed():
-    counts = empty_counts()
-    for verdict in ("unchecked", "unchecked", "passed", "refused"):
-        count_fact(counts, verdict)
-    assert counts == {"made": 4, "checked": 2, "passed": 1, "refused": 1, "unchecked": 2}
-
-
 def test_a_partial_entry_is_unchecked_not_passed(tmp_path, capsys):
     entries = [entry(1, "read", "file", partial=True)]
     facts = {"facts": [{"id": "f1", "value": "lazy", "source": "w1", "quote": "over the lazy dog"}]}
@@ -283,14 +193,6 @@ def test_a_new_walk_without_a_facts_file_is_not_applicable(tmp_path, capsys):
     result = json.loads(run_check(capsys, str(export), "--json")[1])
     assert result["applicable"] is False
     assert "facts.json" in result["not_applicable_reason"]
-
-
-def test_a_saved_result_path_outside_results_is_never_read(tmp_path):
-    export = write_export(
-        tmp_path, [entry(1, "read", "file", saved=False, saved_result="../secret.txt")], {}
-    )
-    (tmp_path / "secret.txt").write_text("secret", encoding="utf-8")
-    assert check_mod.load_export(export)["results"] == {}
 
 
 def test_bad_inputs_raise_a_cli_error_not_a_traceback(tmp_path, capsys):
@@ -354,85 +256,3 @@ def test_the_verb_is_documented_in_learn_and_explain():
     assert "associate check" in learn._TEXT
     assert any(c["path"] == ["check"] for c in learn._as_json_payload()["commands"])
     assert ("check",) in catalog.ENTRIES
-
-
-def test_a_source_reference_with_a_trailing_newline_is_malformed_as_in_typescript():
-    """`$` alone would let "w1\\n" through in Python; the TypeScript pattern does not."""
-    from associate.accuracy import check
-
-    for ref in ("w1\n", "prior:w3\n"):
-        parsed = check.parse_source_ref(ref)
-        assert parsed.get("ok") is not True, ref
-
-
-# --- digits are ASCII only, as in the TypeScript checker ----------------------------
-
-FULLWIDTH_ONE = "\uff11"
-ARABIC_INDIC_ONE = "\u0661"
-
-
-@pytest.mark.parametrize("digit", [FULLWIDTH_ONE, ARABIC_INDIC_ONE])
-def test_a_source_reference_with_a_non_ascii_digit_is_malformed(digit):
-    assert check_mod.parse_source_ref("w1")["ok"] is True
-    assert check_mod.parse_source_ref(f"w1{digit}") == {"ok": False, "reason": "source_malformed"}
-    assert check_mod.parse_source_ref(f"prior:w1{digit}")["ok"] is False
-
-
-@pytest.mark.parametrize("digit", [FULLWIDTH_ONE, ARABIC_INDIC_ONE])
-def test_a_walk_id_with_a_non_ascii_digit_is_not_an_entry(digit):
-    assert check_mod._is_entry({"id": "w11", "tool": "read"}) is True
-    assert check_mod._is_entry({"id": f"w1{digit}", "tool": "read"}) is False
-
-
-@pytest.mark.parametrize("digit", [FULLWIDTH_ONE, ARABIC_INDIC_ONE])
-def test_a_saved_result_name_with_a_non_ascii_digit_is_not_read(tmp_path, digit):
-    assert check_mod._SAVED.match("results/w11.txt") is not None
-    name = f"results/w1{digit}.txt"
-    walk_entry = {"id": "w1", "tool": "read", "saved_result": name}
-    (tmp_path / "results").mkdir()
-    (tmp_path / name).write_text("saved text", encoding="utf-8")
-    (tmp_path / "walk.jsonl").write_text(json.dumps(walk_entry) + "\n", encoding="utf-8")
-    loaded = check_mod.load_export(tmp_path)
-    assert [e["id"] for e in loaded["entries"]] == ["w1"]
-    assert loaded["results"] == {}
-
-
-@pytest.mark.parametrize("digit", [FULLWIDTH_ONE, ARABIC_INDIC_ONE])
-def test_a_child_id_with_a_non_ascii_digit_is_not_linked(tmp_path, digit):
-    walk = tmp_path / "walk.jsonl"
-    lines = [
-        {"child": {"id": f"c1{digit}", "child_walk": "/x/a/walk.jsonl"}},
-        {"child": {"id": "c11", "child_walk": "/x/b/walk.jsonl"}},
-    ]
-    walk.write_text("".join(json.dumps(line) + "\n" for line in lines), encoding="utf-8")
-    assert check_mod._child_links(walk) == [("c11", "/x/b/walk.jsonl")]
-
-
-def test_a_delegate_status_quote_from_the_rendered_answer_is_second_hand():
-    """The result's `answer` holds the child's own words, like `final_reply`."""
-    text = json.dumps(
-        {
-            "ok": True,
-            "result": {
-                "outcome": "ok",
-                "merge": "merged",
-                "answer": "# Answer\n\nFinish summary: every test passed here",
-                "final_reply": "all good here",
-            },
-        },
-        separators=(",", ":"),
-    )
-    handback = {
-        "payload": {
-            "facts": [
-                {"id": "f1", "value": "passed", "source": "w1", "quote": "every test passed here"},
-                {"id": "f2", "value": "merged", "source": "w1", "quote": '"merge":"merged"'},
-            ]
-        },
-        "entries": [{"id": "w1", "tool": "delegate_status", "saved_result": "results/w1.txt"}],
-        "results": {"w1": text},
-    }
-    facts = check_mod.check_handback(handback, load_accuracy())["facts"]
-    assert facts[0]["verdict"] == "passed"
-    assert facts[0]["first_hand"] is False
-    assert facts[1]["first_hand"] is True

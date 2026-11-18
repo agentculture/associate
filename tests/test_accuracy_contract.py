@@ -134,9 +134,13 @@ def test_report_schema_accepts_a_full_report_and_requires_the_recheck_field():
     assert validate.validate(broken, schema)
 
 
-def test_no_runtime_dependency_is_declared():
+def test_no_third_party_runtime_dependency_is_declared():
+    """Only the named first-party packages (tests/test_base_install.py); no npm dependency."""
+    from tests.test_base_install import FIRST_PARTY_RUNTIME
+
     pyproject = tomllib.loads((REPO_ROOT / "pyproject.toml").read_text(encoding="utf-8"))
-    assert pyproject["project"]["dependencies"] == []
+    names = {d.split(">=")[0].strip() for d in pyproject["project"]["dependencies"]}
+    assert names <= set(FIRST_PARTY_RUNTIME)
     import json
 
     package = json.loads((REPO_ROOT / "package.json").read_text(encoding="utf-8"))
