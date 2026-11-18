@@ -28,7 +28,9 @@ def test_vectors_cover_every_verdict_and_reason():
 
 def test_pure_same_inputs_same_verdict():
     args = ("brown fox leaps", None, "The quick brown fox jumps", 8)
-    assert check_quote(*args) == check_quote(*args)
+    first = check_quote(*args)
+    second = check_quote(*args)
+    assert first == second
 
 
 def test_large_text_is_cheap():
