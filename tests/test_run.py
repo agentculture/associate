@@ -48,6 +48,7 @@ _FAKE_PI = '''#!/usr/bin/env python3
 import json
 import os
 import sys
+import time
 from pathlib import Path
 
 READY = {ready!r}
@@ -58,6 +59,9 @@ TASK_EXIT = {task_exit!r}
 #: Which export artifacts this fake writes — a run that produced none is a
 #: failed run even when pi exits 0.
 ARTIFACTS = {artifacts!r}
+#: Seconds the TASK turn (and, separately, the preflight) sleeps before doing anything.
+TASK_SLEEP = {task_sleep!r}
+PREFLIGHT_SLEEP = {preflight_sleep!r}
 
 argv = sys.argv[1:]
 if "--version" in argv or "-v" in argv:
@@ -80,6 +84,16 @@ invocations.append(
         "cwd": os.getcwd(),
         "env": {{k: v for k, v in os.environ.items() if k.startswith("ASSOCIATE_")}},
         "stdin_closed": sys.stdin.read() == "",
+        "contract_dir": os.environ.get("ASSOCIATE_CONTRACT_DIR", ""),
+        # What the contract this pi was given says about each model's reasoning.
+        "reasoning": {{
+            key: entry["reasoning"]
+            for key, entry in json.loads(
+                (Path(os.environ["ASSOCIATE_CONTRACT_DIR"]) / "models.json").read_text(
+                    encoding="utf-8"
+                )
+            )["models"].items()
+        }},
     }}
 )
 invocations_path.write_text(json.dumps(invocations), encoding="utf-8")
@@ -117,9 +131,14 @@ if READY:
 print(json.dumps({{"type": "session", "version": 3, "id": "fake", "cwd": os.getcwd()}}))
 
 if any(arg.endswith("preflight.ts") for arg in argv):
+    if PREFLIGHT_SLEEP:
+        time.sleep(PREFLIGHT_SLEEP)
     # The preflight extension ends the process on before_agent_start: no turn
     # runs, so no sentinel event is ever emitted.
     raise SystemExit(0)
+
+if TASK_SLEEP:
+    time.sleep(TASK_SLEEP)
 
 print(json.dumps({{"type": "agent_start"}}))
 if READY:
@@ -159,6 +178,8 @@ def _install_fake_pi(
     version: str = "1.5.2",
     task_exit: int = 0,
     artifacts: list[str] | None = None,
+    task_sleep: float = 0,
+    preflight_sleep: float = 0,
 ) -> Path:
     """Write an executable fake ``pi`` into *directory* and return its path."""
     directory.mkdir(parents=True, exist_ok=True)
@@ -170,6 +191,8 @@ def _install_fake_pi(
             version=version,
             task_exit=task_exit,
             artifacts=list(_ALL_ARTIFACTS if artifacts is None else artifacts),
+            task_sleep=task_sleep,
+            preflight_sleep=preflight_sleep,
         ),
         encoding="utf-8",
     )
@@ -1294,3 +1317,206 @@ def test_the_delegated_run_marker_never_reaches_pi(tmp_path: Path, checkout):
     assert "ASSOCIATE_DELEGATED_RUN" not in env
     # A top-level `associate run` is nobody's spawned child.
     assert "ASSOCIATE_SPAWNED_BY" not in env
+
+
+# ---------------------------------------------------------------- timeout and reasoning (issue #22)
+
+_TIMEOUT = "3"
+
+
+def _timeout_result(
+    fake_pi,
+    checkout: Path,
+    tmp_path: Path,
+    capsys: pytest.CaptureFixture[str],
+    *,
+    session: str,
+    **fake: object,
+) -> tuple[int, dict]:
+    fake_pi(task_sleep=60, **fake)
+    code = _run(
+        ["--session-id", session, "--timeout", _TIMEOUT, "--model", "senses", "--json"],
+        checkout,
+        tmp_path,
+    )
+    return code, json.loads(capsys.readouterr().out)
+
+
+def test_a_run_killed_at_its_time_limit_prints_a_timeout_result(
+    fake_pi, checkout: Path, tmp_path: Path, capsys: pytest.CaptureFixture[str]
+):
+    from associate.cli._errors import EXIT_RUN_TIMEOUT
+
+    code, result = _timeout_result(fake_pi, checkout, tmp_path, capsys, session="to-1")
+    assert code == EXIT_RUN_TIMEOUT
+    assert result["outcome"] == "timeout"
+    assert result["timed_out"] is True
+    assert result["timeout_seconds"] == float(_TIMEOUT)
+    export = tmp_path / "runs" / "to-1" / "export"
+    assert result["export_dir"] == str(export)
+    assert result["walk_path"] == str(export / "walk.jsonl")
+    assert result["model"] == "senses"
+
+
+def test_the_timeout_exit_code_is_documented_and_distinct():
+    from associate.cli._errors import (
+        EXIT_ENV_ERROR,
+        EXIT_HANDBACK_REFUSED,
+        EXIT_RUN_TIMEOUT,
+        EXIT_USER_ERROR,
+    )
+
+    taken = {EXIT_USER_ERROR, EXIT_ENV_ERROR, EXIT_HANDBACK_REFUSED, 0}
+    assert EXIT_RUN_TIMEOUT not in taken
+    assert EXIT_RUN_TIMEOUT == 4
+
+
+def test_a_timed_out_text_run_prints_the_outcome_and_the_export_path(
+    fake_pi, checkout: Path, tmp_path: Path, capsys: pytest.CaptureFixture[str]
+):
+    fake_pi(task_sleep=60)
+    code = _run(
+        ["--session-id", "to-text", "--timeout", _TIMEOUT, "--model", "senses"], checkout, tmp_path
+    )
+    out = capsys.readouterr().out
+    assert code == 4
+    assert "outcome=timeout" in out
+    assert f"export_dir={tmp_path / 'runs' / 'to-text' / 'export'}" in out
+
+
+def test_a_timeout_without_facts_says_the_recheck_did_not_run(
+    fake_pi, checkout: Path, tmp_path: Path, capsys: pytest.CaptureFixture[str]
+):
+    _, result = _timeout_result(fake_pi, checkout, tmp_path, capsys, session="to-nofacts")
+    accuracy = result["accuracy"]
+    assert accuracy["python_recheck_ran"] is False
+    assert accuracy["report"] is None
+    assert accuracy["not_applicable_reason"]
+
+
+def test_a_timeout_with_facts_carries_the_recheck_counts(
+    fake_pi, checkout: Path, tmp_path: Path, capsys: pytest.CaptureFixture[str]
+):
+    from associate import contract
+    from associate.accuracy.check import inspect_export
+    from associate.harness.stub import StubHarness
+
+    export = tmp_path / "runs" / "to-facts" / "export"
+    stub = StubHarness()
+    stub.start(
+        checkout=checkout, contract_dir=contract.contract_dir(), session_id="x", export_dir=export
+    )
+    stub.submit(
+        {
+            "id": "t",
+            "prompt": "p",
+            "checkout": str(checkout),
+            "session_id": "x",
+            "export_dir": str(export),
+        }
+    )
+    expected = inspect_export(export, contract.load_accuracy())["report"]["facts"]
+    assert expected["made"] > 0
+
+    # The fake pi writes no walk of its own, so the stub's files are what the export holds.
+    code, result = _timeout_result(
+        fake_pi, checkout, tmp_path, capsys, session="to-facts", artifacts=[]
+    )
+    assert code == 4
+    assert result["outcome"] == "timeout"
+    accuracy = result["accuracy"]
+    assert accuracy["python_recheck_ran"] is True
+    assert accuracy["report"]["facts"] == expected
+
+
+def test_a_preflight_that_times_out_is_still_a_refusal_not_a_timeout_result(
+    fake_pi, checkout: Path, tmp_path: Path, capsys: pytest.CaptureFixture[str]
+):
+    fake_pi(preflight_sleep=60)
+    code = _run(["--timeout", "2", "--json"], checkout, tmp_path)
+    captured = capsys.readouterr()
+    assert code == 2
+    assert captured.out == ""
+    assert "did not finish" in captured.err
+
+
+def _models_bytes() -> bytes:
+    return (REPO_ROOT / "associate" / "contract" / "models.json").read_bytes()
+
+
+def test_per_run_reasoning_is_recorded_and_models_json_is_unchanged(
+    fake_pi, checkout: Path, tmp_path: Path, capsys: pytest.CaptureFixture[str]
+):
+    from associate import contract
+
+    registry = contract.load_models()["models"]["worker"]["reasoning"]
+    other = "off" if registry != "off" else "on"
+    before = _models_bytes()
+    code = _run(["--reasoning", other, "--json"], checkout, tmp_path)
+    result = json.loads(capsys.readouterr().out)
+    assert code == 0
+    assert result["reasoning"] == other
+    assert result["reasoning_source"] == "run"
+    assert _models_bytes() == before
+
+    # pi was handed a contract that says so for this run, and only for the run's model.
+    seen = _invocation(tmp_path)["reasoning"]
+    assert seen["worker"] == other
+    for key, entry in contract.load_models()["models"].items():
+        if key != "worker":
+            assert seen[key] == entry["reasoning"]
+    assert contract.load_models()["models"]["worker"]["reasoning"] == registry
+
+
+def test_per_run_reasoning_leaves_no_contract_copy_behind(
+    fake_pi, checkout: Path, tmp_path: Path, capsys: pytest.CaptureFixture[str]
+):
+    assert _run(["--reasoning", "off", "--json"], checkout, tmp_path) == 0
+    capsys.readouterr()
+    seen = Path(_invocation(tmp_path)["contract_dir"])
+    assert seen != REPO_ROOT / "associate" / "contract"
+    assert not seen.exists()
+
+
+def test_a_run_without_reasoning_uses_the_registry_contract_and_says_so(
+    fake_pi, checkout: Path, tmp_path: Path, capsys: pytest.CaptureFixture[str]
+):
+    from associate import contract
+
+    assert _run(["--json"], checkout, tmp_path) == 0
+    result = json.loads(capsys.readouterr().out)
+    assert result["reasoning"] == contract.load_models()["models"]["worker"]["reasoning"]
+    assert result["reasoning_source"] == "registry"
+    assert Path(_invocation(tmp_path)["contract_dir"]) == contract.contract_dir()
+
+
+def test_an_unknown_reasoning_value_exits_1(
+    fake_pi, checkout: Path, tmp_path: Path, capsys: pytest.CaptureFixture[str]
+):
+    with pytest.raises(SystemExit) as exited:
+        _run(["--reasoning", "loud"], checkout, tmp_path)
+    assert exited.value.code == 1
+    assert "invalid choice" in capsys.readouterr().err
+
+
+def test_the_stub_run_records_the_reasoning_it_was_given(
+    checkout: Path, tmp_path: Path, capsys: pytest.CaptureFixture[str]
+):
+    code = _run(["--harness", "stub", "--reasoning", "off", "--json"], checkout, tmp_path)
+    result = json.loads(capsys.readouterr().out)
+    assert code == 0
+    assert result["reasoning"] == "off"
+    assert result["reasoning_source"] == "run"
+
+
+def test_the_new_exit_code_and_flag_are_in_learn_and_explain(
+    capsys: pytest.CaptureFixture[str],
+):
+    assert main(["learn", "--json"]) == 0
+    payload = json.loads(capsys.readouterr().out)
+    assert "4" in payload["exit_codes"]
+    assert "timed out" in payload["exit_codes"]["4"]
+    assert main(["explain", "run"]) == 0
+    text = capsys.readouterr().out
+    assert "--reasoning" in text
+    assert "`4`" in text

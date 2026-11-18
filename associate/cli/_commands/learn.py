@@ -61,7 +61,9 @@ Exit-code policy
   2 environment / setup error
   3 `run` only: the hand-back was refused after the allowed rounds (the
     result is still printed)
-  4+ reserved
+  4 `run` only: pi did not finish within --timeout and was killed; the result
+    (outcome `timeout`) is still printed
+  5+ reserved
 
 More detail
 -----------
@@ -138,6 +140,7 @@ def _as_json_payload() -> dict[str, object]:
             "1": "user-input error",
             "2": "environment/setup error",
             "3": "run only: hand-back refused after the allowed rounds; result still printed",
+            "4": "run only: pi timed out at --timeout; result with outcome timeout still printed",
         },
         "json_support": True,
         "explain_pointer": "associate explain <path>",
