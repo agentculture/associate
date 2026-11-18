@@ -4,7 +4,7 @@
   "schema_version": 6,
   "status": "exported",
   "created": "2026-11-17T18:03:08Z",
-  "updated": "2026-11-18T04:46:52Z",
+  "updated": "2026-11-18T05:08:07Z",
   "claims": [
     {
       "id": "c1",
@@ -1627,6 +1627,17 @@
       ],
       "origin": "llm",
       "status": "approved"
+    },
+    {
+      "id": "l5",
+      "code": "assumption-for-measurement",
+      "what": "I reported PR #27 as 'all CI checks pass' in the handoff; on that commit (1f29031) the SonarCloud check and the pull-request test job were already failing: one new bug and 29 other open issues on new code, which the repo's CI treats as a failure",
+      "skipped_check": "reading the full check list for the head commit (gh pr checks) before stating CI was green",
+      "refs": [
+        "PR #27"
+      ],
+      "origin": "llm",
+      "status": "proposed"
     }
   ],
   "obligations": [
