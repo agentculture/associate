@@ -5,6 +5,16 @@ All notable changes to this project will be documented in this file.
 Format follows [Keep a Changelog](https://keepachangelog.com/). This project
 adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.12.1] - 2026-11-18
+
+### Added
+
+- The delivery record for the accuracy method (issue #20):
+  `docs/deliveries/2026-11-17-associate-accuracy-method.md`. Run status is
+  `partial`: senses was not measured and nine of the 30 behavioural obligations
+  are only partly asserted by tests. Evidence records e1–e33 and behaviour
+  deltas b1–b4 are in the plan's delivery state.
+
 ## [0.12.0] - 2026-11-18
 
 The accuracy method (issue #20; plan
