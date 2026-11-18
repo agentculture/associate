@@ -11,7 +11,7 @@ _store.py append_entry lines 274-283.
 
 ## Answer
 
-It refuses and does not modify the file: with the file opened O_RDWR|O_APPEND|O_CREAT, if size>0 and the last byte (pread at size-1) is not b'\n', it raises CliError 'ledger <path> does not end with a newline (truncated write?)', remediation 'the ledger is append-only; repair the last line by hand'. Exit code 2 (EXIT_ENV_ERROR; the OSError wrapper does not catch CliError). Nothing is written, no repair/truncation. The new entry is lost (not appended).
+It refuses and does not modify the file: with the file opened O_RDWR|O_APPEND|O_CREAT, if size>0 and the last byte (pread at size-1) is not b'\n', it raises CliError 'ledger `<path>` does not end with a newline (truncated write?)', remediation 'the ledger is append-only; repair the last line by hand'. Exit code 2 (EXIT_ENV_ERROR; the OSError wrapper does not catch CliError). Nothing is written, no repair/truncation. The new entry is lost (not appended).
 
 ## Confidence and doubts
 

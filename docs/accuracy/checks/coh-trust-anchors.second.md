@@ -11,7 +11,7 @@ git ls-files | grep -i 'anchor|trust'; coherence/meaning/axis.py lines 35-42 DIM
 
 ## Answer
 
-No such file: the Meaning Gradient has no trust axis. Anchor files in coherence/meaning/anchors/ are <dim>.high.txt/.low.txt for exactly: meaning, consequence, agency, causality, affordance, future_constraint (axis.py DIMENSIONS). 'trust' appears only in README/docs prose (trust as the question the quality domain answers, docs/domains.md line 24), not as a Meaning Gradient axis. If a trust-like axis was meant, the nearest are agency/consequence, but I would say not in repository.
+No such file: the Meaning Gradient has no trust axis. Anchor files in coherence/meaning/anchors/ are `<dim>`.high.txt/.low.txt for exactly: meaning, consequence, agency, causality, affordance, future_constraint (axis.py DIMENSIONS). 'trust' appears only in README/docs prose (trust as the question the quality domain answers, docs/domains.md line 24), not as a Meaning Gradient axis. If a trust-like axis was meant, the nearest are agency/consequence, but I would say not in repository.
 
 ## Confidence and doubts
 
