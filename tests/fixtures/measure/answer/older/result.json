@@ -1,0 +1,18 @@
+{
+ "outcome": "ok",
+ "session_id": "older-fixture",
+ "extension_version": "0.1.0",
+ "contract_version": 1,
+ "active_tools": [
+  "associate_ready",
+  "finish",
+  "grep",
+  "find",
+  "ls"
+ ],
+ "model": "worker",
+ "lobes_role": "worker",
+ "final_reply": "The bundled default settings file is evidence/data/accuracy_defaults.json. In it retry_rounds is 2, refusal_cap is 3 and min_quote_length is 8. The loader is load_default_settings in evidence/accuracy/check.py, and the constant SUPPORTED_WALK_FORMATS = (1, 2). I did not run any test.",
+ "stop_reason": "stop",
+ "isolation": "in-place"
+}
