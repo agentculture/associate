@@ -23,7 +23,7 @@ import pytest
 
 ROOT = Path(__file__).resolve().parent.parent
 TASKS_FILE = ROOT / "docs" / "accuracy" / "tasks.json"
-KINDS = {"read", "find", "not_found"}
+KINDS = {"read", "find", "count", "review", "not_found"}
 
 
 def _load() -> dict:
