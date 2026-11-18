@@ -94,7 +94,7 @@ def current_harness(tmp_path_factory) -> tuple[Path, str]:
     return made.path, made.head
 
 
-@pytest.fixture()
+@pytest.fixture
 def demo(tmp_path: Path) -> tuple[Path, str]:
     repo = tmp_path / "demo"
     repo.mkdir()
@@ -104,7 +104,7 @@ def demo(tmp_path: Path) -> tuple[Path, str]:
     return repo, commit_all(repo)
 
 
-@pytest.fixture()
+@pytest.fixture
 def note_repo(tmp_path: Path) -> Path:
     """A temporary git repository holding the difference note, committed."""
     repo = tmp_path / "noterepo"
@@ -164,7 +164,7 @@ class Setup:
         ]
 
 
-@pytest.fixture()
+@pytest.fixture
 def setup(tmp_path, demo, current_harness) -> Setup:
     return Setup(tmp_path, demo, current_harness)
 
@@ -218,7 +218,7 @@ class FakeRunner:
         return Summary()
 
 
-@pytest.fixture()
+@pytest.fixture
 def fake(monkeypatch) -> FakeRunner:
     runner = FakeRunner()
     monkeypatch.setattr(measure_mod, "run_comparison", runner)
@@ -312,7 +312,7 @@ def test_run_accepts_the_committed_unmodified_note(setup, fake, note_repo, capsy
     rc = main(pi_args(setup, note_repo / NOTE_REL))
     assert rc == 0, capsys.readouterr().err
     assert len(fake.calls) == 1
-    assert fake.calls[0]["harness"] == "pi"
+    assert fake.calls[0]["options"].harness == "pi"
 
 
 def test_stub_run_needs_no_note(setup, fake, note_repo, capsys):
@@ -320,7 +320,7 @@ def test_stub_run_needs_no_note(setup, fake, note_repo, capsys):
     capsys.readouterr()
     rc = main(setup.run_args("--difference-note", str(missing)))
     assert rc == 0, capsys.readouterr().err
-    assert fake.calls[0]["harness"] == "stub"
+    assert fake.calls[0]["options"].harness == "stub"
 
 
 def test_refusal_to_run_is_checked_before_a_detached_child_is_started(
@@ -495,7 +495,7 @@ def draw_filled_sheet(
     return sheet, sample.runs
 
 
-@pytest.fixture()
+@pytest.fixture
 def synthetic(monkeypatch):
     """Serve synthetic stored records to the measure verbs (the directory is not read)."""
 
@@ -719,6 +719,20 @@ def test_arms_file_with_a_duplicate_name_is_refused(setup, fake, capsys):
     assert fake.calls == []
 
 
+@pytest.mark.parametrize("commit", ["main", "HEAD", "-x", "abc123", "z" * 40])
+def test_arms_file_with_a_commit_that_is_not_a_hexadecimal_id_is_refused(
+    setup, fake, capsys, commit
+):
+    arms = two_arms(setup.harness_head)
+    arms[0]["harness_commit"] = commit
+    rc, err = run_with_arms(setup, capsys, arms)
+    assert rc == 1
+    assert "harness_commit" in err
+    assert "arm-a" in err
+    assert "hexadecimal" in err
+    assert fake.calls == []
+
+
 def test_arms_file_missing_a_required_key_is_refused(setup, fake, capsys):
     arms = two_arms(setup.harness_head)
     del arms[0]["model"]
@@ -771,19 +785,35 @@ def test_repeats_below_one_are_refused(setup, fake, capsys):
     assert "repeats" in err
 
 
+def test_repeats_above_the_limit_are_refused(setup, fake, capsys):
+    setup.repeats = measure_mod.MAX_REPEATS + 1
+    rc, err = error_of(capsys, setup.run_args())
+    assert rc == 1
+    assert "repeats" in err
+    assert str(measure_mod.MAX_REPEATS) in err
+    assert fake.calls == []
+
+
+def test_repeats_at_the_limit_are_accepted(setup, fake, capsys):
+    setup.repeats = measure_mod.MAX_REPEATS
+    capsys.readouterr()
+    assert main(setup.run_args()) == 0
+    assert fake.calls[0]["repeats"] == measure_mod.MAX_REPEATS
+
+
 # --- timeout ----------------------------------------------------------------------------
 
 
 def test_timeout_defaults_to_3600_seconds(setup, fake, capsys):
     capsys.readouterr()
     assert main(setup.run_args()) == 0
-    assert fake.calls[0]["timeout_s"] == 3600
+    assert fake.calls[0]["options"].timeout_s == 3600
 
 
 def test_timeout_option_is_passed_to_the_runner(setup, fake, capsys):
     capsys.readouterr()
     assert main(setup.run_args("--timeout", "90")) == 0
-    assert fake.calls[0]["timeout_s"] == 90
+    assert fake.calls[0]["options"].timeout_s == 90
 
 
 @pytest.mark.parametrize("value", ["0", "-5", "nan"])
@@ -925,6 +955,19 @@ def test_status_counts_runs_not_yet_stored(setup, capsys):
     assert payload["finished"] == 6
     assert payload["not_stored"] == 2
     assert payload["expected_runs"] == 8
+
+
+def test_status_refuses_a_manifest_whose_repeats_are_above_the_limit(setup, capsys):
+    run_json(capsys, setup.run_args("--json"))
+    manifest_path = setup.out / measure_mod.MANIFEST_FILE
+    manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
+    manifest["repeats"] = 10**12
+    manifest_path.write_text(json.dumps(manifest), encoding="utf-8")
+    rc, err = error_of(capsys, ["measure", "status", str(setup.out)])
+    assert rc == 1
+    assert "repeats" in err
+    assert str(measure_mod.MAX_REPEATS) in err
+    assert "hint:" in err
 
 
 def test_status_reports_a_held_lock_and_a_live_process(setup, capsys):

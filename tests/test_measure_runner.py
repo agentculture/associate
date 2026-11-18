@@ -32,6 +32,7 @@ from associate.measure.runner import (
     Launch,
     LaunchTimeout,
     RunnerError,
+    RunOptions,
     load_records,
     record_path,
     run_comparison,
@@ -138,7 +139,7 @@ def current_harness(tmp_path_factory) -> tuple[Path, str]:
     return made.path, made.head
 
 
-@pytest.fixture()
+@pytest.fixture
 def demo(tmp_path: Path) -> tuple[Path, str]:
     repo = tmp_path / "demo"
     repo.mkdir()
@@ -189,7 +190,7 @@ sys.exit(main())
 """
 
 
-@pytest.fixture()
+@pytest.fixture
 def old_harness(tmp_path: Path) -> tuple[Path, str]:
     """A fixture harness commit shaped like the one before PR #27."""
     repo = tmp_path / "oldharness"
@@ -208,10 +209,9 @@ def old_harness(tmp_path: Path) -> tuple[Path, str]:
 
 
 def run(arms, tasks, repeats, results, demo_repo, harness_repo, launcher, **kw):
-    kw.setdefault("pi_version", lambda: "1.5.2")
-    kw.setdefault("harness", "stub")
-    kw.setdefault("timeout_s", 60.0)
-    kw.setdefault("grace_s", 60.0)
+    """run_comparison on the stub harness with short clocks; **kw are RunOptions fields."""
+    pi_version = kw.pop("pi_version", lambda: "1.5.2")
+    options = RunOptions(**{"harness": "stub", "timeout_s": 60.0, "grace_s": 60.0, **kw})
     return run_comparison(
         arms,
         tasks,
@@ -219,8 +219,9 @@ def run(arms, tasks, repeats, results, demo_repo, harness_repo, launcher, **kw):
         results,
         {"demo": demo_repo} if demo_repo else {},
         harness_repo=harness_repo,
+        options=options,
         launcher=launcher,
-        **kw,
+        pi_version=pi_version,
     )
 
 
@@ -377,8 +378,9 @@ def test_a_run_that_ended_before_the_kill_is_stored_from_its_attempt_not_rerun(
 
     monkeypatch.setattr(runner_mod, "_store_record", killed_while_storing)
     first = Recorder()
+    tasks = [task("t", demo_head)]
     with pytest.raises(KeyboardInterrupt):
-        run([arm], [task("t", demo_head)], 1, results, demo_repo, harness_repo, first)
+        run([arm], tasks, 1, results, demo_repo, harness_repo, first)
     assert len(first.runs) == 1
     assert load_records(results) == []
 
@@ -404,16 +406,11 @@ def test_a_stored_key_with_a_different_arm_definition_is_refused(tmp_path, demo,
         harness_repo,
         Recorder(),
     )
+    other_arm = [Arm("a", harness_head, "cortex")]
+    tasks = [task("t", demo_head)]
+    launcher = Recorder()
     with pytest.raises(RunnerError, match="arm"):
-        run(
-            [Arm("a", harness_head, "cortex")],
-            [task("t", demo_head)],
-            1,
-            results,
-            demo_repo,
-            harness_repo,
-            Recorder(),
-        )
+        run(other_arm, tasks, 1, results, demo_repo, harness_repo, launcher)
 
 
 # --- acceptance 3: an older harness commit --------------------------------------------
@@ -436,7 +433,8 @@ def test_an_older_harness_commit_run_is_stored_and_graded(tmp_path, demo, old_ha
     )
     rec = only(load_records(tmp_path / "res"))
     launch = only(launcher.runs)
-    assert "--reasoning" not in launch.argv and "--check-mode" not in launch.argv
+    assert "--reasoning" not in launch.argv
+    assert "--check-mode" not in launch.argv
     assert rec["status"] == STATUS_FINISHED
     assert rec["graded"] is True
     assert rec["grade"]["verdict"] == "matches"
@@ -493,7 +491,8 @@ def test_the_real_pre_pr27_commit_runs_through_the_runner(tmp_path, demo):
     run([arm], [task("t", demo_head)], 1, tmp_path / "res", demo_repo, made.path, launcher)
     rec = only(load_records(tmp_path / "res"))
     launch = only(launcher.runs)
-    assert "--reasoning" not in launch.argv and "--check-mode" not in launch.argv
+    assert "--reasoning" not in launch.argv
+    assert "--check-mode" not in launch.argv
     assert rec["status"] == STATUS_FINISHED, rec.get("reason")
     assert rec["graded"] is True
     assert rec["reasoning"]["effective"] == "on"
@@ -644,16 +643,10 @@ def test_a_changed_contract_file_in_the_harness_tree_stops_the_comparison(tmp_pa
             (launch.cwd / "associate/contract/role.json").write_text("{}\n")
         return done
 
+    arms = [Arm("x", harness_head, "worker")]
+    tasks = [task("t1", demo_head), task("t2", demo_head)]
     with pytest.raises(RunnerError, match="contract"):
-        run(
-            [Arm("x", harness_head, "worker")],
-            [task("t1", demo_head), task("t2", demo_head)],
-            1,
-            results,
-            demo_repo,
-            harness_repo,
-            edits_contract,
-        )
+        run(arms, tasks, 1, results, demo_repo, harness_repo, edits_contract)
     rec = only(load_records(results))
     assert rec["harness_tree"]["contract_unchanged"] is False
     assert "associate/contract/role.json" in rec["harness_tree"]["changed"]
@@ -690,4 +683,127 @@ def test_a_second_runner_on_the_same_results_is_refused(tmp_path, demo, current_
         return real_launch(launch)
 
     run([arm], [task("t", demo_head)], 1, results, demo_repo, harness_repo, launch_inner)
-    assert nested and "another runner" in str(nested[0])
+    assert nested
+    assert "another runner" in str(nested[0])
+
+
+# --- guards on values read from files ---------------------------------------------------
+
+
+@pytest.mark.parametrize("commit", ["main", "HEAD", "--upload-pack=x", "abc123", "g" * 40, ""])
+def test_an_arm_commit_that_is_not_a_hexadecimal_commit_id_is_refused(
+    tmp_path, demo, current_harness, commit
+):
+    demo_repo, demo_head = demo
+    harness_repo, _head = current_harness
+    launcher = Recorder()
+    arms = [Arm("a", commit, "worker")]
+    tasks = [task("t", demo_head)]
+    with pytest.raises(RunnerError, match="commit id"):
+        run(arms, tasks, 1, tmp_path / "res", demo_repo, harness_repo, launcher)
+    assert launcher.launches == []
+
+
+def test_an_abbreviated_arm_commit_is_resolved_to_the_full_one(tmp_path, demo, current_harness):
+    demo_repo, demo_head = demo
+    harness_repo, harness_head = current_harness
+    arm = Arm("a", harness_head[:12], "worker")
+    run([arm], [task("t", demo_head)], 1, tmp_path / "res", demo_repo, harness_repo, Recorder())
+    rec = only(load_records(tmp_path / "res"))
+    assert rec["harness_commit"] == harness_head
+
+
+def _ended_but_not_stored(results, demo, current_harness, monkeypatch):
+    """One attempt with plan.json and launch.json and no stored record; returns the rerun."""
+    demo_repo, demo_head = demo
+    harness_repo, harness_head = current_harness
+    arm = Arm("a", harness_head, "worker")
+    real_store = runner_mod._store_record
+
+    def killed_while_storing(*args, **kwargs):
+        raise KeyboardInterrupt
+
+    monkeypatch.setattr(runner_mod, "_store_record", killed_while_storing)
+    tasks = [task("t", demo_head)]
+    launcher = Recorder()
+    with pytest.raises(KeyboardInterrupt):
+        run([arm], tasks, 1, results, demo_repo, harness_repo, launcher)
+    monkeypatch.setattr(runner_mod, "_store_record", real_store)
+
+    def rerun(launcher):
+        return run([arm], [task("t", demo_head)], 1, results, demo_repo, harness_repo, launcher)
+
+    return rerun
+
+
+def _edit_plan(results: Path, **changes) -> None:
+    path = results / "work" / "t" / "a" / "r1" / "a1" / "plan.json"
+    plan = json.loads(path.read_text(encoding="utf-8"))
+    path.write_text(json.dumps({**plan, **changes}), encoding="utf-8")
+
+
+def test_a_stored_plan_naming_a_directory_outside_the_harness_worktrees_is_refused(
+    tmp_path, demo, current_harness, monkeypatch
+):
+    results = tmp_path / "results"
+    rerun = _ended_but_not_stored(results, demo, current_harness, monkeypatch)
+    _edit_plan(results, cwd=str(demo[0]))
+    launcher = Recorder()
+    with pytest.raises(RunnerError, match="plan.json"):
+        rerun(launcher)
+    assert load_records(results) == []
+    assert launcher.runs == []
+
+
+def test_a_stored_plan_naming_an_export_root_outside_its_attempt_is_refused(
+    tmp_path, demo, current_harness, monkeypatch
+):
+    results = tmp_path / "results"
+    rerun = _ended_but_not_stored(results, demo, current_harness, monkeypatch)
+    _edit_plan(results, export_root=str(tmp_path / "elsewhere"))
+    launcher = Recorder()
+    with pytest.raises(RunnerError, match="plan.json"):
+        rerun(launcher)
+    assert load_records(results) == []
+
+
+@pytest.mark.parametrize("session", ["../../../elsewhere", ".hidden", "a/b", ""])
+def test_a_stored_plan_with_an_unsafe_session_id_is_refused(
+    tmp_path, demo, current_harness, monkeypatch, session
+):
+    results = tmp_path / "results"
+    rerun = _ended_but_not_stored(results, demo, current_harness, monkeypatch)
+    _edit_plan(results, session_id=session)
+    launcher = Recorder()
+    with pytest.raises(RunnerError, match="plan.json"):
+        rerun(launcher)
+    assert load_records(results) == []
+
+
+def test_a_result_naming_an_export_outside_the_run_is_a_failed_launch_and_is_not_read(
+    tmp_path, demo, current_harness
+):
+    demo_repo, demo_head = demo
+    harness_repo, harness_head = current_harness
+    elsewhere = tmp_path / "elsewhere"
+    elsewhere.mkdir()
+    heading = "## Unchecked: the model's own words, not checked by the harness"
+    (elsewhere / "answer.md").write_text(f"{heading}\n\n> {MAGIC}\n", encoding="utf-8")
+
+    def points_elsewhere(launch: Launch) -> Completed:
+        done = real_launch(launch)
+        if not _is_run(launch):
+            return done
+        result = {**json.loads(done.stdout), "export_dir": str(elsewhere), "final_reply": ""}
+        result.pop("walk_path", None)
+        return Completed(done.returncode, json.dumps(result), done.stderr)
+
+    arm = Arm("a", harness_head, "worker")
+    results = tmp_path / "res"
+    run([arm], [task("t", demo_head)], 1, results, demo_repo, harness_repo, points_elsewhere)
+    rec = only(load_records(results))
+    assert rec["status"] == STATUS_LAUNCH_FAILED
+    assert str(elsewhere) in rec["reason"]
+    assert "outside" in rec["reason"]
+    assert rec["grade"] is None
+    assert rec["graded"] is False

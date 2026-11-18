@@ -355,10 +355,42 @@ def test_an_unknown_commit_is_an_error_not_a_pass(demo_repo):
         check_expected_in_repository(task, repo)
 
 
+def _git_ok(*args: str) -> bool:
+    done = subprocess.run(["git", "-C", str(ROOT), *args], capture_output=True, check=False)
+    return done.returncode == 0
+
+
+def _is_shallow() -> bool:
+    done = subprocess.run(
+        ["git", "-C", str(ROOT), "rev-parse", "--is-shallow-repository"],
+        capture_output=True,
+        text=True,
+        check=False,
+    )
+    return done.returncode == 0 and done.stdout.strip() == "true"
+
+
+def _pinned_root(task: dict) -> Path:
+    """This checkout, for a test that reads the task's pinned commit.
+
+    A shallow checkout (a default CI checkout) holds only the newest commit, so
+    the pinned one is not in it: the test is skipped, naming the commit. With
+    the object present, or in a checkout that has its whole history, the test
+    runs and asserts.
+    """
+    commit = task["commit"]
+    if not _git_ok("cat-file", "-e", commit) and _is_shallow():
+        pytest.skip(
+            f"the pinned commit {commit} is not in this checkout, which is shallow; "
+            "fetch the full history to run this test"
+        )
+    return ROOT
+
+
 @pytest.mark.parametrize("task_id", SIX)
 def test_each_converted_task_is_found_or_derived_at_its_pinned_commit(doc, task_id):
     task = _task(doc, task_id)
-    result = check_expected_in_repository(task, ROOT)
+    result = check_expected_in_repository(task, _pinned_root(task))
     assert result.missing == []
     assert result.found or result.derived
 
@@ -366,23 +398,27 @@ def test_each_converted_task_is_found_or_derived_at_its_pinned_commit(doc, task_
 def test_a_planted_value_fails_on_a_real_task(doc):
     task = copy.deepcopy(_task(doc, "forbidden-decisions"))
     task["expected"]["must_appear"].append({"text": "planted_decision", "kind": "identifier"})
-    assert check_expected_in_repository(task, ROOT).missing == ["planted_decision"]
+    root = _pinned_root(task)
+    assert check_expected_in_repository(task, root).missing == ["planted_decision"]
 
 
 def test_the_search_does_not_find_values_in_the_answer_key_of_the_real_repository(doc):
     task = copy.deepcopy(_task(doc, "forbidden-decisions"))
     task["search_paths"] = []
     task["expected"]["must_appear"] = [{"text": "never taken from a model run", "kind": "text"}]
-    assert check_expected_in_repository(task, ROOT).missing == ["never taken from a model run"]
+    root = _pinned_root(task)
+    assert check_expected_in_repository(task, root).missing == ["never taken from a model run"]
 
 
 @pytest.mark.parametrize("task_id", SIX)
 def test_every_derived_command_prints_each_text_it_derives(doc, task_id):
     task = _task(doc, task_id)
     for entry in task.get("derived", []):
+        # Only a command that reads the pinned commit needs it in the checkout.
+        root = _pinned_root(task) if "COMMIT" in entry["command"] else ROOT
         done = subprocess.run(
             ["bash", "-c", entry["command"]],
-            cwd=ROOT,
+            cwd=root,
             env={**os.environ, "COMMIT": task["commit"]},
             capture_output=True,
             text=True,
@@ -398,7 +434,7 @@ def test_every_derived_command_prints_each_text_it_derives(doc, task_id):
 def test_the_pinned_commit_is_on_origin_main(doc, task_id):
     task = _task(doc, task_id)
     done = subprocess.run(
-        ["git", "-C", str(ROOT), "cat-file", "-t", task["commit"]],
+        ["git", "-C", str(_pinned_root(task)), "cat-file", "-t", task["commit"]],
         capture_output=True,
         text=True,
         check=False,

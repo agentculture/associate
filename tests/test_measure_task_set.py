@@ -104,11 +104,32 @@ def _main_checkout() -> Path:
     return common.parent if common is not None else ROOT
 
 
-def _locate(task: dict) -> Path:
-    """The checkout holding the task's pinned commit, or pytest.skip with the reason."""
+def _this_checkout(commit: str) -> Path:
+    """This checkout, or pytest.skip when it is shallow and lacks the pinned commit.
+
+    A shallow checkout (a default CI checkout) holds only the newest commit.
+    With the object present, or in a checkout that has its whole history, the
+    test runs and asserts.
+    """
+    if _git(ROOT, "cat-file", "-e", commit).returncode != 0:
+        shallow = _git(ROOT, "rev-parse", "--is-shallow-repository")
+        if shallow.returncode == 0 and shallow.stdout.strip() == "true":
+            pytest.skip(
+                f"the pinned commit {commit} is not in this checkout, which is shallow; "
+                "fetch the full history to run this test"
+            )
+    return ROOT
+
+
+def _locate(task: dict, needs_commit: bool = True) -> Path:
+    """The checkout holding the task's pinned commit, or pytest.skip with the reason.
+
+    ``needs_commit`` False is for a test that reads only the working tree of this
+    repository: it runs in a shallow checkout too.
+    """
     name = task["repository"]["name"]
     if name == "associate":
-        return ROOT
+        return _this_checkout(task["commit"]) if needs_commit else ROOT
     candidates = []
     for base in (ROOT.parent, _main_checkout().parent):
         if base / name not in candidates:
@@ -172,7 +193,8 @@ def test_every_derived_command_prints_each_text_it_derives(task_id):
     task = _task(task_id)
     if not task.get("derived"):
         return
-    repo = _locate(task)
+    # Only a command that reads the pinned commit needs it in the checkout.
+    repo = _locate(task, any("COMMIT" in entry["command"] for entry in task["derived"]))
     for entry in task["derived"]:
         done = subprocess.run(
             ["bash", "-c", entry["command"]],

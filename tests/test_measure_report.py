@@ -179,7 +179,8 @@ def test_short_sample_returns_every_graded_run_and_says_so(tmp_path):
     assert len(sample.runs) == 10
     assert sample.short
     assert "short" in sample.message.lower()
-    assert "10" in sample.message and "48" in sample.message
+    assert "10" in sample.message
+    assert "48" in sample.message
 
 
 def test_agreement_equals_a_hand_count_and_a_missing_hand_grade_is_not_agreement(tmp_path):

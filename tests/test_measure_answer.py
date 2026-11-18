@@ -200,3 +200,15 @@ def test_an_unreadable_result_file_is_none(tmp_path):
     bad.write_text("", encoding="utf-8")
     assert load_result(bad) is None
     assert load_result(tmp_path / "absent.json") is None
+
+
+def test_an_export_directory_named_only_by_the_result_is_never_opened(tmp_path):
+    export = tmp_path / "export"
+    export.mkdir()
+    heading = "## Unchecked: the model's own words, not checked by the harness"
+    (export / "answer.md").write_text(f"{heading}\n\n> from the file\n", encoding="utf-8")
+    result = {"export_dir": str(export), "final_reply": "from the result"}
+    answer = model_answer(result)
+    assert answer.text == "from the result"
+    assert answer.source == "final_reply"
+    assert model_answer(result, export).text == "from the file"

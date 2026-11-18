@@ -653,8 +653,10 @@ Every sub-verb takes `--json`.
 - `--arms FILE`: a JSON list of arms, each `{"name", "harness_commit", "model"}` and
   optionally `"check_mode"` (`report` or `enforce`) and `"reasoning"` (`model-default`,
   `on` or `off`). An unknown key or a duplicate name is refused with the reason.
+  `harness_commit` is a commit id of 7 to 64 hexadecimal characters; a branch or tag
+  name is refused.
 - `--tasks FILE` (default `docs/accuracy/tasks.json`), `--tasks-filter ID` (repeatable,
-  runs only those tasks), `--repeats N` (default 1), `--output-dir DIR`.
+  runs only those tasks), `--repeats N` (default 1, at most 1000), `--output-dir DIR`.
 - `--timeout SECONDS`: the limit for one run, default 3600. There is no unlimited
   value: zero or less is refused.
 - `--checkout-of NAME=PATH` (repeatable): the local checkout of a task repository.
