@@ -13,11 +13,13 @@ How a run is counted
 --------------------
 Each run falls in exactly one of five categories, checked in this order:
 
-1. **not graded**: the launch failed, the record is not graded, the run's
+1. **contaminated**: the stored contamination verdict says ``contaminated``,
+   whether or not the run was graded (a run that read the answer key and then
+   timed out is contaminated, not "not graded"). Such a run is excluded from
+   the three grade counts and reported apart (a run whose walk was never
+   checked is not contaminated here; its number is shown);
+2. **not graded**: the launch failed, the record is not graded, the run's
    outcome is ``timeout``, or the chosen reading holds no grade;
-2. **contaminated**: the stored contamination verdict says ``contaminated``.
-   Such a run is excluded from the three grade counts and reported apart (a run
-   whose walk was never checked is not contaminated here; its number is shown);
 3. **matching**, **not matching** or **cannot tell**: the grade's verdict
    (``matches``, ``does_not_match``, ``cannot_tell``) in the chosen reading.
 
@@ -134,13 +136,21 @@ def _is_contaminated(record: Mapping[str, Any]) -> bool:
     return (record.get(_K_CONTAMINATION) or {}).get("contaminated") is True
 
 
-def _category(record: Mapping[str, Any], name: str) -> str:
+def _graded_verdict(record: Mapping[str, Any], name: str) -> str | None:
+    """The verdict of a run that was graded in the reading used, else None."""
     if not _was_run_to_grade(record):
-        return _NOT_GRADED
-    verdict = _verdict(_reading(record, _used_reading(record, name)))
-    if verdict is None:
-        return _NOT_GRADED
-    return _CONTAMINATED if _is_contaminated(record) else verdict
+        return None
+    return _verdict(_reading(record, _used_reading(record, name)))
+
+
+def _is_graded(record: Mapping[str, Any]) -> bool:
+    return _graded_verdict(record, READING_ANSWER) is not None
+
+
+def _category(record: Mapping[str, Any], name: str) -> str:
+    if _is_contaminated(record):
+        return _CONTAMINATED
+    return _graded_verdict(record, name) or _NOT_GRADED
 
 
 def _check_reading(reading: str) -> None:
@@ -191,7 +201,7 @@ def _fallback_lines(records: Sequence[Mapping[str, Any]]) -> list[str]:
     seen: Counter = Counter()
     lacking: Counter = Counter()
     for record in records:
-        if _category(record, READING_ANSWER) == _NOT_GRADED:
+        if not _is_graded(record):
             continue
         seen[_arm_of(record)] += 1
         if _reading(record, READING_WITH_HANDBACK) is None:
@@ -223,7 +233,8 @@ def render_table(records: Sequence[Mapping[str, Any]], reading: str = READING_AN
     lines.append(
         "Contaminated runs are left out of the matching, not matching and cannot tell counts."
     )
-    lines.append("Not graded: a failed launch or a timeout.")
+    lines.append("Not graded: a failed launch or a timeout. A contaminated run is counted")
+    lines.append("as contaminated whether or not it was graded.")
     for task in tasks:
         per_arm = {arm: cells[task] for arm, cells in counts.items() if task in cells}
         lines += ["", *_section(f"Task: {task}", per_arm)]
@@ -243,7 +254,7 @@ def readings_differences(records: Sequence[Mapping[str, Any]]) -> dict[str, int]
     for record in records:
         arm = _arm_of(record)
         out.setdefault(arm, 0)
-        if _category(record, READING_ANSWER) == _NOT_GRADED:
+        if not _is_graded(record):
             continue
         first = _verdict(_reading(record, READING_ANSWER))
         second = _verdict(_reading(record, READING_WITH_HANDBACK))
@@ -444,18 +455,18 @@ def success_numbers(
       now against the task's expected values, gets a different verdict than the
       stored one (a run whose task is not in ``tasks`` is not re-graded);
     * ``key_reads``: runs whose contamination verdict has a reason of kind
-      ``answer_key``.
+      ``answer_key``, graded or not (a run that read the key and timed out counts).
     """
     known = _load_tasks(tasks)
     arms: dict[str, dict[str, int]] = {}
     for record in records:
         row = arms.setdefault(_arm_of(record), dict.fromkeys(_SUCCESS_KEYS, 0))
         row["runs"] += 1
-        if _category(record, READING_ANSWER) == _NOT_GRADED:
+        row["key_reads"] += int(_reads_key(record))
+        if not _is_graded(record):
             continue
         row["graded"] += 1
         row["regrade_changes"] += int(_regrade_changed(record, known))
-        row["key_reads"] += int(_reads_key(record))
     total = {key: sum(row[key] for row in arms.values()) for key in _SUCCESS_KEYS}
     return {"arms": dict(sorted(arms.items())), "total": total}
 

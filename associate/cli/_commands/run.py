@@ -103,6 +103,7 @@ _RESULT_KEYS = (
     "timeout_seconds",
     "reasoning",
     "reasoning_source",
+    "reasoning_applies_to",
     "check_mode",
     "handback_outcome",
     "answer_path",
@@ -577,10 +578,12 @@ def register(sub: argparse._SubParsersAction) -> None:
         "--reasoning",
         choices=_REASONING_CHOICES,
         default=None,
-        help="Reasoning setting for this run only, overriding the model's entry in "
+        help="Reasoning setting for this run only, overriding the registry's value in "
         "models.json (which is never edited: pi is handed a temporary copy of the "
-        "contract). Recorded in the result as reasoning, with reasoning_source 'run'; "
-        "without the flag the registry's value is recorded with source 'registry'.",
+        "contract). It is run-wide: it is set for every model that can run, so a "
+        "child the run spawns gets it too. Recorded in the result as reasoning, with "
+        "reasoning_source 'run' and the models in reasoning_applies_to; without the "
+        "flag the registry's value is recorded with source 'registry'.",
     )
     p.add_argument(
         "--untrusted-checkout",

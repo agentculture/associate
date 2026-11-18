@@ -1488,6 +1488,44 @@ def test_a_run_that_times_out_after_a_rejected_finish_carries_the_payload_as_rej
     assert result["accuracy"]["python_recheck_ran"] is False
 
 
+def _seed_rejected_then_check(tmp_path: Path, session: str, check: dict) -> Path:
+    """An export holding a rejected finish and the check record of a later finish."""
+    from associate.harness.pi import REJECTED_HANDBACK_FILENAME
+
+    export = tmp_path / "runs" / session / "export"
+    export.mkdir(parents=True)
+    (export / REJECTED_HANDBACK_FILENAME).write_text(
+        json.dumps(_rejected_record()), encoding="utf-8"
+    )
+    (export / "check.json").write_text(json.dumps(check), encoding="utf-8")
+    return export
+
+
+def test_a_rejected_finish_superseded_by_an_accepted_one_is_not_in_the_timeout_result(
+    fake_pi, checkout: Path, tmp_path: Path, capsys: pytest.CaptureFixture[str]
+):
+    from associate.harness.pi import REJECTED_HANDBACK_FILENAME
+
+    accepted = {"outcome": "accepted", "accepted": True, "mode": "report"}
+    export = _seed_rejected_then_check(tmp_path, "to-superseded", accepted)
+    code, result = _timeout_result(fake_pi, checkout, tmp_path, capsys, session="to-superseded")
+    assert code == 4
+    assert result["handback_outcome"] == "accepted"
+    assert "rejected_handback" not in result
+    # The file stays in the export as a record of the earlier round.
+    assert (export / REJECTED_HANDBACK_FILENAME).is_file()
+
+
+def test_a_rejected_finish_with_no_accepted_one_after_it_is_still_carried(
+    fake_pi, checkout: Path, tmp_path: Path, capsys: pytest.CaptureFixture[str]
+):
+    refused = {"outcome": "refused", "accepted": False, "mode": "enforce", "run_ended": False}
+    _seed_rejected_then_check(tmp_path, "to-refused", refused)
+    _, result = _timeout_result(fake_pi, checkout, tmp_path, capsys, session="to-refused")
+    assert result["handback_outcome"] == "refused_unresolved"
+    assert result["rejected_handback"]["label"] == "rejected"
+
+
 def test_a_timeout_with_no_rejected_finish_has_no_rejected_field(
     fake_pi, checkout: Path, tmp_path: Path, capsys: pytest.CaptureFixture[str]
 ):
@@ -1550,14 +1588,32 @@ def test_per_run_reasoning_is_recorded_and_models_json_is_unchanged(
     assert result["reasoning"] == other
     assert result["reasoning_source"] == "run"
     assert _models_bytes() == before
-
-    # pi was handed a contract that says so for this run, and only for the run's model.
-    seen = _invocation(tmp_path)["reasoning"]
-    assert seen["worker"] == other
-    for key, entry in contract.load_models()["models"].items():
-        if key != "worker":
-            assert seen[key] == entry["reasoning"]
+    assert _invocation(tmp_path)["reasoning"]["worker"] == other
     assert contract.load_models()["models"]["worker"]["reasoning"] == registry
+
+
+def test_per_run_reasoning_is_run_wide_so_spawned_children_get_it_too(
+    fake_pi, checkout: Path, tmp_path: Path, capsys: pytest.CaptureFixture[str]
+):
+    """A child started by ``spawn_subagent`` reads the same contract copy
+    (``tools/spawn.ts`` hands it the parent's ``ASSOCIATE_CONTRACT_DIR``), so the
+    copy carries the setting for every model that can run, not only the run's own."""
+    from associate import contract
+
+    models = contract.load_models()["models"]
+    usable = sorted(key for key, entry in models.items() if entry.get("status") != "pending")
+    pending = sorted(set(models) - set(usable))
+    assert {"worker", "senses", "cortex"} <= set(usable)
+    assert pending  # the registry holds an entry that cannot run (super-vl)
+
+    code = _run(["--model", "cortex", "--reasoning", "off", "--json"], checkout, tmp_path)
+    result = json.loads(capsys.readouterr().out)
+    assert code == 0
+    seen = _invocation(tmp_path)["reasoning"]
+    assert {key: seen[key] for key in usable} == dict.fromkeys(usable, "off")
+    # An entry that cannot run is left as the registry has it.
+    assert {key: seen[key] for key in pending} == {key: models[key]["reasoning"] for key in pending}
+    assert result["reasoning_applies_to"] == usable
 
 
 def test_per_run_reasoning_leaves_no_contract_copy_behind(
@@ -1568,6 +1624,56 @@ def test_per_run_reasoning_leaves_no_contract_copy_behind(
     seen = Path(_invocation(tmp_path)["contract_dir"])
     assert seen != REPO_ROOT / "associate" / "contract"
     assert not seen.exists()
+
+
+def _contract_copy(tmp_path: Path, models_text: str | None) -> Path:
+    """A copy of the contract whose models.json is *models_text* (None: no directory at all)."""
+    import shutil
+
+    target = tmp_path / "contract-under-test"
+    if models_text is not None:
+        shutil.copytree(REPO_ROOT / "associate" / "contract", target)
+        (target / "models.json").write_text(models_text, encoding="utf-8")
+    return target
+
+
+@pytest.mark.parametrize(
+    "models_text",
+    [None, "{not json", '{"models": {}}', '{"models": []}', "[]"],
+    ids=["no-contract-dir", "not-json", "no-entry-for-the-model", "models-a-list", "a-list"],
+)
+def test_a_contract_copy_that_cannot_be_made_is_a_harness_error_and_leaves_nothing(
+    checkout: Path, tmp_path: Path, monkeypatch: pytest.MonkeyPatch, models_text
+):
+    import tempfile
+
+    scratch = tmp_path / "scratch"
+    scratch.mkdir()
+    monkeypatch.setattr(tempfile, "tempdir", str(scratch))
+    harness = PiHarness(model="worker", reasoning="off")
+    harness.start(checkout, _contract_copy(tmp_path, models_text), "s", tmp_path / "runs")
+    with pytest.raises(HarnessError, match="contract"):
+        harness._prepare_run_contract()
+    assert list(scratch.iterdir()) == []
+
+
+def test_a_failure_after_the_contract_copy_is_made_removes_the_copy(
+    fake_pi, checkout: Path, tmp_path: Path, monkeypatch: pytest.MonkeyPatch, capsys
+):
+    import tempfile
+
+    scratch = tmp_path / "scratch"
+    scratch.mkdir()
+    monkeypatch.setattr(tempfile, "tempdir", str(scratch))
+
+    def refuses(self, task):
+        raise HarnessError("no environment for this run")
+
+    monkeypatch.setattr(PiHarness, "environment", refuses)
+    code = _run(["--reasoning", "off", "--json"], checkout, tmp_path)
+    assert code == 2
+    assert "no environment for this run" in capsys.readouterr().err
+    assert list(scratch.iterdir()) == []
 
 
 def test_a_run_without_reasoning_uses_the_registry_contract_and_says_so(

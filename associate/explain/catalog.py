@@ -274,13 +274,19 @@ and prints no result. The task turn's `final_reply`, `stop_reason` and
 
 ## Reasoning for one run
 
-`--reasoning model-default|on|off` sets the model's reasoning for this run only.
+`--reasoning model-default|on|off` sets the reasoning for this run only.
 `models.json` is never edited: the launcher copies the contract directory to a
-temporary directory, changes the active model's `reasoning` in the copy, points
-pi at it with `ASSOCIATE_CONTRACT_DIR`, and removes the copy when the run ends.
+temporary directory, changes `reasoning` in the copy, points pi at it with
+`ASSOCIATE_CONTRACT_DIR`, and removes the copy when the run ends. The setting is
+run-wide: it is written to every registry model that can run, not only the
+run's own, because a child started with `spawn_subagent` reads the same copy. A
+`pending` entry is left as it is. A run started with `delegate_run` is a
+separate `associate run` and does not get it.
 The result records `reasoning` and `reasoning_source`: `run` when the flag set
-it, `registry` when the model's own entry applied. Any other value exits `1`.
-A harness that does not apply it (`--harness stub`) still records it.
+it (with `reasoning_applies_to`, the models it was set for), `registry` when
+the model's own entry applied. Any other value exits `1`.
+A harness that does not apply it (`--harness stub`) still records it, without
+`reasoning_applies_to`.
 
 ## How the turn ended
 

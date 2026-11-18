@@ -460,3 +460,13 @@ def test_grading_does_not_change_the_task(doc):
     before = copy.deepcopy(task)
     grade_task(task, task["answer"])
     assert task == before
+
+
+@pytest.mark.parametrize("text", ["1.234.567", "1,2,3", "1,000,00", "-1.2,3"])
+def test_a_number_text_that_is_not_one_number_is_a_problem_not_an_exception(text):
+    task = _basic()
+    task["expected"]["must_appear"] = [{"text": text, "kind": "number"}]
+    problems = validate_task(task)
+    assert len(problems) == 1
+    assert repr(text) in problems[0]
+    assert "number" in problems[0]

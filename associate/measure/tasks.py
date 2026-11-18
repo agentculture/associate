@@ -170,11 +170,36 @@ def _items(expected: dict[str, Any]) -> list[tuple[str, dict[str, Any]]]:
     return out
 
 
-def _number_value(text: str) -> float:
+def _number_value(text: str) -> float | None:
+    """The size of a number text, or None when it does not read as one number.
+
+    ``evidence`` accepts any digits joined by ``.`` and ``,`` (``1.234.567``,
+    ``1,2,3``); only thousands groups with commas and one decimal mark are read here.
+    """
     cleaned = text.lstrip("-")
     if _GROUPED.fullmatch(cleaned):
-        return float(cleaned.replace(",", ""))
-    return float(cleaned.replace(",", "."))
+        cleaned = cleaned.replace(",", "")
+    try:
+        return float(cleaned.replace(",", "."))
+    except ValueError:
+        return None
+
+
+def _number_problem(item: dict[str, Any], where: str) -> str | None:
+    value = _number_value(item["text"])
+    if value is None:
+        return (
+            f"{where} holds {item['text']!r} with kind number, which does not read as one "
+            f'number; write it with at most one decimal mark (thousands as "1,048,576") '
+            f"or give it kind text"
+        )
+    if value < SMALL_NUMBER_LIMIT:
+        return (
+            f"{where} holds the bare number {item['text']!r} below "
+            f"{SMALL_NUMBER_LIMIT} with kind number; write it in text form with its "
+            f'label (for example "version 9")'
+        )
+    return None
 
 
 def _expected_problems(expected: Any, name: str) -> list[str]:
@@ -186,12 +211,9 @@ def _expected_problems(expected: Any, name: str) -> list[str]:
     if not loaded["must_appear"] and not loaded["one_of"]:
         problems.append(f"{name}: expected values name no item that must appear")
     for where, item in _items(loaded):
-        if item["kind"] == "number" and _number_value(item["text"]) < SMALL_NUMBER_LIMIT:
-            problems.append(
-                f"{name}: {where} holds the bare number {item['text']!r} below "
-                f"{SMALL_NUMBER_LIMIT} with kind number; write it in text form with its "
-                f'label (for example "version 9")'
-            )
+        problem = _number_problem(item, where) if item["kind"] == "number" else None
+        if problem is not None:
+            problems.append(f"{name}: {problem}")
     return problems
 
 

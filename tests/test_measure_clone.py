@@ -175,3 +175,21 @@ def test_tracked_file_matching_gitignore_is_kept(source: Path, tmp_path: Path):
     git(source, "commit", "-q", "-m", "ignored but tracked")
     result = make_clone(source, commit_of(source), EXCLUDED, tmp_path / "out")
     assert "kept.log" in git(result.path, "ls-files").splitlines()
+
+
+def test_a_tracked_path_left_out_by_an_export_attribute_is_refused_and_named(tmp_path: Path):
+    repo = tmp_path / "attr"
+    repo.mkdir()
+    git(repo, "init", "-q", "-b", "main")
+    write(repo, "README.md", "hello\n")
+    write(repo, "sub/kept-by-grep.txt", "a value the task checker finds\n")
+    write(repo, "docs/accuracy/tasks.json", "{}\n")
+    write(repo, ".gitattributes", "sub/ export-ignore\ndocs/accuracy/ export-ignore\n")
+    git(repo, "add", "-A")
+    git(repo, "commit", "-q", "-m", "first")
+    out, pin = tmp_path / "out", commit_of(repo)
+    with pytest.raises(CloneError, match="sub/kept-by-grep.txt") as raised:
+        make_clone(repo, pin, ["docs/accuracy"], out)
+    # An excluded path the archive left out is not missing: it was to be removed anyway.
+    assert "docs/accuracy" not in str(raised.value)
+    assert list(out.iterdir()) == []

@@ -687,6 +687,45 @@ def test_a_second_runner_on_the_same_results_is_refused(tmp_path, demo, current_
     assert "another runner" in str(nested[0])
 
 
+def _hold_lock(results: Path, kind: int, seconds: float):
+    """Hold a flock of *kind* on the runner's lock file from a thread for *seconds*."""
+    import fcntl
+    import threading
+
+    results.mkdir(parents=True, exist_ok=True)
+    fd = os.open(results / runner_mod.LOCK_FILE, os.O_RDWR | os.O_CREAT, 0o644)
+    fcntl.flock(fd, kind | fcntl.LOCK_NB)
+    timer = threading.Timer(seconds, os.close, [fd])
+    timer.start()
+    return timer
+
+
+def test_a_status_probe_holding_a_shared_lock_does_not_fail_a_starting_runner(tmp_path):
+    import fcntl
+
+    # What `measure status` did while it looked: a shared lock, held for a moment.
+    probe = _hold_lock(tmp_path / "res", fcntl.LOCK_SH, 0.2)
+    try:
+        with runner_mod._locked(tmp_path / "res"):
+            entered = True
+    finally:
+        probe.join()
+    assert entered is True
+
+
+def test_a_lock_another_runner_keeps_is_still_refused(tmp_path, monkeypatch):
+    import fcntl
+
+    monkeypatch.setattr(runner_mod, "LOCK_WAIT_S", 0.3)
+    other = _hold_lock(tmp_path / "res", fcntl.LOCK_EX, 1.5)
+    waiting = runner_mod._locked(tmp_path / "res")
+    try:
+        with pytest.raises(RunnerError, match="another runner holds the lock"):
+            waiting.__enter__()
+    finally:
+        other.join()
+
+
 # --- guards on values read from files ---------------------------------------------------
 
 
@@ -778,6 +817,74 @@ def test_a_stored_plan_with_an_unsafe_session_id_is_refused(
     with pytest.raises(RunnerError, match="plan.json"):
         rerun(launcher)
     assert load_records(results) == []
+
+
+# --- an attempt that ended, restarted under another arm or task -------------------------
+
+
+def _killed_while_storing(results, demo, current_harness, monkeypatch):
+    """One attempt of arm ``a`` (worker) on task ``t`` that ended and was not stored."""
+    demo_repo, demo_head = demo
+    harness_repo, harness_head = current_harness
+    real_store = runner_mod._store_record
+
+    def killed_while_storing(*args, **kwargs):
+        raise KeyboardInterrupt
+
+    monkeypatch.setattr(runner_mod, "_store_record", killed_while_storing)
+    arms, tasks = [Arm("a", harness_head, "worker")], [task("t", demo_head)]
+    with pytest.raises(KeyboardInterrupt):
+        run(arms, tasks, 1, results, demo_repo, harness_repo, Recorder())
+    monkeypatch.setattr(runner_mod, "_store_record", real_store)
+
+    def rerun(arm, the_task, launcher):
+        return run([arm], [the_task], 1, results, demo_repo, harness_repo, launcher)
+
+    return rerun
+
+
+def test_an_ended_attempt_is_not_stored_under_an_arm_edited_since(
+    tmp_path, demo, current_harness, monkeypatch
+):
+    results = tmp_path / "results"
+    rerun = _killed_while_storing(results, demo, current_harness, monkeypatch)
+    edited, same_task = Arm("a", current_harness[1], "cortex", reasoning="off"), task("t", demo[1])
+    launcher = Recorder()
+    with pytest.raises(RunnerError, match="plan.json was stored for arm"):
+        rerun(edited, same_task, launcher)
+    assert load_records(results) == []
+    assert launcher.runs == []
+
+
+def test_an_ended_attempt_is_not_stored_under_a_task_prompt_edited_since(
+    tmp_path, demo, current_harness, monkeypatch
+):
+    results = tmp_path / "results"
+    rerun = _killed_while_storing(results, demo, current_harness, monkeypatch)
+    same_arm = Arm("a", current_harness[1], "worker")
+    edited = task("t", demo[1], prompt="Another question entirely?")
+    launcher = Recorder()
+    with pytest.raises(RunnerError, match="prompt_sha256 differs"):
+        rerun(same_arm, edited, launcher)
+    assert load_records(results) == []
+    assert launcher.runs == []
+
+
+def test_an_ended_attempt_whose_plan_carries_no_identity_is_refused_not_stored(
+    tmp_path, demo, current_harness, monkeypatch
+):
+    results = tmp_path / "results"
+    rerun = _killed_while_storing(results, demo, current_harness, monkeypatch)
+    path = results / "work" / "t" / "a" / "r1" / "a1" / "plan.json"
+    plan = json.loads(path.read_text(encoding="utf-8"))
+    del plan["identity"]  # a plan written before the identity was kept in it
+    path.write_text(json.dumps(plan), encoding="utf-8")
+    same_arm, same_task = Arm("a", current_harness[1], "worker"), task("t", demo[1])
+    launcher = Recorder()
+    with pytest.raises(RunnerError, match="does not say which arm and task"):
+        rerun(same_arm, same_task, launcher)
+    assert load_records(results) == []
+    assert launcher.runs == []
 
 
 def test_a_result_naming_an_export_outside_the_run_is_a_failed_launch_and_is_not_read(
