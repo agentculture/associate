@@ -259,6 +259,29 @@ refused and the model may answer again for accuracy.json `retry_rounds` more
 rounds; a hand-back still failing ends the run with outcome `refused`, and the verb
 exits `3`. `report` mode records what would have been refused and refuses nothing.
 
+## A run that times out
+
+`--timeout` (default 900 seconds) bounds the task turn. When pi does not finish
+in time it is killed with everything it started, and the run still returns a
+result: the same object, built from what the export directory holds, with
+`outcome` `timeout`, `timed_out` true, `timeout_seconds`, and the `export_dir`
+and `walk_path` to read. The `accuracy` block carries the Python re-check counts
+when the export holds facts, and says `python_recheck_ran` false with a
+`not_applicable_reason` when it holds none (a killed run usually holds none). The
+verb exits `4`. A *preflight* that does not finish proved nothing: it exits `2`
+and prints no result. The task turn's `final_reply`, `stop_reason` and
+`lane_error` are absent from a timeout result, because pi never reported them.
+
+## Reasoning for one run
+
+`--reasoning model-default|on|off` sets the model's reasoning for this run only.
+`models.json` is never edited: the launcher copies the contract directory to a
+temporary directory, changes the active model's `reasoning` in the copy, points
+pi at it with `ASSOCIATE_CONTRACT_DIR`, and removes the copy when the run ends.
+The result records `reasoning` and `reasoning_source`: `run` when the flag set
+it, `registry` when the model's own entry applied. Any other value exits `1`.
+A harness that does not apply it (`--harness stub`) still records it.
+
 ## How the turn ended
 
 With `--json`, the result also says how the task turn ended: `final_reply`
@@ -277,6 +300,7 @@ is empty.
     associate run --harness stub
     associate run "Summarize the gate" --check-mode enforce --json
     associate run --continue-from <prior export dir>
+    associate run "Summarize the gate" --reasoning off --timeout 1500 --json
     associate run --export-root <dir> --session-id <id>
     associate run "Fix the failing parser test" --test-command "uv run pytest -q"
 
@@ -287,12 +311,18 @@ is empty.
   unknown or pending `--model`, an empty or unsplittable `--test-command`, a
   non-positive `--test-timeout`, or a `--checkout` that is not a directory
 - `2` the adapter failed closed (no sentinel, or an active writer tool), pi is
-  not on PATH, the run timed out, or the export root is inside the checkout
+  not on PATH, the preflight did not finish, or the export root is inside the
+  checkout
 - `3` the run served but its hand-back failed the check after the allowed rounds
   (`handback_outcome` `refused_after_rounds`, outcome `refused`). The result
   object is still printed on stdout, and a worktree run is kept, not merged
   (`merge=kept`). A caller that reads only the exit code sees a failure; read the
   result for what ran
+- `4` pi did not finish the task turn within `--timeout` and was killed. The
+  result object is still printed on stdout, with `outcome` `timeout`,
+  `timed_out` true and `timeout_seconds`, built from whatever the export holds
+  (the walk and any hand-back files); a worktree run is kept, not merged. See
+  "A run that times out"
 """
 
 _BENCH = """\

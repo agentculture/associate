@@ -80,6 +80,7 @@ import shutil
 import signal
 import subprocess  # nosec B404 - fixed argv, shell=False; the whole point of c13
 import sys
+import tempfile
 import time
 from pathlib import Path
 from typing import Any, Callable, Iterable, Sequence
@@ -139,6 +140,9 @@ EXTENSION_PATH_ENV = "ASSOCIATE_EXTENSION_PATH"
 
 #: A preflight loads extensions and exits; it must never wait a full task budget.
 PREFLIGHT_TIMEOUT = 60.0
+
+#: The result ``outcome`` of a task turn pi did not finish within ``--timeout``.
+TIMEOUT_OUTCOME = "timeout"
 
 _UNSAFE_SEGMENT = re.compile(r"[^A-Za-z0-9._-]+")
 _LEADING_JUNK = re.compile(r"^[.-]+")
@@ -576,6 +580,20 @@ def _drain(proc: subprocess.Popen[str]) -> None:
 # --------------------------------------------------------------- the adapter
 
 
+class RunTimedOut(HarnessError):
+    """pi did not finish within the run's time limit and was killed.
+
+    A subclass of :class:`HarnessError`, so a caller that only knows the base
+    class still sees a failure. The task turn catches it and hands back a result
+    built from the export (outcome ``timeout``); the preflight does not, because
+    a preflight that never finished proved nothing and serves nothing.
+    """
+
+
+#: The reasoning settings ``models.json`` allows (``schemas/models.schema.json``).
+REASONING_SETTINGS = ("model-default", "on", "off")
+
+
 class PiHarness(Harness):
     """Run one associate task on the installed ``pi`` binary."""
 
@@ -590,6 +608,7 @@ class PiHarness(Harness):
         model: str | None = None,
         untrusted_checkout: bool = False,
         check_mode: str | None = None,
+        reasoning: str | None = None,
         executable: str | None = None,
         env: dict[str, str] | None = None,
         warn: Callable[[str], None] | None = None,
@@ -600,6 +619,15 @@ class PiHarness(Harness):
         self._model_key = model
         self._untrusted_checkout = untrusted_checkout
         self._check_mode = check_mode
+        if reasoning is not None and reasoning not in REASONING_SETTINGS:
+            raise HarnessError(
+                f"unknown reasoning setting {reasoning!r}",
+                remediation=f"use one of: {', '.join(REASONING_SETTINGS)}",
+            )
+        self._reasoning = reasoning
+        # The per-run copy of the contract that carries the reasoning override,
+        # alive only while submit() runs.
+        self._run_contract_dir: Path | None = None
         self._executable = executable
         self._base_env = dict(env) if env is not None else None
         self._warn = warn if warn is not None else _warn
@@ -650,11 +678,29 @@ class PiHarness(Harness):
         self._check_version(executable)
 
         base_args = self.pi_arguments()
+        self._prepare_run_contract()
         env = self.environment(task)
         export_dir = self.export_dir
 
-        report = self._run_preflight(executable, base_args, env, export_dir)
-        completed = self._run_task_turn(executable, base_args, env, task, export_dir)
+        try:
+            report = self._run_preflight(executable, base_args, env, export_dir)
+            try:
+                completed = self._run_task_turn(executable, base_args, env, task, export_dir)
+            except RunTimedOut:
+                # pi was killed at --timeout. The walk and any hand-back files
+                # the extension wrote before that are still in the export, so
+                # the result is built from them and marked as a timeout.
+                report = self._read_ready_report(export_dir) or report
+                continue_from = self._continue_from or task.get("continue_from")
+                self._result = {
+                    **self._assemble_result(export_dir, report, continue_from),
+                    "outcome": TIMEOUT_OUTCOME,
+                    "timed_out": True,
+                    "timeout_seconds": self._timeout,
+                }
+                return
+        finally:
+            self._drop_run_contract()
 
         # The task run's own session_start rewrites ready.json; the sentinel
         # event is only a fallback for a pi that somehow wrote no file, and the
@@ -791,6 +837,7 @@ class PiHarness(Harness):
             # registry default) and its lobes role — which model actually ran.
             "model": self.model_key(),
             "lobes_role": self.model_entry().get("lobes_role"),
+            **self._reasoning_record(),
             **accuracy_result(
                 export_dir,
                 contract.load_accuracy(),
@@ -798,6 +845,46 @@ class PiHarness(Harness):
                 check_mode=self._check_mode,
             ),
         }
+
+    # -- per-run reasoning -------------------------------------------------
+
+    def _reasoning_record(self) -> dict[str, Any]:
+        """The reasoning setting this run used and where it came from.
+
+        ``run`` when ``--reasoning`` set it for this run, ``registry`` when the
+        model's own ``models.json`` entry applied.
+        """
+        if self._reasoning is not None:
+            return {"reasoning": self._reasoning, "reasoning_source": "run"}
+        return {
+            "reasoning": self.model_entry().get("reasoning"),
+            "reasoning_source": "registry",
+        }
+
+    def _prepare_run_contract(self) -> None:
+        """Give this run a contract whose active model carries the reasoning override.
+
+        ``models.json`` is never edited: the contract directory is copied to a
+        temporary directory, the copy's entry for the run's model is changed,
+        and pi is pointed at the copy with ``ASSOCIATE_CONTRACT_DIR``. The copy
+        is removed when the run ends. With no override pi reads the real one.
+        """
+        self._drop_run_contract()
+        if self._reasoning is None or self._contract_dir is None:
+            return
+        key = self.model_key()
+        copy = Path(tempfile.mkdtemp(prefix="associate-contract-")) / "contract"
+        shutil.copytree(self._contract_dir, copy)
+        models_path = copy / "models.json"
+        registry = json.loads(models_path.read_text(encoding="utf-8"))
+        registry["models"][key]["reasoning"] = self._reasoning
+        models_path.write_text(json.dumps(registry, indent=2) + "\n", encoding="utf-8")
+        self._run_contract_dir = copy
+
+    def _drop_run_contract(self) -> None:
+        if self._run_contract_dir is not None:
+            shutil.rmtree(self._run_contract_dir.parent, ignore_errors=True)
+            self._run_contract_dir = None
 
     def collect(self) -> dict[str, Any]:
         if self._result is None:
@@ -845,7 +932,7 @@ class PiHarness(Harness):
         except subprocess.TimeoutExpired as err:
             _kill_tree(proc)
             _drain(proc)
-            raise HarnessError(
+            raise RunTimedOut(
                 f"pi did not finish within {timeout:g}s",
                 remediation="raise --timeout, or check that the configured lane is reachable",
             ) from err
@@ -961,7 +1048,7 @@ class PiHarness(Harness):
             raise HarnessError("PiHarness.environment() called before start()")
 
         env = dict(self._base_env if self._base_env is not None else os.environ)
-        env["ASSOCIATE_CONTRACT_DIR"] = str(self._contract_dir)
+        env["ASSOCIATE_CONTRACT_DIR"] = str(self._run_contract_dir or self._contract_dir)
         # The extension's guard confines writes to ASSOCIATE_CHECKOUT_ROOT
         # (lib/runtime.ts): it is always this run's own checkout (the run
         # worktree for a mutating run), never a value inherited from the

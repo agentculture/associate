@@ -14,11 +14,17 @@ Exit codes
 ``0`` the run served, and both artifact paths are on stdout.
 ``1`` an unknown ``--harness`` (the error lists the registered adapters).
 ``2`` the adapter failed closed, or its environment is not usable — pi absent,
-      a timeout, an export root inside the examined checkout.
+      a preflight that did not finish, an export root inside the examined
+      checkout.
 ``3`` the run served but its hand-back failed the check after the allowed
       rounds (``handback_outcome`` is ``refused_after_rounds``, outcome
       ``refused``). The result object is still printed on stdout; a worktree run
       is kept, not merged.
+``4`` pi did not finish the task turn within ``--timeout`` and was killed
+      (outcome ``timeout``, ``timed_out`` true). The result object is still
+      printed on stdout, built from whatever the export holds — the walk and
+      any hand-back files — with the re-check counts when it holds facts; a
+      worktree run is kept, not merged.
 
 Worktree isolation (spec c51, t15)
 ----------------------------------
@@ -69,6 +75,7 @@ from associate import contract
 from associate.cli._errors import (
     EXIT_ENV_ERROR,
     EXIT_HANDBACK_REFUSED,
+    EXIT_RUN_TIMEOUT,
     EXIT_USER_ERROR,
     CliError,
 )
@@ -92,6 +99,10 @@ _RESULT_KEYS = (
     "worktree",
     "run_branch",
     "tests",
+    "timed_out",
+    "timeout_seconds",
+    "reasoning",
+    "reasoning_source",
     "check_mode",
     "handback_outcome",
     "answer_path",
@@ -101,6 +112,12 @@ _RESULT_KEYS = (
 #: The result's ``handback_outcome`` that makes the verb exit 3 (the check refused
 #: the hand-back on every allowed round and the run ended).
 _HANDBACK_REFUSED = "refused_after_rounds"
+
+#: The result ``outcome`` of a run killed at ``--timeout`` (``PiHarness`` sets it).
+_TIMEOUT_OUTCOME = "timeout"
+
+#: ``--reasoning`` values: the settings ``models.json`` allows for a model.
+_REASONING_CHOICES = ("model-default", "on", "off")
 
 
 def _build(harness_cls: type, args: argparse.Namespace) -> Any:
@@ -117,6 +134,7 @@ def _build(harness_cls: type, args: argparse.Namespace) -> Any:
         "model": args.model,
         "untrusted_checkout": args.untrusted_checkout,
         "check_mode": args.check_mode,
+        "reasoning": args.reasoning,
     }
     try:
         parameters = inspect.signature(harness_cls).parameters
@@ -246,6 +264,10 @@ def _run(
 
     if "check_mode" not in result:
         result = {**result, "check_mode": args.check_mode}
+    if args.reasoning and "reasoning" not in result:
+        # An adapter that does not apply the setting (the stub) still records
+        # what the operator asked for, so the result never omits it.
+        result = {**result, "reasoning": args.reasoning, "reasoning_source": "run"}
     emit_result(result if json_mode else _render(result), json_mode=json_mode)
     if result.get("handback_outcome") == _HANDBACK_REFUSED:
         emit_diagnostic(
@@ -254,6 +276,13 @@ def _run(
             + ("; the run worktree is kept, not merged" if result.get("merge") == "kept" else "")
         )
         return EXIT_HANDBACK_REFUSED
+    if result.get("outcome") == _TIMEOUT_OUTCOME:
+        emit_diagnostic(
+            f"associate: pi did not finish within {args.timeout:g}s and was killed; the result "
+            "was built from the export directory"
+            + ("; the run worktree is kept, not merged" if result.get("merge") == "kept" else "")
+        )
+        return EXIT_RUN_TIMEOUT
     return 0
 
 
@@ -510,13 +539,23 @@ def register(sub: argparse._SubParsersAction) -> None:
         "--timeout",
         type=float,
         default=900.0,
-        help="Seconds to wait for the harness (default: 900).",
+        help="Seconds to wait for the harness (default: 900). A task turn that does not "
+        "finish is killed and its result printed with outcome 'timeout', exit 4.",
     )
     p.add_argument(
         "--model",
         default=None,
         help="Registry model to run (from the contract's models.json; default: the "
         "registry's default). Unknown or pending models exit 1.",
+    )
+    p.add_argument(
+        "--reasoning",
+        choices=_REASONING_CHOICES,
+        default=None,
+        help="Reasoning setting for this run only, overriding the model's entry in "
+        "models.json (which is never edited: pi is handed a temporary copy of the "
+        "contract). Recorded in the result as reasoning, with reasoning_source 'run'; "
+        "without the flag the registry's value is recorded with source 'registry'.",
     )
     p.add_argument(
         "--untrusted-checkout",
