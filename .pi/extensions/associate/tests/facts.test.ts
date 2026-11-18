@@ -210,6 +210,32 @@ test("a delegate_status quote straddling the harness fields and final_reply is s
   assert.equal(f1.first_hand, false);
 });
 
+test("a delegate_status quote from the rendered answer is second-hand", () => {
+  const text = JSON.stringify({
+    ok: true,
+    result: {
+      outcome: "ok",
+      merge: "merged",
+      answer: "# Answer\n\nFinish summary: every test passed here",
+      final_reply: "all good here",
+    },
+  });
+  const input: HandbackInput = {
+    payload: {
+      facts: [
+        { id: "f1", value: "passed", source: "w1", quote: "every test passed here" },
+        { id: "f2", value: "merged", source: "w1", quote: '"merge":"merged"' },
+      ],
+    },
+    entries: [{ id: "w1", tool: "delegate_status", saved_result: "results/w1.txt" }],
+    results: { w1: text },
+  };
+  const facts = checkHandback(input, accuracy).facts;
+  assert.equal(facts[0].verdict, "passed");
+  assert.equal(facts[0].first_hand, false);
+  assert.equal(facts[1].first_hand, true);
+});
+
 // --- AC4: source references -----------------------------------------------
 
 test("parseSourceRef reads an optional run label and a walk id", () => {

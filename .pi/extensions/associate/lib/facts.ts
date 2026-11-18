@@ -188,9 +188,13 @@ export interface HandbackCheck {
 const SOURCE_KINDS: readonly SourceKind[] = ["file", "tool", "web", "memory", "agent", "harness"];
 /** Kinds that are another model's words or a remembered claim, not a measurement. */
 const SECOND_HAND_KINDS: ReadonlySet<SourceKind> = new Set<SourceKind>(["agent", "memory"]);
-/** The tool whose result mixes harness-measured fields with the child's own `final_reply`. */
+/** The tool whose result mixes harness-measured fields with the child's own words. */
 const DELEGATE_STATUS_TOOL = "delegate_status";
-const CHILD_ACCOUNT_KEY = "final_reply";
+/**
+ * The result fields that hold the child's own words: its final message, and the
+ * rendered answer (which carries its finish summary and that message).
+ */
+const CHILD_ACCOUNT_KEYS: readonly string[] = ["final_reply", "answer"];
 
 const REFERENCE = /^(?:([A-Za-z0-9_-]+):)?(w[1-9][0-9]*)$/;
 const LABEL = /^[A-Za-z0-9_-]+$/;
@@ -292,28 +296,26 @@ function reportsFailure(text: string | null): boolean {
   }
 }
 
-/** Find the child's own account (`final_reply`) anywhere in a parsed result. */
-function findChildAccount(value: unknown): string | null {
-  if (!value || typeof value !== "object") return null;
+/** Collect every child-account field (key and text) anywhere in a parsed result. */
+function findChildAccounts(value: unknown, out: Map<string, [string, string]>): void {
+  if (!value || typeof value !== "object") return;
   if (Array.isArray(value)) {
-    for (const item of value) {
-      const found = findChildAccount(item);
-      if (found !== null) return found;
+    for (const item of value) findChildAccounts(item, out);
+    return;
+  }
+  for (const [key, item] of Object.entries(value as Record<string, unknown>)) {
+    if (CHILD_ACCOUNT_KEYS.includes(key) && typeof item === "string") {
+      const encoded = `${JSON.stringify(key)}:${JSON.stringify(item)}`;
+      out.set(encoded, [key, item]);
+    } else {
+      findChildAccounts(item, out);
     }
-    return null;
   }
-  const obj = value as Record<string, unknown>;
-  if (typeof obj[CHILD_ACCOUNT_KEY] === "string") return obj[CHILD_ACCOUNT_KEY] as string;
-  for (const item of Object.values(obj)) {
-    const found = findChildAccount(item);
-    if (found !== null) return found;
-  }
-  return null;
 }
 
 /**
- * The delegate_status saved text with the child's `final_reply` emptied, or
- * null when the text is not JSON carrying one in the encoding it was written.
+ * The delegate_status saved text with the child's own words emptied, or null
+ * when the text is not JSON carrying them in the encoding it was written.
  */
 function harnessPart(text: string): string | null {
   let parsed: unknown;
@@ -322,11 +324,14 @@ function harnessPart(text: string): string | null {
   } catch {
     return null;
   }
-  const account = findChildAccount(parsed);
-  if (account === null) return text;
-  const encoded = `${JSON.stringify(CHILD_ACCOUNT_KEY)}:${JSON.stringify(account)}`;
-  if (!text.includes(encoded)) return null;
-  return text.split(encoded).join(`${JSON.stringify(CHILD_ACCOUNT_KEY)}:""`);
+  const accounts = new Map<string, [string, string]>();
+  findChildAccounts(parsed, accounts);
+  let out = text;
+  for (const [encoded, [key]] of accounts) {
+    if (!text.includes(encoded)) return null;
+    out = out.split(encoded).join(`${JSON.stringify(key)}:""`);
+  }
+  return out;
 }
 
 function isFirstHand(

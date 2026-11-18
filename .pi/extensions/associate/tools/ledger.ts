@@ -307,8 +307,8 @@ export function createLedgerTools(ctx: AssociateContext, deps: LedgerDeps = {}):
                 `refs names ${unknown.join(", ")}, which this run's walk never issued (${have}).`,
                 { field: "refs", refs: unknown, issued_count: issued.length },
                 issued.length === 0
-                  ? "Remove the walk-id refs, or make the call you mean to cite first; each result ends with its own walk id."
-                  : `Use a walk id from this run (${issued[0]} to ${issued[issued.length - 1]}; each result ends with its own walk id), or drop the ref.`,
+                  ? "Remove the walk-id refs, or make the call you mean to cite first; each result starts with its own walk id."
+                  : `Use a walk id from this run (${issued[0]} to ${issued[issued.length - 1]}; each result starts with its own walk id), or drop the ref.`,
               ),
             );
           }

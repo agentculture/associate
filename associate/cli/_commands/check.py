@@ -67,7 +67,8 @@ def render(result: dict[str, Any]) -> str:
 def cmd_check(args: argparse.Namespace) -> int:
     json_mode = bool(getattr(args, "json", False))
     try:
-        result = inspect_export(Path(args.export_dir), load_accuracy())
+        prior = Path(args.continue_from) if getattr(args, "continue_from", None) else None
+        result = inspect_export(Path(args.export_dir), load_accuracy(), continue_from=prior)
     except ExportError as err:
         raise CliError(
             code=EXIT_USER_ERROR,
@@ -84,5 +85,13 @@ def register(sub: argparse._SubParsersAction) -> None:
         help="Re-check an export directory's hand-back facts and print the counts.",
     )
     p.add_argument("export_dir", help="An export directory holding walk.jsonl.")
+    p.add_argument(
+        "--continue-from",
+        metavar="DIR",
+        help=(
+            "The export directory the run continued from (what `associate run "
+            "--continue-from` was given), so facts citing prior:wN can be checked."
+        ),
+    )
     p.add_argument("--json", action="store_true", help="Emit structured JSON.")
     p.set_defaults(func=cmd_check)

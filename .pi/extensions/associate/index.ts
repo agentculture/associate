@@ -313,7 +313,7 @@ export default async function (pi: ExtensionAPI) {
         Type.Array(
           Type.Object({
             id: text("Fact id: f1, f2, …"),
-            value: text("The value found: a number, an identifier, a path, or a short phrase."),
+            value: text("The value found, written as text: a number, an identifier, a path, or a short phrase."),
             source: text(
               "The walk id the fact came from, exactly as the harness line on that tool result showed it " +
                 "(w3), or a run label and a walk id for a prior or child run (prior:w3, c1:w2). Never a path.",

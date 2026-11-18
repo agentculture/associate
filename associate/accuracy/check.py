@@ -62,7 +62,8 @@ _WS = re.compile(r"[ \t\n\r\f\v]")
 #: Kinds that are another model's words or a remembered claim, not a measurement.
 _SECOND_HAND = frozenset({"agent", "memory"})
 _DELEGATE_STATUS = "delegate_status"
-_CHILD_ACCOUNT_KEY = "final_reply"
+#: Result fields holding the child's own words: its final message and the rendered answer.
+_CHILD_ACCOUNT_KEYS = ("final_reply", "answer")
 
 
 def parse_source_ref(ref: Any) -> dict[str, Any]:
@@ -117,38 +118,41 @@ def _reports_failure(text: Optional[str]) -> bool:
     return isinstance(parsed, dict) and parsed.get("ok") is False
 
 
-def _find_child_account(value: Any) -> Optional[str]:
+def _encode_account(key: str, account: str) -> str:
+    # JSON.stringify (the TypeScript side) leaves non-ASCII as is.
+    return (
+        f"{json.dumps(key, ensure_ascii=False)}:"
+        f"{json.dumps(account, ensure_ascii=False, separators=(',', ':'))}"
+    )
+
+
+def _find_child_accounts(value: Any, out: dict[str, str]) -> None:
+    """Collect every child-account field anywhere in a parsed result (encoded text to key)."""
     if isinstance(value, list):
         for item in value:
-            found = _find_child_account(item)
-            if found is not None:
-                return found
-        return None
-    if isinstance(value, dict):
-        if isinstance(value.get(_CHILD_ACCOUNT_KEY), str):
-            return value[_CHILD_ACCOUNT_KEY]
-        for item in value.values():
-            found = _find_child_account(item)
-            if found is not None:
-                return found
-    return None
+            _find_child_accounts(item, out)
+    elif isinstance(value, dict):
+        for key, item in value.items():
+            if key in _CHILD_ACCOUNT_KEYS and isinstance(item, str):
+                out[_encode_account(key, item)] = key
+            else:
+                _find_child_accounts(item, out)
 
 
 def _harness_part(text: str) -> Optional[str]:
-    """The delegate_status saved text with the child's ``final_reply`` emptied."""
+    """The delegate_status saved text with the child's own words emptied."""
     try:
         parsed = json.loads(text)
     except ValueError:
         return None
-    account = _find_child_account(parsed)
-    if account is None:
-        return text
-    key = json.dumps(_CHILD_ACCOUNT_KEY, ensure_ascii=False)
-    # JSON.stringify (the TypeScript side) leaves non-ASCII as is.
-    encoded = f"{key}:{json.dumps(account, ensure_ascii=False, separators=(',', ':'))}"
-    if encoded not in text:
-        return None
-    return text.replace(encoded, f'{key}:""')
+    accounts: dict[str, str] = {}
+    _find_child_accounts(parsed, accounts)
+    out = text
+    for encoded, key in accounts.items():
+        if encoded not in text:
+            return None
+        out = out.replace(encoded, f'{json.dumps(key, ensure_ascii=False)}:""')
+    return out
 
 
 def _is_first_hand(

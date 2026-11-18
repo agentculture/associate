@@ -420,7 +420,8 @@ the cause — so know them before you add a verb.
    `_dispatch()` catches `CliError`, and wraps *any* other exception into one
    pointing at the issue tracker. A handler returns `None` (→ exit 0) or an
    `int` exit code. Exit-code policy: `0` success, `1` user-input error, `2`
-   environment/setup error, `3+` reserved.
+   environment/setup error, `3` a hand-back refused after the allowed rounds
+   (`associate run` only, result still printed), `4+` reserved.
 
 3. **Argparse errors route through the same contract.** `_CliArgumentParser`
    overrides `.error()` to emit `error:` / `hint:` and exit `1` — not argparse's

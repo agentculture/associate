@@ -351,6 +351,11 @@ the calls are still listed.
 
     associate check <export-dir>
     associate check <export-dir> --json
+    associate check <export-dir> --continue-from <prior-export-dir>
+
+For a run started with `associate run --continue-from`, pass the same directory
+here. The export does not record it, and without it every fact citing `prior:wN`
+is reported as refused (`source_unknown`).
 
 ## Exit codes
 

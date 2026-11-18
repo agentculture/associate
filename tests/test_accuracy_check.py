@@ -406,3 +406,33 @@ def test_a_child_id_with_a_non_ascii_digit_is_not_linked(tmp_path, digit):
     ]
     walk.write_text("".join(json.dumps(line) + "\n" for line in lines), encoding="utf-8")
     assert check_mod._child_links(walk) == [("c11", "/x/b/walk.jsonl")]
+
+
+def test_a_delegate_status_quote_from_the_rendered_answer_is_second_hand():
+    """The result's `answer` holds the child's own words, like `final_reply`."""
+    text = json.dumps(
+        {
+            "ok": True,
+            "result": {
+                "outcome": "ok",
+                "merge": "merged",
+                "answer": "# Answer\n\nFinish summary: every test passed here",
+                "final_reply": "all good here",
+            },
+        },
+        separators=(",", ":"),
+    )
+    handback = {
+        "payload": {
+            "facts": [
+                {"id": "f1", "value": "passed", "source": "w1", "quote": "every test passed here"},
+                {"id": "f2", "value": "merged", "source": "w1", "quote": '"merge":"merged"'},
+            ]
+        },
+        "entries": [{"id": "w1", "tool": "delegate_status", "saved_result": "results/w1.txt"}],
+        "results": {"w1": text},
+    }
+    facts = check_mod.check_handback(handback, load_accuracy())["facts"]
+    assert facts[0]["verdict"] == "passed"
+    assert facts[0]["first_hand"] is False
+    assert facts[1]["first_hand"] is True

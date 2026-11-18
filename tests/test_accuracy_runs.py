@@ -162,3 +162,20 @@ def test_load_handback_input_has_the_shapes_check_handback_accepts(tmp_path: Pat
     assert set(loaded["prior_runs"]["prior"]) >= {"entries", "results"}
     assert loaded["children"] == []
     assert loaded["payload"]["facts"][0]["id"] == "f1"
+
+
+def test_the_check_verb_takes_continue_from(tmp_path: Path, capsys):
+    from associate.cli import main
+
+    prior = _export(tmp_path / "prior" / "export", "prior text, quotable line\n")
+    current = _export(tmp_path / "cur" / "export")
+    _write_facts(current, [_fact("prior:w1", "prior text, quotable line")])
+
+    assert main(["check", str(current), "--json"]) == 0
+    without = json.loads(capsys.readouterr().out)
+    assert without["facts"][0]["reason"] == "source_unknown"
+
+    assert main(["check", str(current), "--continue-from", str(prior), "--json"]) == 0
+    with_prior = json.loads(capsys.readouterr().out)
+    assert with_prior["facts"][0]["verdict"] == "passed"
+    assert with_prior["facts"][0]["run"] == "prior"
