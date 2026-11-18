@@ -1,0 +1,316 @@
+{
+  "slug": "associate-decider-fact-score-and-graded-measuremen",
+  "title": "associate decider fact score and graded measurement",
+  "schema_version": 6,
+  "status": "drafting",
+  "created": "2026-11-18T07:39:16Z",
+  "updated": "2026-11-18T07:41:06Z",
+  "claims": [
+    {
+      "id": "c1",
+      "kind": "announcement",
+      "text": "associate scores each reported fact with the decider (does the quote support the value) beside the quote check, and a graded before/after measurement with a hidden answer key shows whether answers are more often correct",
+      "origin": "user",
+      "status": "confirmed",
+      "honesty_conditions": [],
+      "hard_questions": [],
+      "links": [],
+      "instruction": "",
+      "revisions": []
+    },
+    {
+      "id": "c2",
+      "kind": "requirement",
+      "text": "at finish, after the quote check, the extension asks the decider one question per fact that passed the quote check (does the quote, on its own, state or directly show the value) and stores the score per fact in check.json and a count in report.json under their own names; the score never enters accepted, the refusal list, or the passed, refused and unchecked counts",
+      "origin": "llm",
+      "status": "proposed",
+      "honesty_conditions": [],
+      "hard_questions": [],
+      "links": [],
+      "instruction": "Grounded in scope findings s6 and s7. Fetch the score in index.ts after checkHandback; keep it in the saved object the message_end handler rewrites from; declare the new count in report.schema.json.",
+      "revisions": []
+    },
+    {
+      "id": "c3",
+      "kind": "requirement",
+      "text": "the score is fetched by a small client of its own, not by the gate's evaluate path: no Super tier, no read-only fallback, no gate id and no gate line in the walk; a missing key, timeout, non-2xx or malformed answer is recorded as not scored and never as passed, and finish still writes all its files",
+      "origin": "llm",
+      "status": "proposed",
+      "honesty_conditions": [],
+      "hard_questions": [],
+      "links": [],
+      "instruction": "Grounded in scope findings s2 and s3. Reuse buildClefRequest and deciderUrl or copy their pattern; do not call createGate().evaluate.",
+      "revisions": []
+    },
+    {
+      "id": "c4",
+      "kind": "requirement",
+      "text": "the question wording, the cut-off, the timeout and a per-model on/off switch for the score live in accuracy.json and its schema, and nowhere in code",
+      "origin": "llm",
+      "status": "proposed",
+      "honesty_conditions": [],
+      "hard_questions": [],
+      "links": [],
+      "instruction": "Grounded in scope finding s7. Declare each new key in accuracy.schema.json and lib/contract.ts.",
+      "revisions": []
+    },
+    {
+      "id": "c5",
+      "kind": "requirement",
+      "text": "the Python re-check copies the per-fact score from the export with a label naming the extension as its source, as it does for unchecked_text; it never calls the decider, and an export without the score still loads",
+      "origin": "llm",
+      "status": "proposed",
+      "honesty_conditions": [],
+      "hard_questions": [],
+      "links": [],
+      "instruction": "Grounded in scope finding s4. Follow the unchecked_text and unchecked_text_source pattern in associate/accuracy/check.py.",
+      "revisions": []
+    },
+    {
+      "id": "c6",
+      "kind": "requirement",
+      "text": "check_quote returns the support score for a quote and value as one added key beside the matcher verdict, so the model can check a claim before it hands back; the existing keys do not change",
+      "origin": "llm",
+      "status": "proposed",
+      "honesty_conditions": [],
+      "hard_questions": [],
+      "links": [],
+      "instruction": "Grounded in scope finding s6. check.test.ts:167-190 pins the existing keys.",
+      "revisions": []
+    },
+    {
+      "id": "c7",
+      "kind": "requirement",
+      "text": "the rendered answer marks each fact with both signals separately: quote found, and whether the quote supports the value with its score, or not scored",
+      "origin": "llm",
+      "status": "proposed",
+      "honesty_conditions": [],
+      "hard_questions": [],
+      "links": [],
+      "instruction": "Grounded in scope finding s6. The marker goes in factLine in lib/render.ts.",
+      "revisions": []
+    },
+    {
+      "id": "c8",
+      "kind": "requirement",
+      "text": "during a measured run the model cannot read the answer key by any tool (read, shell, grep, find); a test proves the key is absent from the checkout a measured run examines",
+      "origin": "llm",
+      "status": "proposed",
+      "honesty_conditions": [],
+      "hard_questions": [],
+      "links": [],
+      "instruction": "Grounded in scope findings s8 and s9. tools/search.ts has no deny logic, so a deny-list alone is not enough.",
+      "revisions": []
+    },
+    {
+      "id": "c9",
+      "kind": "requirement",
+      "text": "each measurement task carries structured expected values that a script can grade right or wrong without a model, and the grader scores the final answer, not only the fact quotes",
+      "origin": "llm",
+      "status": "proposed",
+      "honesty_conditions": [],
+      "hard_questions": [],
+      "links": [],
+      "instruction": "Grounded in scope findings s8 and s10. Today the answer is free prose and no grader exists.",
+      "revisions": []
+    },
+    {
+      "id": "c10",
+      "kind": "requirement",
+      "text": "a committed runner starts every arm of the comparison (tasks by harness version by mode by repeat) with fixed settings and stores each run's graded result, so no step is done by hand",
+      "origin": "llm",
+      "status": "proposed",
+      "honesty_conditions": [],
+      "hard_questions": [],
+      "links": [],
+      "instruction": "Grounded in scope findings s10 and s11.",
+      "revisions": []
+    },
+    {
+      "id": "c11",
+      "kind": "requirement",
+      "text": "a run that hits its time limit still returns a result object naming the timeout, with whatever the export holds, and reasoning can be set for one run without editing the contract (issue #22)",
+      "origin": "llm",
+      "status": "proposed",
+      "honesty_conditions": [],
+      "hard_questions": [],
+      "links": [],
+      "instruction": "Grounded in scope finding s5.",
+      "revisions": []
+    },
+    {
+      "id": "c12",
+      "kind": "boundary",
+      "text": "checkHandback, the matcher and their shared vectors stay pure and unchanged in behaviour: no network call is added inside them",
+      "origin": "llm",
+      "status": "proposed",
+      "honesty_conditions": [],
+      "hard_questions": [],
+      "links": [],
+      "instruction": "Grounded in scope finding s6.",
+      "revisions": []
+    },
+    {
+      "id": "c13",
+      "kind": "boundary",
+      "text": "gate.json is not changed and stays version 9; nothing in lobes-cli or colleague is changed; no runtime dependency is added",
+      "origin": "llm",
+      "status": "proposed",
+      "honesty_conditions": [],
+      "hard_questions": [],
+      "links": [],
+      "instruction": "Grounded in scope findings s2 and s3.",
+      "revisions": []
+    },
+    {
+      "id": "c14",
+      "kind": "boundary",
+      "text": "no model is moved to enforce mode by this work, and no refusal is made on the decider score; the score is report-only until a live run in report mode is recorded",
+      "origin": "llm",
+      "status": "proposed",
+      "honesty_conditions": [],
+      "hard_questions": [],
+      "links": [],
+      "instruction": "Grounded in scope finding s7 and issue #29.",
+      "revisions": []
+    },
+    {
+      "id": "c15",
+      "kind": "non_goal",
+      "text": "splitting summary text into single assertions and scoring each one; scoring a value against the whole source text; a per-run final report (issue #28); the checker findings in issue #24",
+      "origin": "llm",
+      "status": "proposed",
+      "honesty_conditions": [],
+      "hard_questions": [],
+      "links": [],
+      "instruction": "",
+      "revisions": []
+    },
+    {
+      "id": "c16",
+      "kind": "non_goal",
+      "text": "a grader or ledger in evidence-cli, rigor-cli or workledger-cli: none has domain code today, so the grader starts in associate",
+      "origin": "llm",
+      "status": "proposed",
+      "honesty_conditions": [],
+      "hard_questions": [],
+      "links": [],
+      "instruction": "Grounded in scope finding s1.",
+      "revisions": []
+    },
+    {
+      "id": "c17",
+      "kind": "assumption",
+      "text": "a report-only signal with no refusal reason needs no entry in the checks list and so no motivating failure yet; a real recorded case of a found quote that does not support its value is needed before it can ever refuse",
+      "origin": "llm",
+      "status": "proposed",
+      "honesty_conditions": [],
+      "hard_questions": [],
+      "links": [],
+      "instruction": "Grounded in scope finding s7.",
+      "revisions": []
+    },
+    {
+      "id": "c18",
+      "kind": "assumption",
+      "text": "scoring at finish does not starve the safety gate: within one session the model is waiting on finish, so its own gate calls are not in flight; other sessions and children share the decider's single lock",
+      "origin": "llm",
+      "status": "proposed",
+      "honesty_conditions": [],
+      "hard_questions": [],
+      "links": [],
+      "instruction": "Grounded in scope finding s3. Not measured; check it with children and a second session before relying on it.",
+      "revisions": []
+    }
+  ],
+  "open_vagueness": [
+    {
+      "id": "v1",
+      "text": "whether the decider's yes/no score is calibrated for quote-and-value pairs: lobes-cli documents calibration on 418 other questions only; the replay in issue #29 had 85 facts, one rater and an untuned 0.5 cut-off",
+      "kind": "unknown_nonblocking",
+      "claim_id": null,
+      "resolved": false,
+      "resolution": "",
+      "resolution_claim_id": null
+    },
+    {
+      "id": "v2",
+      "text": "how many tasks, from which repositories, and how many repeats the comparison needs before a difference between arms means anything",
+      "kind": "unknown_blocking",
+      "claim_id": null,
+      "resolved": false,
+      "resolution": "",
+      "resolution_claim_id": null
+    }
+  ],
+  "scope_entries": [
+    {
+      "id": "s1",
+      "surface": "sibling repos: evidence-cli 0.6.1, rigor-cli 0.7.0, workledger-cli 0.8.0 (origin/main), coherence-cli 0.6.1",
+      "finding": "evidence-cli and rigor-cli are template scaffolds with no domain code (evidence-cli pyproject.toml:4 promises grading, tree has only scaffold verbs; rigor-cli README.md:66-70 says the ledger is not implemented). workledger-cli has append/list with free-string refs and no verify verb. coherence-cli quality fidelity only detects that a quote exists and emits quote_accuracy_unverified (coherence/quality/heuristics.py:91). None reads an associate export, none grades an answer right or wrong, none scores a quote against a value. So neither the answer grader nor the per-fact score has an existing home outside associate.",
+      "seeds": []
+    },
+    {
+      "id": "s2",
+      "surface": ".pi/extensions/associate/lib/gate.ts and associate/contract/gate.json (the decider client)",
+      "finding": "buildClefRequest, deciderUrl and judgeClefAnswers are exported (gate.ts:695-784) but tied to the gate's question set and allow rules; askClef, withTimeout and raceAbort, which send and time out, are not exported (gate.ts:790-874). createGate().evaluate mixes in the Super tier, the read-only fallback and g-numbered gate ids (gate.ts:1165-1259): on a decider outage the read-only fallback returns allow for a non-mutating call, which would be wrong for a fact score. gate.json says to bump its version on any change to a question (gate.json:2), so fact questions must not go in it. A truncated state is never sent to CLEF (gate.ts:1189); the limit is 16384 tokens (gate.json:8).",
+      "seeds": []
+    },
+    {
+      "id": "s3",
+      "surface": "lobes-cli decider service (docs/decider.md, lobes/decider_sidecar/, lobes/gateway/server.py) at HEAD 04c86a0",
+      "finding": "POST /v1/systemone takes one state and several questions per request, no batch of states (clef_vllm.py:84-106); one request at a time per sidecar behind a lock (clef_vllm.py:311), so end-of-run fact scoring queues with live gate calls, whose timeout is 30 s (gate.ts:93). Median latency about 516 ms at 1,024 tokens or fewer (docs/decider.md:58). Calibration is documented on 418 labelled questions, top-1 0.9378 (docs/decider.md:43-58); nothing documents yes/no scores on quote-and-claim pairs. The service keeps no state and nothing says it is for the gate only. A third question type, score, exists and associate does not use it (clef_vllm.py:70).",
+      "seeds": []
+    },
+    {
+      "id": "s4",
+      "surface": "associate/accuracy/check.py, associate/cli/_commands/check.py, the run result (Python re-check)",
+      "finding": "Python recomputes counts and verdicts from walk.jsonl, results and facts.json and never uses the extension's (check.py:894-896); the one value it copies is unchecked_text, labelled unchecked_text_source: extension (check.py:920-924), which is the pattern for a score it cannot recompute. The re-check is documented as standard library only, no model called (check.py:1-7). _check_fact builds each fact from a fixed set of keys (check.py:446-453), so a score in the saved files would be dropped unless copied on purpose. report.schema.json and the fact items of facts.schema.json forbid extra properties (report.schema.json:7, facts.schema.json:19). A missing optional field read with a guard is safe for old exports (check.py:855-860).",
+      "seeds": []
+    },
+    {
+      "id": "s5",
+      "surface": "associate/harness/pi.py and associate/cli/_commands/run.py (timeouts, reasoning, continue-from; issue #22)",
+      "finding": "On --timeout the launcher kills pi and raises HarnessError (pi.py:844-851); _assemble_result is never reached (pi.py:760-770), so the caller gets exit 2 and no result object, though walk.jsonl and saved results stay in the export. Reasoning is per model in models.json and applied in lib/provider.ts:25-35,138-179; there is no per-run override (ASSOCIATE_REASONING only labels bench rows, bench/config.py:133). --continue-from loads the prior walk as context and labels it prior (pi.py:1033-1037, check.py:776-781); it is not a resume.",
+      "seeds": []
+    },
+    {
+      "id": "s6",
+      "surface": ".pi/extensions/associate/index.ts finish path, lib/facts.ts, lib/handback.ts, lib/render.ts, tools/check.ts",
+      "finding": "finish.execute and check_quote.execute are already async (index.ts:~381, tools/check.ts:99) and await nothing today. checkHandback is pure and synchronous by its own header (facts.ts:6-9), by test (facts.test.ts:97-101) and by the plan (docs/plans/2026-11-17-associate-accuracy-method.md:54), and its output is compared field by field with vectors shared with Python (facts.test.ts:51-66): a network call cannot go inside it. The message_end handler rewrites check.json, report.json and answer.md from a saved object (index.ts:547-570), so a score must be kept in that object. Refusals come from refusalsOf (handback.ts:303) and accepted (facts.ts:~598); a score must enter neither. answer.md skips refused facts and renders the rest through factLine (render.ts:83-93,148). check.test.ts:167-190 pins that check_quote and the matcher return the same verdict and nearest, so existing keys must not change.",
+      "seeds": []
+    },
+    {
+      "id": "s7",
+      "surface": "associate/contract/accuracy.json, schemas/accuracy.schema.json, schemas/report.schema.json, schemas/facts.schema.json, validate.py",
+      "finding": "accuracy.json states every threshold, retry count, mode and table lives in it and nowhere in code (accuracy.json:2); accuracy.schema.json and report.schema.json forbid extra properties, so a scorer setting and a new count each need a declared property (finish-check.test.ts:508-510 fails on an unknown report key). There is no schema for check.json. facts.schema.json is the model's payload and forbids extra keys on a fact, so a harness-written score cannot live there. A check listed in checks needs a non-blank motivating_failure (validate.py:556-581, CLAUDE.md:796-800); a report-only signal with no refusal reason needs no checks entry. test_accuracy_contract.py pins every model's mode as report.",
+      "seeds": []
+    },
+    {
+      "id": "s8",
+      "surface": "docs/accuracy/tasks.json and tests/test_accuracy_tasks.py (the measurement tasks)",
+      "finding": "Six tasks, each with prompt, answer (free prose, 83 to 506 characters) and either evidence (file, line, text, stable) or absent (file, patterns); no structured expected values. Only tests/test_accuracy_tasks.py reads the file: it pins the path docs/accuracy/tasks.json (line 25), requires answer inside each task (line 67) and checks each evidence text against the file in the repo (lines 83-96). So the key cannot simply leave the tree or be split without changing that test.",
+      "seeds": []
+    },
+    {
+      "id": "s9",
+      "surface": "what a model can read: associate/contract/policy.json read.denylist, lib/contain.ts, tools/read.ts, tools/shell.ts, tools/search.ts, associate run --checkout, associate/harness/worktree.py",
+      "finding": "policy.json has a read deny-list of secret-style globs (policy.json:9-32) applied by isDenylisted (contain.ts:390-411) from tools/read.ts:646 and tools/shell.ts:382 only; tools/search.ts has no deny or ignore logic, so grep and find are not covered. There is no per-run hide option. --checkout takes any existing directory (run.py:272-281); a writing model gets a git worktree at HEAD holding every tracked file (worktree.py:214-237), a read-only model runs in place (run.py:218-219). A filtered copy is therefore possible today only by hand, and only a git-tracked filtered clone keeps worktree isolation for writing models.",
+      "seeds": []
+    },
+    {
+      "id": "s10",
+      "surface": "associate/bench/ (suites.json, public.py, config.py, walkstats.py) and the 2026-10-27 multi-model spec",
+      "finding": "associate bench runs public suites through their own upstream runner and scorer and never re-implements a scorer (public.py:5-6); every entry is verified: false. The in-house 7-case suite was dropped (CHANGELOG.md:416-417) under a recorded decision that every reported benchmark number comes from a public suite's own scorer (docs/specs/2026-10-27-associate-multi-model-on-pi-1-1-0.md:36-37, 231); the same spec notes nothing then benchmarks the harness itself (line 190). No grader exists that decides an answer right or wrong, and bench has no history store. A graded in-house comparison would reverse or narrow that earlier decision.",
+      "seeds": []
+    },
+    {
+      "id": "s11",
+      "surface": "docs/notes/accuracy-live-acceptance.md (how the measurement was run)",
+      "finding": "Every step was manual: a scratch clone, a hand-edited contract copy to turn reasoning off because there is no per-run switch (lines 17-20), 12 launches of associate run with --untrusted-checkout --timeout 1500 --json (lines 14-16), a hand count and a separate re-check script that is not committed (lines 65-72). Correctness of prose answers was not measured (line 198). A comparison with several arms and repeats needs a committed runner.",
+      "seeds": []
+    }
+  ],
+  "lapses": [],
+  "obligations": []
+}
