@@ -69,6 +69,7 @@ def _build_parser() -> argparse.ArgumentParser:
     from associate.cli._commands import explain as _explain_cmd
     from associate.cli._commands import learn as _learn_cmd
     from associate.cli._commands import mcp as _mcp_cmd
+    from associate.cli._commands import measure as _measure_cmd
     from associate.cli._commands import overview as _overview_cmd
     from associate.cli._commands import run as _run_cmd
     from associate.cli._commands import runs as _runs_group
@@ -101,6 +102,7 @@ def _build_parser() -> argparse.ArgumentParser:
     _serve_cmd.register(sub)
     _tokens_group.register(sub)
     _check_cmd.register(sub)
+    _measure_cmd.register(sub)
     _cli_group.register(sub)
     # Register your own noun groups here:
     #   from associate.cli._commands import my_noun as _my_noun_group
