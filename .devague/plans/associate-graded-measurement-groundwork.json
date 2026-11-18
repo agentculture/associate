@@ -5,7 +5,7 @@
   "schema_version": 5,
   "status": "exported",
   "created": "2026-11-18T15:43:53Z",
-  "updated": "2026-11-18T17:07:20Z",
+  "updated": "2026-11-18T17:26:22Z",
   "targets": [
     {
       "id": "c1",
@@ -686,6 +686,22 @@
       "id": "r4",
       "text": "The answer check reads only the model's summary and final message for the current harness. In the recorded worker settings run of 2026-11-18 the expected values appear only in the model's conclusions and facts, so that run would be marked does_not_match, while the older harness's final reply carries everything the model said. This could undercount correct answers in the current-harness arm. The pilot should report both readings (summary only; summary plus the values the model wrote in conclusions and facts) before the operator chooses one for the 288 runs.",
       "kind": "unknown_nonblocking",
+      "task_id": "t12",
+      "resolved": false,
+      "resolution": ""
+    },
+    {
+      "id": "r5",
+      "text": "The comparison was planned with reasoning off in both arms. The commit before PR #27 (a9182d7) has no per-run reasoning setting, and its models.json sets worker and cortex to on, as main's does. So reasoning off can only be applied to the current-harness arm. Either both arms run at the registry value (on), or the older arm's contract is changed, which the plan forbids. Operator decision needed before the pilot.",
+      "kind": "unknown_blocking",
+      "task_id": "t12",
+      "resolved": false,
+      "resolution": ""
+    },
+    {
+      "id": "r6",
+      "text": "The commit before PR #27 pins pi 1.1.0; pi 1.5.2 is installed. The older harness only warns about the mismatch. Whether its extension runs correctly on pi 1.5.2 has not been measured; if it does not, the older arm needs pi 1.1.0 installed beside 1.5.2, or the comparison measures a pi change together with the accuracy method. The pilot will show whether the older arm runs at all.",
+      "kind": "unknown_blocking",
       "task_id": "t12",
       "resolved": false,
       "resolution": ""
