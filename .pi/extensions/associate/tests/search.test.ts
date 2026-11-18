@@ -309,24 +309,23 @@ test("find caps at policy.caps.max_results (200) and sets truncated:true when a 
     assert.equal(calls.length, 1);
     assert.ok(Array.isArray(calls[0]!.argv));
     assert.equal(calls[0]!.options.shell, false);
-    // fd's --max-results is a whole-run cap (unlike rg's per-file
-    // --max-count), so the bound is pushed into the binary too.
-    const maxResultsAt = calls[0]!.argv.indexOf("--max-results");
-    assert.ok(maxResultsAt >= 0, "fd must be given --max-results");
-    assert.equal(calls[0]!.argv[maxResultsAt + 1], "201");
+    // The true total is reported, so fd is not told to stop at the cap.
+    assert.equal(result.total, 300);
+    assert.ok(!calls[0]!.argv.includes("--max-results"), "fd must run to the end so the total is true");
   } finally {
     c.dispose();
   }
 });
 
 // ---------------------------------------------------------------------------
-// bounded memory — the cap stops consumption, it does not just slice the end
+// bounded memory — the scan ceiling stops consumption, it does not just slice the end
 // ---------------------------------------------------------------------------
 
-test("grep stops consuming at the cap and kills the child instead of buffering 100,000 lines", async () => {
+test("grep stops consuming at the scan ceiling (caps.max_raw_chars) and kills the child instead of buffering 100,000 lines", async () => {
   const c = context();
   try {
     const total = 100_000;
+    const ceiling = (c.ctx.policy as { caps: { max_raw_chars: number } }).caps.max_raw_chars;
     const { spawner, state } = chunkSpawner(function* () {
       for (let i = 0; i < total; i += 1) yield `src/file${i}.py:1:needle ${i}\n`;
     }, 0);
@@ -338,22 +337,24 @@ test("grep stops consuming at the cap and kills the child instead of buffering 1
     assert.equal(result.truncated, true);
 
     // The proof this is streaming and not "collect 100,000 lines, then slice":
-    // exactly one chunk past the cap was ever read (the 201st line is what
-    // makes `truncated` honest), and the child was signalled.
-    assert.equal(state.emittedChunks, 201, "the tool must stop consuming one line past the cap");
-    assert.ok(state.emittedChunks < total / 100, "nowhere near the full output may be consumed");
-    assert.deepEqual(state.kills, ["SIGTERM"], "the child must be killed once the cap is reached");
+    // consumption stopped when the buffered characters reached the ceiling, and
+    // the child was signalled. The total is then a lower bound.
+    assert.ok(state.emittedChunks < total, "the whole output must not be consumed");
+    assert.ok(state.emittedChunks >= ceiling / 40 - 1000, "the scan runs to the ceiling so the total is as true as it can be");
+    assert.equal(result.total, state.emittedChunks);
+    assert.equal(result.total_exact, false);
+    assert.deepEqual(state.kills, ["SIGTERM"], "the child must be killed once the ceiling is reached");
     assert.equal(state.destroyed, true, "stdout must be destroyed, not drained");
   } finally {
     c.dispose();
   }
 });
 
-test("find stops consuming at the cap and kills the child", async () => {
+test("find reports the true total past the cap when the output fits under the ceiling, and does not kill the child", async () => {
   const c = context();
   try {
     const { spawner, state } = chunkSpawner(function* () {
-      for (let i = 0; i < 100_000; i += 1) yield `${join(c.checkout, `file${i}.txt`)}\n`;
+      for (let i = 0; i < 1000; i += 1) yield `${join(c.checkout, `file${i}.txt`)}\n`;
     }, 0);
 
     const result = await runFind(c.ctx, { pattern: "file" }, spawner);
@@ -361,8 +362,10 @@ test("find stops consuming at the cap and kills the child", async () => {
     if (!result.ok) return;
     assert.equal(result.matches.length, 200);
     assert.equal(result.truncated, true);
-    assert.equal(state.emittedChunks, 201);
-    assert.deepEqual(state.kills, ["SIGTERM"]);
+    assert.equal(result.total, 1000);
+    assert.equal(result.total_exact, true);
+    assert.equal(state.emittedChunks, 1000);
+    assert.deepEqual(state.kills, []);
   } finally {
     c.dispose();
   }
@@ -639,7 +642,8 @@ test("ls caps entries at policy.caps.max_results and reports truncated:true over
     assert.equal(result.ok, true);
     if (!result.ok) return;
     assert.equal(result.entries.length, 200);
-    assert.equal(result.count, 210);
+    assert.equal(result.count, 200);
+    assert.equal(result.total, 210);
     assert.equal(result.truncated, true);
   } finally {
     c.dispose();

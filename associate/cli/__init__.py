@@ -63,6 +63,7 @@ def _argv_has_json(argv: list[str] | None) -> bool:
 
 def _build_parser() -> argparse.ArgumentParser:
     from associate.cli._commands import bench as _bench_cmd
+    from associate.cli._commands import check as _check_cmd
     from associate.cli._commands import cli as _cli_group
     from associate.cli._commands import doctor as _doctor_cmd
     from associate.cli._commands import explain as _explain_cmd
@@ -99,6 +100,7 @@ def _build_parser() -> argparse.ArgumentParser:
     _mcp_cmd.register(sub)
     _serve_cmd.register(sub)
     _tokens_group.register(sub)
+    _check_cmd.register(sub)
     _cli_group.register(sub)
     # Register your own noun groups here:
     #   from associate.cli._commands import my_noun as _my_noun_group

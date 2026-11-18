@@ -15,7 +15,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { loadExtension, type FakePi } from "./load-extension.ts";
 import { findRepoContractDir, loadContract } from "../lib/contract.ts";
-import { WalkRecorder } from "../lib/walk.ts";
+import { WalkRecorder, stripWalkIdStamp } from "../lib/walk.ts";
 
 const CONTRACT = loadContract({});
 const GATE = CONTRACT.gate as any;
@@ -132,7 +132,22 @@ async function start(
 }
 
 let callSeq = 0;
-async function call(pi: FakePi, toolName: string, input: unknown): Promise<{ block: boolean; reason: string } | undefined> {
+/** The purpose these tests state on every call (issue #20 t7); the gate never sees it. */
+const TEST_PURPOSE = "test call: does the guard decide this as expected";
+/**
+ * Fire one tool call through the hook. A plain-object input without a
+ * `purpose` gets {@link TEST_PURPOSE}, so these tests keep exercising the
+ * guard step they name; {@link callRaw} sends the input exactly as given.
+ */
+function withTestPurpose(input: unknown): unknown {
+  return input && typeof input === "object" && !Array.isArray(input) && !("purpose" in input)
+    ? { ...(input as Record<string, unknown>), purpose: TEST_PURPOSE }
+    : input;
+}
+async function call(pi: FakePi, toolName: string, input: unknown): Promise<{ block: boolean; reason: string; terminate?: boolean } | undefined> {
+  return callRaw(pi, toolName, withTestPurpose(input));
+}
+async function callRaw(pi: FakePi, toolName: string, input: unknown): Promise<{ block: boolean; reason: string; terminate?: boolean } | undefined> {
   callSeq += 1;
   return (await pi.fireToolCall({ type: "tool_call", toolName, toolCallId: `tc-${callSeq}`, input })) as any;
 }
@@ -339,7 +354,8 @@ test("L4: a guard refusal lands in the walk with its reason and the run outcome 
     const entry = lines.find((l) => l.tool === "write");
     assert.ok(entry, "the refused call is in the walk");
     assert.match(entry.error, /^refused: /);
-    assert.ok(entry.error.includes(decision!.reason.slice(0, 40)));
+    // The model sees the reason stamped with the entry's walk id (t9); the walk keeps it unstamped.
+    assert.ok(entry.error.includes(stripWalkIdStamp(decision!.reason).slice(0, 40)));
     const run = lines.find((l) => "run" in l)?.run;
     assert.equal(run?.outcome, "ok");
   });
@@ -386,7 +402,7 @@ function safeSuperVerdicts(): Record<string, unknown> {
 let ctxSeq = 0;
 async function callWith(pi: FakePi, toolName: string, input: unknown, ctx: Record<string, unknown>) {
   ctxSeq += 1;
-  return (await pi.fireToolCall({ type: "tool_call", toolName, toolCallId: `tcx-${ctxSeq}`, input }, ctx)) as
+  return (await pi.fireToolCall({ type: "tool_call", toolName, toolCallId: `tcx-${ctxSeq}`, input: withTestPurpose(input) }, ctx)) as
     | { block: boolean; reason: string }
     | undefined;
 }
@@ -788,7 +804,12 @@ test("gate lines take no walk id: a reopened walk keeps numbering entries densel
     });
     const second = new WalkRecorder({ exportDir: dir, policy: CONTRACT.policy, installExitHook: false });
     assert.equal(second.entryCount, 1);
-    const lines = readFileSync(join(dir, "walk.jsonl"), "utf8").trim().split("\n").map((l) => JSON.parse(l));
+    // The walk's first line is its format marker (accuracy plan t6); skip it.
+    const lines = readFileSync(join(dir, "walk.jsonl"), "utf8")
+      .trim()
+      .split("\n")
+      .map((l) => JSON.parse(l))
+      .filter((l) => !("format" in l));
     assert.deepEqual(Object.keys(lines[1]), ["gate"]);
     assert.ok(!JSON.stringify(lines[1]).includes("sk-abcdefghijklmnopqrstuvwx"), "gate lines are redacted");
     first.finalize();
@@ -855,7 +876,7 @@ async function callAs(
   toolName: string,
   input: unknown,
 ): Promise<{ block: boolean; reason: string } | undefined> {
-  return (await pi.fireToolCall({ type: "tool_call", toolName, toolCallId, input })) as any;
+  return (await pi.fireToolCall({ type: "tool_call", toolName, toolCallId, input: withTestPurpose(input) })) as any;
 }
 
 for (const key of ["worker", "cortex"]) {
@@ -1095,3 +1116,282 @@ for (const key of ["worker", "cortex"]) {
     });
   });
 }
+
+// ------------------------------------------- issue #20 t7: purpose, gate, refusal cap
+
+import { createGate } from "../lib/gate.ts";
+
+const EXEMPT = CONTRACT.accuracy.purpose_exempt_tools;
+const MODEL_KEYS = ["worker", "senses", "cortex"];
+
+function walkRecords(walkPath: string): any[] {
+  if (!existsSync(walkPath)) return [];
+  return readFileSync(walkPath, "utf8").split("\n").filter(Boolean).map((line) => JSON.parse(line));
+}
+
+async function shutdown(pi: FakePi): Promise<void> {
+  for (const handler of pi.handlers.get("session_shutdown") ?? []) {
+    await handler({ type: "session_shutdown" }, {});
+  }
+}
+
+test("t7 criterion 1: models.json names the exempt tools, and every other tool is held by some active model", () => {
+  for (const name of EXEMPT) assert.ok(CONTRACT.models.tool_names.includes(name), name);
+  for (const name of CONTRACT.models.tool_names) {
+    assert.ok(MODEL_KEYS.some((key) => CONTRACT.models.models[key]!.tools.includes(name)), `${name} is in no active model's set`);
+  }
+});
+
+for (const name of CONTRACT.models.tool_names.filter((tool) => !EXEMPT.includes(tool))) {
+  test(`t7 criterion 1: '${name}' with a missing or empty purpose is refused in the hook before it runs`, async () => {
+    const key = MODEL_KEYS.find((k) => CONTRACT.models.models[k]!.tools.includes(name))!;
+    await withRun(key, async ({ pi, decider, walkPath }) => {
+      // The other arguments are shaped so that, with a purpose, the call would
+      // reach the guard step after the purpose check (not refused for a path).
+      const base: Record<string, unknown> = { path: "README.md", content: "x", argv: ["ls"], model: "senses", task: "x", text: "x", query: "x" };
+      for (const input of [base, { ...base, purpose: "" }]) {
+        const decision = await callRaw(pi, name, input);
+        assert.ok(decision?.block, `${key} ${name} ran without a purpose (${JSON.stringify(input.purpose)})`);
+        assert.match(decision!.reason, /'purpose'/, decision!.reason);
+        assert.match(decision!.reason, /e\.g\. .*"purpose": "/, decision!.reason);
+        assert.equal(decision!.terminate, undefined, "two refusals stay under the contract's cap");
+      }
+      assert.equal(decider.calls.length, 0, "the decider was asked about a call with no purpose");
+      assert.deepEqual(gateLines(walkPath), []);
+      const refused = walkRecords(walkPath).filter((record) => record.tool === name);
+      assert.equal(refused.length, 2, "both refusals land in the walk");
+      for (const entry of refused) assert.match(entry.error, /^refused: .*'purpose'/);
+    });
+  });
+}
+
+test("t7 criterion 1: the contract's exempt tools pass the hook without a purpose", async () => {
+  await withRun("worker", async ({ pi }) => {
+    for (const name of EXEMPT) assert.equal(await callRaw(pi, name, {}), undefined, name);
+  });
+});
+
+test("t7 criterion 2: the hook keeps the purpose on the call, and the decider gets what a purpose-free request sends", async () => {
+  assert.equal(GATE.version, 9);
+  await withRun("worker", async ({ pi, decider }) => {
+    const args = { path: "README.md", edits: [{ oldText: "a", newText: "b" }] };
+    const input = { ...args, purpose: "fix the README; expect one replaced block" };
+    assert.equal(await callRaw(pi, "edit", input), undefined);
+    assert.equal(input.purpose, "fix the README; expect one replaced block", "the hook must not delete the purpose from the call");
+    assert.equal(decider.calls.length, 1);
+
+    const bare: any[] = [];
+    const gate = createGate({
+      contract: CONTRACT,
+      env: { ASSOCIATE_API_KEY: "dummy-t12-key", ASSOCIATE_BASE_URL: "http://decider.invalid:9/v1" },
+      fetch: (async (_url: unknown, init?: RequestInit) => {
+        bare.push(JSON.parse(String(init?.body)));
+        return new Response(JSON.stringify({ model: "clef", answers: safeClefAnswers() }), { status: 200 });
+      }) as typeof fetch,
+    });
+    await gate.evaluate({ task: TASK, action: "edit", arguments: args, model: "worker", isMutating: true });
+    assert.equal(JSON.stringify(decider.calls[0]!.body), JSON.stringify(bare[0]));
+    assert.doesNotMatch(JSON.stringify(decider.calls[0]!.body), /purpose/);
+  });
+});
+
+test("t7 criterion 4: the same refusal repeated to the contract's refusal_cap ends the run with outcome 'refused'", async () => {
+  const cap = CONTRACT.accuracy.refusal_cap;
+  await withRun("worker", async ({ pi, walkPath }) => {
+    for (let n = 1; n < cap; n += 1) {
+      const decision = await callRaw(pi, "read", { path: "README.md" });
+      assert.ok(decision?.block);
+      assert.equal(decision!.terminate, undefined, `refusal ${n} of ${cap} ended the run`);
+    }
+    const last = await callRaw(pi, "read", { path: "README.md" });
+    assert.ok(last?.block);
+    assert.equal(last!.terminate, true, "the refusal at the cap must end the run");
+    assert.match(last!.reason, /refusal_cap/);
+    assert.match(last!.reason, /'refused'/);
+    // fix-refusal-cap: the outcome is pinned when the run actually ends with
+    // the cap pending — pi's agent_end, which a real pi emits before the
+    // session shuts down — not at the capping refusal.
+    await agentEnd(pi);
+    await shutdown(pi);
+    const records = walkRecords(walkPath);
+    assert.equal(records.filter((record) => record.tool === "read").length, cap);
+    assert.equal(records.find((record) => "run" in record)?.run?.outcome, "refused");
+  });
+});
+
+test("t7 criterion 4: the cap is the contract's value, not a literal", async () => {
+  const dir = mkdtempSync(join(tmpdir(), "associate-t7-contract-"));
+  try {
+    cpSync(findRepoContractDir(), dir, { recursive: true });
+    const path = join(dir, "accuracy.json");
+    const doc = JSON.parse(readFileSync(path, "utf8"));
+    doc.refusal_cap = 2;
+    writeFileSync(path, JSON.stringify(doc));
+    await withRun(
+      "worker",
+      async ({ pi }) => {
+        assert.equal((await callRaw(pi, "grep", { pattern: "x" }))?.terminate, undefined);
+        assert.equal((await callRaw(pi, "ls", { path: "." }))?.terminate, true, "a cap of 2 ends the run on the second");
+      },
+      { contractDir: dir },
+    );
+  } finally {
+    rmSync(dir, { recursive: true, force: true });
+  }
+});
+
+test("t7 criterion 4: an allowed call, a different refusal or a new prompt restarts the count", async () => {
+  const cap = CONTRACT.accuracy.refusal_cap;
+  await withRun("worker", async ({ pi, walkPath }) => {
+    const missing = async () => (await callRaw(pi, "read", { path: "README.md" }))?.terminate;
+    for (let n = 1; n < cap; n += 1) assert.equal(await missing(), undefined);
+    assert.equal(await call(pi, "read", { path: "README.md" }), undefined, "an allowed call");
+    for (let n = 1; n < cap; n += 1) assert.equal(await missing(), undefined, "the count restarted after an allowed call");
+    // A different refusal kind in between.
+    assert.equal((await call(pi, "spawn_subagent", { model: "senses", task: "x" }))?.terminate, undefined);
+    for (let n = 1; n < cap; n += 1) assert.equal(await missing(), undefined, "the count restarted after another refusal");
+    // A new prompt is a new task.
+    for (const handler of pi.handlers.get("before_agent_start") ?? []) {
+      await handler({ type: "before_agent_start", prompt: "next task", systemPrompt: "" }, {});
+    }
+    for (let n = 1; n < cap; n += 1) assert.equal(await missing(), undefined, "the count restarted with the new prompt");
+    await shutdown(pi);
+    // (The allowed read never gets a tool_result here, so the run is not "ok"; it must not be "refused".)
+    assert.notEqual(walkRecords(walkPath).find((record) => "run" in record)?.run?.outcome, "refused");
+  });
+});
+
+// ---------------------------------------- fix-refusal-cap: one count per turn, outcome at run end
+//
+// Live run acc20-worker-gate-thresholds (pi 1.5.2, 2026-11-17): four parallel
+// purpose-less calls in one turn reached the cap, the hook pinned 'refused',
+// pi did not stop (not every result in the batch terminated), and the run
+// went on to an accepted finish under a 'refused' outcome.
+
+async function agentEnd(pi: FakePi): Promise<void> {
+  for (const handler of pi.handlers.get("agent_end") ?? []) await handler({ type: "agent_end", messages: [] }, {});
+}
+
+let turnIndex = 0;
+async function turnStart(pi: FakePi): Promise<void> {
+  turnIndex += 1;
+  for (const handler of pi.handlers.get("turn_start") ?? []) {
+    await handler({ type: "turn_start", turnIndex, timestamp: Date.now() }, {});
+  }
+}
+
+/** One allowed read with its result, so the walk has no unresolved call. */
+async function allowedRead(pi: FakePi): Promise<void> {
+  callSeq += 1;
+  const id = `tc-${callSeq}`;
+  const input = { path: "README.md", purpose: TEST_PURPOSE };
+  assert.equal(await pi.fireToolCall({ type: "tool_call", toolName: "read", toolCallId: id, input }), undefined, "the read is allowed");
+  await pi.fireToolResult({ toolCallId: id, toolName: "read", input, content: [{ type: "text", text: "# README" }] });
+}
+
+/** finish the way pi runs it: hook, execute, tool_result chain. Worker is in report mode, so it is accepted. */
+async function acceptedFinish(pi: FakePi): Promise<void> {
+  callSeq += 1;
+  const id = `tc-${callSeq}`;
+  const params = { summary: "Read the README." };
+  assert.equal(await pi.fireToolCall({ type: "tool_call", toolName: "finish", toolCallId: id, input: params }), undefined);
+  const result = (await pi.tool("finish").execute(id, params)) as any;
+  await pi.fireToolResult({ toolCallId: id, toolName: "finish", input: params, ...result });
+  assert.equal(result.details?.outcome ?? "accepted", "accepted", JSON.stringify(result.details));
+}
+
+function runOutcome(walkPath: string): string | undefined {
+  return walkRecords(walkPath).find((record) => "run" in record)?.run?.outcome;
+}
+
+test("fix-refusal-cap AC1: four same-kind refusals in one turn, the calls allowed next turn, then finish: outcome ok", async () => {
+  await withRun("worker", async ({ pi, walkPath }) => {
+    await turnStart(pi);
+    for (let n = 1; n <= 4; n += 1) {
+      const decision = await callRaw(pi, "read", { path: "README.md" });
+      assert.ok(decision?.block, `call ${n} must be refused (no purpose)`);
+      assert.equal(decision!.terminate, undefined, `parallel refusal ${n} of one turn ended the run`);
+    }
+    await turnStart(pi);
+    for (let n = 1; n <= 4; n += 1) await allowedRead(pi);
+    await turnStart(pi);
+    await acceptedFinish(pi);
+    await agentEnd(pi);
+    await shutdown(pi);
+    assert.equal(walkRecords(walkPath).filter((record) => record.tool === "read").length, 8);
+    assert.equal(runOutcome(walkPath), "ok");
+  });
+});
+
+test("fix-refusal-cap AC2: the same refusal in refusal_cap separate turns ends the run with outcome 'refused'", async () => {
+  const cap = CONTRACT.accuracy.refusal_cap;
+  await withRun("worker", async ({ pi, walkPath }) => {
+    for (let turn = 1; turn < cap; turn += 1) {
+      await turnStart(pi);
+      for (let n = 0; n < 2; n += 1) {
+        assert.equal((await callRaw(pi, "read", { path: "README.md" }))?.terminate, undefined, `turn ${turn} ended the run`);
+      }
+    }
+    await turnStart(pi);
+    const capping = await callRaw(pi, "read", { path: "README.md" });
+    assert.equal(capping?.terminate, true, "the refusal in the cap-th turn must end the run");
+    assert.match(capping!.reason, /refusal_cap/);
+    const sibling = await callRaw(pi, "read", { path: "README.md" });
+    assert.equal(sibling?.terminate, true, "every same-kind refusal of the capping turn terminates, so pi can stop the batch");
+    await agentEnd(pi);
+    await shutdown(pi);
+    assert.equal(runOutcome(walkPath), "refused");
+  });
+});
+
+test("fix-refusal-cap AC3: the cap reached, pi starts another turn anyway, the run finishes normally: outcome ok", async () => {
+  const cap = CONTRACT.accuracy.refusal_cap;
+  await withRun("worker", async ({ pi, walkPath }) => {
+    let last: Awaited<ReturnType<typeof callRaw>>;
+    for (let turn = 1; turn <= cap; turn += 1) {
+      await turnStart(pi);
+      last = await callRaw(pi, "read", { path: "README.md" });
+    }
+    assert.equal(last!.terminate, true, "the cap was reached");
+    await turnStart(pi); // pi did not stop
+    await allowedRead(pi);
+    await turnStart(pi);
+    await acceptedFinish(pi);
+    await agentEnd(pi);
+    await shutdown(pi);
+    assert.equal(runOutcome(walkPath), "ok");
+  });
+});
+
+test("fix-refusal-cap: after a cap pi did not honour, the next same-kind refusal ends the run again", async () => {
+  const cap = CONTRACT.accuracy.refusal_cap;
+  await withRun("worker", async ({ pi, walkPath }) => {
+    for (let turn = 1; turn <= cap; turn += 1) {
+      await turnStart(pi);
+      await callRaw(pi, "read", { path: "README.md" });
+    }
+    await turnStart(pi);
+    assert.equal((await callRaw(pi, "read", { path: "README.md" }))?.terminate, true, "the count stays at the cap");
+    await agentEnd(pi);
+    await shutdown(pi);
+    assert.equal(runOutcome(walkPath), "refused");
+  });
+});
+
+test("fix-refusal-cap: a pin made at agent_end is lifted when pi starts another turn of the same run (retry)", async () => {
+  const cap = CONTRACT.accuracy.refusal_cap;
+  await withRun("worker", async ({ pi, walkPath }) => {
+    for (let turn = 1; turn <= cap; turn += 1) {
+      await turnStart(pi);
+      await callRaw(pi, "read", { path: "README.md" });
+    }
+    await agentEnd(pi); // pinned 'refused' here
+    await turnStart(pi); // pi retried: the run did not end
+    await allowedRead(pi);
+    await turnStart(pi);
+    await acceptedFinish(pi);
+    await agentEnd(pi);
+    await shutdown(pi);
+    assert.equal(runOutcome(walkPath), "ok");
+  });
+});

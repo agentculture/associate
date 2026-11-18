@@ -1,0 +1,112 @@
+{
+  "$comment": "The accuracy method's settings (issue #20). Every threshold, retry count, mode and table the harness and the extension use lives here and nowhere in code. Version 1.",
+  "version": 1,
+  "mode": {
+    "worker": "report",
+    "senses": "report",
+    "cortex": "report",
+    "super-vl": "report"
+  },
+  "retry_rounds": 2,
+  "refusal_cap": 3,
+  "min_quote_length": 8,
+  "source_kinds": {
+    "read": "file",
+    "find": "tool",
+    "grep": "tool",
+    "ls": "tool",
+    "bash": "tool",
+    "code_lens": "tool",
+    "web_search": "web",
+    "web_page": "web",
+    "write": "tool",
+    "edit": "tool",
+    "eidetic_recall": "memory",
+    "eidetic_remember": "memory",
+    "ledger_append": "tool",
+    "ledger_list": "tool",
+    "run_tests": "tool",
+    "spawn_subagent": "agent",
+    "delegate_run": "agent",
+    "delegate_status": "agent",
+    "check_quote": "harness",
+    "associate_ready": "harness",
+    "finish": "harness"
+  },
+  "purpose_exempt_tools": ["finish", "associate_ready"],
+  "checks": [
+    {
+      "id": "unknown_source",
+      "strength": "refuse",
+      "motivating_failure": "A worker cited w19 (an ls of the lib directory) for a claim about walk.ts: it counted its calls, was wrong, and the harness recorded the statement as referenced (live run scope20-worker-t2)."
+    },
+    {
+      "id": "quote_not_in_result",
+      "strength": "refuse",
+      "motivating_failure": "A cited line only had to fall inside a read range, so a sentence that quoted example markers from AGENTS.md was recorded as referenced on w3 and w7 (live run scope20-worker-t2)."
+    },
+    {
+      "id": "quote_too_short",
+      "strength": "refuse",
+      "motivating_failure": "A one-word quote matches almost any saved result, so a fact could pass without being tied to the entry it cites."
+    },
+    {
+      "id": "ambiguous_run_label",
+      "strength": "flag",
+      "motivating_failure": "Walk ids restart at w1 in every run, so a continued run's citations of the prior run's ids resolved against the wrong entries and all were recorded as referenced (live run scope20-worker-t5)."
+    },
+    {
+      "id": "closing_conclusion_unread",
+      "strength": "refuse",
+      "motivating_failure": "A worker closed with 'Nothing was concluded without reading' while its run was marked not_fully_read (live run scope20-worker-t2)."
+    },
+    {
+      "id": "literal_outside_quote",
+      "strength": "refuse",
+      "motivating_failure": "A fact with value 'version 10' and quote '\"version\": 9' passes a quote match alone (docs/specs/2026-11-17-associate-accuracy-method.md, scope entry s38)."
+    },
+    {
+      "id": "source_is_path",
+      "strength": "refuse",
+      "motivating_failure": "Prior-run and child-run results live outside the session root, and nothing stopped the model naming a location instead of an entry (docs/specs/2026-11-17-associate-accuracy-method.md, scope entry s44)."
+    },
+    {
+      "id": "action_without_call",
+      "strength": "refuse",
+      "motivating_failure": "A senses run reported 'Eidetic remember: Success' with no eidetic_remember call in its walk (docs/notes/t20-live-acceptance.md:53, t20 run A2)."
+    },
+    {
+      "id": "conclusion_without_fact",
+      "strength": "refuse",
+      "motivating_failure": "cortex carried 'a content-identical copy of the same table also sits in pyproject.toml' in its finish summary with no fact behind it, from a file it never read (live run scope20-cortex-t1)."
+    },
+    {
+      "id": "open_item_undecided",
+      "strength": "refuse",
+      "motivating_failure": "A worker review marked a finding 'CANNOT TELL' with no check that would decide it, carried only in the argument of a failed ledger call (live run scope20-worker-t3)."
+    },
+    {
+      "id": "closing_conclusion_second_hand",
+      "strength": "refuse",
+      "motivating_failure": "A spawn_subagent hand-back or a delegate_status final_reply is the child model's own account, not something the harness measured (tools/delegate.ts, cited in docs/specs/2026-11-17-associate-accuracy-method.md scope entry s13)."
+    }
+  ],
+  "refusal_checks": {
+    "source_unknown": "unknown_source",
+    "source_malformed": "unknown_source",
+    "source_path": "source_is_path",
+    "quote_absent": "quote_not_in_result",
+    "quote_short": "quote_too_short",
+    "literal_not_in_quote": "literal_outside_quote",
+    "action_tool_missing": "action_without_call",
+    "action_wrong_tool": "action_without_call",
+    "action_failed": "action_without_call",
+    "unknown_fact": "conclusion_without_fact",
+    "basis_refused": "conclusion_without_fact",
+    "no_basis": "conclusion_without_fact",
+    "verdict_with_unread": "closing_conclusion_unread",
+    "open_without_check": "open_item_undecided",
+    "closing_second_hand": "closing_conclusion_second_hand",
+    "ambiguous_reference": "ambiguous_run_label"
+  }
+}

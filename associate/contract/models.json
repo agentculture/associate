@@ -22,6 +22,7 @@
     "spawn_subagent",
     "delegate_run",
     "delegate_status",
+    "check_quote",
     "associate_ready",
     "finish"
   ],
@@ -37,7 +38,7 @@
       "tools": [
         "read", "find", "grep", "ls", "bash", "code_lens", "web_search", "web_page",
         "write", "edit", "eidetic_recall", "eidetic_remember", "ledger_append",
-        "ledger_list", "run_tests", "associate_ready", "finish"
+        "ledger_list", "run_tests", "check_quote", "associate_ready", "finish"
       ],
       "prompt_file": ".pi/extensions/associate/prompts/worker.md",
       "may_mutate": true,
@@ -53,7 +54,7 @@
       "tools": [
         "read", "find", "grep", "ls", "web_search", "web_page",
         "eidetic_recall", "eidetic_remember", "delegate_run", "delegate_status",
-        "associate_ready", "finish"
+        "check_quote", "associate_ready", "finish"
       ],
       "prompt_file": ".pi/extensions/associate/prompts/senses.md",
       "may_mutate": false,
@@ -69,7 +70,7 @@
       "tools": [
         "read", "find", "grep", "ls", "bash", "code_lens", "web_search", "web_page",
         "write", "edit", "eidetic_recall", "eidetic_remember", "ledger_append",
-        "ledger_list", "run_tests", "spawn_subagent", "associate_ready", "finish"
+        "ledger_list", "run_tests", "spawn_subagent", "check_quote", "associate_ready", "finish"
       ],
       "prompt_file": ".pi/extensions/associate/prompts/cortex.md",
       "may_mutate": true,
@@ -85,7 +86,7 @@
       "tools": [
         "read", "find", "grep", "ls", "bash", "code_lens", "web_search", "web_page",
         "write", "edit", "eidetic_recall", "eidetic_remember", "ledger_append",
-        "ledger_list", "run_tests", "spawn_subagent", "associate_ready", "finish"
+        "ledger_list", "run_tests", "spawn_subagent", "check_quote", "associate_ready", "finish"
       ],
       "prompt_file": ".pi/extensions/associate/prompts/super-vl.md",
       "may_mutate": true,

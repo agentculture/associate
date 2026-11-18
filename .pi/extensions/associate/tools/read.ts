@@ -495,6 +495,11 @@ export function validateContinuationCursor(
   return { ok: true, spillPath: real };
 }
 
+/** The `purpose` argument: stated on every call, read by the harness, never by this tool's own logic. */
+const PURPOSE_DESCRIPTION =
+  "Why you are making this call: the question it settles and what you expect to see. " +
+  "It is recorded with the call; it does not change what the tool does.";
+
 const DESCRIPTION =
   "Read a file's contents, or a line range of it. An image file (png, jpeg, gif, webp) is returned as an image when the active model accepts images, and refused otherwise. Every returned line is prefixed with its " +
   "absolute line number in the file (never renumbered from 1), so `start_line`/`end_line` can " +
@@ -533,6 +538,7 @@ export const register: ToolModule["register"] = async (pi, ctx: AssociateContext
           "are ignored and the next chunk of that same read is returned.",
       }),
     ),
+    purpose: Type.Optional(Type.String({ description: PURPOSE_DESCRIPTION })),
   });
 
   (pi as { registerTool: (definition: Record<string, unknown>) => void }).registerTool({
@@ -545,17 +551,49 @@ export const register: ToolModule["register"] = async (pi, ctx: AssociateContext
       const invalid = validateArgs(schema, rawParams);
       if (invalid) return errorResult(invalid);
       const args = rawParams as ReadArgs;
+      const given = Object.keys(args as object);
 
       if (args.cursor !== undefined) {
-        return continueRead(ctx, args.cursor);
+        return withArgsUsed(continueRead(ctx, args.cursor), given, ["cursor"], (details) => ({ cursor: args.cursor }));
       }
       if (args.path === undefined) {
-        return errorResult(makeStructuredError("invalid_argument", "missing required property 'path'", "path"));
+        return withArgsUsed(
+          errorResult(makeStructuredError("invalid_argument", "missing required property 'path'", "path")),
+          given,
+          ["path", "start_line", "end_line"],
+        );
       }
-      return startRead(ctx, active, args as ReadArgs & { path: string });
+      return withArgsUsed(startRead(ctx, active, args as ReadArgs & { path: string }), given, ["path", "start_line", "end_line"], (details) => {
+        const used: Record<string, unknown> = { path: details.path };
+        if (details.start_line !== undefined) {
+          used.start_line = details.start_line;
+          used.end_line = details.end_line;
+        }
+        return used;
+      });
     },
   });
 };
+
+/**
+ * Add the walk's "as used" keys to a result: `args_used` (what the read ran
+ * with, defaults applied) on a success, and `dropped_args` (the arguments
+ * given that this read did not use: `limit` and `offset` are not arguments of
+ * this tool; a continuation ignores `path` and the window). `purpose` is the
+ * harness's, not an ignored argument.
+ */
+function withArgsUsed(
+  result: ToolResult,
+  given: string[],
+  usedKeys: string[],
+  used?: (details: Record<string, unknown>) => Record<string, unknown>,
+): ToolResult {
+  const dropped = given.filter((key) => key !== "purpose" && !usedKeys.includes(key));
+  const details: Record<string, unknown> = { ...result.details };
+  if (used !== undefined && details.ok !== false) details.args_used = used(details);
+  if (dropped.length > 0) details.dropped_args = dropped;
+  return { ...result, details };
+}
 
 function continueRead(ctx: AssociateContext, rawCursor: string): ToolResult {
   const decoded = decodeCursor(rawCursor);
@@ -581,7 +619,11 @@ function continueRead(ctx: AssociateContext, rawCursor: string): ToolResult {
     );
   }
 
-  const details: Record<string, unknown> = { truncated: chunk.truncated };
+  const details: Record<string, unknown> = {
+    truncated: chunk.truncated,
+    // What this chunk leaves unread: everything after the offset the next cursor names.
+    not_shown_chars: chunk.cursor ? Math.max(0, chunk.cursor.total - chunk.cursor.offset) : 0,
+  };
   if (chunk.cursor) details.cursor = encodeCursor(chunk.cursor);
   return { content: [{ type: "text", text: chunk.text }], details };
 }
@@ -632,6 +674,8 @@ function startRead(ctx: AssociateContext, active: ActiveModel, args: ReadArgs): 
     end_line: endLine,
     total_lines: totalLines,
     truncated,
+    // The window's characters the model was not shown (0 when the window fit).
+    not_shown_chars: truncated ? Math.max(0, stamped.length - text.length) : 0,
   };
   if (cursor) details.cursor = encodeCursor(cursor);
   return { content: [{ type: "text", text }], details };

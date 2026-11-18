@@ -100,6 +100,10 @@ export const LEDGER_APPEND_SCHEMA = {
       description: `Paths, URLs or ids the entry concerns (at most ${MAX_REFS}).`,
     },
     data: { type: "object", description: "Optional small structured detail." },
+    purpose: {
+      type: "string",
+      description: "Why you are recording this. Read by the harness; never written into the ledger entry.",
+    },
   },
 } as const;
 
@@ -115,8 +119,31 @@ export const LEDGER_LIST_SCHEMA = {
       maximum: MAX_LIST_LIMIT,
       description: `Most recent N matching entries (default ${DEFAULT_LIST_LIMIT}, at most ${MAX_LIST_LIMIT}).`,
     },
+    purpose: { type: "string", description: "What you are looking for in the ledger." },
   },
 } as const;
+
+/** A ref "shaped like a walk id": exactly `w` and a positive integer. Labelled refs (`prior:w3`) are not. */
+const WALK_ID_SHAPE = /^w[1-9][0-9]*$/;
+
+/** Argument names each tool understands; anything else is reported as dropped. */
+const APPEND_ARGS = ["action", "summary", "refs", "data", "purpose"];
+const LIST_ARGS = ["agent", "action", "since", "limit", "purpose"];
+
+/** Names of arguments the model gave that the tool ignores. */
+function droppedArgs(params: Record<string, unknown>, known: readonly string[]): string[] {
+  return Object.keys(params).filter((key) => !known.includes(key));
+}
+
+/**
+ * The walk ids this run has issued, or undefined when no recorder is attached
+ * (unit tests). `index.ts` attaches the full `WalkRecorder`, whose `entryIds()`
+ * is the same set `finish` checks; the context types only the linker part.
+ */
+function issuedWalkIds(ctx: AssociateContext): string[] | undefined {
+  const walk = ctx.walk() as { entryIds?: () => string[] } | undefined;
+  return typeof walk?.entryIds === "function" ? walk.entryIds() : undefined;
+}
 
 export interface LedgerDeps {
   which?: Which;
@@ -266,6 +293,28 @@ export function createLedgerTools(ctx: AssociateContext, deps: LedgerDeps = {}):
         return bad("data", `data must serialise to at most ${MAX_DATA_CHARS} characters`);
       }
 
+      // A ref shaped like a walk id must name an entry this run's walk issued
+      // (issue #20, c21/h18). Other refs (paths, URLs, labelled ids) are not checked.
+      if (params.refs !== undefined) {
+        const issued = issuedWalkIds(ctx);
+        if (issued !== undefined) {
+          const unknown = params.refs.filter((ref) => WALK_ID_SHAPE.test(ref) && !issued.includes(ref));
+          if (unknown.length > 0) {
+            const have = issued.length === 0 ? "the walk has issued no ids yet" : `the walk has issued ${issued[0]} to ${issued[issued.length - 1]}`;
+            return toolResult(
+              toolError(
+                "unknown_walk_id",
+                `refs names ${unknown.join(", ")}, which this run's walk never issued (${have}).`,
+                { field: "refs", refs: unknown, issued_count: issued.length },
+                issued.length === 0
+                  ? "Remove the walk-id refs, or make the call you mean to cite first; each result starts with its own walk id."
+                  : `Use a walk id from this run (${issued[0]} to ${issued[issued.length - 1]}; each result starts with its own walk id), or drop the ref.`,
+              ),
+            );
+          }
+        }
+      }
+
       const prep = prepare("ledger_append", "append");
       if ("error" in prep) return toolResult(prep.error);
 
@@ -288,7 +337,11 @@ export function createLedgerTools(ctx: AssociateContext, deps: LedgerDeps = {}):
       if (stored === undefined) {
         return toolResult(toolError("ledger_bad_output", "ledger append --json printed output that is not JSON", { exit_code: 0 }));
       }
-      return toolResult({ ok: true, entry: stored });
+      const used: Record<string, unknown> = { action: params.action, summary: params.summary };
+      if (params.refs !== undefined) used.refs = params.refs;
+      if (params.data !== undefined) used.data = params.data;
+      const dropped = droppedArgs(rawParams ?? {}, APPEND_ARGS);
+      return toolResult({ ok: true, entry: stored, args_used: used, ...(dropped.length > 0 ? { dropped_args: dropped } : {}) });
     },
   };
 
@@ -321,7 +374,11 @@ export function createLedgerTools(ctx: AssociateContext, deps: LedgerDeps = {}):
       if (!Array.isArray(entries)) {
         return toolResult(toolError("ledger_bad_output", "ledger list --json did not print a JSON array", { exit_code: 0 }));
       }
-      const bounded = boundOutput(JSON.stringify(entries), ledgerBudget(ctx), ctx.session.scratchDir);
+      const serialised = JSON.stringify(entries);
+      const bounded = boundOutput(serialised, ledgerBudget(ctx), ctx.session.scratchDir);
+      const used: Record<string, unknown> = { limit };
+      for (const key of ["agent", "action", "since"] as const) if (params[key]) used[key] = params[key];
+      const dropped = droppedArgs(rawParams ?? {}, LIST_ARGS);
       return {
         content: [{ type: "text" as const, text: bounded.text }],
         details: {
@@ -331,6 +388,9 @@ export function createLedgerTools(ctx: AssociateContext, deps: LedgerDeps = {}):
           truncated: bounded.truncated,
           spill_path: bounded.spillPath,
           limit,
+          args_used: used,
+          ...(dropped.length > 0 ? { dropped_args: dropped } : {}),
+          ...(bounded.truncated ? { not_shown_chars: Math.max(serialised.length - (bounded.cursor?.offset ?? 0), 0) } : {}),
         },
       };
     },

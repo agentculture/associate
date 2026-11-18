@@ -106,7 +106,9 @@ function finishLine(handback: Record<string, unknown>): string {
     toolName: "finish",
     result: {
       content: [
-        { type: "text", text: JSON.stringify(handback) },
+        // A real child stamps every result with its walk id (accuracy plan t9),
+        // and pi 1.5.2 reports the patched content on tool_execution_end.
+        { type: "text", text: `walk id: w7\n${JSON.stringify(handback)}` },
         { type: "text", text: "Hand-back recorded. Now reply." },
       ],
     },
@@ -672,6 +674,8 @@ test("criterion 3: every spawn appends a child line naming the child's walk, c1,
       assert.equal(line.child_session_id, env.ASSOCIATE_SESSION_ID);
       assert.equal(line.child_walk, join(env.ASSOCIATE_EXPORT_ROOT!, env.ASSOCIATE_SESSION_ID!, "export", WALK_FILENAME));
       assert.equal(outs[i].child_walk, line.child_walk, "the tool result names the same walk path");
+      assert.equal(outs[i].citation_label, line.id, "the result names the label the child's entries are cited under");
+      assert.match(outs[i].citation_label, /^c[1-9][0-9]*$/);
       assert.equal(typeof line.ts, "string");
     }
     // Child lines take no walk id and are not tool calls.
@@ -680,6 +684,19 @@ test("criterion 3: every spawn appends a child line naming the child's walk, c1,
     // Children live under the parent's session root, outside the checkout.
     assert.ok(lines[0].child_walk.startsWith(r.ctx.session.sessionRoot));
     assert.ok(!lines[0].child_walk.startsWith(r.checkout));
+  } finally {
+    r.dispose();
+  }
+});
+
+test("t13: a successful spawn names the citation label and how to cite under it", async () => {
+  const r = rig();
+  try {
+    const launcher = fakeLauncher();
+    const t = tool(r, launcher);
+    const out = await run(t, { model: "senses", task: "a" });
+    assert.equal(out.citation_label, "c1");
+    assert.match(String(out.citation_note ?? ""), /c1:w/);
   } finally {
     r.dispose();
   }
@@ -948,7 +965,7 @@ for (const model of ["worker", "senses", "cortex"]) {
         type: "tool_call",
         toolName: SPAWN_TOOL_NAME,
         toolCallId: "s1",
-        input: { model: "senses", task: "x" },
+        input: { model: "senses", task: "x", purpose: "check who may spawn" },
       })) as any;
       if (model === "cortex") {
         assert.equal(decision, undefined, "cortex's spawn is not blocked by the guard");

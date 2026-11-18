@@ -2,8 +2,8 @@
 
 The launcher's whole job is to refuse to serve unless the ``associate`` Pi
 extension actually loaded, and h26 pins *how* it may know: **from the tool list
-Pi reports**, never from the presence of a config file on disk. Pi (0.84.2, and
-the pinned 1.1.0) has no ``--list-tools``, and its ``--mode json`` stream carries no startup tool
+Pi reports**, never from the presence of a config file on disk. Pi (0.84.2, 1.1.0 and
+the pinned 1.5.2) has no ``--list-tools``, and its ``--mode json`` stream carries no startup tool
 inventory (``docs/json.md``), so the only list Pi reports is the one the
 ``associate_ready`` sentinel returns as a tool result. The launcher therefore
 drives one turn whose prompt is "call associate_ready, then finish" and reads
@@ -156,7 +156,7 @@ def _install_fake_pi(
     *,
     ready: bool = True,
     writers: list[str] | None = None,
-    version: str = "1.1.0",
+    version: str = "1.5.2",
     task_exit: int = 0,
     artifacts: list[str] | None = None,
 ) -> Path:
@@ -703,12 +703,12 @@ def test_pending_model_is_refused_with_exit_1(
     assert not (tmp_path / "runs" / "invocation.json").exists()
 
 
-def test_the_tested_pin_is_pi_1_1_0():
-    """c39 / t2: the harness is pinned exactly at the pi it was migrated to."""
-    assert PINNED_PI_VERSION == "1.1.0"
+def test_the_tested_pin_is_pi_1_5_2():
+    """c39, moved by the accuracy plan (t1): pinned exactly at the pi it was migrated to."""
+    assert PINNED_PI_VERSION == "1.5.2"
 
 
-@pytest.mark.parametrize("installed", ["0.84.2", "0.99.0", "1.0.4", "1.1.1", "2.0.0"])
+@pytest.mark.parametrize("installed", ["0.84.2", "1.1.0", "1.5.0", "1.5.3", "2.0.0"])
 def test_a_version_mismatch_warns_but_still_serves(
     fake_pi,
     checkout: Path,
@@ -723,7 +723,7 @@ def test_a_version_mismatch_warns_but_still_serves(
 
     captured = capsys.readouterr()
     assert f"pi {installed} is installed" in captured.err
-    assert "tested against 1.1.0" in captured.err
+    assert "tested against 1.5.2" in captured.err
     assert "walk.jsonl" in captured.out
 
 
@@ -731,7 +731,7 @@ def test_the_pinned_version_does_not_warn(
     fake_pi, checkout: Path, tmp_path: Path, capsys: pytest.CaptureFixture[str]
 ):
     """The pin itself runs silently — the warning is reserved for a mismatch."""
-    fake_pi(version="1.1.0")
+    fake_pi(version="1.5.2")
 
     assert _run([], checkout, tmp_path) == 0
 
@@ -901,7 +901,7 @@ def test_the_real_pi_writes_both_artifacts_against_the_fake_lane(
 
 
 def test_the_real_pi_help_offers_the_flags_the_launcher_passes():
-    """The launcher's flags are pinned against pi 1.1.0; a rename must fail here."""
+    """The launcher's flags are pinned against the pinned pi; a rename must fail here."""
     require_pi()
 
     result = subprocess.run(  # nosec B603 B607 - fixed argv, no shell

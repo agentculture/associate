@@ -40,6 +40,7 @@ __all__ = [
     "assert_valid",
     "validate_models",
     "validate_gate",
+    "validate_accuracy",
     "validate_walk_gate",
 ]
 
@@ -529,3 +530,52 @@ def _walk_gate_rules(tier: str, fields: frozenset[str]) -> list[tuple[bool, str]
             "$: self_evaluated belongs to the large tier only",
         ),
     ]
+
+
+def _coverage_errors(field: str, noun: str, named: set[str], known: set[str]) -> list[str]:
+    """*field* must name exactly the *known* names: the unknown ones, then the missing ones."""
+    errors = [f"{field} names unknown {noun} {name!r}" for name in sorted(named - known)]
+    errors.extend(f"{field} is missing {noun} {name!r}" for name in sorted(known - named))
+    return errors
+
+
+def _check_id_errors(doc: dict[str, Any], errors: list[str]) -> set[str]:
+    """Append each duplicate id and missing ``motivating_failure``; return the ids seen."""
+    seen: set[str] = set()
+    for check in doc.get("checks", []):
+        cid = check.get("id")
+        if cid in seen:
+            errors.append(f"checks has duplicate id {cid!r}")
+        seen.add(cid)
+        failure = check.get("motivating_failure")
+        if not isinstance(failure, str) or not failure.strip():
+            errors.append(f"check {cid!r} has no motivating_failure")
+    return seen
+
+
+def validate_accuracy(doc: dict[str, Any], models: dict[str, Any] | None = None) -> list[str]:
+    """Cross-field rules for ``accuracy.json`` (the schema covers shape).
+
+    Modes cover exactly the registry's models, the source-kind table covers
+    exactly ``models.json`` ``tool_names``, exempt tools are registered tools,
+    check ids are unique with a non-blank ``motivating_failure``, and every
+    ``refusal_checks`` value names a listed check.
+    """
+    if models is None:
+        from associate import contract  # noqa: PLC0415 - avoid an import cycle
+
+        models = contract.load_models()
+    errors: list[str] = []
+    registry = set(models.get("models", {}))
+    tool_names = set(models.get("tool_names", []))
+    errors.extend(_coverage_errors("mode", "model", set(doc.get("mode", {})), registry))
+    kinds = set(doc.get("source_kinds", {}))
+    errors.extend(_coverage_errors("source_kinds", "tool", kinds, tool_names))
+    for name in doc.get("purpose_exempt_tools", []):
+        if name not in tool_names:
+            errors.append(f"purpose_exempt_tools names unknown tool {name!r}")
+    seen = _check_id_errors(doc, errors)
+    for reason, cid in sorted(doc.get("refusal_checks", {}).items()):
+        if cid not in seen:
+            errors.append(f"refusal_checks maps {reason!r} to unknown check {cid!r}")
+    return errors

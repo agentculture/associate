@@ -80,6 +80,39 @@ export interface ContractModels {
 /** The parsed `gate.json`; open record, the gate library owns its shape. */
 export type ContractGate = { version?: number; [key: string]: unknown };
 
+/** How strictly the accuracy checks bind one model: report only, or refuse. */
+export type AccuracyMode = "report" | "enforce";
+
+/** The six source kinds a walk entry can carry, set by the harness from the tool. */
+export type SourceKind = "file" | "tool" | "web" | "memory" | "agent" | "harness";
+
+/** One accuracy check; the contract owns the ids, this only names the fields. */
+export interface AccuracyCheck {
+  readonly id: string;
+  readonly strength: "refuse" | "flag";
+  readonly motivating_failure: string;
+}
+
+/** The parsed `accuracy.json`. Values are the contract's; none is restated here. */
+export interface ContractAccuracy {
+  readonly version: number;
+  /** Registry model key -> mode. */
+  readonly mode: Readonly<Record<string, AccuracyMode>>;
+  readonly retry_rounds: number;
+  readonly refusal_cap: number;
+  readonly min_quote_length: number;
+  /** Tool name -> source kind. */
+  readonly source_kinds: Readonly<Record<string, SourceKind>>;
+  readonly purpose_exempt_tools: readonly string[];
+  readonly checks: readonly AccuracyCheck[];
+  /**
+   * Reason a checker gives -> id of the check it counts under. The checker
+   * (`lib/facts.ts`) owns the reason names; the contract owns the check ids,
+   * so no check id is written in TypeScript.
+   */
+  readonly refusal_checks: Readonly<Record<string, string>>;
+}
+
 export type ContractSchemas = Readonly<Record<SchemaName, unknown>>;
 
 export interface Contract {
@@ -91,6 +124,7 @@ export interface Contract {
   readonly schemas: ContractSchemas;
   readonly models: ContractModels;
   readonly gate: ContractGate;
+  readonly accuracy: ContractAccuracy;
   /** `policy.json`'s `version`, or 0 when it declares none. */
   readonly version: number;
 }
@@ -153,7 +187,7 @@ export function resolveContractDir(
   return { dir, source: "repo" };
 }
 
-/** Load `policy.json`, `models.json`, `gate.json` and every schema from the resolved contract directory. */
+/** Load `policy.json`, `models.json`, `gate.json`, `accuracy.json` and every schema from the resolved contract directory. */
 export function loadContract(
   env: Record<string, string | undefined> = process.env,
   start: string = extensionDir,
@@ -177,6 +211,7 @@ export function loadContract(
   };
   const models = requireFile("models.json") as ContractModels;
   const gate = requireFile("gate.json") as ContractGate;
+  const accuracy = requireFile("accuracy.json") as ContractAccuracy;
 
   return {
     dir,
@@ -184,6 +219,7 @@ export function loadContract(
     policy,
     models,
     gate,
+    accuracy,
     schemas: Object.freeze(schemas),
     version: typeof policy.version === "number" ? policy.version : 0,
   };

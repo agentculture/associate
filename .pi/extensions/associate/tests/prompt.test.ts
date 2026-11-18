@@ -466,3 +466,64 @@ test("review: a spawned child's prompt says the run-starting tools are not avail
     assert.ok(child.slice(child.indexOf("# Spawned child")).includes(name), name);
   }
 });
+
+// ------------------------------------------------- t18: the accuracy rules block
+
+const ALL_KEYS = Object.keys(REGISTRY.models);
+const RULES_HEADING = "## Accuracy rules";
+
+/** The accuracy-rules section: from its heading to the next `## ` heading or the end. */
+function rulesBlock(text: string): string {
+  const start = text.indexOf(RULES_HEADING);
+  assert.ok(start >= 0, "the accuracy rules heading is present");
+  const rest = text.slice(start + RULES_HEADING.length);
+  const next = rest.search(/\n## /);
+  return text.slice(start, next < 0 ? text.length : start + RULES_HEADING.length + next).trim();
+}
+
+const RULE_PHRASES: Array<[string, RegExp]> = [
+  ["purpose on every call", /`purpose`/],
+  ["cite the printed walk id", /walk id: wN/],
+  ["a fact is value, source and word-for-word quote", /value, its source.*quote copied word for word/s],
+  ["check_quote before finish", /`check_quote`.*before `finish`/s],
+  ["alternatives before concluding", /alternatives.*before you conclude/s],
+  ["cannot tell is complete", /cannot tell.*complete answer/s],
+  ["say what was not read", /did not read/],
+  ["a refused finish is retried", /refused.*fix each problem.*call\s+it\s+again/s],
+  ["reply with exactly the rendered answer", /exactly\s+that\s+text/],
+];
+
+test("t18: the accuracy rules block is the same in all four prompts", () => {
+  const blocks = ALL_KEYS.map((key) => rulesBlock(promptFile(key)));
+  for (const [i, block] of blocks.entries()) {
+    assert.equal(block, blocks[0], `${ALL_KEYS[i]}'s rules block differs from ${ALL_KEYS[0]}'s`);
+  }
+});
+
+for (const [label, re] of RULE_PHRASES) {
+  test(`t18: the rules block states: ${label}`, () => {
+    assert.match(rulesBlock(promptFile(ALL_KEYS[0]!)), re);
+  });
+  test(`t18: AGENTS.md states: ${label}`, () => {
+    const agents = readFileSync(join(REPO_ROOT, "AGENTS.md"), "utf8");
+    assert.match(agents, re);
+  });
+}
+
+test("t18: the do-not-retry line excludes a refused finish", () => {
+  for (const key of ["worker", "cortex", "super-vl"]) {
+    const text = promptFile(key);
+    const line = text.split("\n").find((l) => l.startsWith("refuse. When a call"));
+    assert.ok(line, `${key} has the refused-call line`);
+    assert.match(line!, /other than `finish`/);
+  }
+  const agents = readFileSync(join(REPO_ROOT, "AGENTS.md"), "utf8");
+  assert.match(agents, /exception to .do not retry a refused call/i);
+});
+
+test("t18: no prompt names a checkpoint id", () => {
+  const texts = [readFileSync(join(REPO_ROOT, "AGENTS.md"), "utf8"), ...ALL_KEYS.map(promptFile)];
+  for (const text of texts) {
+    assert.doesNotMatch(text, /nvidia|nemotron|\b[\w.-]+\/[\w.-]*\d+B\b/i);
+  }
+});

@@ -28,6 +28,7 @@ import { execFile } from "node:child_process";
 import { accessSync, constants, statSync } from "node:fs";
 import { delimiter, isAbsolute, join } from "node:path";
 import type { StructuredError } from "../lib/contain.ts";
+import { defaultFix } from "../lib/contain.ts";
 
 // ---------------------------------------------------------------------------
 // The typed error object
@@ -49,21 +50,30 @@ import type { StructuredError } from "../lib/contain.ts";
  */
 export interface ToolError {
   ok: false;
-  error: { code: string; kind: string; message: string; detail: Record<string, unknown> };
+  error: { code: string; kind: string; message: string; detail: Record<string, unknown>; fix: string };
   code: string;
   kind: string;
   message: string;
   detail: Record<string, unknown>;
+  /** How to change the request so it can succeed (spec c10): never empty. */
+  fix: string;
 }
 
-/** Build a {@link ToolError}. */
+/**
+ * Build a {@link ToolError}. `fix` says how to change the request; without
+ * one (or with a blank one) it is `lib/contain.ts` `defaultFix` for the code,
+ * so no tool error reaches the model without a fix.
+ */
 export function toolError(
   code: string,
   message: string,
   detail: Record<string, unknown> = {},
+  fix?: string,
 ): ToolError {
-  const error = { code, kind: code, message, detail };
-  return { ok: false, error, code, kind: code, message, detail };
+  const field = typeof detail.field === "string" ? detail.field : undefined;
+  const resolvedFix = typeof fix === "string" && fix.trim() ? fix : defaultFix(code, field);
+  const error = { code, kind: code, message, detail, fix: resolvedFix };
+  return { ok: false, error, code, kind: code, message, detail, fix: resolvedFix };
 }
 
 /**
@@ -77,7 +87,7 @@ export function fromContainError(
 ): ToolError {
   const merged = { ...detail };
   if (err.error.field !== undefined) merged.field = err.error.field;
-  return toolError(err.error.code, err.error.message, merged);
+  return toolError(err.error.code, err.error.message, merged, err.fix);
 }
 
 /** Render an error (or any result) as the pi tool result a wrapper returns. */

@@ -10,8 +10,8 @@ How readiness is decided (c34, honesty condition h26, deviation d8)
 -------------------------------------------------------------------
 h26 pins the mechanism: the check is made **from the tool list Pi reports**,
 never from trusting that ``.pi/settings.json`` or the extension directory
-exists on disk. Pi offers no ``--list-tools`` (measured on 0.84.2 and again
-on the pinned 1.1.0), and its JSON event stream carries no startup tool
+exists on disk. Pi offers no ``--list-tools`` (measured on 0.84.2 and 1.1.0;
+``pi --help`` on the pinned 1.5.2 lists none), and its JSON event stream carries no startup tool
 inventory — the session header is ``{"type":"session",…}`` and nothing else
 precedes the first turn. (1.1.0's transcript-backed leading ``system`` message
 does carry ``toolsAdded``, but it is emitted inside the run, after
@@ -63,7 +63,8 @@ repository context rather than as the runtime prompt (deviation d17).
 
 Version pin (c39)
 -----------------
-``pi`` is pinned exactly at the tested 1.1.0. A different version **warns on
+``pi`` is pinned exactly at the tested 1.5.2 (moved from 1.1.0; verdicts in
+``docs/notes/pi-1.5.2-migration.md``). A different version **warns on
 stderr naming the tested one and still runs**: refusing on a version number
 alone would make the harness unusable the day pi ships a patch, and the
 behavioural evidence is what the bench is for.
@@ -84,6 +85,7 @@ from pathlib import Path
 from typing import Any, Callable, Iterable, Sequence
 
 from associate import contract
+from associate.accuracy.check import accuracy_result
 from associate.contract import validate
 from associate.harness.base import (
     STATEMENTS_FILENAME,
@@ -108,7 +110,7 @@ __all__ = [
 ]
 
 #: The tested pi version (CLAUDE.md, "The Pi harness floors"; spec c39).
-PINNED_PI_VERSION = "1.1.0"
+PINNED_PI_VERSION = "1.5.2"
 
 #: The tool whose presence in the reported active tool list proves the load.
 SENTINEL_TOOL = "associate_ready"
@@ -587,6 +589,7 @@ class PiHarness(Harness):
         timeout: float = 900.0,
         model: str | None = None,
         untrusted_checkout: bool = False,
+        check_mode: str | None = None,
         executable: str | None = None,
         env: dict[str, str] | None = None,
         warn: Callable[[str], None] | None = None,
@@ -596,6 +599,7 @@ class PiHarness(Harness):
         self._timeout = timeout
         self._model_key = model
         self._untrusted_checkout = untrusted_checkout
+        self._check_mode = check_mode
         self._executable = executable
         self._base_env = dict(env) if env is not None else None
         self._warn = warn if warn is not None else _warn
@@ -658,7 +662,11 @@ class PiHarness(Harness):
         events = parse_events(completed.stdout)
         report = self._read_ready_report(export_dir) or sentinel_report(events) or report
 
-        self._result = {**self._assemble_result(export_dir, report), **final_turn(events)}
+        continue_from = self._continue_from or task.get("continue_from")
+        self._result = {
+            **self._assemble_result(export_dir, report, continue_from),
+            **final_turn(events),
+        }
 
     def _run_preflight(
         self,
@@ -760,8 +768,15 @@ class PiHarness(Harness):
         self._assert_task_succeeded(completed, export_dir)
         return completed
 
-    def _assemble_result(self, export_dir: Path, report: dict[str, Any]) -> dict[str, Any]:
-        """The result dict handed back by ``collect()``."""
+    def _assemble_result(
+        self, export_dir: Path, report: dict[str, Any], continue_from: str | Path | None = None
+    ) -> dict[str, Any]:
+        """The result dict handed back by ``collect()``.
+
+        The accuracy fields come from the Python re-check run now, after the
+        model stopped (``associate.accuracy.check``); its counts are the ones
+        reported, the extension's ``report.json`` supplying only ``unchecked_text``.
+        """
         return {
             "walk_path": str(export_dir / WALK_FILENAME),
             "statements_path": str(export_dir / STATEMENTS_FILENAME),
@@ -776,6 +791,12 @@ class PiHarness(Harness):
             # registry default) and its lobes role — which model actually ran.
             "model": self.model_key(),
             "lobes_role": self.model_entry().get("lobes_role"),
+            **accuracy_result(
+                export_dir,
+                contract.load_accuracy(),
+                continue_from=Path(continue_from) if continue_from else None,
+                check_mode=self._check_mode,
+            ),
         }
 
     def collect(self) -> dict[str, Any]:
@@ -864,7 +885,7 @@ class PiHarness(Harness):
           exact fail-open c34 exists to close.
         * ``--no-context-files`` — risk r16: ancestor ``CLAUDE.md``/``AGENTS.md``
           files would leak into the system prompt.
-        * ``--no-mcp`` — risk r7: pi 1.1.0's built-in MCP support would connect
+        * ``--no-mcp`` — risk r7: pi's built-in MCP support (present since 1.1.0) would connect
           the operator's MCP servers and offer their ``mcp__*`` tools. The
           extension's ``tool_call`` guard already refuses any tool outside the
           active model's ``models.json`` set; this keeps them off the wire too.
@@ -963,6 +984,18 @@ class PiHarness(Harness):
         # exactly "approve" (including its absence) as untrusted.
         env["ASSOCIATE_PI_TRUST"] = "untrusted" if self._untrusted_checkout else "approve"
 
+        self._apply_task_environment(env, task)
+
+        # Marks of who started a process, each true of one process only: the
+        # delegated `associate run` itself (never the pi it starts, or the
+        # timeout kill would spare that pi's children), and a child pi started
+        # by spawn_subagent (a run started here is nobody's spawned child).
+        env.pop(DELEGATED_RUN_ENV, None)
+        env.pop(SPAWNED_BY_ENV, None)
+        return env
+
+    def _apply_task_environment(self, env: dict[str, str], task: dict[str, Any]) -> None:
+        """Set or clear each per-run variable; an inherited value never passes through."""
         # d8: the gate tells the decider where writes land. Only the task —
         # which ``associate run`` builds from the run it actually started —
         # may claim isolation; an inherited value is never passed through.
@@ -989,19 +1022,19 @@ class PiHarness(Harness):
         else:
             env.pop("ASSOCIATE_TEST_COMMANDS", None)
 
+        # The per-run hand-back check mode, from --check-mode only: an operator's
+        # ambient value is never passed through, so the result's check_mode and
+        # what the extension used cannot disagree.
+        if self._check_mode:
+            env["ASSOCIATE_CHECK_MODE"] = self._check_mode
+        else:
+            env.pop("ASSOCIATE_CHECK_MODE", None)
+
         continue_from = self._continue_from or task.get("continue_from")
         if continue_from:
             env["ASSOCIATE_CONTINUE_FROM"] = str(continue_from)
         else:
             env.pop("ASSOCIATE_CONTINUE_FROM", None)
-
-        # Marks of who started a process, each true of one process only: the
-        # delegated `associate run` itself (never the pi it starts, or the
-        # timeout kill would spare that pi's children), and a child pi started
-        # by spawn_subagent (a run started here is nobody's spawned child).
-        env.pop(DELEGATED_RUN_ENV, None)
-        env.pop(SPAWNED_BY_ENV, None)
-        return env
 
     # -- checks ------------------------------------------------------------
 

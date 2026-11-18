@@ -2,16 +2,26 @@
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "$id": "https://github.com/agentculture/associate/contract/walk.schema.json",
   "title": "associate walk",
-  "description": "Artifact A of a run (issue #4): an ordered log of every tool call and its result, written by the harness from tool events and never editable by the model. On disk it is walk.jsonl — one $defs/entry per line, interleaved {\"gate\": <$defs/gate>} and {\"child\": <$defs/child>} lines, then a final line {\"run\": <$defs/run>}. This top-level document schema describes the same walk assembled in memory.",
+  "description": "Artifact A of a run (issue #4): an ordered log of every tool call and its result, written by the harness from tool events and never editable by the model. On disk it is walk.jsonl — a first line {\"format\": <$defs/format>} (absent in a walk written before format 2, which reads as format 1), then one $defs/entry per line, interleaved {\"gate\": <$defs/gate>} and {\"child\": <$defs/child>} lines, then a final line {\"run\": <$defs/run>}. This top-level document schema describes the same walk assembled in memory.",
   "type": "object",
   "required": ["entries", "run"],
   "properties": {
+    "format": {"$ref": "#/$defs/format"},
     "entries": {"type": "array", "items": {"$ref": "#/$defs/entry"}},
     "gates": {"type": "array", "items": {"$ref": "#/$defs/gate"}},
     "children": {"type": "array", "items": {"$ref": "#/$defs/child"}},
     "run": {"$ref": "#/$defs/run"}
   },
   "$defs": {
+    "format": {
+      "description": "The walk's format marker, written as its first line by the recorder (issue #20). A walk without it was written before format 2 and is read as format 1.",
+      "type": "object",
+      "required": ["name", "version"],
+      "properties": {
+        "name": {"enum": ["associate-walk"]},
+        "version": {"enum": [2]}
+      }
+    },
     "entry": {
       "type": "object",
       "required": ["id", "ts", "tool", "args", "result", "truncated"],
@@ -23,8 +33,38 @@
         },
         "ts": {"type": "string", "description": "ISO 8601 timestamp with offset."},
         "tool": {"type": "string"},
-        "args": {"type": "object"},
+        "purpose": {
+          "type": "string",
+          "description": "The purpose the model stated on the call: the call's purpose argument as the tool_call event carried it, after redaction. Absent when the call had none (an exempt tool, or a walk written before format 2)."
+        },
+        "args": {"type": "object", "description": "The arguments as asked: copied when the tool_call event arrived, before any hook could change them, redacted. Complete, the purpose argument included."},
+        "args_used": {
+          "type": "object",
+          "description": "The arguments as the tool used them, from the tool's result details key args_used, redacted. Absent when the tool did not report them."
+        },
+        "dropped_args": {
+          "type": "array",
+          "items": {"type": "string"},
+          "description": "Names of arguments the tool ignored, from its result details key dropped_args. Absent when the tool did not report them."
+        },
+        "source_kind": {
+          "enum": ["file", "tool", "web", "memory", "agent", "harness"],
+          "description": "What kind of source the result is, set by the harness from the tool name through accuracy.json source_kinds, never from model text. Absent for a tool that table does not list."
+        },
         "result": {"$ref": "#/$defs/result"},
+        "saved_result": {
+          "type": "string",
+          "pattern": "^results/w[1-9][0-9]*\\.txt$",
+          "description": "The file, relative to the export directory, holding the redacted result text in full up to caps.max_raw_chars. Absent when nothing was saved (a refused or unresolved call)."
+        },
+        "not_shown_chars": {
+          "type": "integer",
+          "description": "Characters of the result the model was not shown (a non-negative count), as the tool reported it in its result details key not_shown_chars; 0 for a result the tool did not mark truncated. Absent when unknown."
+        },
+        "partial": {
+          "type": "boolean",
+          "description": "True when the saved result does not hold the whole result text: above caps.max_raw_chars, or nothing saved. A fact citing a partial entry cannot be fully checked."
+        },
         "truncated": {"type": "boolean"},
         "error": {"type": "string", "description": "Present only when the call failed."}
       }

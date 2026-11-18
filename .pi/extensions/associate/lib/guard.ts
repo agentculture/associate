@@ -75,9 +75,17 @@ export const PATH_ARG_KEYS: readonly string[] = [
   "to",
 ];
 
+/**
+ * One refusal. `reason` is what pi hands the model, so it already ends with
+ * the fix; `fix` is also kept on its own (spec c10: every refusal says how to
+ * fix the request), and `kind` names the refusal for the refusal cap (issue
+ * #20: the same kind repeated up to accuracy.json `refusal_cap` ends the run).
+ */
 export interface GuardDecision {
   readonly block: true;
   readonly reason: string;
+  readonly fix: string;
+  readonly kind: string;
 }
 
 export interface GuardOptions {
@@ -160,24 +168,24 @@ export function evaluateToolCall(options: GuardOptions): GuardDecision | undefin
   // built-in bash takes `command`, not a path). There is nothing to confine,
   // so refuse it rather than wave it through.
   if (targets.length === 0) {
-    return {
-      block: true,
-      reason:
-        `associate: '${options.toolName}' can modify a checkout and declares no path to confine. ` +
-        `associate hands work back instead of enacting it; write under ${options.scratchDir} instead.`,
-    };
+    return block(
+      "pathless_writer",
+      `associate: '${options.toolName}' can modify a checkout and declares no path to confine. ` +
+        "associate hands work back instead of enacting it",
+      `name a file under ${options.scratchDir} in 'path', or return the draft through 'finish'`,
+    );
   }
 
   for (const target of targets) {
     const resolved = isAbsolute(target) ? resolve(target) : resolve(options.cwd, target);
     if (!isInside(options.scratchDir, resolved)) {
-      return {
-        block: true,
-        reason:
-          `associate: '${options.toolName}' would write to ${resolved}, outside this session's ` +
+      return block(
+        "outside_scratch",
+        `associate: '${options.toolName}' would write to ${resolved}, outside this session's ` +
           `scratch directory ${options.scratchDir}. The active model may not change the checkout ` +
-          "(models.json may_mutate: false); drafts are returned through the 'finish' tool.",
-      };
+          "(models.json may_mutate: false)",
+        `write under ${options.scratchDir} instead, or return the draft through the 'finish' tool`,
+      );
     }
   }
 
@@ -292,8 +300,10 @@ export function confineWriteToCheckout(options: CheckoutConfineOptions): GuardDe
   const targets = collectPathArguments(options.input);
   if (targets.length === 0) {
     return block(
+      "pathless_writer",
       `associate: '${options.toolName}' can modify files and declares no path to confine to the run's ` +
         `checkout ${options.checkoutRoot}; the call is refused`,
+      `use write or edit with a 'path' inside ${options.checkoutRoot}`,
     );
   }
   const roots = [options.checkoutRoot, options.scratchDir].map((root) => resolveWriteDestination(root));
@@ -301,10 +311,13 @@ export function confineWriteToCheckout(options: CheckoutConfineOptions): GuardDe
     const resolved = resolveWriteDestination(resolveWriteTarget(target, options.cwd, options.home));
     if (roots.some((root) => isInside(root, resolved))) continue;
     return block(
+      "outside_checkout",
       `associate: '${options.toolName}' would write to ${resolved}, outside the run's checkout ` +
         `${options.checkoutRoot} (symlinks followed). Changes may only land in the checkout this run ` +
         `works in, or in the session scratch directory ${options.scratchDir}; the call is refused ` +
         "before the safety gate",
+      `give a path inside ${options.checkoutRoot} (relative to it, no '..' or symlink leading out), ` +
+        `or under ${options.scratchDir}`,
     );
   }
   return undefined;
@@ -418,6 +431,9 @@ export function describeWriteChange(options: WriteChangeOptions): string {
 //   2. tool not in the model's tool set   → refuse (risk r8: catches a tool
 //      another extension re-enabled after our setActiveTools, an `mcp__*`
 //      tool, `codemode`, any unknown name);
+//   2b. no stated purpose (issue #20)    → refuse, unless the tool is in
+//      accuracy.json `purpose_exempt_tools`; nothing below runs, the gate is
+//      never asked;
 //   3. model may not mutate (senses):
 //        mutating call → refuse, BEFORE the gate (the decider is never asked);
 //        otherwise the scratch-dir write confinement above still applies;
@@ -433,7 +449,8 @@ export function describeWriteChange(options: WriteChangeOptions): string {
 //      and `web_page`, which can send data off the machine — none a repo
 //      mutation, so senses keeps them, but none a read either) →
 //      `gate.evaluate` with `isMutating: true` (so the read-only fallback
-//      refuses it), entry recorded to the walk; proceed only on `allow`;
+//      refuses it) and the arguments WITHOUT the purpose (issue #20: gate.json
+//      stays at version 9), entry recorded to the walk; proceed only on `allow`;
 //   6. truncation (risk r15): a gate state cut to fit the decider means CLEF
 //      scored only part of the call, so the call is refused even on `allow`.
 //      Since d16 the gate never cuts: an oversized state is judged whole by a
@@ -476,6 +493,11 @@ export interface ModelGuardOptions {
   readonly toolCallId?: string;
   /** The session's in-flight checkout holds (review r2/5); absent disables the window. */
   readonly testWindow?: TestWindow;
+  /**
+   * accuracy.json `purpose_exempt_tools`: the tools that need no purpose.
+   * Absent means none is exempt (fail closed).
+   */
+  readonly purposeExemptTools?: readonly string[];
 }
 
 /**
@@ -490,8 +512,144 @@ function spawnsWriter(input: unknown, registry: ContractModels): boolean {
   return registry.models[key]!.may_mutate !== false;
 }
 
-function block(reason: string): GuardDecision {
-  return { block: true, reason };
+/** A refusal whose reason ends with its fix, since the reason is all pi shows the model. */
+function block(kind: string, why: string, fix: string): GuardDecision {
+  return { block: true, kind, reason: `${why}. Fix: ${fix}`, fix };
+}
+
+// ===========================================================================
+// The stated purpose (issue #20, spec c7/h43)
+// ===========================================================================
+//
+// Every call except the contract's `purpose_exempt_tools` states, in a
+// `purpose` argument, the question it settles and what it expects to see. It
+// is enforced here, in the hook, and stays optional in every schema: pi skips
+// `tool_call` for a call whose arguments fail the schema, so a required schema
+// property would hand the model pi's message, not this fix. The purpose stays
+// in the call's input (the walk recorder copies it from there) and is removed
+// only from the request built for the safety gate, so what CLEF is asked —
+// and gate.json's version — does not change.
+
+/** The argument a call states its purpose in. */
+export const PURPOSE_ARG = "purpose";
+
+/** The call's stated purpose, or undefined when it is missing, not a string, or blank. */
+export function statedPurpose(input: unknown): string | undefined {
+  if (!input || typeof input !== "object" || Array.isArray(input)) return undefined;
+  const value = (input as Record<string, unknown>)[PURPOSE_ARG];
+  return typeof value === "string" && value.trim() ? value : undefined;
+}
+
+/** The call's arguments without the purpose: what the safety gate is sent. The input is not changed. */
+export function withoutPurpose(input: unknown): unknown {
+  if (!input || typeof input !== "object" || Array.isArray(input) || !Object.hasOwn(input, PURPOSE_ARG)) return input;
+  const { [PURPOSE_ARG]: _omitted, ...rest } = input as Record<string, unknown>;
+  return rest;
+}
+
+function missingPurpose(toolName: string, exempt: readonly string[]): GuardDecision {
+  return block(
+    "missing_purpose",
+    `associate: '${toolName}' was called without a purpose: the '${PURPOSE_ARG}' argument is missing ` +
+      `or empty, and every call${exempt.length ? ` except ${exempt.join(" and ")}` : ""} must state one ` +
+      "before it runs; the call did not run",
+    `call '${toolName}' again with the same arguments plus a '${PURPOSE_ARG}' string: one sentence on the ` +
+      "question this call settles and what you expect to see, e.g. " +
+      `{"${PURPOSE_ARG}": "find where the walk file is written; expect a writeFileSync call in lib/walk.ts", ` +
+      "...the other arguments}",
+  );
+}
+
+// ===========================================================================
+// The refusal cap (issue #20, spec c53)
+// ===========================================================================
+
+/**
+ * Counts consecutive refusals of one kind, at most one per model turn. At
+ * accuracy.json `refusal_cap` the hook returns `terminate: true` instead of
+ * letting the model loop on the same refusal to its time limit (the walk
+ * outcome is pinned by the caller only when the run actually ends; see
+ * index.ts).
+ *
+ * Per turn (fix-refusal-cap, live run acc20-worker-gate-thresholds): the calls
+ * of one assistant turn are made together, before the model can read any of
+ * their refusals, so several same-kind refusals in one turn count once.
+ *
+ * Across turns, as before: a turn's refusal of the same kind adds one; a
+ * refusal of another kind restarts the count at 1; an allowed call restarts
+ * it at 0; {@link reset} clears it.
+ *
+ * Within one turn: an allowed call restarts the count carried from earlier
+ * turns, but does not drop a refusal made in the same turn — the turn ends
+ * with count 1 for that kind, whichever of the two the hook saw first. (A
+ * refusal decided before the turn's allowed call can still report `capped`;
+ * pi does not stop a batch that holds a non-terminating result, and the
+ * allowed call brings the count back to 1.) Several refusal kinds in one
+ * turn: the last one noted is the kind counted.
+ *
+ * A note without a turn number is its own turn (a host that sends no
+ * `turn_start`), which is the one-count-per-call behaviour.
+ */
+export class RefusalCap {
+  private readonly cap: number;
+  private kind: string | undefined;
+  private count = 0;
+  // The turn being counted, and the state carried into it from earlier turns.
+  private turn: number | object | undefined;
+  private carriedKind: string | undefined;
+  private carriedCount = 0;
+  private allowedThisTurn = false;
+  private refusedThisTurn = false;
+
+  constructor(cap: number) {
+    if (!Number.isInteger(cap) || cap < 1) {
+      throw new Error(`accuracy.json refusal_cap must be a positive integer, got ${JSON.stringify(cap)}`);
+    }
+    this.cap = cap;
+  }
+
+  /**
+   * Note one decision made in `turn`; `capped` is true when this refusal
+   * reaches the cap. With no `turn`, the decision is its own turn.
+   */
+  note(decision: GuardDecision | undefined, turn?: number): { capped: boolean; count: number } {
+    const current = turn ?? {};
+    if (current !== this.turn) {
+      this.turn = current;
+      this.carriedKind = this.kind;
+      this.carriedCount = this.count;
+      this.allowedThisTurn = false;
+      this.refusedThisTurn = false;
+    }
+    if (!decision?.block) {
+      this.allowedThisTurn = true;
+      if (this.refusedThisTurn) this.count = 1;
+      else {
+        this.kind = undefined;
+        this.count = 0;
+      }
+      return { capped: false, count: this.count };
+    }
+    this.refusedThisTurn = true;
+    const carried = !this.allowedThisTurn && this.carriedKind === decision.kind ? this.carriedCount : 0;
+    this.kind = decision.kind;
+    this.count = carried + 1;
+    return { capped: this.count >= this.cap, count: this.count };
+  }
+
+  reset(): void {
+    this.kind = undefined;
+    this.count = 0;
+    this.turn = undefined;
+    this.carriedKind = undefined;
+    this.carriedCount = 0;
+    this.allowedThisTurn = false;
+    this.refusedThisTurn = false;
+  }
+
+  get limit(): number {
+    return this.cap;
+  }
 }
 
 function errorText(error: unknown): string {
@@ -503,7 +661,11 @@ export async function decideToolCall(options: ModelGuardOptions): Promise<GuardD
   try {
     return await decide(options);
   } catch (error) {
-    return block(`associate: the tool_call guard failed (${errorText(error)}); the call is refused`);
+    return block(
+      "guard_failed",
+      `associate: the tool_call guard failed (${errorText(error)}); the call is refused`,
+      "call again once; if it fails the same way, do not keep retrying: report it in finish",
+    );
   }
 }
 
@@ -512,15 +674,27 @@ async function decide(options: ModelGuardOptions): Promise<GuardDecision | undef
 
   // 1. No model, no tools.
   if (!model.entry || model.key === undefined) {
-    return block(model.problem ?? "associate: no active model is selected; every tool call is refused");
+    return block(
+      "no_model",
+      model.problem ?? "associate: no active model is selected; every tool call is refused",
+      "no tool can run in this session; reply in text that the operator must select a registry model",
+    );
   }
 
   // 2. The model's own tool set, checked on every call (r8).
   if (!model.tools.has(toolName)) {
     return block(
+      "not_in_tool_set",
       `associate: '${toolName}' is not in the tool set of the active model '${model.key}' ` +
         `(${[...model.tools].join(", ")}); the call is refused`,
+      `use one of the tools listed, or hand the step back with 'finish'`,
     );
+  }
+
+  // 2b. issue #20: a stated purpose, before anything is judged or gated.
+  const exempt = options.purposeExemptTools ?? [];
+  if (!exempt.includes(toolName) && statedPurpose(options.input) === undefined) {
+    return missingPurpose(toolName, exempt);
   }
 
   const mutating = isMutatingCall(toolName, options.input, options.registry, options.policy);
@@ -534,8 +708,10 @@ async function decide(options: ModelGuardOptions): Promise<GuardDecision | undef
   if (!model.mayMutate) {
     if (mutating) {
       return block(
+        "may_not_mutate",
         `associate: '${toolName}' can change something and the active model '${model.key}' may ` +
-          "not mutate (models.json may_mutate: false); hand the work back with 'finish' instead",
+          "not mutate (models.json may_mutate: false)",
+        "do not make the change; describe it and hand the work back with 'finish' instead",
       );
     }
     const confined = evaluateToolCall({
@@ -573,14 +749,18 @@ async function decide(options: ModelGuardOptions): Promise<GuardDecision | undef
   if (window && holds) {
     if (window.testsRunning()) {
       return block(
+        "tests_running",
         `associate: '${toolName}' could change the checkout while run_tests is restoring it; ` +
           "tests are running; retry after run_tests returns",
+        `wait for run_tests to return, then call '${toolName}' again`,
       );
     }
     if (holds === "tests" && window.changesInFlight()) {
       return block(
+        "change_in_flight",
         "associate: run_tests would snapshot and restore the checkout while a change to the checkout " +
           "is still in progress; retry run_tests after that call returns",
+        "wait for the pending change to return, then call run_tests again",
       );
     }
   }
@@ -595,8 +775,10 @@ async function decide(options: ModelGuardOptions): Promise<GuardDecision | undef
   // 5. Every mutation, and every gated call, goes through the gate.
   if (!options.gate) {
     return block(
+      "gate_unavailable",
       `associate: '${toolName}' is a ${gated ? "gated" : "mutating"} call and the safety gate is ` +
         "unavailable; the call is refused",
+      "do not retry it; describe the change you would make and hand it back with 'finish'",
     );
   }
   // d20: a write that replaces a file is shown to the gate as its change too.
@@ -613,7 +795,8 @@ async function decide(options: ModelGuardOptions): Promise<GuardDecision | undef
   const request = {
     task: options.task,
     action: toolName,
-    arguments: options.input,
+    // issue #20: the purpose is recorded in the walk, never scored by the gate.
+    arguments: withoutPurpose(options.input),
     model: model.key,
     isolation: options.isolation,
     ...(change !== undefined ? { change } : {}),
@@ -653,9 +836,15 @@ async function decide(options: ModelGuardOptions): Promise<GuardDecision | undef
   options.recordGate(entry);
 
   if (entry.decision !== "allow") {
+    const why =
+      typeof entry.reason === "string" && entry.reason.trim()
+        ? entry.reason
+        : `${entry.tier}: refused without a stated reason (treated as unsafe)`;
     return block(
-      `associate: the safety gate refused '${toolName}' (${entry.id}, tier ${entry.tier})` +
-        (entry.reason ? `: ${entry.reason}` : ""),
+      "gate_refused",
+      `associate: the safety gate refused '${toolName}' (${entry.id}, tier ${entry.tier}): ${why}`,
+      "do not send the same call again; make the change smaller and closer to what the task asks, " +
+        "or describe it in 'finish' and leave it to the operator",
     );
   }
   return allow();

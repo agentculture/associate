@@ -17,6 +17,13 @@ import type { ChildEntry, ChildLink } from "./walk.ts";
  * The part of the session's walk recorder a tool module may use: linking a
  * child walk (plan t16). Tool calls themselves are recorded from pi events,
  * never by a tool, so nothing else of the recorder is exposed.
+ *
+ * Issue #20 (plan t6): a tool contributes to its walk entry only through its
+ * result `details` — `args_used`, `dropped_args` and `not_shown_chars`, read by
+ * the recorder when the result arrives (documented at the top of
+ * `lib/walk.ts`). A tool never writes a walk line or a saved result
+ * (`lib/results.ts`) itself; `tests/walk.test.ts` checks that no tool module
+ * calls a walk-writing recorder method.
  */
 export interface ChildWalkLinker {
   readonly walkPath: string;

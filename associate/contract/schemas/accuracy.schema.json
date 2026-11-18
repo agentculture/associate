@@ -1,0 +1,46 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://github.com/agentculture/associate/contract/accuracy.schema.json",
+  "title": "associate accuracy settings",
+  "description": "The accuracy method's settings (accuracy.json). Structural shape only; cross-field rules (modes cover exactly the registry, the source-kind table covers exactly tool_names, exempt tools are registered, check ids are unique, refusal_checks names only listed checks) live in validate.validate_accuracy.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["version", "mode", "retry_rounds", "refusal_cap", "min_quote_length", "source_kinds", "purpose_exempt_tools", "checks", "refusal_checks"],
+  "properties": {
+    "$comment": {"type": "string"},
+    "version": {"type": "integer"},
+    "mode": {
+      "type": "object",
+      "description": "Registry model key -> report or enforce.",
+      "additionalProperties": {"enum": ["report", "enforce"]}
+    },
+    "retry_rounds": {"type": "integer"},
+    "refusal_cap": {"type": "integer"},
+    "min_quote_length": {"type": "integer"},
+    "source_kinds": {
+      "type": "object",
+      "description": "Tool name -> source kind of an entry that tool produces.",
+      "additionalProperties": {"enum": ["file", "tool", "web", "memory", "agent", "harness"]}
+    },
+    "purpose_exempt_tools": {"type": "array", "items": {"type": "string"}},
+    "checks": {
+      "type": "array",
+      "minItems": 1,
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["id", "strength", "motivating_failure"],
+        "properties": {
+          "id": {"type": "string", "pattern": "^[a-z][a-z0-9_]*$"},
+          "strength": {"enum": ["refuse", "flag"]},
+          "motivating_failure": {"type": "string", "pattern": "\\S"}
+        }
+      }
+    },
+    "refusal_checks": {
+      "type": "object",
+      "description": "Reason a checker gives (a refusal or a flag) -> id of the check in checks it belongs to. The checker code owns the reason names; the contract owns which check each one counts under.",
+      "additionalProperties": {"type": "string", "pattern": "^[a-z][a-z0-9_]*$"}
+    }
+  }
+}

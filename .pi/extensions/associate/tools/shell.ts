@@ -95,6 +95,12 @@ export const SHELL_PARAMETERS: Record<string, unknown> = {
         "Optional working directory, relative to the checkout being examined. " +
         "It must stay inside that checkout.",
     },
+    purpose: {
+      type: "string",
+      description:
+        "Why you are making this call: the question it settles and what you expect to see. " +
+        "It is recorded with the call; it does not change what the command does.",
+    },
   },
   required: ["argv"],
 };
@@ -471,6 +477,19 @@ function asResult(details: Record<string, unknown>): ToolResult {
   return { content: [{ type: "text", text: JSON.stringify(details) }], details };
 }
 
+/**
+ * Characters of *raw* that a bounded rendering of it did not show. A bounded
+ * text starts with a notice that ends at the first blank line and then holds
+ * the shown part of *raw*; the notice is not *raw*'s, so it is not counted as
+ * shown.
+ */
+function notShownChars(raw: string, bounded: { text: string; truncated: boolean } | undefined): number {
+  if (!bounded || !bounded.truncated) return 0;
+  const noticeEnd = bounded.text.indexOf("\n\n");
+  const shown = noticeEnd >= 0 ? bounded.text.length - (noticeEnd + 2) : bounded.text.length;
+  return Math.max(0, raw.length - shown);
+}
+
 function quoteForDisplay(argv: readonly string[]): string {
   return argv.map((token) => (/^[\w@%+=:,./-]+$/.test(token) ? token : JSON.stringify(token))).join(" ");
 }
@@ -589,6 +608,14 @@ export function makeShellExecute(ctx: AssociateContext, deps: ShellDeps = {}) {
       command_display: quoteForDisplay(argv),
       duration_ms: duration,
     };
+    // As used (issue #20): the command and directory the process ran with, the
+    // arguments given that this tool does not take, and what the cut hid.
+    const used: Record<string, unknown> = { argv };
+    if (typeof params.cwd === "string" && params.cwd.trim() !== "") used.cwd = params.cwd;
+    details.args_used = used;
+    const dropped = Object.keys(params).filter((key) => key !== "purpose" && key !== "argv" && key !== "cwd");
+    if (dropped.length > 0) details.dropped_args = dropped;
+    details.not_shown_chars = notShownChars(outcome.stdout, stdout) + notShownChars(outcome.stderr, stderr);
     if (outcome.signal) details.signal = outcome.signal;
     if (stdout?.spillPath) details.stdout_spill = stdout.spillPath;
     if (stderr?.spillPath) details.stderr_spill = stderr.spillPath;

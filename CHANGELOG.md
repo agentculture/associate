@@ -5,6 +5,75 @@ All notable changes to this project will be documented in this file.
 Format follows [Keep a Changelog](https://keepachangelog.com/). This project
 adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.12.0] - 2026-11-18
+
+The accuracy method (issue #20; plan
+`docs/plans/2026-11-17-associate-accuracy-method.md`, tasks t1–t21, deviations
+d1–d4).
+
+**Measured live, single runs** (`docs/notes/accuracy-live-acceptance.md`; pi
+1.5.2, reasoning off, report mode): six tasks each on `worker` and `cortex`
+handed back; the extension's counts, the Python re-check and a hand count
+agreed in 12 of 12 runs; `worker` had 7 of 26 facts pass and `cortex` 35 of
+40. **Not measured:** `senses`, reasoning on, the mesh path, spawned children
+and delegated runs, a real `ledger` binary, and enforce mode beyond two
+worker runs.
+
+### Added
+
+- A required `purpose` argument on every tool call except `finish` and
+  `associate_ready`, enforced in the `tool_call` hook, recorded in the walk and
+  kept out of the safety-gate request.
+- The walk entry as the action record: purpose, arguments as asked and as
+  used, source kind, and a saved result file per call (`results/wN.txt`). Every
+  tool result the model sees starts with a `walk id: wN` line.
+- Facts, alternatives, verdicts and open items in the `finish` payload, checked
+  by a deterministic quote matcher that exists in TypeScript and Python with
+  shared test vectors (`associate/contract/matcher_vectors.json`).
+- The `check_quote` tool, which runs the same matcher during a run.
+- Report and enforce modes for the hand-back check, per model in the contract,
+  with `associate run --check-mode` and `ASSOCIATE_CHECK_MODE` for one run.
+- A harness-rendered answer (`answer.md`), with the model's own summary and
+  final message labelled unchecked and counted.
+- `associate check <export-dir>`: the calls, facts and counts of any export,
+  recomputed from its files.
+- Run labels for citing other runs: `prior:wN` for a `--continue-from` run and
+  `cN:wN` for a child.
+- `docs/accuracy/tasks.json`, a fixed measurement task set with hand-checked
+  answers, and replay tests for six recorded failures
+  (`tests/fixtures/accuracy/`).
+
+### Changed
+
+- **Contract (compatibility events):** new `associate/contract/accuracy.json`
+  (version 1) with schemas for it, for facts and for the report; the tool name
+  `check_quote` added to `models.json` `tool_names` and to every model's tools;
+  the walk gains a format marker as its first line (format 2) and new optional
+  entry fields. Exports written before this version still load.
+- The pinned pi moves from 1.1.0 to 1.5.2
+  (`docs/notes/pi-1.5.2-migration.md`).
+- `associate run --json` carries `answer`, `accuracy`, `handback_outcome` and
+  `check_mode`. Exit code 3 is new: the hand-back was refused after the allowed
+  rounds, and the result is still printed. `delegate_status` reports such a
+  run as finished.
+- Every refusal a model receives carries a fix; a gate refusal always carries
+  a reason.
+- `grep`, `find` and `ls` report the true total beside a capped list and save
+  the full result. They no longer stop the search at the cap.
+- A call pi rejects before the hook (invalid arguments, unknown tool) is
+  recorded in the walk.
+- `ledger_append` refuses a ref shaped like a walk id that the walk never
+  issued; `eidetic_remember` can store a walk reference and quote.
+- `walkstats` no longer counts gate, child or format lines as tool calls of a
+  killed run.
+
+### Fixed
+
+- A final message citing a walk id the walk never issued is no longer recorded
+  as referenced.
+- A parent run parses a spawned child's hand-back again after results gained
+  the walk id line.
+
 ## [0.11.0] - 2026-11-16
 
 The bridge: another service can start an `associate run` on a checkout and read

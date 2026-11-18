@@ -101,7 +101,7 @@ test("tools on mutating_tools are mutating; the other registry tools are not", (
   for (const name of ["write", "edit", "ledger_append"]) {
     assert.equal(isMutatingCall(name, {}, REGISTRY, POLICY), true, name);
   }
-  for (const name of ["read", "grep", "find", "ls", "code_lens", "web_search", "web_page", "eidetic_recall", "ledger_list", "associate_ready", "finish"]) {
+  for (const name of ["read", "grep", "find", "ls", "code_lens", "web_search", "web_page", "eidetic_recall", "ledger_list", "check_quote", "associate_ready", "finish"]) {
     assert.equal(isMutatingCall(name, {}, REGISTRY, POLICY), false, name);
   }
 });
@@ -224,4 +224,13 @@ test("review: only a non-blank ASSOCIATE_SPAWNED_BY marks a child", () => {
   assert.equal(isSpawnedChild({ [SPAWNED_BY_ENV]: "" }), false);
   assert.equal(isSpawnedChild({ [SPAWNED_BY_ENV]: "  " }), false);
   assert.equal(isSpawnedChild({ [SPAWNED_BY_ENV]: "sess-1" }), true);
+});
+
+test("check_quote is offered to every active model and is not a writer", () => {
+  const available = [...REGISTRY.tool_names];
+  for (const key of ["worker", "senses", "cortex"]) {
+    const model = resolveActiveModel({ ASSOCIATE_MODEL: key }, REGISTRY);
+    assert.ok(activeToolSet(model, available, isWriter).includes("check_quote"), key);
+  }
+  assert.equal(isWriter("check_quote"), false);
 });

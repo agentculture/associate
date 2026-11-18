@@ -1,0 +1,68 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://github.com/agentculture/associate/contract/facts.schema.json",
+  "title": "associate facts",
+  "description": "The hand-back a model reports: facts, the alternatives it weighed, the verdicts it reached and the items it left open, beside an optional free-text summary. A source is an optional run label and a walk id (for example w12 or run-3:w12), never a path. Cross-field rules (a verdict's basis names facts of this payload, a supported or refuted verdict has no unread items, an open item names its deciding check, an action fact names its tool) are checked by the hand-back checker, not here.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["facts"],
+  "properties": {
+    "summary": {"type": "string", "description": "Free text; never a checked answer."},
+    "facts": {"type": "array", "items": {"$ref": "#/$defs/fact"}},
+    "alternatives": {"type": "array", "items": {"$ref": "#/$defs/alternative"}},
+    "verdicts": {"type": "array", "items": {"$ref": "#/$defs/verdict"}},
+    "open_items": {"type": "array", "items": {"$ref": "#/$defs/open_item"}}
+  },
+  "$defs": {
+    "fact": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["id", "value", "source", "quote"],
+      "properties": {
+        "id": {"type": "string", "pattern": "^f[1-9][0-9]*$"},
+        "value": {"type": "string"},
+        "source": {"type": "string", "pattern": "^([A-Za-z0-9_-]+:)?w[1-9][0-9]*$"},
+        "quote": {"type": "string"},
+        "action": {"type": "boolean", "description": "True when the fact states that an action happened (a tool ran, a file changed, a test passed, a record was stored)."},
+        "tool": {"type": "string", "description": "For an action fact: the tool whose call the fact says happened. The cited entry must be a call of this tool that did not end in an error or refusal."}
+      }
+    },
+    "alternative": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["id", "text", "predicts", "refuted_by"],
+      "properties": {
+        "id": {"type": "string", "pattern": "^a[1-9][0-9]*$"},
+        "text": {"type": "string"},
+        "predicts": {"type": "string", "description": "What would be seen if this alternative held."},
+        "refuted_by": {"type": "string", "description": "What would refute it."}
+      }
+    },
+    "verdict": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["id", "text", "verdict", "basis"],
+      "properties": {
+        "id": {"type": "string", "pattern": "^v[1-9][0-9]*$"},
+        "text": {"type": "string"},
+        "verdict": {"enum": ["supported", "refuted", "open", "cannot_tell"]},
+        "basis": {"type": "array", "items": {"type": "string", "pattern": "^f[1-9][0-9]*$"}, "description": "Ids of the facts this verdict rests on."},
+        "alternative": {"type": "string", "pattern": "^a[1-9][0-9]*$"},
+        "unread": {"type": "array", "items": {"type": "string"}, "description": "What was not read that bears on this verdict."},
+        "check": {"type": "string", "description": "For open or cannot_tell: the check that would decide it."},
+        "closing": {"type": "boolean", "description": "Marks the closing conclusion of the hand-back; when no verdict is marked, the last verdict is the closing one."}
+      }
+    },
+    "open_item": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["id", "text"],
+      "properties": {
+        "id": {"type": "string", "pattern": "^o[1-9][0-9]*$"},
+        "text": {"type": "string"},
+        "check": {"type": "string", "description": "The check that would decide it; an open item without one is refused by the checker."},
+        "basis": {"type": "array", "items": {"type": "string", "pattern": "^f[1-9][0-9]*$"}}
+      }
+    }
+  }
+}

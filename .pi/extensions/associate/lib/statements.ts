@@ -466,8 +466,12 @@ export class StatementsRecorder {
   recordAssistantMessage(text: string): StatementEntry[] {
     const redacted = this.filter.apply(text);
     const ranges = this.ranges();
+    // The final-message route must drop ids the walk never issued, just as
+    // recordHandback does: an id that names no walk entry is not evidence, so
+    // drop it and let the statement fall to `unreferenced`.
+    const known = this.knownWalkIds();
     const added = splitStatements(redacted).map((statementText) =>
-      this.buildStatement(statementText, parseEvidence(statementText), ranges),
+      this.buildStatement(statementText, this.keepKnown(parseEvidence(statementText), known), ranges),
     );
     return this.commit(added);
   }

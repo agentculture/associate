@@ -85,6 +85,7 @@ import { extensionDir } from "../lib/paths.ts";
 import { ASSOCIATE_PROVIDER_ID } from "../lib/provider.ts";
 import { resolveSessionDirs, sanitizeSessionId } from "../lib/session.ts";
 import { PI_TRUST_ENV, PI_TRUSTED, isCheckoutTrusted } from "../lib/trust.ts";
+import { stripWalkIdStamp } from "../lib/walk.ts";
 import { resolveActiveModel, SPAWNED_BY_ENV } from "../lib/toolset.ts";
 import {
   compileRedaction,
@@ -368,7 +369,10 @@ function readLine(state: ChildStream, line: string): void {
   if (!event || typeof event !== "object") return;
   if (event.type === "tool_execution_end" && event.toolName === "finish" && event.isError !== true) {
     // finish's first content block is the normalized hand-back, as JSON (index.ts).
-    const text = firstText(event.result?.content);
+    // The child stamps every result with its walk id (lib/walk.ts); the stamp
+    // line is for the child's model, not part of the hand-back.
+    const stamped = firstText(event.result?.content);
+    const text = stamped === undefined ? undefined : stripWalkIdStamp(stamped);
     if (text !== undefined) {
       try {
         state.handback = JSON.parse(text);
@@ -576,6 +580,10 @@ export function createSpawnTool(ctx: AssociateContext, deps: SpawnDeps = {}) {
       child_session_id: childSession,
       child_walk: childWalk,
       child_link: link.id,
+      // The label the child's walk entries are cited under (spec c58): the
+      // child's own w ids collide with this run's, so a bare one is ambiguous.
+      citation_label: link.id,
+      citation_note: `cite the child's walk entries as ${link.id}:w<N> (for example ${link.id}:w1), never as a bare w<N>`,
     };
     const state: ChildStream = {};
     const started = Date.now();
@@ -678,7 +686,7 @@ export function createSpawnTool(ctx: AssociateContext, deps: SpawnDeps = {}) {
   }
 
   async function execute(params: Record<string, unknown>, signal: AbortSignal | undefined): Promise<Result> {
-    const extra = Object.keys(params).filter((key) => key !== "model" && key !== "task");
+    const extra = Object.keys(params).filter((key) => key !== "model" && key !== "task" && key !== "purpose");
     if (extra.length > 0) {
       return toolResult(
         toolError("invalid_args", `spawn_subagent takes only 'model' and 'task'; ${extra.join(", ")} cannot be given`, {
@@ -798,6 +806,12 @@ export function createSpawnTool(ctx: AssociateContext, deps: SpawnDeps = {}) {
           description: `The child model's registry key (${childList}).`,
         },
         task: { type: "string", description: "The sub-task, complete and self-contained: the child sees nothing else." },
+        purpose: {
+          type: "string",
+          description:
+            "Why you are making this call: the question it settles and what you expect to see. " +
+            "It is recorded with the call; it is not given to the child.",
+        },
       },
       required: ["model", "task"],
       additionalProperties: false,

@@ -79,7 +79,9 @@ test("ASSOCIATE_CONTRACT_DIR wins over the repo-relative fallback", () => {
     }
     writeFileSync(join(dir, "models.json"), JSON.stringify(real.models));
     writeFileSync(join(dir, "gate.json"), JSON.stringify(real.gate));
+    writeFileSync(join(dir, "accuracy.json"), JSON.stringify({ ...real.accuracy, retry_rounds: 77 }));
     const contract = loadContract({ ASSOCIATE_CONTRACT_DIR: dir });
+    assert.equal(contract.accuracy.retry_rounds, 77, "accuracy.json is read from ASSOCIATE_CONTRACT_DIR");
     assert.equal(contract.source, "env");
     assert.equal(contract.version, 99);
     assert.notEqual(contract.dir, real.dir);
@@ -170,3 +172,57 @@ function collectTypeScript(dir: string): string[] {
   }
   return found;
 }
+
+test("loadContract exposes accuracy.json from disk", () => {
+  const contract = loadContract({});
+  const onDisk = JSON.parse(readFileSync(join(contract.dir, "accuracy.json"), "utf8"));
+  assert.deepEqual(contract.accuracy, onDisk);
+  assert.ok(contract.accuracy.version >= 1);
+  assert.ok(contract.accuracy.checks.length > 0);
+  assert.deepEqual(Object.keys(contract.accuracy.source_kinds).sort(), [...contract.models.tool_names].sort());
+});
+
+test("a contract dir without accuracy.json is refused", () => {
+  const real = loadContract({});
+  const dir = mkdtempSync(join(tmpdir(), "associate-contract-"));
+  try {
+    mkdirSync(join(dir, "schemas"), { recursive: true });
+    writeFileSync(join(dir, "policy.json"), "{}");
+    for (const name of SCHEMA_NAMES) writeFileSync(join(dir, "schemas", `${name}.schema.json`), "{}");
+    writeFileSync(join(dir, "models.json"), JSON.stringify(real.models));
+    writeFileSync(join(dir, "gate.json"), JSON.stringify(real.gate));
+    assert.throws(() => loadContract({ ASSOCIATE_CONTRACT_DIR: dir }), /accuracy\.json/);
+  } finally {
+    rmSync(dir, { recursive: true, force: true });
+  }
+});
+
+test("no accuracy setting appears as a literal in the extension's TypeScript", () => {
+  // Spec h17: thresholds, modes, retry rounds and the check table live in
+  // accuracy.json. The distinctive strings of that file (setting key names,
+  // check ids, motivating failures) appear quoted in no shipped .ts file.
+  const { accuracy } = loadContract({});
+  const needles = [
+    ...["retry_rounds", "refusal_cap", "min_quote_length", "source_kinds", "purpose_exempt_tools", "motivating_failure", "refusal_checks"],
+    ...accuracy.checks.map((check) => check.id),
+  ].map((word) => `"${word}"`);
+  needles.push(...accuracy.checks.map((check) => check.motivating_failure));
+  assert.ok(needles.length > 6, "fixture assumption: accuracy.json has checks");
+  const shipped = [
+    join(extensionDir, "index.ts"),
+    ...collectTypeScript(join(extensionDir, "lib")),
+    ...collectTypeScript(join(extensionDir, "tools")),
+  ];
+  for (const path of shipped) {
+    const text = readFileSync(path, "utf8");
+    for (const needle of needles) {
+      assert.ok(!text.includes(needle), `${path} restates accuracy.json value ${needle}`);
+    }
+  }
+});
+
+test("package.json declares no dependency", () => {
+  const manifest = JSON.parse(readFileSync(join(extensionDir, "..", "..", "..", "package.json"), "utf8"));
+  assert.equal(manifest.dependencies, undefined);
+  assert.equal(manifest.devDependencies, undefined);
+});

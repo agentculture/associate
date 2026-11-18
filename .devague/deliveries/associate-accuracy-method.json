@@ -1,0 +1,72 @@
+{
+  "plan_slug": "associate-accuracy-method",
+  "schema_version": 2,
+  "created": "2026-11-17T21:34:16Z",
+  "updated": "2026-11-18T04:46:52Z",
+  "deviations": [
+    {
+      "id": "d1",
+      "what": "t9 also records a call that pi rejected before the tool_call hook (invalid arguments or an unknown tool) as a walk entry, taken from tool_execution_end, with pi's error as the reason",
+      "task_ref": "t9",
+      "reason": "pi 1.5.2 docs/extensions.md: \"An unknown tool or invalid arguments skip tool_call\"; found while writing the t1 migration note. Without it such a call has no walk entry, so the record claim (c8) and the refusal claim (c10) do not hold for it. Approved by the operator 2026-11-17.",
+      "affects": [
+        "c8",
+        "c10"
+      ],
+      "origin": "user",
+      "status": "approved",
+      "classification": "acceptable",
+      "seq": 1
+    },
+    {
+      "id": "d2",
+      "what": "t12 and t10 edit associate/contract/accuracy.json, which their confirmed instructions do not list: t12 adds the source kind of its new tool; t10 extends the checks list and adds a reason-to-check mapping, with schema, validator and loader changes",
+      "task_ref": "t10",
+      "reason": "The t2 validator requires the source-kind table to equal tool_names, and an existing test forbids check ids as literals in the extension TypeScript, so both needs can only be met in the contract file. Approved by the operator 2026-11-17.",
+      "affects": [
+        "t12",
+        "t2"
+      ],
+      "origin": "user",
+      "status": "approved",
+      "classification": "acceptable",
+      "seq": 2
+    },
+    {
+      "id": "d3",
+      "what": "run_tests, spawn_subagent, delegate_run and delegate_status still refuse an unknown argument (other than purpose) instead of reporting it as dropped",
+      "task_ref": "t8",
+      "reason": "The t8 instruction says an unknown argument is reported in used-args as dropped. The builder kept the existing refusal for these four tools because their tests and their security intent require it; a refusal with a fix is not a silent drop. Reported by the task agent, not yet approved.",
+      "affects": [],
+      "origin": "llm",
+      "status": "approved",
+      "classification": "acceptable",
+      "seq": 3
+    },
+    {
+      "id": "d4",
+      "what": "grep, find and ls no longer stop the search process at the 200-result cap; they scan to the end or to caps.max_raw_chars to report a true total, and save the full list unredacted in the session scratch directory",
+      "task_ref": "t8",
+      "reason": "The acceptance criterion asks for the true total and a saved full result; the builder met it by scanning further. Cost: a large repository is searched longer and up to 2,000,000 characters are held in memory. Reported by the task agent, not yet approved.",
+      "affects": [],
+      "origin": "llm",
+      "status": "approved",
+      "classification": "risky",
+      "seq": 4
+    },
+    {
+      "id": "d5",
+      "what": "the finished work was moved from its integration branch onto origin/main as one change (branch accuracy/issue-20-on-main), and its version became 0.12.0 instead of 0.11.0",
+      "task_ref": "t21",
+      "reason": "The integration branch was created from a local base that predates PR #19 on origin/main (the bridge, also 0.11.0), which edits many of the same files; found only at PR time (lapse l4). The branch diff was applied onto origin/main with a three-way apply; 12 files conflicted and were resolved by keeping both sides; five merge fallouts in tests were fixed; the bridge surface-parity test learned the check verb. Both suites and every gate pass on the combined tree, and one live worker run from it was accepted. Not yet approved by the operator.",
+      "affects": [],
+      "origin": "llm",
+      "status": "approved",
+      "classification": "risky",
+      "seq": 5
+    }
+  ],
+  "evidence": [],
+  "deltas": [],
+  "supersessions": []
+}

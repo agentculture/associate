@@ -1148,6 +1148,19 @@ async function decideLarge(
 
 // --------------------------------------------------------------------- gate
 
+/**
+ * Give a refusal that carries no reason one that names its tier (spec c10: a
+ * non-allow outcome without a reason is a harness bug, never something the
+ * model is handed). Every tier states its reason today; this is the guarantee
+ * that stays true if one stops. An allow, or a refusal with a reason, is left
+ * as it is.
+ */
+export function ensureRefusalReason(entry: { tier?: unknown; decision?: unknown; reason?: unknown }): void {
+  if (entry.decision === "allow") return;
+  if (typeof entry.reason === "string" && entry.reason.trim()) return;
+  entry.reason = `${String(entry.tier ?? "gate")}: refused without a stated reason (treated as unsafe)`;
+}
+
 /** Build a gate. `compileGate` runs here, so a bad contract throws at construction. */
 export function createGate(options: GateOptions): Gate {
   const config = compileGate(options.contract);
@@ -1240,6 +1253,7 @@ export function createGate(options: GateOptions): Gate {
         decided = { tier: "readonly", decision: "refuse", reason: `gate failed: ${errorText(error)}` };
       }
       const entry: GateEntry = { ...base, ...decided };
+      ensureRefusalReason(entry);
       if (entry.reason !== undefined) entry.reason = config.filter.apply(entry.reason);
       return entry;
     },
