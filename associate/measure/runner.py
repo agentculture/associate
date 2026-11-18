@@ -509,11 +509,18 @@ def _resolve_commit(repo: Path, commit: str) -> str:
 
 
 def _inside(path: Path, parent: Path, what: str) -> Path:
-    """*path* resolved, when it lies in *parent*; a :class:`RunnerError` naming it otherwise."""
-    resolved = Path(path).resolve()
-    if not resolved.is_relative_to(Path(parent).resolve()):
-        raise RunnerError(f"{what} is {resolved}, which is outside {parent}; it is not used")
-    return resolved
+    """*path* normalised, when it lies in *parent*; a :class:`RunnerError` naming it otherwise.
+
+    The check is on the written path (``..`` folded, made absolute): *path* may
+    come from a file, so the file system is not asked about it before it is
+    known to lie in *parent*. *parent* is the runner's own directory and is
+    accepted both as written and with its links resolved.
+    """
+    candidate = Path(os.path.normpath(os.path.abspath(path)))
+    parents = (Path(os.path.abspath(parent)), Path(parent).resolve())
+    if not any(candidate.is_relative_to(known) for known in parents):
+        raise RunnerError(f"{what} is {candidate}, which is outside {parent}; it is not used")
+    return candidate
 
 
 def _harness_root(main: Path) -> Path:
