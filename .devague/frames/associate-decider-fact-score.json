@@ -4,7 +4,7 @@
   "schema_version": 6,
   "status": "exported",
   "created": "2026-11-18T08:35:48Z",
-  "updated": "2026-11-18T08:37:22Z",
+  "updated": "2026-11-18T08:39:16Z",
   "claims": [
     {
       "id": "c1",
@@ -426,6 +426,101 @@
       "links": [],
       "instruction": "",
       "revisions": []
+    },
+    {
+      "id": "c25",
+      "kind": "requirement",
+      "text": "the value and quote are passed through the policy redaction filter before they are sent to the decider, as gate state is",
+      "origin": "llm",
+      "status": "proposed",
+      "honesty_conditions": [
+        {
+          "id": "h20",
+          "text": "a quote containing a string the policy redacts reaches the decider with that string replaced",
+          "status": "proposed",
+          "instruction": ""
+        }
+      ],
+      "hard_questions": [],
+      "links": [],
+      "instruction": "",
+      "revisions": []
+    },
+    {
+      "id": "c26",
+      "kind": "requirement",
+      "text": "the labelled set includes quotes that carry text addressed to the scorer (for example an instruction to answer yes), and the share of those that score above the cut-off is reported; the score is not offered as protection against such text until that share is known",
+      "origin": "llm",
+      "status": "proposed",
+      "honesty_conditions": [
+        {
+          "id": "h21",
+          "text": "the calibration note reports the count and share for that group separately",
+          "status": "proposed",
+          "instruction": ""
+        }
+      ],
+      "hard_questions": [],
+      "links": [],
+      "instruction": "",
+      "revisions": []
+    },
+    {
+      "id": "c27",
+      "kind": "requirement",
+      "text": "a score is asked once per distinct value and quote in a session and reused across retry rounds and the rewrite after the final message",
+      "origin": "llm",
+      "status": "proposed",
+      "honesty_conditions": [
+        {
+          "id": "h22",
+          "text": "a hand-back refused and answered again with the same fact produces one decider request for it, counted by a fake decider in a test",
+          "status": "proposed",
+          "instruction": ""
+        }
+      ],
+      "hard_questions": [],
+      "links": [],
+      "instruction": "",
+      "revisions": []
+    },
+    {
+      "id": "c28",
+      "kind": "requirement",
+      "text": "a fact with an empty value, or whose value and quote exceed the decider's input limit, is recorded as not scored with the reason, and is never sent cut short",
+      "origin": "llm",
+      "status": "proposed",
+      "honesty_conditions": [
+        {
+          "id": "h23",
+          "text": "a fact with an over-long quote is marked not scored with a size reason and the fake decider receives no request for it",
+          "status": "proposed",
+          "instruction": ""
+        }
+      ],
+      "hard_questions": [],
+      "links": [],
+      "instruction": "",
+      "revisions": []
+    },
+    {
+      "id": "c29",
+      "kind": "requirement",
+      "text": "the prompts tell the model that check_quote is how it learns the support score during a run; in report mode the score shown after an accepted hand-back is for the caller, since the run has ended",
+      "origin": "llm",
+      "status": "proposed",
+      "honesty_conditions": [
+        {
+          "id": "h24",
+          "text": "the model prompts name check_quote for this, and no text promises the model a second chance in report mode",
+          "status": "proposed",
+          "instruction": ""
+        }
+      ],
+      "hard_questions": [],
+      "links": [],
+      "instruction": "",
+      "revisions": []
     }
   ],
   "open_vagueness": [
@@ -441,6 +536,15 @@
     {
       "id": "v2",
       "text": "whether end-of-run scoring delays safety-gate calls from other sessions or children enough to trip their 30 second timeout",
+      "kind": "unknown_nonblocking",
+      "claim_id": null,
+      "resolved": false,
+      "resolution": "",
+      "resolution_claim_id": null
+    },
+    {
+      "id": "v3",
+      "text": "the decider's response names its model only as clef, so a change of the served checkpoint cannot be seen from a score; the cut-off could go stale without notice",
       "kind": "unknown_nonblocking",
       "claim_id": null,
       "resolved": false,
@@ -477,6 +581,38 @@
       "id": "s5",
       "surface": "associate/contract/accuracy.json, schemas/accuracy.schema.json, schemas/report.schema.json, schemas/facts.schema.json, validate.py",
       "finding": "accuracy.json states every threshold, retry count, mode and table lives in it and nowhere in code (accuracy.json:2); accuracy.schema.json and report.schema.json forbid extra properties, so a scorer setting and a new count each need a declared property (finish-check.test.ts:508-510 fails on an unknown report key). There is no schema for check.json. facts.schema.json is the model's payload and forbids extra keys on a fact, so a harness-written score cannot live there. A check listed in checks needs a non-blank motivating_failure (validate.py:556-581, CLAUDE.md:796-800); a report-only signal with no refusal reason needs no checks entry. test_accuracy_contract.py pins every model's mode as report.",
+      "seeds": []
+    },
+    {
+      "id": "s6",
+      "surface": "challenge pass / security lens: associate/contract/gate.json comment, lib/gate.ts redaction",
+      "finding": "gate.json line 2 says the state sent to the decider never carries a tool result or fetched web content. A fact's quote is exactly that: text from a file, a command or a web page, chosen by the model. This use sends untrusted text to the decider for the first time, and a quote can be written to push the answer.",
+      "seeds": [
+        "c25",
+        "c26"
+      ]
+    },
+    {
+      "id": "s7",
+      "surface": "challenge pass / lifecycle lens: index.ts finish rounds and message_end rewrite",
+      "finding": "finish can run several times in enforce mode and the message_end handler rewrites check.json, report.json and answer.md (index.ts:547-570); without reuse each pass would ask the decider again for the same facts, behind the same single lock the safety gate uses.",
+      "seeds": [
+        "c27"
+      ]
+    },
+    {
+      "id": "s8",
+      "surface": "challenge pass / overlooked-actors lens: who can act on a score",
+      "finding": "In report mode finish ends the run, so a low score shown in its result cannot change the model's answer; only check_quote, called earlier, or a retry round in enforce mode lets the model act. The spec's audience claim named the model without saying how the score reaches it in time.",
+      "seeds": [
+        "c28",
+        "c29"
+      ]
+    },
+    {
+      "id": "s9",
+      "surface": "challenge pass / concurrency lens: lobes-cli decider single lock",
+      "finding": "Examined from the scoping finding only (clef_vllm.py:311, one request at a time); no probe was run with a second session. The cap and timeout requirement bounds one session's use; the effect on other sessions' gate calls stays parked.",
       "seeds": []
     }
   ],
