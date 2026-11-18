@@ -254,3 +254,14 @@ def test_success_numbers_match_a_hand_count(tmp_path):
     assert total["regrade_changes"] == 2
     text = render_success_numbers(numbers)
     assert "3 of 5" in text
+
+
+def test_a_run_that_read_the_key_and_timed_out_is_a_key_read_and_contaminated(tmp_path):
+    timed_out = make_record("t1", "arm-a", 0, MATCH, outcome="timeout", reasons=["answer_key"])
+    records = store(tmp_path, [timed_out, make_record("t1", "arm-a", 1, MATCH)])
+    row = success_numbers(records, TASKS)["arms"]["arm-a"]
+    assert (row["runs"], row["graded"], row["key_reads"]) == (2, 1, 1)
+    # columns: arm runs matching not-matching cannot-tell not-graded contaminated
+    assert rows_for(render_table(records), "arm-a")[-1] == ["arm-a", "2", "1", "0", "0", "0", "1"]
+    assert [run.key for run in draw_sample(records, seed=1).runs] == [("t1", "arm-a", 1)]
+    assert readings_differences(records) == {"arm-a": 0}

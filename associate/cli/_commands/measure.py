@@ -375,7 +375,11 @@ def require_note(note: Path) -> None:
 
 
 def lock_held(results: Path) -> bool:
-    """Whether a runner holds the lock on *results*. Reads only; never creates the file."""
+    """Whether a runner holds the lock on *results*. Reads only; never creates the file.
+
+    The look takes a shared lock for a moment. A runner starting at that moment
+    is not refused by it: it keeps trying for ``runner.LOCK_WAIT_S`` seconds.
+    """
     try:
         fd = os.open(results / _runner().LOCK_FILE, os.O_RDONLY)
     except OSError:

@@ -121,6 +121,10 @@ export const RUN_ID_PATTERN = /^dlg-\d{8}T\d{6}Z-[0-9a-f]{8}$/;
 const MAX_TASK_CHARS = 100_000;
 /** `associate run` exit code for a hand-back refused after the allowed rounds; the result is still on stdout. */
 const HANDBACK_REFUSED_EXIT = 3;
+/** `associate run` exit code for a run killed at its `--timeout`; the timeout result is still on stdout. */
+const RUN_TIMEOUT_EXIT = 4;
+/** The non-zero exit codes with which `associate run` still prints a full result (associate/cli/_errors.py). */
+const RESULT_EXITS: readonly (number | null | undefined)[] = [HANDBACK_REFUSED_EXIT, RUN_TIMEOUT_EXIT];
 
 /** Chars of a failed run's stderr kept for the error (its end is where the reason is). */
 const STDERR_TAIL_CHARS = 4_000;
@@ -883,9 +887,11 @@ export function createDelegateTools(ctx: AssociateContext, deps: DelegateDeps = 
     }
 
     // Exit 3 is `associate run`'s "the hand-back was refused after the allowed
-    // rounds" (associate/cli/_errors.py EXIT_HANDBACK_REFUSED): the run served
-    // and printed its result, so it is a finished run whose result says so.
-    const servedWithResult = exit?.exitCode === HANDBACK_REFUSED_EXIT && result !== undefined;
+    // rounds" (associate/cli/_errors.py EXIT_HANDBACK_REFUSED) and exit 4 its
+    // "the run was killed at --timeout" (EXIT_RUN_TIMEOUT, result outcome
+    // `timeout`): the run served and printed its result, so it is a finished
+    // run whose result says so.
+    const servedWithResult = RESULT_EXITS.includes(exit?.exitCode) && result !== undefined;
     if (exit && !servedWithResult && (exit.error !== undefined || exit.exitCode !== 0 || result === undefined)) {
       const stderr = redaction.apply(readTail(join(dir, STDERR_FILE), STDERR_TAIL_CHARS));
       const error = cliError(stderr);

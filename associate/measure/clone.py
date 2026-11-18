@@ -7,6 +7,12 @@ of the source's object store, nothing written there), deletes the excluded
 paths, and makes a brand-new repository with a single commit. The result has
 no history, no remote and no alternates link back to the source.
 
+``git archive`` honours the ``export-ignore`` attribute, so the exported files
+are compared with the commit's tracked paths (``git ls-tree``): a clone that
+would lack a tracked path outside the excluded ones is refused with the paths
+named, never made silently smaller. ``export-subst`` (which rewrites file
+content) is not checked.
+
 The commit is made with a fixed identity and fixed dates, so the same source
 commit and the same exclusions give the same commit id every time. A fresh
 clone is made for every call; nothing is reused.
@@ -103,7 +109,34 @@ def _run_bytes(args: list[str]) -> bytes:
         ).stdout
     except subprocess.CalledProcessError as exc:
         detail = exc.stderr.decode("utf-8", "replace").strip().splitlines()
-        raise CloneError(f"git archive failed: {detail[-1] if detail else exc}") from exc
+        raise CloneError(f"git {args[3]} failed: {detail[-1] if detail else exc}") from exc
+
+
+def _is_under(path: str, excluded: list[str]) -> bool:
+    return any(path == rel or path.startswith(rel + "/") for rel in excluded)
+
+
+def _check_complete(source: Path, commit: str, root: Path, excluded: list[str]) -> None:
+    """Refuse an export that lacks a tracked path of the commit.
+
+    ``git archive`` leaves out paths with the ``export-ignore`` attribute, while
+    the task checker reads the whole commit. The names git lists are only
+    compared, as text, with the paths found under *root*.
+    """
+    listed = _run_bytes(["git", "-C", str(source), "ls-tree", "-r", "-z", "--name-only", commit])
+    present = set()
+    for folder, dirs, files in os.walk(root):
+        inside = os.path.relpath(folder, root)
+        prefix = "" if inside == "." else inside.replace(os.sep, "/") + "/"
+        present.update(prefix + name for name in (*dirs, *files))
+    tracked = (os.fsdecode(name) for name in listed.split(b"\0") if name)
+    missing = sorted(p for p in tracked if p not in present and not _is_under(p, excluded))
+    if missing:
+        shown = ", ".join(missing[:10]) + (" ..." if len(missing) > 10 else "")
+        raise CloneError(
+            f"the export lacks {len(missing)} tracked path(s) of the commit (an export-ignore "
+            f"attribute leaves them out of git archive): {shown}"
+        )
 
 
 def _remove(root: Path, excluded: list[str]) -> tuple[list[str], list[str]]:
@@ -148,6 +181,7 @@ def make_clone(
     root = Path(tempfile.mkdtemp(prefix="clone-", dir=dest_parent))
     try:
         _export(source, full, root)
+        _check_complete(source, full, root, wanted)
         removed, missing = _remove(root, wanted)
         _run(["git", "init", "-q", "-b", "main", str(root)])
         _run(["git", "-C", str(root), *_NO_CONFIG, "add", "-f", "-A"])

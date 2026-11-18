@@ -148,6 +148,9 @@ TIMEOUT_OUTCOME = "timeout"
 #: (``lib/handback.ts`` writes both; plan task t3, h27).
 REJECTED_HANDBACK_FILENAME = "rejected_handback.json"
 REJECTED_LABEL = "rejected"
+#: The result's ``handback_outcome`` when the export's check record says a
+#: hand-back was accepted (``evidence.accuracy``).
+ACCEPTED_HANDBACK = "accepted"
 
 
 def rejected_handback(export_dir: Path) -> dict[str, Any] | None:
@@ -653,6 +656,8 @@ class PiHarness(Harness):
         # The per-run copy of the contract that carries the reasoning override,
         # alive only while submit() runs.
         self._run_contract_dir: Path | None = None
+        # The registry keys the override was written to in that copy.
+        self._reasoning_models: list[str] = []
         self._executable = executable
         self._base_env = dict(env) if env is not None else None
         self._warn = warn if warn is not None else _warn
@@ -703,11 +708,12 @@ class PiHarness(Harness):
         self._check_version(executable)
 
         base_args = self.pi_arguments()
-        self._prepare_run_contract()
-        env = self.environment(task)
         export_dir = self.export_dir
 
         try:
+            # Inside the try: the contract copy is removed whatever fails after it.
+            self._prepare_run_contract()
+            env = self.environment(task)
             report = self._run_preflight(executable, base_args, env, export_dir)
             try:
                 completed = self._run_task_turn(executable, base_args, env, task, export_dir)
@@ -725,7 +731,11 @@ class PiHarness(Harness):
                 }
                 # A finish the run made and had rejected is part of what it
                 # leaves: carried under the rejected label, never as a hand-back.
-                rejected = rejected_handback(export_dir)
+                # The extension keeps the latest rejected payload in the export
+                # even after a later finish is accepted; beside an accepted
+                # hand-back it is superseded, so the result does not carry it.
+                superseded = self._result.get("handback_outcome") == ACCEPTED_HANDBACK
+                rejected = None if superseded else rejected_handback(export_dir)
                 if rejected is not None:
                     self._result["rejected_handback"] = rejected
                 return
@@ -882,34 +892,66 @@ class PiHarness(Harness):
         """The reasoning setting this run used and where it came from.
 
         ``run`` when ``--reasoning`` set it for this run, ``registry`` when the
-        model's own ``models.json`` entry applied.
+        model's own ``models.json`` entry applied. A run setting is run-wide:
+        ``reasoning_applies_to`` lists every model it was set for, which is every
+        registry model that can run (a child the run spawns reads the same
+        contract copy). A pending entry is left as the registry has it.
         """
         if self._reasoning is not None:
-            return {"reasoning": self._reasoning, "reasoning_source": "run"}
+            return {
+                "reasoning": self._reasoning,
+                "reasoning_source": "run",
+                "reasoning_applies_to": list(self._reasoning_models),
+            }
         return {
             "reasoning": self.model_entry().get("reasoning"),
             "reasoning_source": "registry",
         }
 
     def _prepare_run_contract(self) -> None:
-        """Give this run a contract whose active model carries the reasoning override.
+        """Give this run a contract whose models carry the reasoning override.
 
         ``models.json`` is never edited: the contract directory is copied to a
-        temporary directory, the copy's entry for the run's model is changed,
-        and pi is pointed at the copy with ``ASSOCIATE_CONTRACT_DIR``. The copy
-        is removed when the run ends. With no override pi reads the real one.
+        temporary directory, the copy's entry for every model that can run
+        (not ``pending``) is changed, and pi is pointed at the copy with
+        ``ASSOCIATE_CONTRACT_DIR``. Every such model, not only the run's own:
+        ``spawn_subagent`` hands a child the same directory, so the setting is
+        run-wide. The copy is removed when the run ends, and at once when it
+        cannot be made (a :class:`HarnessError`). With no override pi reads the
+        real one.
         """
         self._drop_run_contract()
+        self._reasoning_models = []
         if self._reasoning is None or self._contract_dir is None:
             return
         key = self.model_key()
-        copy = Path(tempfile.mkdtemp(prefix="associate-contract-")) / "contract"
-        shutil.copytree(self._contract_dir, copy)
-        models_path = copy / "models.json"
-        registry = json.loads(models_path.read_text(encoding="utf-8"))
-        registry["models"][key]["reasoning"] = self._reasoning
-        models_path.write_text(json.dumps(registry, indent=2) + "\n", encoding="utf-8")
-        self._run_contract_dir = copy
+        try:
+            # Named before it is filled, so _drop_run_contract removes a partial copy.
+            self._run_contract_dir = (
+                Path(tempfile.mkdtemp(prefix="associate-contract-")) / "contract"
+            )
+            shutil.copytree(self._contract_dir, self._run_contract_dir)
+            models_path = self._run_contract_dir / "models.json"
+            registry = json.loads(models_path.read_text(encoding="utf-8"))
+            usable = {
+                name: entry
+                for name, entry in registry["models"].items()
+                if entry.get("status") != "pending"
+            }
+            if key not in usable:
+                raise LookupError(f"models.json has no usable entry for model {key!r}")
+            for entry in usable.values():
+                entry["reasoning"] = self._reasoning
+            models_path.write_text(json.dumps(registry, indent=2) + "\n", encoding="utf-8")
+        except (OSError, ValueError, LookupError, TypeError, AttributeError) as error:
+            self._drop_run_contract()
+            raise HarnessError(
+                f"the contract copy for --reasoning could not be made from "
+                f"{self._contract_dir}: {error}",
+                remediation="check that the contract directory holds a models.json with an "
+                "entry for the run's model, and that the temporary directory is writable",
+            ) from error
+        self._reasoning_models = sorted(usable)
 
     def _drop_run_contract(self) -> None:
         if self._run_contract_dir is not None:

@@ -298,6 +298,24 @@ test("AC2: an accepted hand-back is never written as rejected", async () => {
   }
 });
 
+test("a rejected finish stays in the export after a later finish is accepted; check.json then says accepted", async () => {
+  // What the Python harness relies on (associate/harness/pi.py): the file is the
+  // latest REJECTED payload, kept as a record, and check.json's outcome tells a
+  // reader that a later hand-back was accepted and the rejected one is superseded.
+  const s = await openSession({ [CHECK_MODE_ENV]: "enforce" });
+  try {
+    await piCallsFinish(s.pi, "fin-1", { summary: "first", facts: [GOOD_FACT, BAD_FACT] });
+    assert.equal(readJson(join(s.exportDir, CHECK_FILENAME)).outcome, "refused");
+    await piCallsFinish(s.pi, "fin-2", { summary: "second", facts: [GOOD_FACT] });
+    assert.equal(readJson(join(s.exportDir, CHECK_FILENAME)).outcome, "accepted");
+    const rejected = readJson(join(s.exportDir, REJECTED_HANDBACK_FILENAME));
+    assert.equal(rejected.payload.summary, "first");
+    assert.equal(existsSync(join(s.exportDir, ANSWER_FILENAME)), true);
+  } finally {
+    s.dispose();
+  }
+});
+
 // --- AC4: the purpose rule ------------------------------------------------------
 
 test("AC4: the purpose rule still exempts finish, with or without a quoted list", async () => {

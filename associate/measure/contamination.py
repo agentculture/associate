@@ -15,9 +15,10 @@ from __future__ import annotations
 
 import json
 import os
+import re
 from dataclasses import dataclass, field
 from pathlib import Path
-from urllib.parse import urlparse
+from urllib.parse import unquote, urlparse
 
 ANSWER_KEY = "answer_key"
 REPOSITORY_HOSTING = "repository_hosting"
@@ -26,6 +27,9 @@ RECALLED_RECORD = "recalled_record"
 _WEB_TOOLS = ("web_search", "web_page")
 _RECALL_TOOL = "eidetic_recall"
 _RAW_HOSTING = {"github.com": ("githubusercontent.com",)}
+# Where a URL starts, and a URL up to the next white space.
+_URL_START = re.compile(r"[a-z][a-z\d+.-]*://", re.ASCII)
+_URL = re.compile(r"[a-z][a-z\d+.-]*://\S*", re.ASCII)
 
 
 @dataclass(frozen=True)
@@ -79,15 +83,32 @@ def _host_matches(hostname: str, host: str) -> bool:
     return any(hostname == h or hostname.endswith("." + h) for h in hosts)
 
 
+def _hostname(url: str) -> str:
+    try:
+        return (urlparse(url).hostname or "").strip(".")
+    except ValueError:
+        return ""
+
+
+def _urls(text: str) -> list[str]:
+    """Every URL in *text*, a URL inside another URL's path or query included."""
+    return [text[m.start() :].split(None, 1)[0] for m in _URL_START.finditer(text)]
+
+
 def _reaches_repository(text: str, host: str, slug: str) -> bool:
-    lowered = text.lower()
+    """Whether *text* names the repository: in words, or in any URL on its hosting.
+
+    Every URL found anywhere in the text is checked, percent-encoded ones and
+    one embedded in another URL (a proxy or an archive address) included. The
+    owner/name in a URL on another host is not a sign; outside any URL it is.
+    """
+    lowered = unquote(text).lower()
     if slug not in lowered:
         return False
-    if "://" not in lowered:
+    if slug in _URL.sub(" ", lowered):
         # A search query or bare text naming owner/name.
         return True
-    hostname = (urlparse(lowered).hostname or "").strip(".")
-    return _host_matches(hostname, host)
+    return any(slug in url and _host_matches(_hostname(url), host) for url in _urls(lowered))
 
 
 def _key_reason(entry: dict, answer_key_paths: list[str]) -> Reason | None:

@@ -117,3 +117,42 @@ def test_load_walk_skips_format_gate_child_and_run_lines(tmp_path):
     path = tmp_path / "walk.jsonl"
     path.write_text("\n".join(json.dumps(x) for x in lines) + "\n", encoding="utf-8")
     assert [e["id"] for e in load_walk(path)] == ["w1"]
+
+
+# --- a repository URL that is not the whole argument ---------------------------------
+
+REPO_URL = "https://github.com/agentculture/associate/blob/main/README.md"
+
+
+def _hosting_ids(walk):
+    return [r.walk_id for r in _check(walk).reasons if r.kind == "repository_hosting"]
+
+
+def test_a_repository_url_after_other_words_of_a_search_query_is_contaminated():
+    walk = [_entry("w3", "web_search", {"query": f"gate thresholds {REPO_URL}"})]
+    assert _hosting_ids(walk) == ["w3"]
+
+
+def test_a_repository_url_in_the_path_of_a_proxy_url_is_contaminated():
+    walk = [_entry("w5", "web_page", {"url": f"https://r.jina.ai/{REPO_URL}"})]
+    assert _hosting_ids(walk) == ["w5"]
+
+
+def test_a_percent_encoded_repository_url_in_a_query_string_is_contaminated():
+    encoded = "https%3A%2F%2Fgithub.com%2Fagentculture%2Fassociate%2Fblob%2Fmain%2FREADME.md"
+    walk = [_entry("w6", "web_page", {"url": f"https://proxy.example/fetch?url={encoded}"})]
+    assert _hosting_ids(walk) == ["w6"]
+
+
+def test_the_repository_named_in_words_beside_another_url_is_contaminated():
+    query = "agentculture/associate gate thresholds https://docs.python.org/3/"
+    assert _hosting_ids([_entry("w8", "web_search", {"query": query})]) == ["w8"]
+
+
+def test_the_same_owner_and_name_on_another_host_stays_clean():
+    walk = [
+        _entry("w1", "web_page", {"url": "https://example.com/agentculture/associate"}),
+        _entry("w2", "web_search", {"query": "see https://example.com/agentculture/associate x"}),
+        _entry("w3", "web_page", {"url": "https://r.jina.ai/https://github.com/agentculture/x"}),
+    ]
+    assert _check(walk).contaminated is False

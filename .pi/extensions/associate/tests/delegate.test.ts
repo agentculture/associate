@@ -645,6 +645,41 @@ test("exit 3 with no readable result is still a failure", async () => {
   }
 });
 
+test("a delegated run that timed out (exit 4) is reported as finished, with its timeout result", async () => {
+  const r = rig();
+  try {
+    const launcher = fakeLauncher();
+    const t = tools(r, launcher);
+    const started = await call(t.run, { model: "worker", task: TASK });
+    const result = JSON.stringify({ ...JSON.parse(runResult()), outcome: "timeout", timed_out: true, merge: "kept" });
+    await launcher.runs[0]!.end({ exitCode: 4 }, { stdout: result, stderr: "associate: the run timed out\n" });
+    const out = await call(t.status, { run_id: started.run_id });
+    assert.equal(out.ok, true, JSON.stringify(out));
+    assert.equal(out.state, "finished");
+    assert.equal(out.exit_code, 4);
+    assert.equal(out.result.outcome, "timeout");
+    assert.equal(out.result.timed_out, true);
+    assert.equal(out.result.merge, "kept");
+  } finally {
+    r.dispose();
+  }
+});
+
+test("exit 4 with no readable result is still a failure", async () => {
+  const r = rig();
+  try {
+    const launcher = fakeLauncher();
+    const t = tools(r, launcher);
+    const started = await call(t.run, { model: "worker", task: TASK });
+    await launcher.runs[0]!.end({ exitCode: 4 }, { stderr: "boom\n" });
+    const out = await call(t.status, { run_id: started.run_id });
+    assert.equal(out.ok, false);
+    assert.equal(out.code, "delegate_failed");
+  } finally {
+    r.dispose();
+  }
+});
+
 test("d18: a run that fails reports a structured error with the CLI's own error object", async () => {
   const r = rig();
   try {

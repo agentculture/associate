@@ -105,8 +105,14 @@ Restarting after a kill: ``plan.json`` is written before the launch and
 ``launch.json`` after the process ends. An attempt with both but no stored
 record is stored from them without a new launch, so a run that finished is
 never started twice; an attempt with no ``launch.json`` was interrupted and is
-listed in the next record's ``history`` as ``interrupted``. A second runner on
-the same results directory is refused while the first holds the lock.
+listed in the next record's ``history`` as ``interrupted``. The plan names the
+arm and the task (repository, commit, prompt) it was written for under
+``identity``; an ended attempt whose plan names another arm or task than the
+runner was given, or names none (a plan written before plans carried it), is
+refused like a stored record that differs, never stored under the new ones. A second runner on
+the same results directory is refused while the first holds the lock (the
+lock is tried for ``LOCK_WAIT_S`` seconds first, so a look at it by ``measure
+status``, which holds a shared lock for a moment, is not taken for a runner).
 
 Values read back from files
 ---------------------------
@@ -163,6 +169,12 @@ PLAN_FILE = "plan.json"
 LAUNCH_FILE = "launch.json"
 LOCK_FILE = ".runner.lock"
 PROBE_TIMEOUT_S = 120.0
+# How long a starting runner keeps trying for the lock. `measure status` (and the
+# check `measure run` makes before it starts) looks at the lock by taking a shared
+# one for a moment; a runner that gave up at the first try could meet that look
+# and report another runner where there is none.
+LOCK_WAIT_S = 2.0
+_LOCK_POLL_S = 0.05
 
 _SAFE_NAME = re.compile(r"[A-Za-z0-9][A-Za-z0-9._-]{0,63}", re.ASCII)
 _SAFE_SESSION = re.compile(r"[A-Za-z0-9][A-Za-z0-9._-]{0,254}", re.ASCII)
@@ -193,6 +205,7 @@ _K_EXPORT_ROOT = "export_root"
 EXPORT_ROOT_DIR = "export-root"
 _K_SESSION_ID = "session_id"
 _K_SETTINGS = "settings"
+_K_IDENTITY = "identity"
 _END_OF_OPTIONS = "--end-of-options"
 _IN_PLAN = f"in {PLAN_FILE}"
 
@@ -434,17 +447,28 @@ def load_records(results_dir: str | Path) -> list[dict[str, Any]]:
     return [json.loads(p.read_text(encoding=_UTF8)) for p in paths]
 
 
+def _take_lock(fd: int) -> bool:
+    """Take the exclusive lock, trying again for up to ``LOCK_WAIT_S``; False when it stays held."""
+    deadline = time.monotonic() + LOCK_WAIT_S
+    while True:
+        try:
+            fcntl.flock(fd, fcntl.LOCK_EX | fcntl.LOCK_NB)
+            return True
+        except BlockingIOError:
+            if time.monotonic() >= deadline:
+                return False
+            time.sleep(_LOCK_POLL_S)
+
+
 @contextlib.contextmanager
 def _locked(results: Path) -> Iterator[None]:
     results.mkdir(parents=True, exist_ok=True)
     fd = os.open(results / LOCK_FILE, os.O_RDWR | os.O_CREAT, 0o644)
     try:
-        try:
-            fcntl.flock(fd, fcntl.LOCK_EX | fcntl.LOCK_NB)
-        except BlockingIOError:
+        if not _take_lock(fd):
             raise RunnerError(
                 f"another runner holds the lock on {results}; one runner per results directory"
-            ) from None
+            )
         yield
     finally:
         os.close(fd)
@@ -760,6 +784,22 @@ def _check_same(existing: dict, arm_id: dict, task_id: dict, path: Path) -> None
     for name in ("repository", "commit", "prompt_sha256"):
         if stored.get(name) != task_id[name]:
             raise RunnerError(f"{path} was stored for a task whose {name} differs from this one")
+
+
+def _check_plan_identity(plan: dict, arm_id: dict, task_id: dict, path: Path) -> None:
+    """Refuse to store an ended attempt under another arm or task than it ran for.
+
+    The plan names the arm and task it was written for; they are compared, never
+    used. A plan with no identity (written before plans carried one) cannot be
+    checked and is refused too, with what to do by hand.
+    """
+    written = plan.get(_K_IDENTITY)
+    if not isinstance(written, dict):
+        raise RunnerError(
+            f"{path} does not say which arm and task its run was for, so the run that ended "
+            f"there cannot be stored; move {path.parent} aside by hand to run it again"
+        )
+    _check_same(written, arm_id, task_id, path)
 
 
 def _history_entry(record: dict[str, Any]) -> dict[str, Any]:
@@ -1209,6 +1249,7 @@ def _run_key(
     base = _base_record(key, arm_id, task_id, attempt, history)
     if ended is not None:
         plan = _read_json(attempt_dir / PLAN_FILE) or {}
+        _check_plan_identity(plan, arm_id, task_id, attempt_dir / PLAN_FILE)
         _store(ctx, key, _launched_record(ctx, base, plan, task, attempt_dir), recovered=True)
         return
     attempt_dir.mkdir(parents=True)
@@ -1217,6 +1258,7 @@ def _run_key(
     except _LaunchFailed as failed:
         _store(ctx, key, _failed_record(base, failed.reason, failed.partial))
         return
+    plan[_K_IDENTITY] = {"arm": arm_id, "task": task_id}
     _write_atomic(attempt_dir / PLAN_FILE, plan)
     ctx.progress(f"{key}: launching attempt {attempt}")
     _launch(ctx, plan, env, attempt_dir)
