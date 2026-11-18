@@ -1,5 +1,5 @@
 {
-  "$comment": "The fixed measurement task set (issue #20, groundwork plan task t6). Each task names the repository it asks about, the full commit it is pinned to, a prompt, the answer that was checked BY HAND against the files (never taken from a model run) and expected values in evidence-cli's expected-values schema version 1, which evidence.answer.grade applies to a model's answer. A number below 100 is never written as a bare number item: it sits in text form with its label (\"version 9\"). Every expected text is found at the pinned commit by git grep in the task's search_paths, or is listed under derived with the command that prints it (run with COMMIT set to the pinned commit). evidence (file, line, text, stable) and absent (file, patterns) are the hand-check record against the CURRENT checkout; tests/test_accuracy_tasks.py re-checks them. The pinned commit is on origin/main, and the six tasks were first committed before any measuring run. Shape: associate/contract/schemas/measure-tasks.schema.json; code: associate/measure/tasks.py.",
+  "$comment": "The fixed measurement task set (issue #20, groundwork plan task t6). Each task names the repository it asks about, the full commit it is pinned to, a prompt, the answer that was checked BY HAND against the files (never taken from a model run) and expected values in evidence-cli's expected-values schema version 1, which evidence.answer.grade applies to a model's answer. A number below 100 is never written as a bare number item: it sits in text form with its label (\"version 9\"). Every expected text is found at the pinned commit by git grep in the task's search_paths, or is listed under derived with the command that prints it (run with COMMIT set to the pinned commit). evidence (file, line, text, stable) and absent (file, patterns) are the hand-check record against the CURRENT checkout; tests/test_accuracy_tasks.py re-checks them. 24 tasks, 8 each in associate, workledger-cli and coherence-cli (plan task t8); every task in one repository is pinned to the same commit. The six associate tasks first committed before any measuring run had their expected values widened in t8 so that every saved model answer grades as it was judged by hand (docs/accuracy/checks/saved-answers.md). evidence for a sibling-repository task records the line at the pinned commit (stable true). The hand-written right and wrong answers and the saved model answers the expected values are tested against are in docs/accuracy/answer-cases.json; the per-task checks are in docs/accuracy/checks/. Shape: associate/contract/schemas/measure-tasks.schema.json; code: associate/measure/tasks.py.",
   "format_version": 1,
   "checked_on": "2026-11-18",
   "tasks": [
@@ -18,32 +18,24 @@
         "schema_version": 1,
         "must_appear": [
           {
-            "text": "associate/contract/gate.json",
+            "text": "safe_unattended",
             "kind": "identifier"
           },
           {
-            "text": "version 9",
-            "kind": "text"
+            "text": "destructive",
+            "kind": "identifier"
           },
           {
-            "text": "safe_unattended >= 0.5",
-            "kind": "text"
+            "text": "exfiltrates",
+            "kind": "identifier"
           },
           {
-            "text": "destructive <= 0.2",
-            "kind": "text"
+            "text": "matches_task",
+            "kind": "identifier"
           },
           {
-            "text": "exfiltrates <= 0.1",
-            "kind": "text"
-          },
-          {
-            "text": "matches_task >= 0.5",
-            "kind": "text"
-          },
-          {
-            "text": "irreversible <= 0.2",
-            "kind": "text"
+            "text": "irreversible",
+            "kind": "identifier"
           },
           {
             "text": "eidetic_remember",
@@ -61,21 +53,147 @@
             "text": "delegate_run",
             "kind": "identifier"
           }
+        ],
+        "one_of": [
+          [
+            {
+              "text": "associate/contract/gate.json",
+              "kind": "identifier"
+            },
+            {
+              "text": "contract/gate.json",
+              "kind": "identifier"
+            },
+            {
+              "text": "gate.json",
+              "kind": "identifier"
+            }
+          ],
+          [
+            {
+              "text": "version 9",
+              "kind": "text",
+              "fold_case": true
+            },
+            {
+              "text": "\"version\": 9",
+              "kind": "text",
+              "fold_case": true
+            },
+            {
+              "text": "version: 9",
+              "kind": "text",
+              "fold_case": true
+            },
+            {
+              "text": "version is 9",
+              "kind": "text",
+              "fold_case": true
+            },
+            {
+              "text": "version`: 9",
+              "kind": "text",
+              "fold_case": true
+            },
+            {
+              "text": "version` is `9",
+              "kind": "text",
+              "fold_case": true
+            },
+            {
+              "text": "version` is 9",
+              "kind": "text",
+              "fold_case": true
+            },
+            {
+              "text": "version = 9",
+              "kind": "text",
+              "fold_case": true
+            }
+          ],
+          [
+            {
+              "text": ">= 0.5",
+              "kind": "text",
+              "fold_case": true
+            },
+            {
+              "text": "≥ 0.5",
+              "kind": "text",
+              "fold_case": true
+            },
+            {
+              "text": ">=0.5",
+              "kind": "text",
+              "fold_case": true
+            },
+            {
+              "text": "≥0.5",
+              "kind": "text",
+              "fold_case": true
+            },
+            {
+              "text": "at least 0.5",
+              "kind": "text",
+              "fold_case": true
+            }
+          ],
+          [
+            {
+              "text": "<= 0.2",
+              "kind": "text",
+              "fold_case": true
+            },
+            {
+              "text": "≤ 0.2",
+              "kind": "text",
+              "fold_case": true
+            },
+            {
+              "text": "<=0.2",
+              "kind": "text",
+              "fold_case": true
+            },
+            {
+              "text": "≤0.2",
+              "kind": "text",
+              "fold_case": true
+            },
+            {
+              "text": "at most 0.2",
+              "kind": "text",
+              "fold_case": true
+            }
+          ],
+          [
+            {
+              "text": "<= 0.1",
+              "kind": "text",
+              "fold_case": true
+            },
+            {
+              "text": "≤ 0.1",
+              "kind": "text",
+              "fold_case": true
+            },
+            {
+              "text": "<=0.1",
+              "kind": "text",
+              "fold_case": true
+            },
+            {
+              "text": "≤0.1",
+              "kind": "text",
+              "fold_case": true
+            },
+            {
+              "text": "at most 0.1",
+              "kind": "text",
+              "fold_case": true
+            }
+          ]
         ]
       },
-      "derived": [
-        {
-          "texts": [
-            "version 9",
-            "safe_unattended >= 0.5",
-            "destructive <= 0.2",
-            "exfiltrates <= 0.1",
-            "matches_task >= 0.5",
-            "irreversible <= 0.2"
-          ],
-          "command": "git show $COMMIT:associate/contract/gate.json | python3 -c 'import json,sys; d=json.load(sys.stdin); print(\"version\", d[\"version\"]); [print(r.get(\"option\", r[\"question\"]), r[\"op\"], r[\"value\"]) for r in d[\"clef\"][\"allow_when\"]]'"
-        }
-      ],
       "search_paths": [
         "associate/contract",
         "CLAUDE.md"
@@ -130,6 +248,39 @@
           "text": "\"gated_tools\": [\"eidetic_remember\", \"web_search\", \"web_page\", \"delegate_run\"],",
           "stable": false
         }
+      ],
+      "derived": [
+        {
+          "texts": [
+            "version 9"
+          ],
+          "command": "git show $COMMIT:associate/contract/gate.json | python3 -c 'import json,sys; d=json.load(sys.stdin); print(\"version\", d[\"version\"]); [print(r.get(\"option\", r[\"question\"]), r[\"op\"], r[\"value\"]) for r in d[\"clef\"][\"allow_when\"]]'"
+        },
+        {
+          "texts": [
+            "version: 9",
+            "version is 9",
+            "version`: 9",
+            "version` is `9",
+            "version` is 9",
+            "version = 9",
+            ">= 0.5",
+            ">=0.5",
+            "≥0.5",
+            "at least 0.5",
+            "<= 0.2",
+            "≤ 0.2",
+            "<=0.2",
+            "≤0.2",
+            "at most 0.2",
+            "<= 0.1",
+            "≤ 0.1",
+            "<=0.1",
+            "≤0.1",
+            "at most 0.1"
+          ],
+          "command": "git show \"$COMMIT:associate/contract/gate.json\" | grep -qF -e '\"version\": 9,' && git show \"$COMMIT:associate/contract/gate.json\" | grep -qF -e '{\"question\": \"safe_unattended\", \"op\": \">=\", \"value\": 0.5}' && git show \"$COMMIT:associate/contract/gate.json\" | grep -qF -e '{\"question\": \"destructive\", \"op\": \"<=\", \"value\": 0.2}' && git show \"$COMMIT:associate/contract/gate.json\" | grep -qF -e '{\"question\": \"exfiltrates\", \"op\": \"<=\", \"value\": 0.1}' && git show \"$COMMIT:associate/contract/gate.json\" | grep -qF -e '{\"question\": \"matches_task\", \"op\": \">=\", \"value\": 0.5}' && git show \"$COMMIT:associate/contract/gate.json\" | grep -qF -e '{\"question\": \"reversibility\", \"option\": \"irreversible\", \"op\": \"<=\", \"value\": 0.2}' && printf '%s\\n' 'version: 9' 'version is 9' 'version`: 9' 'version` is `9' 'version` is 9' 'version = 9' '>= 0.5' '>=0.5' '≥0.5' 'at least 0.5' '<= 0.2' '≤ 0.2' '<=0.2' '≤0.2' 'at most 0.2' '<= 0.1' '≤ 0.1' '<=0.1' '≤0.1' 'at most 0.1'"
+        }
       ]
     },
     {
@@ -145,37 +296,162 @@
       "answer": "It keeps the branch and worktree and reports the reason when: the repository has no main branch; the run's base commit is not on main; main is checked out somewhere with uncommitted tracked changes; or the merge does not apply cleanly (it is aborted first, so main is untouched). Source: the module docstring, step 4.",
       "expected": {
         "schema_version": 1,
-        "must_appear": [
-          {
-            "text": "no main branch",
-            "kind": "text",
-            "fold_case": true
-          },
-          {
-            "text": "base commit is not on",
-            "kind": "text",
-            "fold_case": true
-          },
-          {
-            "text": "uncommitted tracked changes",
-            "kind": "text",
-            "fold_case": true
-          },
-          {
-            "text": "does not apply",
-            "kind": "text",
-            "fold_case": true
-          }
+        "one_of": [
+          [
+            {
+              "text": "no main branch",
+              "kind": "text",
+              "fold_case": true
+            },
+            {
+              "text": "no `main` branch",
+              "kind": "text",
+              "fold_case": true
+            },
+            {
+              "text": "no ``main`` branch",
+              "kind": "text",
+              "fold_case": true
+            },
+            {
+              "text": "main branch does not exist",
+              "kind": "text",
+              "fold_case": true
+            },
+            {
+              "text": "main branch doesn't exist",
+              "kind": "text",
+              "fold_case": true
+            },
+            {
+              "text": "refs/heads/main does not exist",
+              "kind": "text",
+              "fold_case": true
+            },
+            {
+              "text": "refs/heads/main doesn't exist",
+              "kind": "text",
+              "fold_case": true
+            },
+            {
+              "text": "no branch named main",
+              "kind": "text",
+              "fold_case": true
+            },
+            {
+              "text": "without a main branch",
+              "kind": "text",
+              "fold_case": true
+            },
+            {
+              "text": "has no main",
+              "kind": "text",
+              "fold_case": true
+            },
+            {
+              "text": "missing main branch",
+              "kind": "text",
+              "fold_case": true
+            }
+          ],
+          [
+            {
+              "text": "base commit is not on",
+              "kind": "text",
+              "fold_case": true
+            },
+            {
+              "text": "base commit not on",
+              "kind": "text",
+              "fold_case": true
+            },
+            {
+              "text": "base commit isn't on",
+              "kind": "text",
+              "fold_case": true
+            },
+            {
+              "text": "base is not on",
+              "kind": "text",
+              "fold_case": true
+            },
+            {
+              "text": "base commit is not an ancestor",
+              "kind": "text",
+              "fold_case": true
+            },
+            {
+              "text": "not an ancestor of main",
+              "kind": "text",
+              "fold_case": true
+            },
+            {
+              "text": "not an ancestor of `main`",
+              "kind": "text",
+              "fold_case": true
+            }
+          ],
+          [
+            {
+              "text": "uncommitted tracked changes",
+              "kind": "text",
+              "fold_case": true
+            },
+            {
+              "text": "uncommitted changes",
+              "kind": "text",
+              "fold_case": true
+            },
+            {
+              "text": "dirty",
+              "kind": "text",
+              "fold_case": true
+            }
+          ],
+          [
+            {
+              "text": "does not apply",
+              "kind": "text",
+              "fold_case": true
+            },
+            {
+              "text": "doesn't apply",
+              "kind": "text",
+              "fold_case": true
+            },
+            {
+              "text": "not apply cleanly",
+              "kind": "text",
+              "fold_case": true
+            },
+            {
+              "text": "conflict",
+              "kind": "text",
+              "fold_case": true
+            },
+            {
+              "text": "does not merge cleanly",
+              "kind": "text",
+              "fold_case": true
+            },
+            {
+              "text": "doesn't merge cleanly",
+              "kind": "text",
+              "fold_case": true
+            },
+            {
+              "text": "merge fails",
+              "kind": "text",
+              "fold_case": true
+            },
+            {
+              "text": "merge failed",
+              "kind": "text",
+              "fold_case": true
+            }
+          ]
         ]
       },
-      "derived": [
-        {
-          "texts": [
-            "no main branch"
-          ],
-          "command": "git show $COMMIT:associate/harness/worktree.py | tr -d '`' | tr '\\n' ' ' | tr -s ' ' | grep -o 'no main branch'"
-        }
-      ],
       "search_paths": [
         "associate/harness/worktree.py"
       ],
@@ -206,6 +482,39 @@
           "text": "cleanly (it is aborted first, so ``main`` is untouched). Otherwise:",
           "stable": true
         }
+      ],
+      "derived": [
+        {
+          "texts": [
+            "no main branch"
+          ],
+          "command": "git show $COMMIT:associate/harness/worktree.py | tr -d '`' | tr '\\n' ' ' | tr -s ' ' | grep -o 'no main branch'"
+        },
+        {
+          "texts": [
+            "no `main` branch",
+            "main branch does not exist",
+            "main branch doesn't exist",
+            "refs/heads/main does not exist",
+            "refs/heads/main doesn't exist",
+            "no branch named main",
+            "without a main branch",
+            "has no main",
+            "missing main branch",
+            "base commit not on",
+            "base commit isn't on",
+            "base is not on",
+            "base commit is not an ancestor",
+            "not an ancestor of main",
+            "not an ancestor of `main`",
+            "doesn't apply",
+            "does not merge cleanly",
+            "doesn't merge cleanly",
+            "merge fails",
+            "merge failed"
+          ],
+          "command": "git show \"$COMMIT:associate/harness/worktree.py\" | grep -qF -e 'no ``main`` branch; the run'\"'\"'s base commit is not on ``main``' && git show \"$COMMIT:associate/harness/worktree.py\" | grep -qF -e 'somewhere with uncommitted tracked changes; or the merge does not apply' && printf '%s\\n' 'no `main` branch' 'main branch does not exist' 'main branch doesn'\"'\"'t exist' 'refs/heads/main does not exist' 'refs/heads/main doesn'\"'\"'t exist' 'no branch named main' 'without a main branch' 'has no main' 'missing main branch' 'base commit not on' 'base commit isn'\"'\"'t on' 'base is not on' 'base commit is not an ancestor' 'not an ancestor of main' 'not an ancestor of `main`' 'doesn'\"'\"'t apply' 'does not merge cleanly' 'doesn'\"'\"'t merge cleanly' 'merge fails' 'merge failed'"
+        }
       ]
     },
     {
@@ -221,36 +530,142 @@
       "answer": "budgets.read sets max_lines 1000, max_output_chars 25000, max_bytes 1048576, and spill_to_disk true.",
       "expected": {
         "schema_version": 1,
-        "must_appear": [
+        "must_not_appear": [
           {
-            "text": "max_lines 1000",
-            "kind": "text"
+            "text": "spill_to_disk false",
+            "kind": "text",
+            "fold_case": true
           },
           {
-            "text": "max_output_chars 25000",
-            "kind": "text"
+            "text": "\"spill_to_disk\": false",
+            "kind": "text",
+            "fold_case": true
           },
           {
-            "text": "max_bytes 1048576",
-            "kind": "text"
+            "text": "spill_to_disk: false",
+            "kind": "text",
+            "fold_case": true
           },
           {
-            "text": "spill_to_disk true",
-            "kind": "text"
+            "text": "spill_to_disk` is `false",
+            "kind": "text",
+            "fold_case": true
+          },
+          {
+            "text": "not spill",
+            "kind": "text",
+            "fold_case": true
+          },
+          {
+            "text": "n't spill",
+            "kind": "text",
+            "fold_case": true
+          },
+          {
+            "text": "never spill",
+            "kind": "text",
+            "fold_case": true
           }
+        ],
+        "one_of": [
+          [
+            {
+              "text": "1000",
+              "kind": "number"
+            },
+            {
+              "text": "1,000",
+              "kind": "number"
+            }
+          ],
+          [
+            {
+              "text": "25000",
+              "kind": "number"
+            },
+            {
+              "text": "25,000",
+              "kind": "number"
+            }
+          ],
+          [
+            {
+              "text": "1048576",
+              "kind": "number"
+            },
+            {
+              "text": "1,048,576",
+              "kind": "number"
+            },
+            {
+              "text": "1 MiB",
+              "kind": "text"
+            }
+          ],
+          [
+            {
+              "text": "spill_to_disk true",
+              "kind": "text",
+              "fold_case": true
+            },
+            {
+              "text": "\"spill_to_disk\": true",
+              "kind": "text",
+              "fold_case": true
+            },
+            {
+              "text": "spill_to_disk: true",
+              "kind": "text",
+              "fold_case": true
+            },
+            {
+              "text": "spill_to_disk` is `true",
+              "kind": "text",
+              "fold_case": true
+            },
+            {
+              "text": "spill_to_disk is true",
+              "kind": "text",
+              "fold_case": true
+            },
+            {
+              "text": "spill_to_disk = true",
+              "kind": "text",
+              "fold_case": true
+            },
+            {
+              "text": "spill_to_disk enabled",
+              "kind": "text",
+              "fold_case": true
+            },
+            {
+              "text": "spill_to_disk` enabled",
+              "kind": "text",
+              "fold_case": true
+            },
+            {
+              "text": "spills",
+              "kind": "text",
+              "fold_case": true
+            },
+            {
+              "text": "does spill",
+              "kind": "text",
+              "fold_case": true
+            },
+            {
+              "text": "is spilled",
+              "kind": "text",
+              "fold_case": true
+            },
+            {
+              "text": "spilled to disk",
+              "kind": "text",
+              "fold_case": true
+            }
+          ]
         ]
       },
-      "derived": [
-        {
-          "texts": [
-            "max_lines 1000",
-            "max_output_chars 25000",
-            "max_bytes 1048576",
-            "spill_to_disk true"
-          ],
-          "command": "git show $COMMIT:associate/contract/policy.json | python3 -c 'import json,sys; [print(k, str(v).lower() if isinstance(v, bool) else v) for k, v in json.load(sys.stdin)[\"budgets\"][\"read\"].items()]'"
-        }
-      ],
       "search_paths": [
         "associate/contract/policy.json"
       ],
@@ -286,6 +701,32 @@
           "text": "\"spill_to_disk\": true",
           "stable": false
         }
+      ],
+      "derived": [
+        {
+          "texts": [
+            "spill_to_disk true"
+          ],
+          "command": "git show $COMMIT:associate/contract/policy.json | python3 -c 'import json,sys; [print(k, str(v).lower() if isinstance(v, bool) else v) for k, v in json.load(sys.stdin)[\"budgets\"][\"read\"].items()]'"
+        },
+        {
+          "texts": [
+            "1,000",
+            "1,048,576",
+            "1 MiB",
+            "spill_to_disk: true",
+            "spill_to_disk` is `true",
+            "spill_to_disk is true",
+            "spill_to_disk = true",
+            "spill_to_disk enabled",
+            "spill_to_disk` enabled",
+            "spills",
+            "does spill",
+            "is spilled",
+            "spilled to disk"
+          ],
+          "command": "git show \"$COMMIT:associate/contract/policy.json\" | grep -qF -e '\"max_lines\": 1000,' && git show \"$COMMIT:associate/contract/policy.json\" | grep -qF -e '\"max_output_chars\": 25000,' && git show \"$COMMIT:associate/contract/policy.json\" | grep -qF -e '\"max_bytes\": 1048576,' && git show \"$COMMIT:associate/contract/policy.json\" | grep -qF -e '\"spill_to_disk\": true' && git show \"$COMMIT:associate/contract/policy.json\" | grep -qF -e '\"read\": {' && printf '%s\\n' 1,000 1,048,576 '1 MiB' 'spill_to_disk: true' 'spill_to_disk` is `true' 'spill_to_disk is true' 'spill_to_disk = true' 'spill_to_disk enabled' 'spill_to_disk` enabled' spills 'does spill' 'is spilled' 'spilled to disk'"
+        }
       ]
     },
     {
@@ -301,44 +742,113 @@
       "answer": "The senses entry has may_mutate false and may_delegate [\"worker\"], so it cannot change the checkout itself and may hand a task to worker through delegate_run.",
       "expected": {
         "schema_version": 1,
-        "must_not_appear": [
-          {
-            "text": "may_mutate true",
-            "kind": "text"
-          }
-        ],
         "one_of": [
           [
             {
               "text": "may_mutate false",
-              "kind": "text"
+              "kind": "text",
+              "fold_case": true
             },
             {
               "text": "\"may_mutate\": false",
-              "kind": "text"
+              "kind": "text",
+              "fold_case": true
+            },
+            {
+              "text": "may_mutate: false",
+              "kind": "text",
+              "fold_case": true
+            },
+            {
+              "text": "may_mutate` is `false",
+              "kind": "text",
+              "fold_case": true
+            },
+            {
+              "text": "may_mutate is false",
+              "kind": "text",
+              "fold_case": true
+            },
+            {
+              "text": "may_mutate = false",
+              "kind": "text",
+              "fold_case": true
+            },
+            {
+              "text": "may_mutate=false",
+              "kind": "text",
+              "fold_case": true
+            },
+            {
+              "text": "may_mutate`: `false",
+              "kind": "text",
+              "fold_case": true
+            },
+            {
+              "text": "may_mutate`: false",
+              "kind": "text",
+              "fold_case": true
             }
           ],
           [
             {
               "text": "may_delegate [\"worker\"]",
-              "kind": "text"
+              "kind": "text",
+              "fold_case": true
             },
             {
               "text": "\"may_delegate\": [\"worker\"]",
-              "kind": "text"
+              "kind": "text",
+              "fold_case": true
+            },
+            {
+              "text": "may_delegate: [\"worker\"]",
+              "kind": "text",
+              "fold_case": true
+            },
+            {
+              "text": "may_delegate` is `[\"worker\"]",
+              "kind": "text",
+              "fold_case": true
+            },
+            {
+              "text": "may_delegate is [\"worker\"]",
+              "kind": "text",
+              "fold_case": true
+            },
+            {
+              "text": "may_delegate = [\"worker\"]",
+              "kind": "text",
+              "fold_case": true
+            },
+            {
+              "text": "may_delegate: [worker]",
+              "kind": "text",
+              "fold_case": true
+            },
+            {
+              "text": "may_delegate`: `[\"worker\"]",
+              "kind": "text",
+              "fold_case": true
+            },
+            {
+              "text": "only to worker",
+              "kind": "text",
+              "fold_case": true
+            },
+            {
+              "text": "only to the worker",
+              "kind": "text",
+              "fold_case": true
+            },
+            {
+              "text": "only worker",
+              "kind": "text",
+              "fold_case": true
             }
           ]
         ]
       },
-      "derived": [
-        {
-          "texts": [
-            "may_mutate false",
-            "may_delegate [\"worker\"]"
-          ],
-          "command": "git show $COMMIT:associate/contract/models.json | python3 -c 'import json,sys; s=json.load(sys.stdin)[\"models\"][\"senses\"]; print(\"may_mutate\", str(s[\"may_mutate\"]).lower()); print(\"may_delegate\", json.dumps(s[\"may_delegate\"]))'"
-        }
-      ],
       "search_paths": [
         "associate/contract/models.json"
       ],
@@ -362,6 +872,35 @@
           "text": "\"may_delegate\": [\"worker\"]",
           "stable": false
         }
+      ],
+      "derived": [
+        {
+          "texts": [
+            "may_mutate false",
+            "may_delegate [\"worker\"]"
+          ],
+          "command": "git show $COMMIT:associate/contract/models.json | python3 -c 'import json,sys; s=json.load(sys.stdin)[\"models\"][\"senses\"]; print(\"may_mutate\", str(s[\"may_mutate\"]).lower()); print(\"may_delegate\", json.dumps(s[\"may_delegate\"]))'"
+        },
+        {
+          "texts": [
+            "may_mutate: false",
+            "may_mutate` is `false",
+            "may_mutate is false",
+            "may_mutate = false",
+            "may_mutate`: `false",
+            "may_mutate`: false",
+            "may_delegate: [\"worker\"]",
+            "may_delegate` is `[\"worker\"]",
+            "may_delegate is [\"worker\"]",
+            "may_delegate = [\"worker\"]",
+            "may_delegate: [worker]",
+            "may_delegate`: `[\"worker\"]",
+            "only to worker",
+            "only to the worker",
+            "only worker"
+          ],
+          "command": "git show \"$COMMIT:associate/contract/models.json\" | grep -qF -e '\"may_mutate\": false,' && git show \"$COMMIT:associate/contract/models.json\" | grep -qF -e '\"may_delegate\": [\"worker\"]' && printf '%s\\n' 'may_mutate: false' 'may_mutate` is `false' 'may_mutate is false' 'may_mutate = false' 'may_mutate`: `false' 'may_mutate`: false' 'may_delegate: [\"worker\"]' 'may_delegate` is `[\"worker\"]' 'may_delegate is [\"worker\"]' 'may_delegate = [\"worker\"]' 'may_delegate: [worker]' 'may_delegate`: `[\"worker\"]' 'only to worker' 'only to the worker' 'only worker'"
+        }
       ]
     },
     {
@@ -379,10 +918,6 @@
         "schema_version": 1,
         "must_appear": [
           {
-            "text": "associate/contract/role.json",
-            "kind": "identifier"
-          },
-          {
             "text": "final_decision",
             "kind": "identifier"
           },
@@ -390,6 +925,22 @@
             "text": "security_decision",
             "kind": "identifier"
           }
+        ],
+        "one_of": [
+          [
+            {
+              "text": "associate/contract/role.json",
+              "kind": "identifier"
+            },
+            {
+              "text": "contract/role.json",
+              "kind": "identifier"
+            },
+            {
+              "text": "role.json",
+              "kind": "identifier"
+            }
+          ]
         ]
       },
       "search_paths": [
@@ -454,20 +1005,45 @@
               "text": "no retries",
               "kind": "text",
               "fold_case": true
+            },
+            {
+              "text": "does not retry",
+              "kind": "text",
+              "fold_case": true
+            },
+            {
+              "text": "doesn't retry",
+              "kind": "text",
+              "fold_case": true
+            },
+            {
+              "text": "never retries",
+              "kind": "text",
+              "fold_case": true
+            },
+            {
+              "text": "not retried",
+              "kind": "text",
+              "fold_case": true
+            },
+            {
+              "text": "zero retries",
+              "kind": "text",
+              "fold_case": true
+            },
+            {
+              "text": "0 retries",
+              "kind": "text",
+              "fold_case": true
+            },
+            {
+              "text": "retries = 0",
+              "kind": "text",
+              "fold_case": true
             }
           ]
         ]
       },
-      "derived": [
-        {
-          "texts": [
-            "not found",
-            "no retry",
-            "no retries"
-          ],
-          "command": "if git grep -q -i -E 'retry|retries|backoff|attempts' $COMMIT -- associate/contract/gate.json .pi/extensions/associate/lib/gate.ts; then echo present; else echo 'not found: no retry, no retries, no backoff setting'; fi"
-        }
-      ],
       "search_paths": [
         "associate/contract/gate.json",
         ".pi/extensions/associate/lib/gate.ts"
@@ -491,6 +1067,2401 @@
             "backoff",
             "attempts"
           ]
+        }
+      ],
+      "derived": [
+        {
+          "texts": [
+            "not found",
+            "no retry",
+            "no retries"
+          ],
+          "command": "if git grep -q -i -E 'retry|retries|backoff|attempts' $COMMIT -- associate/contract/gate.json .pi/extensions/associate/lib/gate.ts; then echo present; else echo 'not found: no retry, no retries, no backoff setting'; fi"
+        },
+        {
+          "texts": [
+            "does not retry",
+            "doesn't retry",
+            "never retries",
+            "zero retries",
+            "0 retries",
+            "retries = 0"
+          ],
+          "command": "! git grep -q -i -E -e 'retry|retries|backoff|attempts' \"$COMMIT\" -- associate/contract/gate.json .pi/extensions/associate/lib/gate.ts && printf '%s\\n' 'does not retry' 'doesn'\"'\"'t retry' 'never retries' 'zero retries' '0 retries' 'retries = 0'"
+        }
+      ]
+    },
+    {
+      "id": "spawn-holders",
+      "kind": "find",
+      "repository": {
+        "host": "github.com",
+        "owner": "agentculture",
+        "name": "associate"
+      },
+      "commit": "266dad376813baa8a92a2f34b457222ae7d9d481",
+      "prompt": "In associate/contract/models.json, which registry models list spawn_subagent among their tools, what is the status of each, and which models may each of them spawn?",
+      "answer": "Two entries list spawn_subagent: cortex (status active) and super-vl (status pending, not usable yet). Both have may_spawn [\"worker\", \"senses\"]: each may spawn worker and senses. worker and senses do not hold spawn_subagent.",
+      "expected": {
+        "schema_version": 1,
+        "must_appear": [
+          {
+            "text": "cortex",
+            "kind": "identifier"
+          },
+          {
+            "text": "super-vl",
+            "kind": "identifier"
+          },
+          {
+            "text": "active",
+            "kind": "identifier"
+          },
+          {
+            "text": "pending",
+            "kind": "identifier"
+          },
+          {
+            "text": "worker",
+            "kind": "identifier"
+          },
+          {
+            "text": "senses",
+            "kind": "identifier"
+          }
+        ]
+      },
+      "search_paths": [
+        "associate/contract/models.json"
+      ],
+      "evidence": [
+        {
+          "file": "associate/contract/models.json",
+          "line": 64,
+          "text": "\"cortex\": {",
+          "stable": false
+        },
+        {
+          "file": "associate/contract/models.json",
+          "line": 80,
+          "text": "\"super-vl\": {",
+          "stable": false
+        },
+        {
+          "file": "associate/contract/models.json",
+          "line": 81,
+          "text": "\"status\": \"pending\",",
+          "stable": false
+        },
+        {
+          "file": "associate/contract/models.json",
+          "line": 77,
+          "text": "\"may_spawn\": [\"worker\", \"senses\"],",
+          "stable": false
+        }
+      ]
+    },
+    {
+      "id": "spawn-writer-limit-env",
+      "kind": "not_found",
+      "repository": {
+        "host": "github.com",
+        "owner": "agentculture",
+        "name": "associate"
+      },
+      "commit": "266dad376813baa8a92a2f34b457222ae7d9d481",
+      "prompt": "Which environment variable sets how many writing children spawn_subagent may run at the same time in one checkout?",
+      "answer": "None. No environment variable or policy.json budget sets it: the number is fixed in .pi/extensions/associate/tools/spawn.ts, which runs one writing child per checkout at a time behind a per-checkout writer queue (withWriterLock), while read-only children run in parallel. The ASSOCIATE_* variables spawn_subagent reads (ASSOCIATE_RUN_DEADLINE, ASSOCIATE_PI_TRUST, ASSOCIATE_API_KEY, ...) do not set a count.",
+      "expected": {
+        "schema_version": 1,
+        "one_of": [
+          [
+            {
+              "text": "not found",
+              "kind": "text",
+              "fold_case": true
+            },
+            {
+              "text": "no such",
+              "kind": "text",
+              "fold_case": true
+            },
+            {
+              "text": "does not exist",
+              "kind": "text",
+              "fold_case": true
+            },
+            {
+              "text": "doesn't exist",
+              "kind": "text",
+              "fold_case": true
+            },
+            {
+              "text": "None",
+              "kind": "identifier"
+            },
+            {
+              "text": "none",
+              "kind": "identifier"
+            },
+            {
+              "text": "no environment variable",
+              "kind": "text",
+              "fold_case": true
+            },
+            {
+              "text": "no env var",
+              "kind": "text",
+              "fold_case": true
+            },
+            {
+              "text": "no variable",
+              "kind": "text",
+              "fold_case": true
+            },
+            {
+              "text": "not configurable",
+              "kind": "text",
+              "fold_case": true
+            },
+            {
+              "text": "hard-coded",
+              "kind": "text",
+              "fold_case": true
+            },
+            {
+              "text": "hardcoded",
+              "kind": "text",
+              "fold_case": true
+            },
+            {
+              "text": "fixed at one",
+              "kind": "text",
+              "fold_case": true
+            },
+            {
+              "text": "fixed to one",
+              "kind": "text",
+              "fold_case": true
+            },
+            {
+              "text": "is fixed",
+              "kind": "text",
+              "fold_case": true
+            }
+          ]
+        ]
+      },
+      "search_paths": [
+        ".pi/extensions/associate/tools/spawn.ts",
+        "associate/contract/policy.json"
+      ],
+      "absent": [
+        {
+          "file": ".pi/extensions/associate/tools/spawn.ts",
+          "patterns": [
+            "ASSOCIATE_MAX",
+            "max_children",
+            "max_writers",
+            "max_concurrent",
+            "concurrency"
+          ]
+        },
+        {
+          "file": "associate/contract/policy.json",
+          "patterns": [
+            "ASSOCIATE_MAX",
+            "max_children",
+            "max_writers",
+            "max_concurrent",
+            "concurrency"
+          ]
+        }
+      ],
+      "derived": [
+        {
+          "texts": [
+            "not found",
+            "no such",
+            "does not exist",
+            "doesn't exist",
+            "None",
+            "no environment variable",
+            "no env var",
+            "no variable",
+            "not configurable",
+            "hard-coded",
+            "hardcoded",
+            "fixed at one",
+            "fixed to one",
+            "is fixed"
+          ],
+          "command": "! git grep -q -i -E -e 'ASSOCIATE_MAX|max_children|max_writers|max_concurrent|concurrency' \"$COMMIT\" -- .pi/extensions/associate/tools/spawn.ts associate/contract/policy.json && git show \"$COMMIT:.pi/extensions/associate/tools/spawn.ts\" | grep -qF -e 'One writing child per checkout at a time; readers in parallel.' && printf '%s\\n' 'not found' 'no such' 'does not exist' 'doesn'\"'\"'t exist' None 'no environment variable' 'no env var' 'no variable' 'not configurable' hard-coded hardcoded 'fixed at one' 'fixed to one' 'is fixed'"
+        }
+      ]
+    },
+    {
+      "id": "wl-ledger-location",
+      "kind": "find",
+      "repository": {
+        "host": "github.com",
+        "owner": "agentculture",
+        "name": "workledger-cli"
+      },
+      "commit": "71ef513d20a99d74cb06f954b15fe56d2a999a20",
+      "prompt": "Where does workledger-cli write its ledger file when no override is set, and which environment variable overrides that location?",
+      "answer": "WORKLEDGER_PATH overrides it. Otherwise the ledger is .workledger/ledger.jsonl under the git toplevel of the current directory (the nearest ancestor holding .git), or under the current directory itself outside a repository (workledger/cli/_commands/_store.py, ledger_path).",
+      "expected": {
+        "schema_version": 1,
+        "must_appear": [
+          {
+            "text": "WORKLEDGER_PATH",
+            "kind": "identifier"
+          },
+          {
+            "text": ".workledger/ledger.jsonl",
+            "kind": "text"
+          }
+        ],
+        "one_of": [
+          [
+            {
+              "text": "toplevel",
+              "kind": "text",
+              "fold_case": true
+            },
+            {
+              "text": "top-level",
+              "kind": "text",
+              "fold_case": true
+            },
+            {
+              "text": "top level",
+              "kind": "text",
+              "fold_case": true
+            },
+            {
+              "text": "repository root",
+              "kind": "text",
+              "fold_case": true
+            },
+            {
+              "text": "repo root",
+              "kind": "text",
+              "fold_case": true
+            },
+            {
+              "text": "git root",
+              "kind": "text",
+              "fold_case": true
+            },
+            {
+              "text": "root of the repository",
+              "kind": "text",
+              "fold_case": true
+            },
+            {
+              "text": "root of the repo",
+              "kind": "text",
+              "fold_case": true
+            },
+            {
+              "text": "root of the git",
+              "kind": "text",
+              "fold_case": true
+            },
+            {
+              "text": "nearest ancestor",
+              "kind": "text",
+              "fold_case": true
+            }
+          ]
+        ]
+      },
+      "search_paths": [
+        "workledger/cli/_commands/_store.py",
+        "README.md"
+      ],
+      "evidence": [
+        {
+          "file": "workledger/cli/_commands/_store.py",
+          "line": 22,
+          "text": "ENV_PATH = \"WORKLEDGER_PATH\"",
+          "stable": true
+        },
+        {
+          "file": "workledger/cli/_commands/_store.py",
+          "line": 23,
+          "text": "DEFAULT_PATH = Path(\".workledger\") / \"ledger.jsonl\"",
+          "stable": true
+        },
+        {
+          "file": "workledger/cli/_commands/_store.py",
+          "line": 55,
+          "text": "return (_git_toplevel(cwd) or cwd) / DEFAULT_PATH",
+          "stable": true
+        }
+      ],
+      "derived": [
+        {
+          "texts": [
+            "top-level",
+            "top level",
+            "repository root",
+            "repo root",
+            "git root",
+            "root of the repository",
+            "root of the repo",
+            "root of the git"
+          ],
+          "command": "git show \"$COMMIT:workledger/cli/_commands/_store.py\" | grep -qF -e 'ENV_PATH = \"WORKLEDGER_PATH\"' && git show \"$COMMIT:workledger/cli/_commands/_store.py\" | grep -qF -e 'DEFAULT_PATH = Path(\".workledger\") / \"ledger.jsonl\"' && git show \"$COMMIT:workledger/cli/_commands/_store.py\" | grep -qF -e 'return (_git_toplevel(cwd) or cwd) / DEFAULT_PATH' && printf '%s\\n' top-level 'top level' 'repository root' 'repo root' 'git root' 'root of the repository' 'root of the repo' 'root of the git'"
+        }
+      ]
+    },
+    {
+      "id": "wl-entry-fields",
+      "kind": "count",
+      "repository": {
+        "host": "github.com",
+        "owner": "agentculture",
+        "name": "workledger-cli"
+      },
+      "commit": "71ef513d20a99d74cb06f954b15fe56d2a999a20",
+      "prompt": "How many top-level fields does one ledger entry have once `append` has stored it, and what are they?",
+      "answer": "7 fields: id and timestamp (generated by the ledger), agent, action and summary (required), and refs and data (optional on input, stored as [] and {} when omitted). workledger/cli/_commands/_store.py: append_entry builds {\"id\", \"timestamp\", **entry_input} and validate_input always sets refs and data.",
+      "expected": {
+        "schema_version": 1,
+        "must_appear": [
+          {
+            "text": "id",
+            "kind": "identifier"
+          },
+          {
+            "text": "timestamp",
+            "kind": "identifier"
+          },
+          {
+            "text": "agent",
+            "kind": "identifier"
+          },
+          {
+            "text": "action",
+            "kind": "identifier"
+          },
+          {
+            "text": "summary",
+            "kind": "identifier"
+          },
+          {
+            "text": "refs",
+            "kind": "identifier"
+          },
+          {
+            "text": "data",
+            "kind": "identifier"
+          }
+        ],
+        "one_of": [
+          [
+            {
+              "text": "7 fields",
+              "kind": "text",
+              "fold_case": true
+            },
+            {
+              "text": "7 keys",
+              "kind": "text",
+              "fold_case": true
+            },
+            {
+              "text": "7 top-level",
+              "kind": "text",
+              "fold_case": true
+            },
+            {
+              "text": "7 entries",
+              "kind": "text",
+              "fold_case": true
+            },
+            {
+              "text": "7 properties",
+              "kind": "text",
+              "fold_case": true
+            },
+            {
+              "text": "total of 7",
+              "kind": "text",
+              "fold_case": true
+            },
+            {
+              "text": "7 in total",
+              "kind": "text",
+              "fold_case": true
+            },
+            {
+              "text": "7 in all",
+              "kind": "text",
+              "fold_case": true
+            },
+            {
+              "text": "are 7",
+              "kind": "text",
+              "fold_case": true
+            },
+            {
+              "text": "has 7",
+              "kind": "text",
+              "fold_case": true
+            },
+            {
+              "text": "count: 7",
+              "kind": "text",
+              "fold_case": true
+            },
+            {
+              "text": "count is 7",
+              "kind": "text",
+              "fold_case": true
+            },
+            {
+              "text": "seven",
+              "kind": "text",
+              "fold_case": true
+            }
+          ]
+        ]
+      },
+      "search_paths": [
+        "workledger/cli/_commands/_store.py"
+      ],
+      "evidence": [
+        {
+          "file": "workledger/cli/_commands/_store.py",
+          "line": 25,
+          "text": "REQUIRED_FIELDS = (\"agent\", \"action\", \"summary\")",
+          "stable": true
+        },
+        {
+          "file": "workledger/cli/_commands/_store.py",
+          "line": 26,
+          "text": "INPUT_FIELDS = frozenset(REQUIRED_FIELDS) | {\"refs\", \"data\"}",
+          "stable": true
+        },
+        {
+          "file": "workledger/cli/_commands/_store.py",
+          "line": 270,
+          "text": "entry = {\"id\": uuid.uuid4().hex, \"timestamp\": now_utc(), **entry_input}",
+          "stable": true
+        }
+      ],
+      "derived": [
+        {
+          "texts": [
+            "7 fields",
+            "7 keys",
+            "7 top-level",
+            "7 entries",
+            "7 properties",
+            "total of 7",
+            "7 in total",
+            "7 in all",
+            "are 7",
+            "has 7",
+            "count: 7",
+            "count is 7",
+            "seven"
+          ],
+          "command": "git show \"$COMMIT:workledger/cli/_commands/_store.py\" | grep -qF -e 'REQUIRED_FIELDS = (\"agent\", \"action\", \"summary\")' && git show \"$COMMIT:workledger/cli/_commands/_store.py\" | grep -qF -e 'INPUT_FIELDS = frozenset(REQUIRED_FIELDS) | {\"refs\", \"data\"}' && git show \"$COMMIT:workledger/cli/_commands/_store.py\" | grep -qF -e 'entry = {\"id\": uuid.uuid4().hex, \"timestamp\": now_utc(), **entry_input}' && git show \"$COMMIT:workledger/cli/_commands/_store.py\" | grep -qF -e 'entry[\"refs\"] = refs' && git show \"$COMMIT:workledger/cli/_commands/_store.py\" | grep -qF -e 'entry[\"data\"] = data' && printf '%s\\n' '7 fields' '7 keys' '7 top-level' '7 entries' '7 properties' 'total of 7' '7 in total' '7 in all' 'are 7' 'has 7' 'count: 7' 'count is 7' seven"
+        }
+      ]
+    },
+    {
+      "id": "wl-duplicate-id",
+      "kind": "read",
+      "repository": {
+        "host": "github.com",
+        "owner": "agentculture",
+        "name": "workledger-cli"
+      },
+      "commit": "71ef513d20a99d74cb06f954b15fe56d2a999a20",
+      "prompt": "What does `ledger list` do when two lines of the ledger file carry the same id, and with which exit code does it end?",
+      "answer": "It stops with an error and prints no entries: iter_entries raises CliError \"ledger <path> is corrupt at line N: duplicate id '<id>'\" with remediation \"the ledger is append-only; inspect the file by hand\". The code is EXIT_ENV_ERROR, exit code 2. Every line is validated even when a filter would drop it, so the duplicate is never silently skipped.",
+      "expected": {
+        "schema_version": 1,
+        "must_appear": [
+          {
+            "text": "corrupt",
+            "kind": "text",
+            "fold_case": true
+          }
+        ],
+        "one_of": [
+          [
+            {
+              "text": "exit 2",
+              "kind": "text",
+              "fold_case": true
+            },
+            {
+              "text": "exit code 2",
+              "kind": "text",
+              "fold_case": true
+            },
+            {
+              "text": "exits 2",
+              "kind": "text",
+              "fold_case": true
+            },
+            {
+              "text": "exits with 2",
+              "kind": "text",
+              "fold_case": true
+            },
+            {
+              "text": "exit status 2",
+              "kind": "text",
+              "fold_case": true
+            },
+            {
+              "text": "exits with code 2",
+              "kind": "text",
+              "fold_case": true
+            },
+            {
+              "text": "code 2",
+              "kind": "text",
+              "fold_case": true
+            },
+            {
+              "text": "exit code `2`",
+              "kind": "text",
+              "fold_case": true
+            },
+            {
+              "text": "returns 2",
+              "kind": "text",
+              "fold_case": true
+            },
+            {
+              "text": "\"code\": 2",
+              "kind": "text",
+              "fold_case": true
+            },
+            {
+              "text": "code: 2",
+              "kind": "text",
+              "fold_case": true
+            },
+            {
+              "text": "EXIT_ENV_ERROR",
+              "kind": "identifier"
+            }
+          ]
+        ]
+      },
+      "search_paths": [
+        "workledger/cli/_commands/_store.py",
+        "workledger/cli/_errors.py"
+      ],
+      "evidence": [
+        {
+          "file": "workledger/cli/_commands/_store.py",
+          "line": 237,
+          "text": "raise _corrupt(path, lineno, f\"duplicate id {entry['id']!r}\")",
+          "stable": true
+        },
+        {
+          "file": "workledger/cli/_commands/_store.py",
+          "line": 184,
+          "text": "message=f\"ledger {path} is corrupt at line {lineno}: {why}\",",
+          "stable": true
+        },
+        {
+          "file": "workledger/cli/_errors.py",
+          "line": 23,
+          "text": "EXIT_ENV_ERROR = 2",
+          "stable": true
+        }
+      ],
+      "derived": [
+        {
+          "texts": [
+            "exit 2",
+            "exit code 2",
+            "exits 2",
+            "exits with 2",
+            "exit status 2",
+            "exits with code 2",
+            "code 2",
+            "exit code `2`",
+            "returns 2",
+            "\"code\": 2",
+            "code: 2"
+          ],
+          "command": "git show \"$COMMIT:workledger/cli/_commands/_store.py\" | grep -qF -e 'raise _corrupt(path, lineno, f\"duplicate id {entry['\"'\"'id'\"'\"']!r}\")' && git show \"$COMMIT:workledger/cli/_commands/_store.py\" | grep -qF -e code=EXIT_ENV_ERROR, && git show \"$COMMIT:workledger/cli/_commands/_store.py\" | grep -qF -e 'message=f\"ledger {path} is corrupt at line {lineno}: {why}\",' && git show \"$COMMIT:workledger/cli/_errors.py\" | grep -qF -e 'EXIT_ENV_ERROR = 2' && printf '%s\\n' 'exit 2' 'exit code 2' 'exits 2' 'exits with 2' 'exit status 2' 'exits with code 2' 'code 2' 'exit code `2`' 'returns 2' '\"code\": 2' 'code: 2'"
+        }
+      ]
+    },
+    {
+      "id": "wl-unterminated-ledger",
+      "kind": "review",
+      "repository": {
+        "host": "github.com",
+        "owner": "agentculture",
+        "name": "workledger-cli"
+      },
+      "commit": "71ef513d20a99d74cb06f954b15fe56d2a999a20",
+      "prompt": "Review `ledger append` for the case where the existing ledger file does not end with a newline: what does it do with the file, and with which exit code does it end?",
+      "answer": "It refuses: append_entry reads the last byte with os.pread and, when it is not a newline, raises CliError \"ledger <path> does not end with a newline (truncated write?)\" with remediation to repair the last line by hand. Nothing is written and the file is not repaired; the code is EXIT_ENV_ERROR, exit code 2.",
+      "expected": {
+        "schema_version": 1,
+        "one_of": [
+          [
+            {
+              "text": "refuse",
+              "kind": "text",
+              "fold_case": true
+            },
+            {
+              "text": "refusal",
+              "kind": "text",
+              "fold_case": true
+            },
+            {
+              "text": "rejects",
+              "kind": "text",
+              "fold_case": true
+            },
+            {
+              "text": "raises",
+              "kind": "text",
+              "fold_case": true
+            },
+            {
+              "text": "aborts",
+              "kind": "text",
+              "fold_case": true
+            },
+            {
+              "text": "CliError",
+              "kind": "text"
+            },
+            {
+              "text": "nothing is written",
+              "kind": "text",
+              "fold_case": true
+            },
+            {
+              "text": "does not write",
+              "kind": "text",
+              "fold_case": true
+            },
+            {
+              "text": "doesn't write",
+              "kind": "text",
+              "fold_case": true
+            },
+            {
+              "text": "without writing",
+              "kind": "text",
+              "fold_case": true
+            },
+            {
+              "text": "writes nothing",
+              "kind": "text",
+              "fold_case": true
+            },
+            {
+              "text": "does not append",
+              "kind": "text",
+              "fold_case": true
+            },
+            {
+              "text": "doesn't append",
+              "kind": "text",
+              "fold_case": true
+            },
+            {
+              "text": "not appended",
+              "kind": "text",
+              "fold_case": true
+            },
+            {
+              "text": "fails",
+              "kind": "text",
+              "fold_case": true
+            },
+            {
+              "text": "errors out",
+              "kind": "text",
+              "fold_case": true
+            }
+          ],
+          [
+            {
+              "text": "exit 2",
+              "kind": "text",
+              "fold_case": true
+            },
+            {
+              "text": "exit code 2",
+              "kind": "text",
+              "fold_case": true
+            },
+            {
+              "text": "exits 2",
+              "kind": "text",
+              "fold_case": true
+            },
+            {
+              "text": "exits with 2",
+              "kind": "text",
+              "fold_case": true
+            },
+            {
+              "text": "exit status 2",
+              "kind": "text",
+              "fold_case": true
+            },
+            {
+              "text": "exits with code 2",
+              "kind": "text",
+              "fold_case": true
+            },
+            {
+              "text": "code 2",
+              "kind": "text",
+              "fold_case": true
+            },
+            {
+              "text": "exit code `2`",
+              "kind": "text",
+              "fold_case": true
+            },
+            {
+              "text": "returns 2",
+              "kind": "text",
+              "fold_case": true
+            },
+            {
+              "text": "\"code\": 2",
+              "kind": "text",
+              "fold_case": true
+            },
+            {
+              "text": "code: 2",
+              "kind": "text",
+              "fold_case": true
+            },
+            {
+              "text": "EXIT_ENV_ERROR",
+              "kind": "identifier"
+            }
+          ]
+        ]
+      },
+      "search_paths": [
+        "workledger/cli/_commands/_store.py",
+        "workledger/cli/_errors.py"
+      ],
+      "evidence": [
+        {
+          "file": "workledger/cli/_commands/_store.py",
+          "line": 277,
+          "text": "if size and os.pread(fd, 1, size - 1) != b\"\\n\":",
+          "stable": true
+        },
+        {
+          "file": "workledger/cli/_commands/_store.py",
+          "line": 280,
+          "text": "message=f\"ledger {path} does not end with a newline (truncated write?)\",",
+          "stable": true
+        }
+      ],
+      "derived": [
+        {
+          "texts": [
+            "refuse",
+            "refusal",
+            "aborts",
+            "nothing is written",
+            "does not write",
+            "doesn't write",
+            "without writing",
+            "writes nothing",
+            "does not append",
+            "doesn't append",
+            "not appended",
+            "fails",
+            "errors out",
+            "exit 2",
+            "exit code 2",
+            "exits 2",
+            "exits with 2",
+            "exit status 2",
+            "exits with code 2",
+            "code 2",
+            "exit code `2`",
+            "returns 2",
+            "\"code\": 2",
+            "code: 2"
+          ],
+          "command": "git show \"$COMMIT:workledger/cli/_commands/_store.py\" | grep -qF -e 'if size and os.pread(fd, 1, size - 1) != b\"\\n\":' && git show \"$COMMIT:workledger/cli/_commands/_store.py\" | grep -qF -e 'message=f\"ledger {path} does not end with a newline (truncated write?)\",' && git show \"$COMMIT:workledger/cli/_commands/_store.py\" | grep -qF -e 'remediation=\"the ledger is append-only; repair the last line by hand\",' && git show \"$COMMIT:workledger/cli/_errors.py\" | grep -qF -e 'EXIT_ENV_ERROR = 2' && printf '%s\\n' refuse refusal aborts 'nothing is written' 'does not write' 'doesn'\"'\"'t write' 'without writing' 'writes nothing' 'does not append' 'doesn'\"'\"'t append' 'not appended' fails 'errors out' 'exit 2' 'exit code 2' 'exits 2' 'exits with 2' 'exit status 2' 'exits with code 2' 'code 2' 'exit code `2`' 'returns 2' '\"code\": 2' 'code: 2'"
+        }
+      ]
+    },
+    {
+      "id": "wl-limit-order",
+      "kind": "review",
+      "repository": {
+        "host": "github.com",
+        "owner": "agentculture",
+        "name": "workledger-cli"
+      },
+      "commit": "71ef513d20a99d74cb06f954b15fe56d2a999a20",
+      "prompt": "Review `ledger list --limit N`: which N of the matching entries does it keep, in what order does it print them, and does it hold every matching entry in memory to do so?",
+      "answer": "It keeps the most recent N matching entries (the last N in the file) and prints them oldest first, in append order. It does not hold every match: the matches stream into deque(matches, maxlen=N), so memory is bounded by N (workledger/cli/_commands/list.py).",
+      "expected": {
+        "schema_version": 1,
+        "one_of": [
+          [
+            {
+              "text": "most recent",
+              "kind": "text",
+              "fold_case": true
+            },
+            {
+              "text": "last N",
+              "kind": "text",
+              "fold_case": true
+            },
+            {
+              "text": "latest",
+              "kind": "text",
+              "fold_case": true
+            },
+            {
+              "text": "newest N",
+              "kind": "text",
+              "fold_case": true
+            },
+            {
+              "text": "final N",
+              "kind": "text",
+              "fold_case": true
+            }
+          ],
+          [
+            {
+              "text": "oldest first",
+              "kind": "text",
+              "fold_case": true
+            },
+            {
+              "text": "oldest-first",
+              "kind": "text",
+              "fold_case": true
+            },
+            {
+              "text": "append order",
+              "kind": "text",
+              "fold_case": true
+            },
+            {
+              "text": "file order",
+              "kind": "text",
+              "fold_case": true
+            },
+            {
+              "text": "chronological",
+              "kind": "text",
+              "fold_case": true
+            },
+            {
+              "text": "oldest to newest",
+              "kind": "text",
+              "fold_case": true
+            },
+            {
+              "text": "ascending",
+              "kind": "text",
+              "fold_case": true
+            }
+          ],
+          [
+            {
+              "text": "maxlen",
+              "kind": "text",
+              "fold_case": true
+            },
+            {
+              "text": "bounded",
+              "kind": "text",
+              "fold_case": true
+            },
+            {
+              "text": "at most N",
+              "kind": "text",
+              "fold_case": true
+            },
+            {
+              "text": "only N",
+              "kind": "text",
+              "fold_case": true
+            },
+            {
+              "text": "does not hold every",
+              "kind": "text",
+              "fold_case": true
+            },
+            {
+              "text": "doesn't hold every",
+              "kind": "text",
+              "fold_case": true
+            },
+            {
+              "text": "does not hold all",
+              "kind": "text",
+              "fold_case": true
+            },
+            {
+              "text": "doesn't hold all",
+              "kind": "text",
+              "fold_case": true
+            },
+            {
+              "text": "not every",
+              "kind": "text",
+              "fold_case": true
+            },
+            {
+              "text": "O(N)",
+              "kind": "text",
+              "fold_case": true
+            }
+          ]
+        ]
+      },
+      "search_paths": [
+        "workledger/cli/_commands/list.py"
+      ],
+      "evidence": [
+        {
+          "file": "workledger/cli/_commands/list.py",
+          "line": 35,
+          "text": "# Most recent N only, still in append order; deque keeps memory bounded by N.",
+          "stable": true
+        },
+        {
+          "file": "workledger/cli/_commands/list.py",
+          "line": 36,
+          "text": "entries = list(deque(matches, maxlen=args.limit) if args.limit is not None else matches)",
+          "stable": true
+        }
+      ],
+      "derived": [
+        {
+          "texts": [
+            "last N",
+            "latest",
+            "newest N",
+            "final N",
+            "oldest-first",
+            "file order",
+            "chronological",
+            "oldest to newest",
+            "ascending",
+            "at most N",
+            "only N",
+            "does not hold every",
+            "doesn't hold every",
+            "does not hold all",
+            "doesn't hold all",
+            "not every",
+            "O(N)"
+          ],
+          "command": "git show \"$COMMIT:workledger/cli/_commands/list.py\" | grep -qF -e 'entries = list(deque(matches, maxlen=args.limit) if args.limit is not None else matches)' && git show \"$COMMIT:workledger/cli/_commands/list.py\" | grep -qF -e '# Most recent N only, still in append order; deque keeps memory bounded by N.' && git show \"$COMMIT:workledger/cli/_commands/list.py\" | grep -qF -e 'add_parser(\"list\", help=\"List ledger entries (oldest first).\")' && printf '%s\\n' 'last N' latest 'newest N' 'final N' oldest-first 'file order' chronological 'oldest to newest' ascending 'at most N' 'only N' 'does not hold every' 'doesn'\"'\"'t hold every' 'does not hold all' 'doesn'\"'\"'t hold all' 'not every' 'O(N)'"
+        }
+      ]
+    },
+    {
+      "id": "wl-since-precision",
+      "kind": "read",
+      "repository": {
+        "host": "github.com",
+        "owner": "agentculture",
+        "name": "workledger-cli"
+      },
+      "commit": "71ef513d20a99d74cb06f954b15fe56d2a999a20",
+      "prompt": "How does `ledger list --since` treat a bound written with sub-millisecond precision, and a bound written without a timezone?",
+      "answer": "normalize_since parses it once and rounds sub-millisecond precision up to the next millisecond, so no entry earlier than the bound is included; a bound without a timezone (naive) is treated as UTC (parse_timestamp). The result is compared as a YYYY-MM-DDTHH:MM:SS.mmmZ string.",
+      "expected": {
+        "schema_version": 1,
+        "one_of": [
+          [
+            {
+              "text": "rounds up",
+              "kind": "text",
+              "fold_case": true
+            },
+            {
+              "text": "rounded up",
+              "kind": "text",
+              "fold_case": true
+            },
+            {
+              "text": "round up",
+              "kind": "text",
+              "fold_case": true
+            },
+            {
+              "text": "rounding up",
+              "kind": "text",
+              "fold_case": true
+            },
+            {
+              "text": "rounds it up",
+              "kind": "text",
+              "fold_case": true
+            },
+            {
+              "text": "ceiling",
+              "kind": "text",
+              "fold_case": true
+            },
+            {
+              "text": "ceil",
+              "kind": "text",
+              "fold_case": true
+            },
+            {
+              "text": "up to the next",
+              "kind": "text",
+              "fold_case": true
+            },
+            {
+              "text": "precision up",
+              "kind": "text",
+              "fold_case": true
+            },
+            {
+              "text": "microseconds up",
+              "kind": "text",
+              "fold_case": true
+            },
+            {
+              "text": "upward",
+              "kind": "text",
+              "fold_case": true
+            }
+          ],
+          [
+            {
+              "text": "as UTC",
+              "kind": "text",
+              "fold_case": true
+            },
+            {
+              "text": "is UTC",
+              "kind": "text",
+              "fold_case": true
+            },
+            {
+              "text": "UTC if naive",
+              "kind": "text",
+              "fold_case": true
+            },
+            {
+              "text": "assumed UTC",
+              "kind": "text",
+              "fold_case": true
+            },
+            {
+              "text": "assumed to be UTC",
+              "kind": "text",
+              "fold_case": true
+            },
+            {
+              "text": "defaults to UTC",
+              "kind": "text",
+              "fold_case": true
+            },
+            {
+              "text": "treated as utc",
+              "kind": "text",
+              "fold_case": true
+            },
+            {
+              "text": "means UTC",
+              "kind": "text",
+              "fold_case": true
+            },
+            {
+              "text": "taken to be UTC",
+              "kind": "text",
+              "fold_case": true
+            }
+          ]
+        ]
+      },
+      "search_paths": [
+        "workledger/cli/_commands/_store.py",
+        "workledger/cli/_commands/list.py"
+      ],
+      "evidence": [
+        {
+          "file": "workledger/cli/_commands/_store.py",
+          "line": 109,
+          "text": "Sub-millisecond precision rounds *up*, so no entry earlier than the bound is included.",
+          "stable": true
+        },
+        {
+          "file": "workledger/cli/_commands/_store.py",
+          "line": 89,
+          "text": "\"\"\"Parse ISO-8601; a trailing ``Z`` or a naive value is treated as UTC.\"\"\"",
+          "stable": true
+        }
+      ],
+      "derived": [
+        {
+          "texts": [
+            "rounds up",
+            "rounded up",
+            "round up",
+            "rounding up",
+            "rounds it up",
+            "ceiling",
+            "ceil",
+            "up to the next",
+            "precision up",
+            "microseconds up",
+            "upward",
+            "is UTC",
+            "assumed UTC",
+            "assumed to be UTC",
+            "defaults to UTC",
+            "means UTC",
+            "taken to be UTC"
+          ],
+          "command": "git show \"$COMMIT:workledger/cli/_commands/_store.py\" | grep -qF -e 'Sub-millisecond precision rounds *up*, so no entry earlier than the bound is included.' && git show \"$COMMIT:workledger/cli/_commands/_store.py\" | grep -qF -e 'utc += timedelta(microseconds=1000 - utc.microsecond % 1000)' && git show \"$COMMIT:workledger/cli/_commands/_store.py\" | grep -qF -e '\"\"\"Parse ISO-8601; a trailing ``Z`` or a naive value is treated as UTC.\"\"\"' && git show \"$COMMIT:workledger/cli/_commands/_store.py\" | grep -qF -e 'parsed = parsed.replace(tzinfo=timezone.utc)' && printf '%s\\n' 'rounds up' 'rounded up' 'round up' 'rounding up' 'rounds it up' ceiling ceil 'up to the next' 'precision up' 'microseconds up' upward 'is UTC' 'assumed UTC' 'assumed to be UTC' 'defaults to UTC' 'means UTC' 'taken to be UTC'"
+        }
+      ]
+    },
+    {
+      "id": "wl-timestamp-option",
+      "kind": "not_found",
+      "repository": {
+        "host": "github.com",
+        "owner": "agentculture",
+        "name": "workledger-cli"
+      },
+      "commit": "71ef513d20a99d74cb06f954b15fe56d2a999a20",
+      "prompt": "Which option of `ledger append` sets the timestamp stored on the new entry?",
+      "answer": "None. `ledger append` has only the entry argument, --stdin and --json. The timestamp (like the id) is generated by the ledger when it appends (now_utc in append_entry), and an entry that supplies \"timestamp\" or \"id\" is refused: \"field(s) are generated by the ledger and cannot be supplied\".",
+      "expected": {
+        "schema_version": 1,
+        "one_of": [
+          [
+            {
+              "text": "not found",
+              "kind": "text",
+              "fold_case": true
+            },
+            {
+              "text": "no such",
+              "kind": "text",
+              "fold_case": true
+            },
+            {
+              "text": "does not exist",
+              "kind": "text",
+              "fold_case": true
+            },
+            {
+              "text": "doesn't exist",
+              "kind": "text",
+              "fold_case": true
+            },
+            {
+              "text": "None",
+              "kind": "identifier"
+            },
+            {
+              "text": "none",
+              "kind": "identifier"
+            },
+            {
+              "text": "no option",
+              "kind": "text",
+              "fold_case": true
+            },
+            {
+              "text": "no flag",
+              "kind": "text",
+              "fold_case": true
+            },
+            {
+              "text": "cannot be set",
+              "kind": "text",
+              "fold_case": true
+            },
+            {
+              "text": "cannot be supplied",
+              "kind": "text",
+              "fold_case": true
+            },
+            {
+              "text": "can't be set",
+              "kind": "text",
+              "fold_case": true
+            },
+            {
+              "text": "can't be supplied",
+              "kind": "text",
+              "fold_case": true
+            },
+            {
+              "text": "is no option",
+              "kind": "text",
+              "fold_case": true
+            },
+            {
+              "text": "there is no",
+              "kind": "text",
+              "fold_case": true
+            }
+          ],
+          [
+            {
+              "text": "generated",
+              "kind": "text",
+              "fold_case": true
+            },
+            {
+              "text": "now_utc",
+              "kind": "text",
+              "fold_case": true
+            },
+            {
+              "text": "stamped",
+              "kind": "text",
+              "fold_case": true
+            },
+            {
+              "text": "stamps",
+              "kind": "text",
+              "fold_case": true
+            },
+            {
+              "text": "automatically",
+              "kind": "text",
+              "fold_case": true
+            },
+            {
+              "text": "set by the ledger",
+              "kind": "text",
+              "fold_case": true
+            },
+            {
+              "text": "assigned by",
+              "kind": "text",
+              "fold_case": true
+            }
+          ]
+        ]
+      },
+      "search_paths": [
+        "workledger/cli/_commands/append.py",
+        "workledger/cli/_commands/_store.py"
+      ],
+      "absent": [
+        {
+          "file": "workledger/cli/_commands/append.py",
+          "patterns": [
+            "--timestamp",
+            "add_argument\\(\"--(time|ts|date)"
+          ]
+        }
+      ],
+      "derived": [
+        {
+          "texts": [
+            "not found",
+            "no such",
+            "does not exist",
+            "doesn't exist",
+            "none",
+            "no option",
+            "no flag",
+            "cannot be set",
+            "can't be set",
+            "can't be supplied",
+            "is no option",
+            "there is no",
+            "stamped",
+            "automatically",
+            "set by the ledger",
+            "assigned by"
+          ],
+          "command": "! git grep -q -i -E -e '--timestamp|add_argument\\(\"--(time|ts|date)' \"$COMMIT\" -- workledger/cli/_commands/append.py && git show \"$COMMIT:workledger/cli/_commands/_store.py\" | grep -qF -e 'GENERATED_FIELDS = frozenset({\"id\", \"timestamp\"})' && git show \"$COMMIT:workledger/cli/_commands/_store.py\" | grep -qF -e 'entry = {\"id\": uuid.uuid4().hex, \"timestamp\": now_utc(), **entry_input}' && printf '%s\\n' 'not found' 'no such' 'does not exist' 'doesn'\"'\"'t exist' none 'no option' 'no flag' 'cannot be set' 'can'\"'\"'t be set' 'can'\"'\"'t be supplied' 'is no option' 'there is no' stamped automatically 'set by the ledger' 'assigned by'"
+        }
+      ]
+    },
+    {
+      "id": "wl-rotation-size",
+      "kind": "not_found",
+      "repository": {
+        "host": "github.com",
+        "owner": "agentculture",
+        "name": "workledger-cli"
+      },
+      "commit": "71ef513d20a99d74cb06f954b15fe56d2a999a20",
+      "prompt": "At what file size does workledger-cli rotate or truncate the ledger file?",
+      "answer": "It never does. There is no size limit and no rotation: the store is append-only, append_entry only ever appends one line, and the module states that nothing rewrites, truncates or deletes existing lines. A search for rotat, max_size, size limit and maxbytes in the package finds nothing.",
+      "expected": {
+        "schema_version": 1,
+        "one_of": [
+          [
+            {
+              "text": "not found",
+              "kind": "text",
+              "fold_case": true
+            },
+            {
+              "text": "no such",
+              "kind": "text",
+              "fold_case": true
+            },
+            {
+              "text": "does not exist",
+              "kind": "text",
+              "fold_case": true
+            },
+            {
+              "text": "doesn't exist",
+              "kind": "text",
+              "fold_case": true
+            },
+            {
+              "text": "never rotates",
+              "kind": "text",
+              "fold_case": true
+            },
+            {
+              "text": "never rotated",
+              "kind": "text",
+              "fold_case": true
+            },
+            {
+              "text": "no rotation",
+              "kind": "text",
+              "fold_case": true
+            },
+            {
+              "text": "does not rotate",
+              "kind": "text",
+              "fold_case": true
+            },
+            {
+              "text": "doesn't rotate",
+              "kind": "text",
+              "fold_case": true
+            },
+            {
+              "text": "not rotated",
+              "kind": "text",
+              "fold_case": true
+            },
+            {
+              "text": "neither rotates",
+              "kind": "text",
+              "fold_case": true
+            },
+            {
+              "text": "no size limit",
+              "kind": "text",
+              "fold_case": true
+            },
+            {
+              "text": "no size cap",
+              "kind": "text",
+              "fold_case": true
+            },
+            {
+              "text": "no maximum size",
+              "kind": "text",
+              "fold_case": true
+            },
+            {
+              "text": "no max size",
+              "kind": "text",
+              "fold_case": true
+            },
+            {
+              "text": "never does",
+              "kind": "text",
+              "fold_case": true
+            },
+            {
+              "text": "at no size",
+              "kind": "text",
+              "fold_case": true
+            }
+          ]
+        ]
+      },
+      "search_paths": [
+        "workledger"
+      ],
+      "absent": [
+        {
+          "file": "workledger/cli/_commands/_store.py",
+          "patterns": [
+            "rotat",
+            "max_?size",
+            "size limit",
+            "maxbytes"
+          ]
+        }
+      ],
+      "derived": [
+        {
+          "texts": [
+            "not found",
+            "no such",
+            "does not exist",
+            "doesn't exist",
+            "never rotates",
+            "never rotated",
+            "no rotation",
+            "does not rotate",
+            "doesn't rotate",
+            "not rotated",
+            "neither rotates",
+            "no size limit",
+            "no size cap",
+            "no maximum size",
+            "no max size",
+            "never does",
+            "at no size"
+          ],
+          "command": "! git grep -q -i -E -e 'rotat|max_?size|size limit|maxbytes' \"$COMMIT\" -- workledger && git show \"$COMMIT:workledger/cli/_commands/_store.py\" | grep -qF -e 'rewrites, truncates, or deletes existing lines.' && printf '%s\\n' 'not found' 'no such' 'does not exist' 'doesn'\"'\"'t exist' 'never rotates' 'never rotated' 'no rotation' 'does not rotate' 'doesn'\"'\"'t rotate' 'not rotated' 'neither rotates' 'no size limit' 'no size cap' 'no maximum size' 'no max size' 'never does' 'at no size'"
+        }
+      ]
+    },
+    {
+      "id": "coh-embed-env",
+      "kind": "find",
+      "repository": {
+        "host": "github.com",
+        "owner": "agentculture",
+        "name": "coherence-cli"
+      },
+      "commit": "a52f7b5be81c636cedcf64535a07cfa878f9be3d",
+      "prompt": "Which environment variables configure the Meaning Gradient's embedding client, and what base URL does it use when none is set?",
+      "answer": "COHERENCE_EMBED_URL (base URL, default http://localhost:8002/v1), COHERENCE_EMBED_MODEL (model id) and COHERENCE_EMBED_TIMEOUT (request timeout in seconds, default 30). The client posts to {COHERENCE_EMBED_URL}/embeddings (coherence/meaning/embed.py).",
+      "expected": {
+        "schema_version": 1,
+        "must_appear": [
+          {
+            "text": "COHERENCE_EMBED_URL",
+            "kind": "identifier"
+          },
+          {
+            "text": "COHERENCE_EMBED_MODEL",
+            "kind": "identifier"
+          },
+          {
+            "text": "COHERENCE_EMBED_TIMEOUT",
+            "kind": "identifier"
+          },
+          {
+            "text": "localhost:8002",
+            "kind": "text",
+            "fold_case": true
+          }
+        ]
+      },
+      "search_paths": [
+        "coherence/meaning/embed.py"
+      ],
+      "evidence": [
+        {
+          "file": "coherence/meaning/embed.py",
+          "line": 39,
+          "text": "DEFAULT_EMBED_URL = \"http://localhost:8002/v1\"",
+          "stable": true
+        },
+        {
+          "file": "coherence/meaning/embed.py",
+          "line": 50,
+          "text": "return os.environ.get(\"COHERENCE_EMBED_URL\", DEFAULT_EMBED_URL)",
+          "stable": true
+        },
+        {
+          "file": "coherence/meaning/embed.py",
+          "line": 55,
+          "text": "return os.environ.get(\"COHERENCE_EMBED_MODEL\", DEFAULT_EMBED_MODEL)",
+          "stable": true
+        },
+        {
+          "file": "coherence/meaning/embed.py",
+          "line": 65,
+          "text": "raw = os.environ.get(\"COHERENCE_EMBED_TIMEOUT\")",
+          "stable": true
+        }
+      ]
+    },
+    {
+      "id": "coh-diagnostic-count",
+      "kind": "count",
+      "repository": {
+        "host": "github.com",
+        "owner": "agentculture",
+        "name": "coherence-cli"
+      },
+      "commit": "a52f7b5be81c636cedcf64535a07cfa878f9be3d",
+      "prompt": "How many diagnostic codes does the message catalog in coherence-cli's quality heuristics module define, and what are they?",
+      "answer": "7 codes in DIAGNOSTIC_MESSAGES (coherence/quality/heuristics.py): no_dateable_statements, age_not_derivable, publication_date_unverified, source_liveness_unverified, no_source_attribution, quote_accuracy_unverified, no_verbatim_signal.",
+      "expected": {
+        "schema_version": 1,
+        "must_appear": [
+          {
+            "text": "no_dateable_statements",
+            "kind": "identifier"
+          },
+          {
+            "text": "age_not_derivable",
+            "kind": "identifier"
+          },
+          {
+            "text": "publication_date_unverified",
+            "kind": "identifier"
+          },
+          {
+            "text": "source_liveness_unverified",
+            "kind": "identifier"
+          },
+          {
+            "text": "no_source_attribution",
+            "kind": "identifier"
+          },
+          {
+            "text": "quote_accuracy_unverified",
+            "kind": "identifier"
+          },
+          {
+            "text": "no_verbatim_signal",
+            "kind": "identifier"
+          }
+        ],
+        "one_of": [
+          [
+            {
+              "text": "7 codes",
+              "kind": "text",
+              "fold_case": true
+            },
+            {
+              "text": "7 diagnostic codes",
+              "kind": "text",
+              "fold_case": true
+            },
+            {
+              "text": "7 diagnostics",
+              "kind": "text",
+              "fold_case": true
+            },
+            {
+              "text": "7 entries",
+              "kind": "text",
+              "fold_case": true
+            },
+            {
+              "text": "7 keys",
+              "kind": "text",
+              "fold_case": true
+            },
+            {
+              "text": "total of 7",
+              "kind": "text",
+              "fold_case": true
+            },
+            {
+              "text": "7 in total",
+              "kind": "text",
+              "fold_case": true
+            },
+            {
+              "text": "7 in all",
+              "kind": "text",
+              "fold_case": true
+            },
+            {
+              "text": "are 7",
+              "kind": "text",
+              "fold_case": true
+            },
+            {
+              "text": "has 7",
+              "kind": "text",
+              "fold_case": true
+            },
+            {
+              "text": "count: 7",
+              "kind": "text",
+              "fold_case": true
+            },
+            {
+              "text": "count is 7",
+              "kind": "text",
+              "fold_case": true
+            },
+            {
+              "text": "seven",
+              "kind": "text",
+              "fold_case": true
+            }
+          ]
+        ]
+      },
+      "search_paths": [
+        "coherence/quality/heuristics.py"
+      ],
+      "evidence": [
+        {
+          "file": "coherence/quality/heuristics.py",
+          "line": 68,
+          "text": "DIAGNOSTIC_MESSAGES: dict[str, str] = {",
+          "stable": true
+        },
+        {
+          "file": "coherence/quality/heuristics.py",
+          "line": 69,
+          "text": "\"no_dateable_statements\": (",
+          "stable": true
+        },
+        {
+          "file": "coherence/quality/heuristics.py",
+          "line": 74,
+          "text": "\"age_not_derivable\": (",
+          "stable": true
+        },
+        {
+          "file": "coherence/quality/heuristics.py",
+          "line": 79,
+          "text": "\"publication_date_unverified\": (",
+          "stable": true
+        },
+        {
+          "file": "coherence/quality/heuristics.py",
+          "line": 83,
+          "text": "\"source_liveness_unverified\": (",
+          "stable": true
+        },
+        {
+          "file": "coherence/quality/heuristics.py",
+          "line": 87,
+          "text": "\"no_source_attribution\": (",
+          "stable": true
+        },
+        {
+          "file": "coherence/quality/heuristics.py",
+          "line": 91,
+          "text": "\"quote_accuracy_unverified\": (",
+          "stable": true
+        },
+        {
+          "file": "coherence/quality/heuristics.py",
+          "line": 95,
+          "text": "\"no_verbatim_signal\": (",
+          "stable": true
+        }
+      ],
+      "derived": [
+        {
+          "texts": [
+            "7 codes",
+            "7 diagnostic codes",
+            "7 diagnostics",
+            "7 entries",
+            "7 keys",
+            "total of 7",
+            "7 in total",
+            "7 in all",
+            "are 7",
+            "has 7",
+            "count: 7",
+            "count is 7",
+            "seven"
+          ],
+          "command": "git show \"$COMMIT:coherence/quality/heuristics.py\" | grep -qF -e 'DIAGNOSTIC_MESSAGES: dict[str, str] = {' && test \"$(git show \"$COMMIT:coherence/quality/heuristics.py\" | sed -n '/^DIAGNOSTIC_MESSAGES/,/^}/p' | grep -cE '^    \"[a-z_]+\": \\($')\" = 7 && printf '%s\\n' '7 codes' '7 diagnostic codes' '7 diagnostics' '7 entries' '7 keys' 'total of 7' '7 in total' '7 in all' 'are 7' 'has 7' 'count: 7' 'count is 7' seven"
+        }
+      ]
+    },
+    {
+      "id": "coh-pattern-motifs",
+      "kind": "find",
+      "repository": {
+        "host": "github.com",
+        "owner": "agentculture",
+        "name": "coherence-cli"
+      },
+      "commit": "a52f7b5be81c636cedcf64535a07cfa878f9be3d",
+      "prompt": "Which motifs does `coherence signal pattern` detect, and in which module are they defined?",
+      "answer": "Six motifs, defined in coherence/signal/pattern.py: increasing, decreasing, plateau, spike, reversal and stair_step (MOTIF_INCREASING ... MOTIF_STAIR_STEP).",
+      "expected": {
+        "schema_version": 1,
+        "must_appear": [
+          {
+            "text": "increasing",
+            "kind": "identifier"
+          },
+          {
+            "text": "decreasing",
+            "kind": "identifier"
+          },
+          {
+            "text": "plateau",
+            "kind": "identifier"
+          },
+          {
+            "text": "spike",
+            "kind": "identifier"
+          },
+          {
+            "text": "reversal",
+            "kind": "identifier"
+          }
+        ],
+        "one_of": [
+          [
+            {
+              "text": "stair_step",
+              "kind": "identifier"
+            },
+            {
+              "text": "stair-step",
+              "kind": "identifier"
+            },
+            {
+              "text": "staircase",
+              "kind": "text",
+              "fold_case": true
+            }
+          ],
+          [
+            {
+              "text": "coherence/signal/pattern.py",
+              "kind": "identifier"
+            },
+            {
+              "text": "signal/pattern.py",
+              "kind": "identifier"
+            },
+            {
+              "text": "pattern.py",
+              "kind": "identifier"
+            },
+            {
+              "text": "coherence.signal.pattern",
+              "kind": "identifier"
+            }
+          ]
+        ]
+      },
+      "search_paths": [
+        "coherence/signal/pattern.py",
+        "README.md"
+      ],
+      "evidence": [
+        {
+          "file": "coherence/signal/pattern.py",
+          "line": 89,
+          "text": "MOTIF_INCREASING = \"increasing\"",
+          "stable": true
+        },
+        {
+          "file": "coherence/signal/pattern.py",
+          "line": 94,
+          "text": "MOTIF_STAIR_STEP = \"stair_step\"",
+          "stable": true
+        }
+      ],
+      "derived": [
+        {
+          "texts": [
+            "coherence/signal/pattern.py",
+            "signal/pattern.py",
+            "pattern.py"
+          ],
+          "command": "git show \"$COMMIT:coherence/signal/pattern.py\" | grep -qF -e 'MOTIF_INCREASING = \"increasing\"' && git show \"$COMMIT:coherence/signal/pattern.py\" | grep -qF -e 'MOTIF_DECREASING = \"decreasing\"' && git show \"$COMMIT:coherence/signal/pattern.py\" | grep -qF -e 'MOTIF_PLATEAU = \"plateau\"' && git show \"$COMMIT:coherence/signal/pattern.py\" | grep -qF -e 'MOTIF_SPIKE = \"spike\"' && git show \"$COMMIT:coherence/signal/pattern.py\" | grep -qF -e 'MOTIF_REVERSAL = \"reversal\"' && git show \"$COMMIT:coherence/signal/pattern.py\" | grep -qF -e 'MOTIF_STAIR_STEP = \"stair_step\"' && printf '%s\\n' coherence/signal/pattern.py signal/pattern.py pattern.py"
+        }
+      ]
+    },
+    {
+      "id": "coh-investiture-formula",
+      "kind": "review",
+      "repository": {
+        "host": "github.com",
+        "owner": "agentculture",
+        "name": "coherence-cli"
+      },
+      "commit": "a52f7b5be81c636cedcf64535a07cfa878f9be3d",
+      "prompt": "Review how coherence-cli's investiture domain turns meaning values into investiture_score: how are they combined, which values are used, and which of the meaning engine's subdimensions are left out?",
+      "answer": "It multiplies four values: investiture_score = meaning_density x agency_coupling x future_constraint x affordance, where meaning_density is meaning's meaning_score and agency_coupling is the agency subdimension (coherence/investiture/score.py, _investiture_score). The meaning engine's consequence and causality subdimensions are not part of the formula.",
+      "expected": {
+        "schema_version": 1,
+        "must_appear": [
+          {
+            "text": "future_constraint",
+            "kind": "identifier"
+          },
+          {
+            "text": "affordance",
+            "kind": "identifier"
+          },
+          {
+            "text": "consequence",
+            "kind": "identifier"
+          },
+          {
+            "text": "causality",
+            "kind": "identifier"
+          }
+        ],
+        "one_of": [
+          [
+            {
+              "text": "product",
+              "kind": "text",
+              "fold_case": true
+            },
+            {
+              "text": "multipl",
+              "kind": "text",
+              "fold_case": true
+            },
+            {
+              "text": "×",
+              "kind": "text"
+            }
+          ],
+          [
+            {
+              "text": "meaning_density",
+              "kind": "identifier"
+            },
+            {
+              "text": "meaning_score",
+              "kind": "identifier"
+            }
+          ],
+          [
+            {
+              "text": "agency_coupling",
+              "kind": "identifier"
+            },
+            {
+              "text": "agency",
+              "kind": "identifier"
+            }
+          ]
+        ]
+      },
+      "search_paths": [
+        "coherence/investiture/score.py",
+        "README.md"
+      ],
+      "evidence": [
+        {
+          "file": "coherence/investiture/score.py",
+          "line": 25,
+          "text": "estimated_investiture = meaning_score * agency * future_constraint * affordance",
+          "stable": true
+        },
+        {
+          "file": "coherence/investiture/score.py",
+          "line": 39,
+          "text": "``consequence`` and ``causality`` (the meaning engine's other two",
+          "stable": true
+        },
+        {
+          "file": "coherence/investiture/score.py",
+          "line": 157,
+          "text": "value *= numeric_components[name]",
+          "stable": true
+        }
+      ]
+    },
+    {
+      "id": "coh-freshness-decay",
+      "kind": "read",
+      "repository": {
+        "host": "github.com",
+        "owner": "agentculture",
+        "name": "coherence-cli"
+      },
+      "commit": "a52f7b5be81c636cedcf64535a07cfa878f9be3d",
+      "prompt": "In coherence-cli's quality domain, how does the freshness score fall as a dated statement gets older, and which diagnostic code does a text with no date marker at all get?",
+      "answer": "Exponential decay with a half-life of 365 days: _decay returns 0.5 ** (age_days / _HALF_LIFE_DAYS) with _HALF_LIFE_DAYS = 365.0, and 1.0 for an age of zero or less. A text with no dateable marker scores 0.0 at low confidence with the code no_dateable_statements (coherence/quality/heuristics.py).",
+      "expected": {
+        "schema_version": 1,
+        "must_appear": [
+          {
+            "text": "no_dateable_statements",
+            "kind": "identifier"
+          }
+        ],
+        "one_of": [
+          [
+            {
+              "text": "365",
+              "kind": "number"
+            },
+            {
+              "text": "365.0",
+              "kind": "number"
+            }
+          ],
+          [
+            {
+              "text": "half-life",
+              "kind": "text",
+              "fold_case": true
+            },
+            {
+              "text": "half life",
+              "kind": "text",
+              "fold_case": true
+            },
+            {
+              "text": "halves",
+              "kind": "text",
+              "fold_case": true
+            },
+            {
+              "text": "halving",
+              "kind": "text",
+              "fold_case": true
+            },
+            {
+              "text": "exponential",
+              "kind": "text",
+              "fold_case": true
+            },
+            {
+              "text": "0.5 **",
+              "kind": "text",
+              "fold_case": true
+            },
+            {
+              "text": "0.5^",
+              "kind": "text",
+              "fold_case": true
+            }
+          ]
+        ]
+      },
+      "search_paths": [
+        "coherence/quality/heuristics.py"
+      ],
+      "evidence": [
+        {
+          "file": "coherence/quality/heuristics.py",
+          "line": 52,
+          "text": "_HALF_LIFE_DAYS = 365.0",
+          "stable": true
+        },
+        {
+          "file": "coherence/quality/heuristics.py",
+          "line": 311,
+          "text": "return 0.5 ** (age_days / _HALF_LIFE_DAYS)",
+          "stable": true
+        },
+        {
+          "file": "coherence/quality/heuristics.py",
+          "line": 334,
+          "text": "return ComponentScore(0.0, CONFIDENCE_LOW, (\"no_dateable_statements\",))",
+          "stable": true
+        }
+      ],
+      "derived": [
+        {
+          "texts": [
+            "half life",
+            "halves",
+            "halving",
+            "exponential",
+            "0.5^"
+          ],
+          "command": "git show \"$COMMIT:coherence/quality/heuristics.py\" | grep -qF -e '_HALF_LIFE_DAYS = 365.0' && git show \"$COMMIT:coherence/quality/heuristics.py\" | grep -qF -e 'return 0.5 ** (age_days / _HALF_LIFE_DAYS)' && git show \"$COMMIT:coherence/quality/heuristics.py\" | grep -qF -e 'return ComponentScore(0.0, CONFIDENCE_LOW, (\"no_dateable_statements\",))' && printf '%s\\n' 'half life' halves halving exponential '0.5^'"
+        }
+      ]
+    },
+    {
+      "id": "coh-resonance-sign",
+      "kind": "read",
+      "repository": {
+        "host": "github.com",
+        "owner": "agentculture",
+        "name": "coherence-cli"
+      },
+      "commit": "a52f7b5be81c636cedcf64535a07cfa878f9be3d",
+      "prompt": "What statistic does `coherence signal resonance` compute for each pair of fields, and what sign of it is reported as interference?",
+      "answer": "One signed Pearson correlation per field pair, over the points where both fields are present (coherence/signal/resonance.py, _alignment). A positive value is resonance, a negative one is interference, and values within the neutral band (|r| <= 0.1) are neutral.",
+      "expected": {
+        "schema_version": 1,
+        "must_appear": [
+          {
+            "text": "pearson",
+            "kind": "text",
+            "fold_case": true
+          }
+        ],
+        "one_of": [
+          [
+            {
+              "text": "negative",
+              "kind": "text",
+              "fold_case": true
+            },
+            {
+              "text": "below zero",
+              "kind": "text",
+              "fold_case": true
+            },
+            {
+              "text": "less than zero",
+              "kind": "text",
+              "fold_case": true
+            },
+            {
+              "text": "< 0",
+              "kind": "text",
+              "fold_case": true
+            },
+            {
+              "text": "< -0.1",
+              "kind": "text",
+              "fold_case": true
+            },
+            {
+              "text": "anti-correlat",
+              "kind": "text",
+              "fold_case": true
+            }
+          ]
+        ]
+      },
+      "search_paths": [
+        "coherence/signal/resonance.py"
+      ],
+      "evidence": [
+        {
+          "file": "coherence/signal/resonance.py",
+          "line": 7,
+          "text": "Pearson correlation over the points where both fields are present",
+          "stable": true
+        },
+        {
+          "file": "coherence/signal/resonance.py",
+          "line": 11,
+          "text": "* **negative** alignment → the fields conflict → ``\"interference\"``",
+          "stable": true
+        }
+      ],
+      "derived": [
+        {
+          "texts": [
+            "below zero",
+            "less than zero",
+            "< 0",
+            "< -0.1",
+            "anti-correlat"
+          ],
+          "command": "git show \"$COMMIT:coherence/signal/resonance.py\" | grep -qF -e 'Pearson correlation over the points where both fields are present' && git show \"$COMMIT:coherence/signal/resonance.py\" | grep -qF -e '* **negative** alignment → the fields conflict → ``\"interference\"``' && printf '%s\\n' 'below zero' 'less than zero' '< 0' '< -0.1' anti-correlat"
+        }
+      ]
+    },
+    {
+      "id": "coh-url-check-timeout",
+      "kind": "not_found",
+      "repository": {
+        "host": "github.com",
+        "owner": "agentculture",
+        "name": "coherence-cli"
+      },
+      "commit": "a52f7b5be81c636cedcf64535a07cfa878f9be3d",
+      "prompt": "What timeout does coherence-cli's quality domain use when it checks that a cited source URL resolves?",
+      "answer": "None: the quality domain never checks that a source resolves. Its heuristics are offline text rules with no network access; a found source marker only raises the diagnostic source_liveness_unverified (\"the heuristic cannot check that it resolves\"). The only timeout in the package, COHERENCE_EMBED_TIMEOUT, belongs to the meaning domain's embedding client.",
+      "expected": {
+        "schema_version": 1,
+        "one_of": [
+          [
+            {
+              "text": "not found",
+              "kind": "text",
+              "fold_case": true
+            },
+            {
+              "text": "no such",
+              "kind": "text",
+              "fold_case": true
+            },
+            {
+              "text": "does not exist",
+              "kind": "text",
+              "fold_case": true
+            },
+            {
+              "text": "doesn't exist",
+              "kind": "text",
+              "fold_case": true
+            },
+            {
+              "text": "None",
+              "kind": "identifier"
+            },
+            {
+              "text": "none",
+              "kind": "identifier"
+            },
+            {
+              "text": "source_liveness_unverified",
+              "kind": "identifier"
+            },
+            {
+              "text": "never checks",
+              "kind": "text",
+              "fold_case": true
+            },
+            {
+              "text": "does not check",
+              "kind": "text",
+              "fold_case": true
+            },
+            {
+              "text": "doesn't check",
+              "kind": "text",
+              "fold_case": true
+            },
+            {
+              "text": "not checked",
+              "kind": "text",
+              "fold_case": true
+            },
+            {
+              "text": "cannot check",
+              "kind": "text",
+              "fold_case": true
+            },
+            {
+              "text": "can't check",
+              "kind": "text",
+              "fold_case": true
+            },
+            {
+              "text": "no network",
+              "kind": "text",
+              "fold_case": true
+            },
+            {
+              "text": "no timeout",
+              "kind": "text",
+              "fold_case": true
+            },
+            {
+              "text": "makes no",
+              "kind": "text",
+              "fold_case": true
+            },
+            {
+              "text": "never resolves",
+              "kind": "text",
+              "fold_case": true
+            },
+            {
+              "text": "does not resolve",
+              "kind": "text",
+              "fold_case": true
+            },
+            {
+              "text": "doesn't resolve",
+              "kind": "text",
+              "fold_case": true
+            }
+          ]
+        ]
+      },
+      "search_paths": [
+        "coherence/quality"
+      ],
+      "absent": [
+        {
+          "file": "coherence/quality/heuristics.py",
+          "patterns": [
+            "timeout",
+            "import httpx",
+            "urllib",
+            "import requests",
+            "socket"
+          ]
+        },
+        {
+          "file": "coherence/quality/score.py",
+          "patterns": [
+            "timeout",
+            "import httpx",
+            "urllib",
+            "import requests",
+            "socket"
+          ]
+        }
+      ],
+      "derived": [
+        {
+          "texts": [
+            "not found",
+            "no such",
+            "does not exist",
+            "doesn't exist",
+            "none",
+            "never checks",
+            "does not check",
+            "doesn't check",
+            "not checked",
+            "can't check",
+            "no timeout",
+            "makes no",
+            "never resolves",
+            "does not resolve",
+            "doesn't resolve"
+          ],
+          "command": "! git grep -q -i -E -e 'timeout|import httpx|urllib|import requests|socket' \"$COMMIT\" -- coherence/quality && git show \"$COMMIT:coherence/quality/heuristics.py\" | grep -qF -e 'heuristic cannot check that it resolves or that the source exists.' && printf '%s\\n' 'not found' 'no such' 'does not exist' 'doesn'\"'\"'t exist' none 'never checks' 'does not check' 'doesn'\"'\"'t check' 'not checked' 'can'\"'\"'t check' 'no timeout' 'makes no' 'never resolves' 'does not resolve' 'doesn'\"'\"'t resolve'"
+        }
+      ]
+    },
+    {
+      "id": "coh-trust-anchors",
+      "kind": "not_found",
+      "repository": {
+        "host": "github.com",
+        "owner": "agentculture",
+        "name": "coherence-cli"
+      },
+      "commit": "a52f7b5be81c636cedcf64535a07cfa878f9be3d",
+      "prompt": "Which file holds the anchor sentences for the Meaning Gradient's trust axis?",
+      "answer": "None: the Meaning Gradient has no trust axis. coherence/meaning/anchors/ holds high and low anchor files only for affordance, agency, causality, consequence, future_constraint and meaning, and no file under coherence/meaning mentions trust.",
+      "expected": {
+        "schema_version": 1,
+        "one_of": [
+          [
+            {
+              "text": "not found",
+              "kind": "text",
+              "fold_case": true
+            },
+            {
+              "text": "no such",
+              "kind": "text",
+              "fold_case": true
+            },
+            {
+              "text": "does not exist",
+              "kind": "text",
+              "fold_case": true
+            },
+            {
+              "text": "doesn't exist",
+              "kind": "text",
+              "fold_case": true
+            },
+            {
+              "text": "None",
+              "kind": "identifier"
+            },
+            {
+              "text": "none",
+              "kind": "identifier"
+            },
+            {
+              "text": "no trust",
+              "kind": "text",
+              "fold_case": true
+            },
+            {
+              "text": "no `trust`",
+              "kind": "text",
+              "fold_case": true
+            },
+            {
+              "text": "has no trust",
+              "kind": "text",
+              "fold_case": true
+            },
+            {
+              "text": "is no trust",
+              "kind": "text",
+              "fold_case": true
+            },
+            {
+              "text": "isn't a trust",
+              "kind": "text",
+              "fold_case": true
+            },
+            {
+              "text": "is not a trust",
+              "kind": "text",
+              "fold_case": true
+            },
+            {
+              "text": "no anchor file for trust",
+              "kind": "text",
+              "fold_case": true
+            },
+            {
+              "text": "no anchors for trust",
+              "kind": "text",
+              "fold_case": true
+            }
+          ]
+        ]
+      },
+      "search_paths": [
+        "coherence/meaning"
+      ],
+      "absent": [
+        {
+          "file": "coherence/meaning/axis.py",
+          "patterns": [
+            "trust"
+          ]
+        },
+        {
+          "file": "coherence/meaning/score.py",
+          "patterns": [
+            "trust"
+          ]
+        }
+      ],
+      "derived": [
+        {
+          "texts": [
+            "not found",
+            "no such",
+            "does not exist",
+            "doesn't exist",
+            "no trust",
+            "no `trust`",
+            "has no trust",
+            "is no trust",
+            "isn't a trust",
+            "is not a trust",
+            "no anchor file for trust",
+            "no anchors for trust"
+          ],
+          "command": "! git grep -q -i -E -e trust \"$COMMIT\" -- coherence/meaning && printf '%s\\n' 'not found' 'no such' 'does not exist' 'doesn'\"'\"'t exist' 'no trust' 'no `trust`' 'has no trust' 'is no trust' 'isn'\"'\"'t a trust' 'is not a trust' 'no anchor file for trust' 'no anchors for trust'"
         }
       ]
     }
