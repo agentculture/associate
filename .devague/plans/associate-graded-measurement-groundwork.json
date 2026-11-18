@@ -5,7 +5,7 @@
   "schema_version": 5,
   "status": "exported",
   "created": "2026-11-18T15:43:53Z",
-  "updated": "2026-11-18T18:37:31Z",
+  "updated": "2026-11-18T19:54:26Z",
   "targets": [
     {
       "id": "c1",
@@ -687,8 +687,8 @@
       "text": "The answer check reads only the model's summary and final message for the current harness. In the recorded worker settings run of 2026-11-18 the expected values appear only in the model's conclusions and facts, so that run would be marked does_not_match, while the older harness's final reply carries everything the model said. This could undercount correct answers in the current-harness arm. The pilot should report both readings (summary only; summary plus the values the model wrote in conclusions and facts) before the operator chooses one for the 288 runs.",
       "kind": "unknown_nonblocking",
       "task_id": "t12",
-      "resolved": false,
-      "resolution": ""
+      "resolved": true,
+      "resolution": "Operator, 2026-11-18: the table is read on the answer text alone (the reading both arms have); the second reading (answer text plus hand-back values) is reported beside it."
     },
     {
       "id": "r5",
