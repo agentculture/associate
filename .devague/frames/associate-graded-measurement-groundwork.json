@@ -4,7 +4,7 @@
   "schema_version": 6,
   "status": "exported",
   "created": "2026-11-18T08:35:07Z",
-  "updated": "2026-11-18T16:21:06Z",
+  "updated": "2026-11-18T17:36:08Z",
   "claims": [
     {
       "id": "c1",
@@ -796,7 +796,7 @@
       "behavior": "a clone made for a measured run holds no file under docs/accuracy and one commit; read, grep, find and git log in it cannot reach the expected values",
       "source_text": "during a measured run the model cannot read the answer key by any tool (read, shell, grep, find); a test proves the key is absent from the checkout a measured run examines",
       "origin": "llm",
-      "status": "proposed"
+      "status": "approved"
     },
     {
       "id": "o2",
@@ -805,7 +805,7 @@
       "behavior": "a run that hits its time limit prints a result object naming the timeout with what the export holds, and --reasoning sets reasoning for that run with the contract file unchanged",
       "source_text": "a run that hits its time limit still returns a result object naming the timeout, with whatever the export holds, and reasoning can be set for one run without editing the contract (issue #22)",
       "origin": "llm",
-      "status": "proposed"
+      "status": "approved"
     },
     {
       "id": "o3",
@@ -814,7 +814,7 @@
       "behavior": "associate check prints the same counts for the saved exports as before the move, apart from the differences named in evidence-cli's 0.7.0 changelog",
       "source_text": "evidence-cli provides two things associate uses: the export re-check (the matcher, the checker and the counts now in associate/accuracy, moved with their tests and still passing the shared vectors), and a grade command that takes an export directory and a task's expected values and returns right, wrong or cannot grade, with no model call",
       "origin": "llm",
-      "status": "proposed"
+      "status": "approved"
     },
     {
       "id": "o4",
@@ -823,7 +823,7 @@
       "behavior": "a dependency outside the named first-party list fails the test, and so does a listed package that declares dependencies of its own",
       "source_text": "associate's dependency rule is rewritten in CLAUDE.md and in the tests that enforce it: no third-party runtime dependency; a first-party AgentCulture package with zero dependencies of its own may be imported with a version floor; evidence-cli is the first",
       "origin": "llm",
-      "status": "proposed"
+      "status": "approved"
     },
     {
       "id": "o5",
@@ -832,7 +832,7 @@
       "behavior": "with evidence-cli unimportable both verbs exit with a CliError naming the package and the install command, and no traceback",
       "source_text": "when evidence-cli is missing or older than the floor, associate run and associate check fail with a CliError that names the package and the install command, never a traceback",
       "origin": "llm",
-      "status": "proposed"
+      "status": "approved"
     },
     {
       "id": "o6",
@@ -841,7 +841,7 @@
       "behavior": "each measured run gets its own empty memory store and its own empty ledger file, outside the clone",
       "source_text": "every measured run starts with an empty memory store and an empty ledger file of its own, so nothing one run remembered can reach another",
       "origin": "llm",
-      "status": "proposed"
+      "status": "approved"
     },
     {
       "id": "o7",
@@ -850,7 +850,7 @@
       "behavior": "a walk that shows the answer key path, a web call reaching the repository's hosting, or a recalled record marks the run contaminated; it is left out of the table and counted",
       "source_text": "the runner marks a run contaminated, excludes it from the table and counts it, when its walk shows the answer key's path, a web search or page fetch that reaches this repository's hosting, or a recalled record; the measured clone has one commit and no history, and files that restate task answers are removed from it",
       "origin": "llm",
-      "status": "proposed"
+      "status": "approved"
     },
     {
       "id": "o8",
@@ -859,7 +859,7 @@
       "behavior": "a finish whose facts field is a string holding a JSON list is accepted or refused with a fix naming the cause, and a timed-out run keeps the rejected payload labelled as rejected",
       "source_text": "A finish call whose facts field is a string holding a JSON list is either accepted or refused with a fix that names the cause, and a run that times out after a rejected finish keeps that payload in its result, labelled as rejected. Found in the same live test (associate issue 22, comment of 2026-11-18): a worker run lost a complete, correct answer this way.",
       "origin": "llm",
-      "status": "proposed"
+      "status": "approved"
     },
     {
       "id": "o9",
@@ -868,7 +868,7 @@
       "behavior": "every task carries expected values in evidence-cli's schema, and the answer check returns matches, does_not_match or cannot_tell for a run's answer text with no model call",
       "source_text": "each measurement task carries structured expected values that a script can grade right or wrong without a model, and the grader scores the final answer, not only the fact quotes",
       "origin": "llm",
-      "status": "proposed"
+      "status": "approved"
     },
     {
       "id": "o10",
@@ -877,7 +877,7 @@
       "behavior": "the text handed to the answer check is the model's own answer with every harness-written line removed",
       "source_text": "The text given to the answer check is the model's own answer without any line the harness wrote, and expected values avoid bare small numbers. Found in the evidence-cli live test of 2026-11-18 (agentculture/evidence-cli docs/notes/2026-11-18-live-test.md, finding 2): the rendered answer.md holds harness lines such as '2 items were refused' and 'Finish summary (3 sentences)', and a deliberately wrong answer was reported as holding the expected 2 and 3 because of them.",
       "origin": "llm",
-      "status": "proposed"
+      "status": "approved"
     },
     {
       "id": "o11",
@@ -886,7 +886,7 @@
       "behavior": "24 tasks, 8 per repository, each with a pinned commit, expected values, and two recorded checks of its answer",
       "source_text": "the task set grows to 24 tasks, 8 each in associate and two sibling repositories, each with a prompt, structured expected values and a pinned commit of the repository it is asked about; every answer is checked by hand and by a second, independent check before it is used",
       "origin": "llm",
-      "status": "proposed"
+      "status": "approved"
     },
     {
       "id": "o12",
@@ -895,7 +895,7 @@
       "behavior": "one command starts every arm with fixed settings and stores a graded result per run; a restart skips stored runs and stores a failed launch with its reason",
       "source_text": "a committed runner starts every arm of the comparison (tasks by harness version by mode by repeat) with fixed settings and stores each run's graded result, so no step is done by hand",
       "origin": "llm",
-      "status": "proposed"
+      "status": "approved"
     },
     {
       "id": "o13",
@@ -904,7 +904,7 @@
       "behavior": "an arm runs the harness from a named older commit against the same tasks",
       "source_text": "the runner can run an arm on an older harness commit, so the commit before PR #27 can be measured on the same tasks as current main",
       "origin": "llm",
-      "status": "proposed"
+      "status": "approved"
     },
     {
       "id": "o14",
@@ -913,7 +913,7 @@
       "behavior": "the report draws at least 48 graded runs for hand grading and states the agreement with the answer check",
       "source_text": "before any table is read, a sample of at least 48 graded runs is graded by hand and the agreement with the grader is reported; below 95% agreement the grader or the expected values are fixed first",
       "origin": "llm",
-      "status": "proposed"
+      "status": "approved"
     },
     {
       "id": "o15",
@@ -922,7 +922,7 @@
       "behavior": "at least 95% of the 288 runs end with a graded result, and grading the same exports a second time gives the same table",
       "source_text": "a comparison of the commit before PR #27 against current main in report mode, on worker and cortex, yields a graded result for at least 95% of its 288 runs (24 tasks, 3 repeats, 2 arms, 2 models); grading the same exports a second time changes 0 grades; and 0 of the walks contain a read of the answer key",
       "origin": "llm",
-      "status": "proposed"
+      "status": "approved"
     }
   ]
 }
