@@ -1,87 +1,497 @@
 {
-  "$comment": "The fixed measurement task set for the accuracy method (issue #20, plan task t3). Each task is a read or find question on this repository with an answer that was checked BY HAND against the files, never taken from a model run: the evidence lists the file, the line and the exact text that settles it. tests/test_accuracy_tasks.py loads this file and checks every item against the checkout. A file with stable=false may be edited by later tasks of the plan; the test then reports the line drift as a warning and still requires the text to be present. A not_found task has no evidence line: it lists the patterns that were searched for and are absent, and the test checks they are still absent. This file was committed before any measuring run.",
-  "checked_against_commit": "424a50a182e789f6db9b73485b5366529a02c294",
-  "checked_against_commit_note": "A commit of the local integration branch accuracy/issue-20, made before any measuring run. That branch reached main as one change, so this hash is not in the published history; tests/test_accuracy_tasks.py re-checks every answer against the current files instead.",
-  "checked_on": "2026-11-17",
+  "$comment": "The fixed measurement task set (issue #20, groundwork plan task t6). Each task names the repository it asks about, the full commit it is pinned to, a prompt, the answer that was checked BY HAND against the files (never taken from a model run) and expected values in evidence-cli's expected-values schema version 1, which evidence.answer.grade applies to a model's answer. A number below 100 is never written as a bare number item: it sits in text form with its label (\"version 9\"). Every expected text is found at the pinned commit by git grep in the task's search_paths, or is listed under derived with the command that prints it (run with COMMIT set to the pinned commit). evidence (file, line, text, stable) and absent (file, patterns) are the hand-check record against the CURRENT checkout; tests/test_accuracy_tasks.py re-checks them. The pinned commit is on origin/main, and the six tasks were first committed before any measuring run. Shape: associate/contract/schemas/measure-tasks.schema.json; code: associate/measure/tasks.py.",
+  "format_version": 1,
+  "checked_on": "2026-11-18",
   "tasks": [
     {
       "id": "gate-thresholds",
       "kind": "find",
-      "reused_from_2026_11_17": true,
+      "repository": {
+        "host": "github.com",
+        "owner": "agentculture",
+        "name": "associate"
+      },
+      "commit": "266dad376813baa8a92a2f34b457222ae7d9d481",
       "prompt": "Which file defines the CLEF safety gate's thresholds, what is that file's version, what are the names of the threshold questions and their threshold values, and which tools are gated without being in the mutating set?",
       "answer": "associate/contract/gate.json, version 9. The clef.allow_when rules are safe_unattended >= 0.5, destructive <= 0.2, exfiltrates <= 0.1, matches_task >= 0.5, and reversibility option irreversible <= 0.2. The gated tools that are not in the mutating set are eidetic_remember, web_search, web_page and delegate_run (associate/contract/models.json gated_tools; mutating_tools is write, edit, bash, ledger_append, run_tests).",
+      "expected": {
+        "schema_version": 1,
+        "must_appear": [
+          {
+            "text": "associate/contract/gate.json",
+            "kind": "identifier"
+          },
+          {
+            "text": "version 9",
+            "kind": "text"
+          },
+          {
+            "text": "safe_unattended >= 0.5",
+            "kind": "text"
+          },
+          {
+            "text": "destructive <= 0.2",
+            "kind": "text"
+          },
+          {
+            "text": "exfiltrates <= 0.1",
+            "kind": "text"
+          },
+          {
+            "text": "matches_task >= 0.5",
+            "kind": "text"
+          },
+          {
+            "text": "irreversible <= 0.2",
+            "kind": "text"
+          },
+          {
+            "text": "eidetic_remember",
+            "kind": "identifier"
+          },
+          {
+            "text": "web_search",
+            "kind": "identifier"
+          },
+          {
+            "text": "web_page",
+            "kind": "identifier"
+          },
+          {
+            "text": "delegate_run",
+            "kind": "identifier"
+          }
+        ]
+      },
+      "derived": [
+        {
+          "texts": [
+            "version 9",
+            "safe_unattended >= 0.5",
+            "destructive <= 0.2",
+            "exfiltrates <= 0.1",
+            "matches_task >= 0.5",
+            "irreversible <= 0.2"
+          ],
+          "command": "git show $COMMIT:associate/contract/gate.json | python3 -c 'import json,sys; d=json.load(sys.stdin); print(\"version\", d[\"version\"]); [print(r.get(\"option\", r[\"question\"]), r[\"op\"], r[\"value\"]) for r in d[\"clef\"][\"allow_when\"]]'"
+        }
+      ],
+      "search_paths": [
+        "associate/contract",
+        "CLAUDE.md"
+      ],
+      "reused_from_2026_11_17": true,
       "evidence": [
-        {"file": "associate/contract/gate.json", "line": 3, "text": "\"version\": 9,", "stable": false},
-        {"file": "associate/contract/gate.json", "line": 67, "text": "{\"question\": \"safe_unattended\", \"op\": \">=\", \"value\": 0.5}", "stable": true},
-        {"file": "associate/contract/gate.json", "line": 68, "text": "{\"question\": \"destructive\", \"op\": \"<=\", \"value\": 0.2}", "stable": true},
-        {"file": "associate/contract/gate.json", "line": 69, "text": "{\"question\": \"exfiltrates\", \"op\": \"<=\", \"value\": 0.1}", "stable": true},
-        {"file": "associate/contract/gate.json", "line": 70, "text": "{\"question\": \"matches_task\", \"op\": \">=\", \"value\": 0.5}", "stable": true},
-        {"file": "associate/contract/gate.json", "line": 71, "text": "{\"question\": \"reversibility\", \"option\": \"irreversible\", \"op\": \"<=\", \"value\": 0.2}", "stable": true},
-        {"file": "associate/contract/models.json", "line": 28, "text": "\"mutating_tools\": [\"write\", \"edit\", \"bash\", \"ledger_append\", \"run_tests\"],", "stable": false},
-        {"file": "associate/contract/models.json", "line": 29, "text": "\"gated_tools\": [\"eidetic_remember\", \"web_search\", \"web_page\", \"delegate_run\"],", "stable": false}
+        {
+          "file": "associate/contract/gate.json",
+          "line": 3,
+          "text": "\"version\": 9,",
+          "stable": false
+        },
+        {
+          "file": "associate/contract/gate.json",
+          "line": 67,
+          "text": "{\"question\": \"safe_unattended\", \"op\": \">=\", \"value\": 0.5}",
+          "stable": true
+        },
+        {
+          "file": "associate/contract/gate.json",
+          "line": 68,
+          "text": "{\"question\": \"destructive\", \"op\": \"<=\", \"value\": 0.2}",
+          "stable": true
+        },
+        {
+          "file": "associate/contract/gate.json",
+          "line": 69,
+          "text": "{\"question\": \"exfiltrates\", \"op\": \"<=\", \"value\": 0.1}",
+          "stable": true
+        },
+        {
+          "file": "associate/contract/gate.json",
+          "line": 70,
+          "text": "{\"question\": \"matches_task\", \"op\": \">=\", \"value\": 0.5}",
+          "stable": true
+        },
+        {
+          "file": "associate/contract/gate.json",
+          "line": 71,
+          "text": "{\"question\": \"reversibility\", \"option\": \"irreversible\", \"op\": \"<=\", \"value\": 0.2}",
+          "stable": true
+        },
+        {
+          "file": "associate/contract/models.json",
+          "line": 28,
+          "text": "\"mutating_tools\": [\"write\", \"edit\", \"bash\", \"ledger_append\", \"run_tests\"],",
+          "stable": false
+        },
+        {
+          "file": "associate/contract/models.json",
+          "line": 29,
+          "text": "\"gated_tools\": [\"eidetic_remember\", \"web_search\", \"web_page\", \"delegate_run\"],",
+          "stable": false
+        }
       ]
     },
     {
       "id": "worktree-merge-refusals",
       "kind": "find",
-      "reused_from_2026_11_17": false,
-      "stable_replacement_for": "walk-recording (the second prompt run on 2026-11-17), whose answers live in files this plan edits",
+      "repository": {
+        "host": "github.com",
+        "owner": "agentculture",
+        "name": "associate"
+      },
+      "commit": "266dad376813baa8a92a2f34b457222ae7d9d481",
       "prompt": "Under what four conditions does the harness refuse to merge a mutating run's worktree branch into main, per associate/harness/worktree.py?",
       "answer": "It keeps the branch and worktree and reports the reason when: the repository has no main branch; the run's base commit is not on main; main is checked out somewhere with uncommitted tracked changes; or the merge does not apply cleanly (it is aborted first, so main is untouched). Source: the module docstring, step 4.",
+      "expected": {
+        "schema_version": 1,
+        "must_appear": [
+          {
+            "text": "no main branch",
+            "kind": "text",
+            "fold_case": true
+          },
+          {
+            "text": "base commit is not on",
+            "kind": "text",
+            "fold_case": true
+          },
+          {
+            "text": "uncommitted tracked changes",
+            "kind": "text",
+            "fold_case": true
+          },
+          {
+            "text": "does not apply",
+            "kind": "text",
+            "fold_case": true
+          }
+        ]
+      },
+      "derived": [
+        {
+          "texts": [
+            "no main branch"
+          ],
+          "command": "git show $COMMIT:associate/harness/worktree.py | tr -d '`' | tr '\\n' ' ' | tr -s ' ' | grep -o 'no main branch'"
+        }
+      ],
+      "search_paths": [
+        "associate/harness/worktree.py"
+      ],
+      "reused_from_2026_11_17": false,
+      "stable_replacement_for": "walk-recording (the second prompt run on 2026-11-17), whose answers live in files this plan edits",
       "evidence": [
-        {"file": "associate/harness/worktree.py", "line": 26, "text": "Refused (branch and worktree kept, reason reported) when: the repository has", "stable": true},
-        {"file": "associate/harness/worktree.py", "line": 27, "text": "no ``main`` branch; the run's base commit is not on ``main`` (merging would", "stable": true},
-        {"file": "associate/harness/worktree.py", "line": 29, "text": "somewhere with uncommitted tracked changes; or the merge does not apply", "stable": true},
-        {"file": "associate/harness/worktree.py", "line": 30, "text": "cleanly (it is aborted first, so ``main`` is untouched). Otherwise:", "stable": true}
+        {
+          "file": "associate/harness/worktree.py",
+          "line": 26,
+          "text": "Refused (branch and worktree kept, reason reported) when: the repository has",
+          "stable": true
+        },
+        {
+          "file": "associate/harness/worktree.py",
+          "line": 27,
+          "text": "no ``main`` branch; the run's base commit is not on ``main`` (merging would",
+          "stable": true
+        },
+        {
+          "file": "associate/harness/worktree.py",
+          "line": 29,
+          "text": "somewhere with uncommitted tracked changes; or the merge does not apply",
+          "stable": true
+        },
+        {
+          "file": "associate/harness/worktree.py",
+          "line": 30,
+          "text": "cleanly (it is aborted first, so ``main`` is untouched). Otherwise:",
+          "stable": true
+        }
       ]
     },
     {
       "id": "read-budget",
       "kind": "read",
-      "reused_from_2026_11_17": false,
+      "repository": {
+        "host": "github.com",
+        "owner": "agentculture",
+        "name": "associate"
+      },
+      "commit": "266dad376813baa8a92a2f34b457222ae7d9d481",
       "prompt": "What limits does associate/contract/policy.json set on one read of a file (maximum lines, maximum output characters, maximum bytes), and does an over-limit read spill to disk?",
       "answer": "budgets.read sets max_lines 1000, max_output_chars 25000, max_bytes 1048576, and spill_to_disk true.",
+      "expected": {
+        "schema_version": 1,
+        "must_appear": [
+          {
+            "text": "max_lines 1000",
+            "kind": "text"
+          },
+          {
+            "text": "max_output_chars 25000",
+            "kind": "text"
+          },
+          {
+            "text": "max_bytes 1048576",
+            "kind": "text"
+          },
+          {
+            "text": "spill_to_disk true",
+            "kind": "text"
+          }
+        ]
+      },
+      "derived": [
+        {
+          "texts": [
+            "max_lines 1000",
+            "max_output_chars 25000",
+            "max_bytes 1048576",
+            "spill_to_disk true"
+          ],
+          "command": "git show $COMMIT:associate/contract/policy.json | python3 -c 'import json,sys; [print(k, str(v).lower() if isinstance(v, bool) else v) for k, v in json.load(sys.stdin)[\"budgets\"][\"read\"].items()]'"
+        }
+      ],
+      "search_paths": [
+        "associate/contract/policy.json"
+      ],
+      "reused_from_2026_11_17": false,
       "evidence": [
-        {"file": "associate/contract/policy.json", "line": 72, "text": "\"read\": {", "stable": false},
-        {"file": "associate/contract/policy.json", "line": 73, "text": "\"max_lines\": 1000,", "stable": false},
-        {"file": "associate/contract/policy.json", "line": 74, "text": "\"max_output_chars\": 25000,", "stable": false},
-        {"file": "associate/contract/policy.json", "line": 75, "text": "\"max_bytes\": 1048576,", "stable": false},
-        {"file": "associate/contract/policy.json", "line": 76, "text": "\"spill_to_disk\": true", "stable": false}
+        {
+          "file": "associate/contract/policy.json",
+          "line": 72,
+          "text": "\"read\": {",
+          "stable": false
+        },
+        {
+          "file": "associate/contract/policy.json",
+          "line": 73,
+          "text": "\"max_lines\": 1000,",
+          "stable": false
+        },
+        {
+          "file": "associate/contract/policy.json",
+          "line": 74,
+          "text": "\"max_output_chars\": 25000,",
+          "stable": false
+        },
+        {
+          "file": "associate/contract/policy.json",
+          "line": 75,
+          "text": "\"max_bytes\": 1048576,",
+          "stable": false
+        },
+        {
+          "file": "associate/contract/policy.json",
+          "line": 76,
+          "text": "\"spill_to_disk\": true",
+          "stable": false
+        }
       ]
     },
     {
       "id": "senses-rights",
       "kind": "read",
-      "reused_from_2026_11_17": false,
+      "repository": {
+        "host": "github.com",
+        "owner": "agentculture",
+        "name": "associate"
+      },
+      "commit": "266dad376813baa8a92a2f34b457222ae7d9d481",
       "prompt": "In associate/contract/models.json, may the senses model change the checkout (may_mutate), and which registry models may it delegate a task to?",
       "answer": "The senses entry has may_mutate false and may_delegate [\"worker\"], so it cannot change the checkout itself and may hand a task to worker through delegate_run.",
+      "expected": {
+        "schema_version": 1,
+        "must_not_appear": [
+          {
+            "text": "may_mutate true",
+            "kind": "text"
+          }
+        ],
+        "one_of": [
+          [
+            {
+              "text": "may_mutate false",
+              "kind": "text"
+            },
+            {
+              "text": "\"may_mutate\": false",
+              "kind": "text"
+            }
+          ],
+          [
+            {
+              "text": "may_delegate [\"worker\"]",
+              "kind": "text"
+            },
+            {
+              "text": "\"may_delegate\": [\"worker\"]",
+              "kind": "text"
+            }
+          ]
+        ]
+      },
+      "derived": [
+        {
+          "texts": [
+            "may_mutate false",
+            "may_delegate [\"worker\"]"
+          ],
+          "command": "git show $COMMIT:associate/contract/models.json | python3 -c 'import json,sys; s=json.load(sys.stdin)[\"models\"][\"senses\"]; print(\"may_mutate\", str(s[\"may_mutate\"]).lower()); print(\"may_delegate\", json.dumps(s[\"may_delegate\"]))'"
+        }
+      ],
+      "search_paths": [
+        "associate/contract/models.json"
+      ],
+      "reused_from_2026_11_17": false,
       "evidence": [
-        {"file": "associate/contract/models.json", "line": 47, "text": "\"senses\": {", "stable": false},
-        {"file": "associate/contract/models.json", "line": 59, "text": "\"may_mutate\": false,", "stable": false},
-        {"file": "associate/contract/models.json", "line": 61, "text": "\"may_delegate\": [\"worker\"]", "stable": false}
+        {
+          "file": "associate/contract/models.json",
+          "line": 47,
+          "text": "\"senses\": {",
+          "stable": false
+        },
+        {
+          "file": "associate/contract/models.json",
+          "line": 59,
+          "text": "\"may_mutate\": false,",
+          "stable": false
+        },
+        {
+          "file": "associate/contract/models.json",
+          "line": 61,
+          "text": "\"may_delegate\": [\"worker\"]",
+          "stable": false
+        }
       ]
     },
     {
       "id": "forbidden-decisions",
       "kind": "find",
-      "reused_from_2026_11_17": false,
+      "repository": {
+        "host": "github.com",
+        "owner": "agentculture",
+        "name": "associate"
+      },
+      "commit": "266dad376813baa8a92a2f34b457222ae7d9d481",
       "prompt": "Which decisions does the harness-wide role contract forbid every registry model from taking, and in which file?",
       "answer": "associate/contract/role.json lists forbidden: final_decision and security_decision.",
+      "expected": {
+        "schema_version": 1,
+        "must_appear": [
+          {
+            "text": "associate/contract/role.json",
+            "kind": "identifier"
+          },
+          {
+            "text": "final_decision",
+            "kind": "identifier"
+          },
+          {
+            "text": "security_decision",
+            "kind": "identifier"
+          }
+        ]
+      },
+      "search_paths": [
+        "associate/contract",
+        "CLAUDE.md"
+      ],
+      "reused_from_2026_11_17": false,
       "evidence": [
-        {"file": "associate/contract/role.json", "line": 15, "text": "\"forbidden\": [", "stable": true},
-        {"file": "associate/contract/role.json", "line": 16, "text": "\"final_decision\",", "stable": true},
-        {"file": "associate/contract/role.json", "line": 17, "text": "\"security_decision\"", "stable": true}
+        {
+          "file": "associate/contract/role.json",
+          "line": 15,
+          "text": "\"forbidden\": [",
+          "stable": true
+        },
+        {
+          "file": "associate/contract/role.json",
+          "line": 16,
+          "text": "\"final_decision\",",
+          "stable": true
+        },
+        {
+          "file": "associate/contract/role.json",
+          "line": 17,
+          "text": "\"security_decision\"",
+          "stable": true
+        }
       ]
     },
     {
       "id": "decider-retry-count",
       "kind": "not_found",
-      "reused_from_2026_11_17": false,
+      "repository": {
+        "host": "github.com",
+        "owner": "agentculture",
+        "name": "associate"
+      },
+      "commit": "266dad376813baa8a92a2f34b457222ae7d9d481",
       "prompt": "What is the maximum number of retries, and the backoff between them, that the CLEF safety gate applies to a failed call to the decider?",
       "answer": "Not found. The gate has no retry or backoff setting: a case-insensitive search for retry, retries, backoff and attempts finds nothing in associate/contract/gate.json or in .pi/extensions/associate/lib/gate.ts. The one nearby hit is the comment at gate.ts line 19 saying a decider failure is \"NOT retried on a laxer tier\", which says there is no retry. When the decider is unreachable the gate falls through to the Super tier and then the read-only fallback (gate.json readonly_fallback), it does not retry.",
+      "expected": {
+        "schema_version": 1,
+        "must_not_appear": [
+          {
+            "text": "exponential backoff",
+            "kind": "text",
+            "fold_case": true
+          }
+        ],
+        "one_of": [
+          [
+            {
+              "text": "not found",
+              "kind": "text",
+              "fold_case": true
+            },
+            {
+              "text": "no retry",
+              "kind": "text",
+              "fold_case": true
+            },
+            {
+              "text": "no retries",
+              "kind": "text",
+              "fold_case": true
+            }
+          ]
+        ]
+      },
+      "derived": [
+        {
+          "texts": [
+            "not found",
+            "no retry",
+            "no retries"
+          ],
+          "command": "if git grep -q -i -E 'retry|retries|backoff|attempts' $COMMIT -- associate/contract/gate.json .pi/extensions/associate/lib/gate.ts; then echo present; else echo 'not found: no retry, no retries, no backoff setting'; fi"
+        }
+      ],
+      "search_paths": [
+        "associate/contract/gate.json",
+        ".pi/extensions/associate/lib/gate.ts"
+      ],
+      "reused_from_2026_11_17": false,
       "absent": [
-        {"file": "associate/contract/gate.json", "patterns": ["retry", "retries", "backoff", "attempts"]},
-        {"file": ".pi/extensions/associate/lib/gate.ts", "patterns": ["retry", "retries", "backoff", "attempts"]}
+        {
+          "file": "associate/contract/gate.json",
+          "patterns": [
+            "retry",
+            "retries",
+            "backoff",
+            "attempts"
+          ]
+        },
+        {
+          "file": ".pi/extensions/associate/lib/gate.ts",
+          "patterns": [
+            "retry",
+            "retries",
+            "backoff",
+            "attempts"
+          ]
+        }
       ]
     }
   ]

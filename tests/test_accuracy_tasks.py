@@ -1,6 +1,6 @@
 """The fixed measurement task set (issue #20, plan task t3).
 
-``docs/accuracy/tasks.json`` records read/find tasks on this repository with
+``docs/accuracy/tasks.json`` records read/find tasks on this repository (and, later, others) with
 hand-checked answers. Every evidence item names a file, a line and the exact
 text on that line. This test loads the file and checks each one against the
 checkout.
@@ -37,18 +37,17 @@ def _lines(rel: str) -> list[str]:
 
 
 def _task_ids() -> list[str]:
-    return [t["id"] for t in _load()["tasks"]]
+    return [t["id"] for t in _load()["tasks"] if t["repository"]["name"] == "associate"]
 
 
-def test_header_names_the_commit_the_answers_were_checked_against():
+def test_header_names_the_format_and_every_task_is_pinned_to_a_commit():
     data = _load()
-    commit = data["checked_against_commit"]
-    assert re.fullmatch(r"[0-9a-f]{40}", commit), commit
+    assert data["format_version"] == 1
     assert data["checked_on"]
-    # The hash is not required to exist in this clone: the answers were checked on a
-    # local integration branch that reached main as one change, so that commit is
-    # not in the published history. The header says so.
-    assert data["checked_against_commit_note"].strip()
+    # The pinned commit is checked against git by tests/test_measure_tasks.py; the
+    # checks below compare the answers with the CURRENT files, as before.
+    for task in data["tasks"]:
+        assert re.fullmatch(r"[0-9a-f]{40}", task["commit"]), task["id"]
 
 
 def test_task_set_has_enough_tasks_and_a_not_found():

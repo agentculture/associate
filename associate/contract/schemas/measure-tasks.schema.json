@@ -1,0 +1,67 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://github.com/agentculture/associate/contract/measure-tasks.schema.json",
+  "title": "associate measurement task file",
+  "description": "The fixed measurement task set (docs/accuracy/tasks.json). Each task names the repository it asks about, the full commit that repository is pinned to, a prompt, a recorded answer, and structured expected values in evidence-cli's expected-values schema version 1 (evidence.answer). This schema holds the shape; associate.measure.tasks adds what a shape cannot say: a bare number below 100 with kind number is refused (write it in text form with its label), every expected text must be found at the pinned commit or be marked derived with the command that derives it, and the expected values must pass evidence.answer.load_expected.",
+  "type": "object",
+  "required": ["format_version", "tasks"],
+  "additionalProperties": false,
+  "properties": {
+    "$comment": {"type": "string"},
+    "format_version": {"enum": [1]},
+    "checked_on": {"type": "string"},
+    "tasks": {"type": "array", "minItems": 1, "items": {"$ref": "#/$defs/task"}}
+  },
+  "$defs": {
+    "repository": {
+      "type": "object",
+      "required": ["host", "owner", "name"],
+      "additionalProperties": false,
+      "properties": {
+        "host": {"type": "string"},
+        "owner": {"type": "string"},
+        "name": {"type": "string"}
+      }
+    },
+    "derived": {
+      "type": "object",
+      "required": ["texts", "command"],
+      "additionalProperties": false,
+      "properties": {
+        "texts": {"type": "array", "minItems": 1, "items": {"type": "string"}},
+        "command": {
+          "type": "string",
+          "description": "A shell command, run in a checkout that holds the pinned commit with COMMIT set to it, that prints each of the texts."
+        }
+      }
+    },
+    "task": {
+      "type": "object",
+      "required": ["id", "kind", "repository", "commit", "prompt", "answer", "expected"],
+      "additionalProperties": false,
+      "properties": {
+        "id": {"type": "string"},
+        "kind": {"enum": ["read", "find", "count", "review", "not_found"]},
+        "repository": {"$ref": "#/$defs/repository"},
+        "commit": {
+          "type": "string",
+          "pattern": "^[0-9a-f]{40}$",
+          "description": "The full id of the commit the task is pinned to."
+        },
+        "prompt": {"type": "string"},
+        "answer": {"type": "string", "description": "The hand-checked recorded answer; it must grade as matching."},
+        "expected": {"type": "object", "description": "evidence-cli expected values, schema_version 1."},
+        "derived": {"type": "array", "items": {"$ref": "#/$defs/derived"}},
+        "search_paths": {
+          "type": "array",
+          "items": {"type": "string"},
+          "description": "Where the repository check looks; empty or absent means the whole tree except docs/accuracy."
+        },
+        "evidence": {"type": "array", "items": {"type": "object"}},
+        "absent": {"type": "array", "items": {"type": "object"}},
+        "reused_from_2026_11_17": {"type": "boolean"},
+        "stable_replacement_for": {"type": "string"}
+      }
+    }
+  }
+}
