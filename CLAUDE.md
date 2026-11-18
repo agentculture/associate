@@ -381,7 +381,9 @@ associate/                  # Python package (top level — no src/ wrapper)
 ├── server/                 # the bridge's HTTP API: app, serve, tokenstore (server extra)
 ├── bridge/                 # cited framework: auth, policy, Access, tokens, MCP server,
 │                           #   static UI serving, origin check
-├── accuracy/               # the Python re-check: matcher.py, check.py, counts.py
+├── accuracy/               # the Python re-check, imported from evidence-cli
+├── measure/                # graded comparison runs: clone, isolation,
+│                           #   contamination, tasks, answer, runner, report
 └── bench/                  # public suites (suites.json, public.py), walkstats
 web/                        # the web UI (Vite + React + TS); built into the wheel as
                             #   associate/web_dist by hatch_build.py (never committed)

@@ -86,7 +86,7 @@ from pathlib import Path
 from typing import Any, Callable, Iterable, Sequence
 
 from associate import contract
-from associate.accuracy.check import accuracy_result
+from associate.accuracy import accuracy_result
 from associate.contract import validate
 from associate.harness.base import (
     STATEMENTS_FILENAME,
@@ -850,7 +850,7 @@ class PiHarness(Harness):
         """The result dict handed back by ``collect()``.
 
         The accuracy fields come from the Python re-check run now, after the
-        model stopped (``associate.accuracy.check``); its counts are the ones
+        model stopped (``associate.accuracy``); its counts are the ones
         reported, the extension's ``report.json`` supplying only ``unchecked_text``.
         """
         return {

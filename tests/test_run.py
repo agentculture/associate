@@ -1404,7 +1404,7 @@ def test_a_timeout_with_facts_carries_the_recheck_counts(
     fake_pi, checkout: Path, tmp_path: Path, capsys: pytest.CaptureFixture[str]
 ):
     from associate import contract
-    from associate.accuracy.check import inspect_export
+    from associate.accuracy import inspect_export
     from associate.harness.stub import StubHarness
 
     export = tmp_path / "runs" / "to-facts" / "export"
