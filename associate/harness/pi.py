@@ -144,6 +144,31 @@ PREFLIGHT_TIMEOUT = 60.0
 #: The result ``outcome`` of a task turn pi did not finish within ``--timeout``.
 TIMEOUT_OUTCOME = "timeout"
 
+#: The export file holding the latest rejected ``finish`` payload, and its label
+#: (``lib/handback.ts`` writes both; plan task t3, h27).
+REJECTED_HANDBACK_FILENAME = "rejected_handback.json"
+REJECTED_LABEL = "rejected"
+
+
+def rejected_handback(export_dir: Path) -> dict[str, Any] | None:
+    """The latest rejected ``finish`` payload in *export_dir*, under the rejected label.
+
+    ``None`` when the run left none. A file that cannot be read as a JSON object
+    is still reported, labelled, with why instead of a payload: a rejected
+    hand-back is never dropped silently and never counted as a checked one.
+    """
+    path = export_dir / REJECTED_HANDBACK_FILENAME
+    if not path.is_file():
+        return None
+    try:
+        record = json.loads(path.read_text(encoding="utf-8"))
+    except (OSError, ValueError) as error:
+        return {"label": REJECTED_LABEL, "path": str(path), "unreadable": str(error)}
+    if not isinstance(record, dict):
+        return {"label": REJECTED_LABEL, "path": str(path), "unreadable": "not a JSON object"}
+    return {**record, "label": REJECTED_LABEL, "path": str(path)}
+
+
 _UNSAFE_SEGMENT = re.compile(r"[^A-Za-z0-9._-]+")
 _LEADING_JUNK = re.compile(r"^[.-]+")
 
@@ -698,6 +723,11 @@ class PiHarness(Harness):
                     "timed_out": True,
                     "timeout_seconds": self._timeout,
                 }
+                # A finish the run made and had rejected is part of what it
+                # leaves: carried under the rejected label, never as a hand-back.
+                rejected = rejected_handback(export_dir)
+                if rejected is not None:
+                    self._result["rejected_handback"] = rejected
                 return
         finally:
             self._drop_run_contract()
