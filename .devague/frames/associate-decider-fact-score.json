@@ -2,9 +2,9 @@
   "slug": "associate-decider-fact-score",
   "title": "associate decider fact score",
   "schema_version": 6,
-  "status": "drafting",
+  "status": "exported",
   "created": "2026-11-18T08:35:48Z",
-  "updated": "2026-11-18T08:35:51Z",
+  "updated": "2026-11-18T08:37:22Z",
   "claims": [
     {
       "id": "c1",
@@ -16,7 +16,7 @@
         {
           "id": "h19",
           "text": "a run with the score switched on leaves a score or a not-scored mark for every quote-found fact, in a field of its own",
-          "status": "proposed",
+          "status": "confirmed",
           "instruction": ""
         }
       ],
@@ -35,7 +35,7 @@
         {
           "id": "h11",
           "text": "for a hand-back with a fact whose quote is found, check.json holds a score for that fact and report.json a count of scored facts, while accepted, the refusal list and the passed, refused and unchecked counts are byte-identical to a run with the score switched off",
-          "status": "proposed",
+          "status": "confirmed",
           "instruction": ""
         }
       ],
@@ -54,7 +54,7 @@
         {
           "id": "h12",
           "text": "with the decider unreachable, timing out, answering non-2xx or answering malformed, finish still writes facts.json, check.json, report.json and answer.md, each fact is recorded as not scored, and the walk gains no gate line",
-          "status": "proposed",
+          "status": "confirmed",
           "instruction": ""
         }
       ],
@@ -73,7 +73,7 @@
         {
           "id": "h13",
           "text": "a test fails if the question wording, the cut-off or the timeout appears as a literal in the extension's TypeScript or in associate's Python",
-          "status": "proposed",
+          "status": "confirmed",
           "instruction": ""
         }
       ],
@@ -92,7 +92,7 @@
         {
           "id": "h14",
           "text": "associate run --json and associate check show the score copied from the export with its source label, the Python side makes no network call, and an export written before this change loads without error",
-          "status": "proposed",
+          "status": "confirmed",
           "instruction": ""
         }
       ],
@@ -111,7 +111,7 @@
         {
           "id": "h15",
           "text": "check_quote returns the same verdict and nearest text as before for the same inputs, plus the new key, and reports not scored when the decider cannot be reached",
-          "status": "proposed",
+          "status": "confirmed",
           "instruction": ""
         }
       ],
@@ -130,7 +130,7 @@
         {
           "id": "h16",
           "text": "answer.md shows, for a scored fact, both markers as separate text, and never the word accuracy",
-          "status": "proposed",
+          "status": "confirmed",
           "instruction": ""
         }
       ],
@@ -149,7 +149,7 @@
         {
           "id": "h17",
           "text": "the shared matcher and hand-back vectors pass unchanged on both sides, and a test fails if lib/facts.ts or lib/matcher.ts imports a module that performs a network call",
-          "status": "proposed",
+          "status": "confirmed",
           "instruction": ""
         }
       ],
@@ -168,7 +168,7 @@
         {
           "id": "h18",
           "text": "accuracy.json still lists every model in report mode, and no code path refuses or retries a hand-back because of a score",
-          "status": "proposed",
+          "status": "confirmed",
           "instruction": ""
         }
       ],
@@ -242,12 +242,12 @@
       "kind": "audience",
       "text": "the operator and any caller reading a run's answer, who need to know which facts are backed by their quote; and the model during a run, which can check a claim before handing it back",
       "origin": "llm",
-      "status": "proposed",
+      "status": "confirmed",
       "honesty_conditions": [
         {
           "id": "h1",
           "text": "the rendered answer and the check_quote result each show the score in words a reader can act on without knowing what the decider is",
-          "status": "proposed",
+          "status": "confirmed",
           "instruction": ""
         }
       ],
@@ -261,12 +261,12 @@
       "kind": "before_state",
       "text": "today the harness checks only that a fact's quote appears in the result it cites; it cannot tell whether the quote supports the value, so a fact with a real quote and a wrong value passes; an offline replay on 85 real facts showed the decider separating true pairs from planted wrong ones (issue #29), but nothing in the harness uses it",
       "origin": "llm",
-      "status": "proposed",
+      "status": "confirmed",
       "honesty_conditions": [
         {
           "id": "h2",
           "text": "the replay numbers quoted here match issue #29",
-          "status": "proposed",
+          "status": "confirmed",
           "instruction": ""
         }
       ],
@@ -280,12 +280,12 @@
       "kind": "after_state",
       "text": "a finished run's files say, for each fact whose quote was found, whether the decider judged the quote to support the value, with the score, or that it was not scored; the model can get the same judgement during the run from check_quote; nothing is refused on it",
       "origin": "llm",
-      "status": "proposed",
+      "status": "confirmed",
       "honesty_conditions": [
         {
           "id": "h3",
           "text": "one live run in report mode on worker and one on cortex each leave a check.json in which every quote-found fact is either scored or marked not scored",
-          "status": "proposed",
+          "status": "confirmed",
           "instruction": ""
         }
       ],
@@ -299,12 +299,12 @@
       "kind": "why_it_matters",
       "text": "it is the first check of whether a claim follows from its evidence, not only whether the evidence exists; it lets the agent strengthen its own claims before hand-back and gives the operator a second, independent signal on each fact",
       "origin": "llm",
-      "status": "proposed",
+      "status": "confirmed",
       "honesty_conditions": [
         {
           "id": "h4",
           "text": "the measurement in the last success signal reports whether answers were more often correct with the score than without it",
-          "status": "proposed",
+          "status": "confirmed",
           "instruction": ""
         }
       ],
@@ -318,12 +318,12 @@
       "kind": "success_signal",
       "text": "on a labelled set of at least 300 real value-and-quote pairs, labelled by two raters, the decider score at the contract cut-off passes at least 90% of the pairs both raters call supported and at most 10% of the pairs both call unsupported; the set and the labels are committed",
       "origin": "llm",
-      "status": "proposed",
+      "status": "confirmed",
       "honesty_conditions": [
         {
           "id": "h5",
           "text": "the two percentages are computed by a committed script from the committed labels and scores",
-          "status": "proposed",
+          "status": "confirmed",
           "instruction": ""
         }
       ],
@@ -337,12 +337,12 @@
       "kind": "success_signal",
       "text": "the groundwork comparison gains an arm with the score switched on, and its table reports correct answers out of 72 runs per model beside the arm without it; the result is stated whichever way it comes out",
       "origin": "llm",
-      "status": "proposed",
+      "status": "confirmed",
       "honesty_conditions": [
         {
           "id": "h6",
           "text": "the arm is run with the same tasks, models, reasoning setting and repeats as the arm it is compared with",
-          "status": "proposed",
+          "status": "confirmed",
           "instruction": ""
         }
       ],
@@ -356,12 +356,12 @@
       "kind": "requirement",
       "text": "the cut-off in the contract is set from the labelled set, and the labelled set, the question wording and the decider's served model are recorded with it, so a later change of any of them is visible",
       "origin": "llm",
-      "status": "proposed",
+      "status": "confirmed",
       "honesty_conditions": [
         {
           "id": "h7",
           "text": "the note names the set size, the raters, the wording, the cut-off and the served model read from a live response",
-          "status": "proposed",
+          "status": "confirmed",
           "instruction": ""
         }
       ],
@@ -375,12 +375,12 @@
       "kind": "requirement",
       "text": "scoring calls are bounded: a per-fact timeout and a per-hand-back cap on the number of scored facts and on total scoring time, all from the contract; facts beyond the cap are recorded as not scored",
       "origin": "llm",
-      "status": "proposed",
+      "status": "confirmed",
       "honesty_conditions": [
         {
           "id": "h8",
           "text": "a hand-back with more facts than the cap leaves the extra facts marked not scored, and finish returns within the configured total time when the decider is slow",
-          "status": "proposed",
+          "status": "confirmed",
           "instruction": ""
         }
       ],
@@ -394,12 +394,12 @@
       "kind": "boundary",
       "text": "the score is never called accuracy and never folded into the quote-found counts; a low score is shown to the model as information, not as a refusal",
       "origin": "llm",
-      "status": "proposed",
+      "status": "confirmed",
       "honesty_conditions": [
         {
           "id": "h9",
           "text": "no user-facing string or document produced by this work describes the score or its count as accuracy",
-          "status": "proposed",
+          "status": "confirmed",
           "instruction": ""
         }
       ],
@@ -413,12 +413,12 @@
       "kind": "boundary",
       "text": "nothing in lobes-cli is changed; anything the decider would need (calibration for this use, several states per request, priority between callers) is filed as an issue on that repository",
       "origin": "llm",
-      "status": "proposed",
+      "status": "confirmed",
       "honesty_conditions": [
         {
           "id": "h10",
           "text": "no commit of this work touches the lobes-cli repository, and each need found is an issue there",
-          "status": "proposed",
+          "status": "confirmed",
           "instruction": ""
         }
       ],

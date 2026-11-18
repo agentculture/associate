@@ -2,9 +2,9 @@
   "slug": "associate-graded-measurement-groundwork",
   "title": "associate graded measurement groundwork",
   "schema_version": 6,
-  "status": "drafting",
+  "status": "exported",
   "created": "2026-11-18T08:35:07Z",
-  "updated": "2026-11-18T08:35:17Z",
+  "updated": "2026-11-18T08:37:22Z",
   "claims": [
     {
       "id": "c1",
@@ -16,7 +16,7 @@
         {
           "id": "h17",
           "text": "the command exists, runs against clones that a test shows hold no answers, and its stored results include a grade from evidence-cli for each completed run",
-          "status": "proposed",
+          "status": "confirmed",
           "instruction": ""
         }
       ],
@@ -35,7 +35,7 @@
         {
           "id": "h12",
           "text": "a test builds the filtered clone and fails if any tracked file or any reachable git revision in it contains the answer key; after a measured run, no walk entry names the key's path",
-          "status": "proposed",
+          "status": "confirmed",
           "instruction": ""
         }
       ],
@@ -54,7 +54,7 @@
         {
           "id": "h13",
           "text": "grading the same export twice gives the same grade, and for every task a hand-written wrong answer is graded wrong and the recorded answer is graded right",
-          "status": "proposed",
+          "status": "confirmed",
           "instruction": ""
         }
       ],
@@ -73,7 +73,7 @@
         {
           "id": "h14",
           "text": "starting the runner with a list of arms produces one stored result per task, arm and repeat with no manual edit of any contract file between runs",
-          "status": "proposed",
+          "status": "confirmed",
           "instruction": ""
         }
       ],
@@ -92,7 +92,7 @@
         {
           "id": "h15",
           "text": "a run killed at its time limit prints a result object with a timeout outcome and exits with the documented code, and a run started with the per-run reasoning setting records that setting in its result",
-          "status": "proposed",
+          "status": "confirmed",
           "instruction": ""
         }
       ],
@@ -202,12 +202,12 @@
       "kind": "boundary",
       "text": "gate.json is not changed and stays version 9; nothing in lobes-cli or colleague is changed; no third-party runtime dependency is added to associate, and the only first-party one added is evidence-cli",
       "origin": "llm",
-      "status": "proposed",
+      "status": "confirmed",
       "honesty_conditions": [
         {
           "id": "h16",
           "text": "git diff against main shows no change under associate/contract/gate.json, and pyproject.toml lists evidence-cli as its only dependency",
-          "status": "proposed",
+          "status": "confirmed",
           "instruction": ""
         }
       ],
@@ -221,7 +221,7 @@
       "kind": "non_goal",
       "text": "a grader or ledger built inside associate that duplicates what evidence-cli, rigor-cli or workledger-cli will own: the grader goes to evidence-cli and associate uses it",
       "origin": "llm",
-      "status": "proposed",
+      "status": "confirmed",
       "honesty_conditions": [],
       "hard_questions": [],
       "links": [],
@@ -233,12 +233,12 @@
       "kind": "audience",
       "text": "the operator, who decides from the results whether a harness change is kept; Claude Code sessions that run the comparison and read its table; and the evidence-cli maintainers, whose package becomes the grader and the re-check",
       "origin": "llm",
-      "status": "proposed",
+      "status": "confirmed",
       "honesty_conditions": [
         {
           "id": "h1",
           "text": "the stored results name, for every run, the task, arm, repeat, model, reasoning setting, harness commit and grade, so a reader needs nothing else to interpret a row",
-          "status": "proposed",
+          "status": "confirmed",
           "instruction": ""
         }
       ],
@@ -252,12 +252,12 @@
       "kind": "before_state",
       "text": "today nothing shows that the accuracy method improved answers: the old-harness and new-harness runs used different tasks and reasoning settings, answers were never graded right or wrong, each result is one run, the answer key was readable in the checkout and both models quoted it, every step of the measurement was manual, a run that hits its time limit returns no result, and the Python re-check exists only inside associate",
       "origin": "llm",
-      "status": "proposed",
+      "status": "confirmed",
       "honesty_conditions": [
         {
           "id": "h2",
           "text": "each statement in this claim is recorded in docs/notes/accuracy-live-acceptance.md or in issue #30, #22 or #32",
-          "status": "proposed",
+          "status": "confirmed",
           "instruction": ""
         }
       ],
@@ -271,12 +271,12 @@
       "kind": "after_state",
       "text": "one associate command runs every arm of a comparison on 24 tasks in three repositories, each against a clone without the answers; every run ends with a result object even when it times out; evidence-cli grades each run right or wrong from its export and the task's expected values; associate's own re-check is evidence-cli, imported; the results are stored and printed as one table per arm with correct answers, time, calls and runs that ended without a hand-back",
       "origin": "llm",
-      "status": "proposed",
+      "status": "confirmed",
       "honesty_conditions": [
         {
           "id": "h3",
           "text": "running the command twice on the same stored exports prints the same table, and the table's correct-answer count for an arm equals a count made by hand from the per-run files",
-          "status": "proposed",
+          "status": "confirmed",
           "instruction": ""
         }
       ],
@@ -290,12 +290,12 @@
       "kind": "why_it_matters",
       "text": "without a graded, repeatable comparison no change to the harness, including the decider score that comes next, can be shown to help or to hurt",
       "origin": "llm",
-      "status": "proposed",
+      "status": "confirmed",
       "honesty_conditions": [
         {
           "id": "h4",
           "text": "the decider-score spec names this comparison as the way its effect is measured",
-          "status": "proposed",
+          "status": "confirmed",
           "instruction": ""
         }
       ],
@@ -309,12 +309,12 @@
       "kind": "success_signal",
       "text": "a comparison of the commit before PR #27 against current main in report mode, on worker and cortex, yields a graded result for at least 95% of its 288 runs (24 tasks, 3 repeats, 2 arms, 2 models); grading the same exports a second time changes 0 grades; and 0 of the walks contain a read of the answer key",
       "origin": "llm",
-      "status": "proposed",
+      "status": "confirmed",
       "honesty_conditions": [
         {
           "id": "h5",
           "text": "the three numbers are computed by a committed script from the stored results, not counted by hand",
-          "status": "proposed",
+          "status": "confirmed",
           "instruction": ""
         }
       ],
@@ -328,12 +328,12 @@
       "kind": "requirement",
       "text": "evidence-cli provides two things associate uses: the export re-check (the matcher, the checker and the counts now in associate/accuracy, moved with their tests and still passing the shared vectors), and a grade command that takes an export directory and a task's expected values and returns right, wrong or cannot grade, with no model call",
       "origin": "llm",
-      "status": "proposed",
+      "status": "confirmed",
       "honesty_conditions": [
         {
           "id": "h6",
           "text": "the shared matcher and hand-back vectors pass in evidence-cli, the TypeScript extension still passes the same vectors, and associate check prints the same output for the saved test exports before and after the move",
-          "status": "proposed",
+          "status": "confirmed",
           "instruction": ""
         }
       ],
@@ -347,12 +347,12 @@
       "kind": "requirement",
       "text": "associate's dependency rule is rewritten in CLAUDE.md and in the tests that enforce it: no third-party runtime dependency; a first-party AgentCulture package with zero dependencies of its own may be imported with a version floor; evidence-cli is the first",
       "origin": "llm",
-      "status": "proposed",
+      "status": "confirmed",
       "honesty_conditions": [
         {
           "id": "h7",
           "text": "a test fails if pyproject.toml gains a dependency that is not on a named first-party list, and fails if a listed package declares dependencies of its own",
-          "status": "proposed",
+          "status": "confirmed",
           "instruction": ""
         }
       ],
@@ -366,12 +366,12 @@
       "kind": "requirement",
       "text": "the task set grows to 24 tasks, 8 each in associate and two sibling repositories, each with a prompt, structured expected values and a pinned commit of the repository it is asked about; every answer is checked by hand and by a second, independent check before it is used",
       "origin": "llm",
-      "status": "proposed",
+      "status": "confirmed",
       "honesty_conditions": [
         {
           "id": "h8",
           "text": "for every task the expected values are found in the repository at its pinned commit by a test, and a recorded second check exists that did not use the first checker's notes",
-          "status": "proposed",
+          "status": "confirmed",
           "instruction": ""
         }
       ],
@@ -385,12 +385,12 @@
       "kind": "requirement",
       "text": "the runner can run an arm on an older harness commit, so the commit before PR #27 can be measured on the same tasks as current main",
       "origin": "llm",
-      "status": "proposed",
+      "status": "confirmed",
       "honesty_conditions": [
         {
           "id": "h9",
           "text": "one task run on the commit before PR #27 through the runner produces a stored, graded result",
-          "status": "proposed",
+          "status": "confirmed",
           "instruction": ""
         }
       ],
@@ -404,12 +404,12 @@
       "kind": "boundary",
       "text": "the TypeScript checker and matcher stay in the extension, because they run inside pi and cannot import Python; the shared vectors remain the contract between the two sides, now held in two repositories",
       "origin": "llm",
-      "status": "proposed",
+      "status": "confirmed",
       "honesty_conditions": [
         {
           "id": "h10",
           "text": "git diff shows no behaviour change in lib/facts.ts or lib/matcher.ts, and a test fails if the vector files in the two repositories differ",
-          "status": "proposed",
+          "status": "confirmed",
           "instruction": ""
         }
       ],
@@ -423,12 +423,12 @@
       "kind": "boundary",
       "text": "this spec does not add the decider score, does not move any model to enforce mode, and does not report any number as a benchmark score",
       "origin": "llm",
-      "status": "proposed",
+      "status": "confirmed",
       "honesty_conditions": [
         {
           "id": "h11",
           "text": "no file under associate/contract/ gains a decider-score setting in this work, and every printed table carries a line saying it is an internal measurement",
-          "status": "proposed",
+          "status": "confirmed",
           "instruction": ""
         }
       ],
@@ -442,7 +442,7 @@
       "kind": "assumption",
       "text": "the two sibling repositories that host tasks are workledger-cli and coherence-cli, because they hold real code; evidence-cli and rigor-cli are scaffolds today",
       "origin": "llm",
-      "status": "proposed",
+      "status": "confirmed",
       "honesty_conditions": [],
       "hard_questions": [],
       "links": [],
@@ -454,7 +454,7 @@
       "kind": "assumption",
       "text": "worker and cortex with reasoning off are the models measured; senses is included only if the gateway can serve it on the measuring machine",
       "origin": "llm",
-      "status": "proposed",
+      "status": "confirmed",
       "honesty_conditions": [],
       "hard_questions": [],
       "links": [],
