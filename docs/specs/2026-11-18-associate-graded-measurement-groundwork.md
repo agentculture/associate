@@ -43,6 +43,22 @@
 - the runner can run an arm on an older harness commit, so the commit before PR #27 can be measured on the same tasks as current main
   - instruction: The old harness has no finish payload with facts and no purpose argument; the grader must work from the final answer alone for that arm.
   - honesty: one task run on the commit before PR #27 through the runner produces a stored, graded result
+- every measured run starts with an empty memory store and an empty ledger file of its own, so nothing one run remembered can reach another
+  - honesty: two runs of the same task in sequence: the second run's `eidetic_recall` returns no record written by the first
+- the runner marks a run contaminated, excludes it from the table and counts it, when its walk shows the answer key's path, a web search or page fetch that reaches this repository's hosting, or a recalled record; the measured clone has one commit and no history, and files that restate task answers are removed from it
+  - honesty: a run whose walk holds a `web_page` call to the repository's hosting is stored as contaminated and is absent from the correct-answer count
+- each run gets a fresh clone: a clean run by a writing model commits and merges into its checkout's main, so a reused clone would differ from run to run
+  - honesty: the clone's HEAD is the same commit at the start of every run of a task, shown by the stored result
+- the grader reads the same input for every arm: the text the run returned as its answer, not the facts list, because the older harness has no facts; what counts as that text is fixed in the spec of the grade command
+  - honesty: the grade of a run is unchanged when its facts.json is deleted
+- before any table is read, a sample of at least 48 graded runs is graded by hand and the agreement with the grader is reported; below 95% agreement the grader or the expected values are fixed first
+  - honesty: the committed results include the hand grades of the sample and the agreement figure
+- the runner can be stopped and restarted: it skips runs already stored, stores every failed launch with its reason, and never leaves a run counted twice
+  - honesty: killing the runner mid-comparison and starting it again yields exactly one stored result per task, arm and repeat
+- when evidence-cli is missing or older than the floor, associate run and associate check fail with a CliError that names the package and the install command, never a traceback
+  - honesty: with evidence-cli uninstalled, associate check exits with the documented code and a remediation line
+- the size of difference between two arms that will be called a change is written down before the runs start, and the table reports counts per task as well as totals
+  - honesty: the note with the stated difference is committed before the first stored run's timestamp
 
 ## Honesty conditions
 
@@ -91,6 +107,20 @@
 - `s5` — `what a model can read: associate/contract/policy.json read.denylist, lib/contain.ts, tools/read.ts, tools/shell.ts, tools/search.ts, associate run --checkout, associate/harness/worktree.py`: policy.json has a read deny-list of secret-style globs (policy.json:9-32) applied by isDenylisted (contain.ts:390-411) from tools/read.ts:646 and tools/shell.ts:382 only; tools/search.ts has no deny or ignore logic, so grep and find are not covered. There is no per-run hide option. --checkout takes any existing directory (run.py:272-281); a writing model gets a git worktree at HEAD holding every tracked file (worktree.py:214-237), a read-only model runs in place (run.py:218-219). A filtered copy is therefore possible today only by hand, and only a git-tracked filtered clone keeps worktree isolation for writing models.
 - `s6` — `associate/bench/ (suites.json, public.py, config.py, walkstats.py) and the 2026-10-27 multi-model spec`: associate bench runs public suites through their own upstream runner and scorer and never re-implements a scorer (public.py:5-6); every entry is verified: false. The in-house 7-case suite was dropped (CHANGELOG.md:416-417) under a recorded decision that every reported benchmark number comes from a public suite's own scorer (docs/specs/2026-10-27-associate-multi-model-on-pi-1-1-0.md:36-37, 231); the same spec notes nothing then benchmarks the harness itself (line 190). No grader exists that decides an answer right or wrong, and bench has no history store. A graded in-house comparison would reverse or narrow that earlier decision.
 - `s7` — `docs/notes/accuracy-live-acceptance.md (how the measurement was run)`: Every step was manual: a scratch clone, a hand-edited contract copy to turn reasoning off because there is no per-run switch (lines 17-20), 12 launches of associate run with --untrusted-checkout --timeout 1500 --json (lines 14-16), a hand count and a separate re-check script that is not committed (lines 65-72). Correctness of prose answers was not measured (line 198). A comparison with several arms and repeats needs a committed runner.
+- `s8` — `challenge pass / data-flow lens: associate/contract/models.json tool lists`: worker and cortex hold `eidetic_recall`, `eidetic_remember`, `ledger_list` and `ledger_append`; with 3 repeats per task a run can store an answer that a later run recalls. The scoping survey looked only at file reads.
+  - seeds: `c29`
+- `s9` — `challenge pass / adjacent-systems lens: gh repo view (visibility PUBLIC), docs/notes/accuracy-live-acceptance.md, git history`: The repository is public and both models hold `web_search` and `web_page`, so the answer key is reachable on the web whatever the clone holds. docs/notes/accuracy-live-acceptance.md names all six task ids, and a clone with history exposes the key through old revisions.
+  - seeds: `c30`
+- `s10` — `challenge pass / lifecycle lens: associate/harness/worktree.py finish()`: A `may_mutate` model's clean run is committed and merged into the local main of the checkout it ran against (worktree.py finish, merge outcomes merged / `nothing_to_merge` / kept); worker and cortex are `may_mutate`.
+  - seeds: `c31`
+- `s11` — `challenge pass / unstated-assumptions lens: the grader`: The spec assumed a script can grade prose answers from structured expected values. Answers today are free prose (83 to 506 characters) and the models do not reply with the rendered answer (issue #25); nothing measures whether the grader agrees with a person. devague's lapse codes name this case: grader-unverified.
+  - seeds: `c32`, `c33`
+- `s12` — `challenge pass / failure-mode lens: importers of associate.accuracy`: associate/harness/pi.py:88, associate/harness/stub.py:21 and associate/cli/`_commands`/check.py:15-16 import the re-check at module load, so a missing package would break associate run and associate check at import time. Delegated runs start the in-tree python or python3 on PATH (CLAUDE.md, delegation section), which may lack the package.
+  - seeds: `c34`, `c35`
+- `s13` — `challenge pass / counter-evidence lens: 72 runs per model per arm`: With 24 tasks and 3 repeats an arm has 72 runs per model. Nothing in the spec said what difference would count, so any difference could be read as a result after the fact.
+  - seeds: `c36`
+- `s14` — `challenge pass / packaging lens: pyproject.toml of associate, evidence-cli, workledger-cli, rigor-cli`: All four require Python 3.12 or newer and evidence-cli's import package is named evidence with no dependencies; no conflict found. Not examined: how the TestPyPI pre-release job resolves a first-party dependency, and the uv.lock change.
+- `s15` — `challenge pass / security lens: associate run --untrusted-checkout`: Sibling repositories used as task checkouts carry their own AGENTS.md and .pi settings; --untrusted-checkout ignores those (CLAUDE.md, deviation d5), and the live measurement already used it. Clean for this spec; residual risk is a task repository whose files address the model directly.
 
 ## Decisions
 
@@ -107,3 +137,4 @@
 
 - [unknown_nonblocking] how the shared vector files are kept identical in two repositories (a copy with an equality test, or one repository reading the other's released file)
 - [unknown_nonblocking] whether the commit before PR #27 can run unmodified on pi 1.5.2, or needs its own pinned pi 1.1.0 beside the current one
+- [unknown_nonblocking] whether running three arms on one machine in sequence adds order or load effects (gateway warm-up, resident agent activity) large enough to matter

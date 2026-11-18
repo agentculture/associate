@@ -4,7 +4,7 @@
   "schema_version": 6,
   "status": "exported",
   "created": "2026-11-18T08:35:48Z",
-  "updated": "2026-11-18T08:39:16Z",
+  "updated": "2026-11-18T08:45:30Z",
   "claims": [
     {
       "id": "c1",
@@ -432,12 +432,12 @@
       "kind": "requirement",
       "text": "the value and quote are passed through the policy redaction filter before they are sent to the decider, as gate state is",
       "origin": "llm",
-      "status": "proposed",
+      "status": "confirmed",
       "honesty_conditions": [
         {
           "id": "h20",
           "text": "a quote containing a string the policy redacts reaches the decider with that string replaced",
-          "status": "proposed",
+          "status": "confirmed",
           "instruction": ""
         }
       ],
@@ -451,12 +451,12 @@
       "kind": "requirement",
       "text": "the labelled set includes quotes that carry text addressed to the scorer (for example an instruction to answer yes), and the share of those that score above the cut-off is reported; the score is not offered as protection against such text until that share is known",
       "origin": "llm",
-      "status": "proposed",
+      "status": "confirmed",
       "honesty_conditions": [
         {
           "id": "h21",
           "text": "the calibration note reports the count and share for that group separately",
-          "status": "proposed",
+          "status": "confirmed",
           "instruction": ""
         }
       ],
@@ -470,12 +470,12 @@
       "kind": "requirement",
       "text": "a score is asked once per distinct value and quote in a session and reused across retry rounds and the rewrite after the final message",
       "origin": "llm",
-      "status": "proposed",
+      "status": "confirmed",
       "honesty_conditions": [
         {
           "id": "h22",
           "text": "a hand-back refused and answered again with the same fact produces one decider request for it, counted by a fake decider in a test",
-          "status": "proposed",
+          "status": "confirmed",
           "instruction": ""
         }
       ],
@@ -489,12 +489,12 @@
       "kind": "requirement",
       "text": "a fact with an empty value, or whose value and quote exceed the decider's input limit, is recorded as not scored with the reason, and is never sent cut short",
       "origin": "llm",
-      "status": "proposed",
+      "status": "confirmed",
       "honesty_conditions": [
         {
           "id": "h23",
           "text": "a fact with an over-long quote is marked not scored with a size reason and the fake decider receives no request for it",
-          "status": "proposed",
+          "status": "confirmed",
           "instruction": ""
         }
       ],
@@ -508,12 +508,12 @@
       "kind": "requirement",
       "text": "the prompts tell the model that check_quote is how it learns the support score during a run; in report mode the score shown after an accepted hand-back is for the caller, since the run has ended",
       "origin": "llm",
-      "status": "proposed",
+      "status": "confirmed",
       "honesty_conditions": [
         {
           "id": "h24",
           "text": "the model prompts name check_quote for this, and no text promises the model a second chance in report mode",
-          "status": "proposed",
+          "status": "confirmed",
           "instruction": ""
         }
       ],

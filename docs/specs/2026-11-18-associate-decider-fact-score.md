@@ -43,6 +43,16 @@
 - scoring calls are bounded: a per-fact timeout and a per-hand-back cap on the number of scored facts and on total scoring time, all from the contract; facts beyond the cap are recorded as not scored
   - instruction: The decider serves one request at a time and the safety gate shares it (scope finding on lobes-cli).
   - honesty: a hand-back with more facts than the cap leaves the extra facts marked not scored, and finish returns within the configured total time when the decider is slow
+- the value and quote are passed through the policy redaction filter before they are sent to the decider, as gate state is
+  - honesty: a quote containing a string the policy redacts reaches the decider with that string replaced
+- the labelled set includes quotes that carry text addressed to the scorer (for example an instruction to answer yes), and the share of those that score above the cut-off is reported; the score is not offered as protection against such text until that share is known
+  - honesty: the calibration note reports the count and share for that group separately
+- a score is asked once per distinct value and quote in a session and reused across retry rounds and the rewrite after the final message
+  - honesty: a hand-back refused and answered again with the same fact produces one decider request for it, counted by a fake decider in a test
+- a fact with an empty value, or whose value and quote exceed the decider's input limit, is recorded as not scored with the reason, and is never sent cut short
+  - honesty: a fact with an over-long quote is marked not scored with a size reason and the fake decider receives no request for it
+- the prompts tell the model that `check_quote` is how it learns the support score during a run; in report mode the score shown after an accepted hand-back is for the caller, since the run has ended
+  - honesty: the model prompts name `check_quote` for this, and no text promises the model a second chance in report mode
 
 ## Honesty conditions
 
@@ -92,6 +102,13 @@
 - `s3` — `associate/accuracy/check.py, associate/cli/_commands/check.py, the run result (Python re-check)`: Python recomputes counts and verdicts from walk.jsonl, results and facts.json and never uses the extension's (check.py:894-896); the one value it copies is `unchecked_text`, labelled `unchecked_text_source`: extension (check.py:920-924), which is the pattern for a score it cannot recompute. The re-check is documented as standard library only, no model called (check.py:1-7). `_check_fact` builds each fact from a fixed set of keys (check.py:446-453), so a score in the saved files would be dropped unless copied on purpose. report.schema.json and the fact items of facts.schema.json forbid extra properties (report.schema.json:7, facts.schema.json:19). A missing optional field read with a guard is safe for old exports (check.py:855-860).
 - `s4` — `.pi/extensions/associate/index.ts finish path, lib/facts.ts, lib/handback.ts, lib/render.ts, tools/check.ts`: finish.execute and `check_quote`.execute are already async (index.ts:~381, tools/check.ts:99) and await nothing today. checkHandback is pure and synchronous by its own header (facts.ts:6-9), by test (facts.test.ts:97-101) and by the plan (docs/plans/2026-11-17-associate-accuracy-method.md:54), and its output is compared field by field with vectors shared with Python (facts.test.ts:51-66): a network call cannot go inside it. The `message_end` handler rewrites check.json, report.json and answer.md from a saved object (index.ts:547-570), so a score must be kept in that object. Refusals come from refusalsOf (handback.ts:303) and accepted (facts.ts:~598); a score must enter neither. answer.md skips refused facts and renders the rest through factLine (render.ts:83-93,148). check.test.ts:167-190 pins that `check_quote` and the matcher return the same verdict and nearest, so existing keys must not change.
 - `s5` — `associate/contract/accuracy.json, schemas/accuracy.schema.json, schemas/report.schema.json, schemas/facts.schema.json, validate.py`: accuracy.json states every threshold, retry count, mode and table lives in it and nowhere in code (accuracy.json:2); accuracy.schema.json and report.schema.json forbid extra properties, so a scorer setting and a new count each need a declared property (finish-check.test.ts:508-510 fails on an unknown report key). There is no schema for check.json. facts.schema.json is the model's payload and forbids extra keys on a fact, so a harness-written score cannot live there. A check listed in checks needs a non-blank `motivating_failure` (validate.py:556-581, CLAUDE.md:796-800); a report-only signal with no refusal reason needs no checks entry. `test_accuracy_contract.py` pins every model's mode as report.
+- `s6` — `challenge pass / security lens: associate/contract/gate.json comment, lib/gate.ts redaction`: gate.json line 2 says the state sent to the decider never carries a tool result or fetched web content. A fact's quote is exactly that: text from a file, a command or a web page, chosen by the model. This use sends untrusted text to the decider for the first time, and a quote can be written to push the answer.
+  - seeds: `c25`, `c26`
+- `s7` — `challenge pass / lifecycle lens: index.ts finish rounds and message_end rewrite`: finish can run several times in enforce mode and the `message_end` handler rewrites check.json, report.json and answer.md (index.ts:547-570); without reuse each pass would ask the decider again for the same facts, behind the same single lock the safety gate uses.
+  - seeds: `c27`
+- `s8` — `challenge pass / overlooked-actors lens: who can act on a score`: In report mode finish ends the run, so a low score shown in its result cannot change the model's answer; only `check_quote`, called earlier, or a retry round in enforce mode lets the model act. The spec's audience claim named the model without saying how the score reaches it in time.
+  - seeds: `c28`, `c29`
+- `s9` — `challenge pass / concurrency lens: lobes-cli decider single lock`: Examined from the scoping finding only (`clef_vllm.py`:311, one request at a time); no probe was run with a second session. The cap and timeout requirement bounds one session's use; the effect on other sessions' gate calls stays parked.
 
 ## Decisions
 
@@ -102,3 +119,4 @@
 
 - [unknown_nonblocking] whether the decider's yes/no score is calibrated for quote-and-value pairs: lobes-cli documents calibration on 418 other questions only
 - [unknown_nonblocking] whether end-of-run scoring delays safety-gate calls from other sessions or children enough to trip their 30 second timeout
+- [unknown_nonblocking] the decider's response names its model only as clef, so a change of the served checkpoint cannot be seen from a score; the cut-off could go stale without notice

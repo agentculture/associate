@@ -4,7 +4,7 @@
   "schema_version": 6,
   "status": "exported",
   "created": "2026-11-18T08:35:07Z",
-  "updated": "2026-11-18T08:39:15Z",
+  "updated": "2026-11-18T08:45:30Z",
   "claims": [
     {
       "id": "c1",
@@ -466,12 +466,12 @@
       "kind": "requirement",
       "text": "every measured run starts with an empty memory store and an empty ledger file of its own, so nothing one run remembered can reach another",
       "origin": "llm",
-      "status": "proposed",
+      "status": "confirmed",
       "honesty_conditions": [
         {
           "id": "h18",
           "text": "two runs of the same task in sequence: the second run's eidetic_recall returns no record written by the first",
-          "status": "proposed",
+          "status": "confirmed",
           "instruction": ""
         }
       ],
@@ -485,12 +485,12 @@
       "kind": "requirement",
       "text": "the runner marks a run contaminated, excludes it from the table and counts it, when its walk shows the answer key's path, a web search or page fetch that reaches this repository's hosting, or a recalled record; the measured clone has one commit and no history, and files that restate task answers are removed from it",
       "origin": "llm",
-      "status": "proposed",
+      "status": "confirmed",
       "honesty_conditions": [
         {
           "id": "h19",
           "text": "a run whose walk holds a web_page call to the repository's hosting is stored as contaminated and is absent from the correct-answer count",
-          "status": "proposed",
+          "status": "confirmed",
           "instruction": ""
         }
       ],
@@ -504,12 +504,12 @@
       "kind": "requirement",
       "text": "each run gets a fresh clone: a clean run by a writing model commits and merges into its checkout's main, so a reused clone would differ from run to run",
       "origin": "llm",
-      "status": "proposed",
+      "status": "confirmed",
       "honesty_conditions": [
         {
           "id": "h20",
           "text": "the clone's HEAD is the same commit at the start of every run of a task, shown by the stored result",
-          "status": "proposed",
+          "status": "confirmed",
           "instruction": ""
         }
       ],
@@ -523,12 +523,12 @@
       "kind": "requirement",
       "text": "the grader reads the same input for every arm: the text the run returned as its answer, not the facts list, because the older harness has no facts; what counts as that text is fixed in the spec of the grade command",
       "origin": "llm",
-      "status": "proposed",
+      "status": "confirmed",
       "honesty_conditions": [
         {
           "id": "h21",
           "text": "the grade of a run is unchanged when its facts.json is deleted",
-          "status": "proposed",
+          "status": "confirmed",
           "instruction": ""
         }
       ],
@@ -542,12 +542,12 @@
       "kind": "requirement",
       "text": "before any table is read, a sample of at least 48 graded runs is graded by hand and the agreement with the grader is reported; below 95% agreement the grader or the expected values are fixed first",
       "origin": "llm",
-      "status": "proposed",
+      "status": "confirmed",
       "honesty_conditions": [
         {
           "id": "h22",
           "text": "the committed results include the hand grades of the sample and the agreement figure",
-          "status": "proposed",
+          "status": "confirmed",
           "instruction": ""
         }
       ],
@@ -561,12 +561,12 @@
       "kind": "requirement",
       "text": "the runner can be stopped and restarted: it skips runs already stored, stores every failed launch with its reason, and never leaves a run counted twice",
       "origin": "llm",
-      "status": "proposed",
+      "status": "confirmed",
       "honesty_conditions": [
         {
           "id": "h23",
           "text": "killing the runner mid-comparison and starting it again yields exactly one stored result per task, arm and repeat",
-          "status": "proposed",
+          "status": "confirmed",
           "instruction": ""
         }
       ],
@@ -580,12 +580,12 @@
       "kind": "requirement",
       "text": "when evidence-cli is missing or older than the floor, associate run and associate check fail with a CliError that names the package and the install command, never a traceback",
       "origin": "llm",
-      "status": "proposed",
+      "status": "confirmed",
       "honesty_conditions": [
         {
           "id": "h24",
           "text": "with evidence-cli uninstalled, associate check exits with the documented code and a remediation line",
-          "status": "proposed",
+          "status": "confirmed",
           "instruction": ""
         }
       ],
@@ -599,12 +599,12 @@
       "kind": "requirement",
       "text": "the size of difference between two arms that will be called a change is written down before the runs start, and the table reports counts per task as well as totals",
       "origin": "llm",
-      "status": "proposed",
+      "status": "confirmed",
       "honesty_conditions": [
         {
           "id": "h25",
           "text": "the note with the stated difference is committed before the first stored run's timestamp",
-          "status": "proposed",
+          "status": "confirmed",
           "instruction": ""
         }
       ],
