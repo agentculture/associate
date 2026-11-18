@@ -86,6 +86,8 @@ export interface StructuredError {
   code: string;
   message: string;
   field?: string;
+  /** How to change the request so it can succeed (spec c10): never empty. */
+  fix: string;
 }
 
 export interface ConfineOk {
@@ -126,20 +128,68 @@ export type GitignoreMatcher = (rel: string) => boolean;
 // ---------------------------------------------------------------------------
 
 /**
+ * The default fix for each error code this module and the tools built on it
+ * return (spec c10: every refusal says how to fix the request). A caller that
+ * knows better passes its own fix to {@link makeStructuredError}.
+ */
+const FIX_BY_CODE: Readonly<Record<string, string>> = {
+  invalid_argument:
+    "correct the argument named in 'field' so it matches the tool's parameters, and call again",
+  invalid_schema:
+    "the tool's own schema is broken, not your arguments; do the step with another tool, or report it in finish",
+  path_escapes_root:
+    "give a path inside the checkout (relative to its root, with no '..' climbing out of it), and call again",
+  pattern_escapes_root: "drop the '..' segments from the pattern and search from inside the checkout",
+  path_denied:
+    "this path may not be read; pick another file, and say in finish that this one was not read if it matters",
+  path_not_found: "check the path with ls or find first, then call again with a path that exists",
+  not_a_file: "name a file, not a directory; use ls to list a directory",
+  cursor_invalid:
+    "pass the cursor exactly as the previous result returned it, or call again without a cursor to start over",
+  ls_failed: "check that the directory exists and is readable (ls its parent), then call again",
+  search_failed: "check the pattern and the path (ls the path first), then call again",
+  invalid_args:
+    "correct the argument named in detail.field (or drop the arguments the tool does not take), and call again",
+  tool_missing:
+    "the program this tool needs is not installed here; do the step with another tool, or report it in finish",
+  contract_incomplete:
+    "the contract does not allow this call; do not retry it, report it in finish so the operator can fix the contract",
+  unknown_run: "pass a run id that delegate_run returned in this session",
+  fetch_failed: "check the URL, try another source, or report in finish that the page could not be fetched",
+  shell_refused:
+    "run only an allowlisted read-only command, as an argv array with no shell operators, or use read/grep/find instead",
+};
+
+/**
+ * The fix for `code`: the table's entry, else one that names `field`, else a
+ * generic one. Never empty — a refusal without a fix is a harness bug.
+ */
+export function defaultFix(code: string, field?: string): string {
+  const known = Object.hasOwn(FIX_BY_CODE, code) ? FIX_BY_CODE[code] : undefined;
+  if (known) return known;
+  const what = field !== undefined ? `correct '${field}' as the message says` : "change the request as the message says";
+  return `${what} and call again; if the same error comes back, do not repeat the call unchanged: take another route or report it in finish`;
+}
+
+/**
  * Build the one error shape every export in this module returns.
  *
- * `{ ok: false, error: { code, message, field? } }` is the canonical payload;
- * `code` / `message` / `field` are mirrored at the top level so a caller can
- * write `const { error, field } = result` without reaching two levels down.
+ * `{ ok: false, error: { code, message, field? }, fix }` is the canonical
+ * payload; `code` / `message` / `field` are mirrored at the top level so a
+ * caller can write `const { error, field } = result` without reaching two
+ * levels down. `fix` (spec c10) says how to change the request; without one
+ * given (or with a blank one) it is {@link defaultFix} for the code.
  */
 export function makeStructuredError(
   code: string,
   message: string,
   field?: string,
+  fix?: string,
 ): StructuredError {
   const inner: { code: string; message: string; field?: string } = { code, message };
   if (field !== undefined) inner.field = field;
-  const out: StructuredError = { ok: false, error: inner, code, message };
+  const resolvedFix = typeof fix === "string" && fix.trim() ? fix : defaultFix(code, field);
+  const out: StructuredError = { ok: false, error: inner, code, message, fix: resolvedFix };
   if (field !== undefined) out.field = field;
   return out;
 }

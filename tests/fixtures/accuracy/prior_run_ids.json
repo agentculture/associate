@@ -1,0 +1,217 @@
+{
+  "_origin": "Recorded runs scope20-worker-t3 (prior, ended at its time limit) and scope20-worker-t5 (continued from it), pre-change exports. The recorded t5 statement s4 cited its evidence as bare ids w10, w11, w16-w19, taken from the numbering of t3's walk; in t5's own walk w10 is a read of policy.json, in t3's it is a read of index.ts. The old recorder marked it 'referenced'. Both walks are trimmed to the entries the test reads (w1..w12 of t3 as entry stubs, w10 of each with a few lines); paths rewritten to /checkout. The fact is built from the recorded statement: its recorded id (w10) and a line of the t3 w10 read.",
+  "kind": "recorded",
+  "prior_entries": [
+    {
+      "id": "w1",
+      "tool": "ls",
+      "args": {
+        "path": "/checkout"
+      },
+      "result": {
+        "content": ""
+      }
+    },
+    {
+      "id": "w2",
+      "tool": "bash",
+      "args": {
+        "argv": [
+          "ls",
+          "-la"
+        ],
+        "cwd": "/checkout"
+      },
+      "result": {
+        "content": ""
+      }
+    },
+    {
+      "id": "w3",
+      "tool": "bash",
+      "args": {
+        "argv": [
+          "find",
+          "associate",
+          "-name",
+          "*.ts",
+          "-o",
+          "name",
+          "*.json",
+          "-o",
+          "name",
+          "*.py"
+        ],
+        "cwd": "/checkout"
+      },
+      "result": {
+        "content": ""
+      }
+    },
+    {
+      "id": "w4",
+      "tool": "bash",
+      "args": {
+        "argv": [
+          "ls",
+          "-R",
+          ".pi/extensions/associate/lib",
+          ".pi/extensions/associate",
+          "associate/harness/pi.py",
+          "cli/_commands/run.py",
+          "harness/worktree.py"
+        ],
+        "cwd": "/checkout"
+      },
+      "result": {
+        "content": ""
+      }
+    },
+    {
+      "id": "w5",
+      "tool": "bash",
+      "args": {
+        "argv": [
+          "ls",
+          "associate"
+        ],
+        "cwd": "/checkout"
+      },
+      "result": {
+        "content": ""
+      }
+    },
+    {
+      "id": "w6",
+      "tool": "bash",
+      "args": {
+        "argv": [
+          "ls",
+          ".pi/extensions/associate"
+        ],
+        "cwd": "/checkout"
+      },
+      "result": {
+        "content": ""
+      }
+    },
+    {
+      "id": "w7",
+      "tool": "bash",
+      "args": {
+        "argv": [
+          "ls",
+          ".pi"
+        ],
+        "cwd": "/checkout"
+      },
+      "result": {
+        "content": ""
+      }
+    },
+    {
+      "id": "w8",
+      "tool": "bash",
+      "args": {
+        "argv": [
+          "fd",
+          "-t",
+          "f",
+          "policy.json",
+          "gate.json",
+          "walk.schema.json",
+          "statements.schema.json"
+        ],
+        "cwd": "/checkout"
+      },
+      "result": {
+        "content": ""
+      }
+    },
+    {
+      "id": "w9",
+      "tool": "bash",
+      "args": {
+        "argv": [
+          "ls",
+          "-R",
+          "associate/harness",
+          "associate/cli",
+          "associate/contract"
+        ],
+        "cwd": "/checkout"
+      },
+      "result": {
+        "content": ""
+      }
+    },
+    {
+      "id": "w10",
+      "tool": "read",
+      "args": {
+        "path": "/checkout/.pi/extensions/associate/index.ts",
+        "start_line": 1,
+        "end_line": 120
+      },
+      "result": {
+        "content": "1\t/**\n2\t * associate's Pi extension — the core.\n3\t *\n4\t * What this file does, and only this:\n5\t *\n6\t * 1. loads the portable contract (`policy.json` + the walk/statements schemas)\n7\t *    from the Python package — `$ASSOCIATE_CONTRACT_DIR` when the adapter\n8\t *    passes it, the repo-relative `associate/contract/` otherwise. **No policy\n9\t *    value is defined in TypeScript** (spec c46/c50);\n10\t * 2. resolves one scratch and one export directory for this session, keyed by\n11\t *    the ACP session id when present (spec c42), outside the examined checkout;\n12\t * 3. registers `associate_ready` — the sentinel a launcher uses to prove the\n13\t *    extension actually loaded rather than trusting that the config file is on\n14\t *    disk (spec c34) — and `finish`, whose payload is the hand-back;\n15\t * 4. registers the `tool_call` guard: the active model's tool set (plan t12),\n16\t *    senses' no-mutation rule, and the safety gate (`lib/gate.ts`) in front of\n17\t *    every mutating call of a model that may mutate, each decision appended to\n18\t *    the walk (spec c4/c5, c13, c35, c38);\n19\t * 5. registers the `associate` provider from the environment, with the hook\n20\t *    that switches reasoning off on the wire (spec c14/c28) — or, with no key\n21\t *    configured, registers nothing and prints one hint;"
+      }
+    },
+    {
+      "id": "w11",
+      "tool": "read",
+      "args": {
+        "path": "/checkout/.pi/extensions/associate/lib/guard.ts",
+        "start_line": 1,
+        "end_line": 120
+      },
+      "result": {
+        "content": ""
+      }
+    },
+    {
+      "id": "w12",
+      "tool": "read",
+      "args": {
+        "path": "/checkout/.pi/extensions/associate/index.ts",
+        "start_line": 120,
+        "end_line": 320
+      },
+      "result": {
+        "content": ""
+      }
+    }
+  ],
+  "current_entries": [
+    {
+      "id": "w10",
+      "tool": "read",
+      "args": {
+        "path": "/checkout/associate/contract/policy.json",
+        "start_line": 90,
+        "end_line": 105
+      },
+      "result": {
+        "content": "90\t      \"$comment\": \"delegate_run / delegate_status (deviation d18): timeout_ms is passed to the delegated `associate run` as its --timeout (the wait for the delegated model's pi run; worktree setup and the operator's test commands come on top, each command under associate run's own --test-timeout). 1,800,000 ms (30 min) because live worker runs on this repo have taken up to ~25 minutes; the resident's turn is not held for it, since delegate_run returns at once. max_output_chars bounds what delegate_status returns of the delegated run's result (its final reply first).\",\n91\t      \"max_output_chars\": 25000,\n92\t      \"timeout_ms\": 1800000\n93\t    }\n94\t  },\n95\t  \"caps\": {"
+      }
+    }
+  ],
+  "recorded_statement": {
+    "text": "s4 CONFIRMED: single tool_call hook at index.ts:288; GuardDecision is only block+reason (guard.ts:78-81); no purpose/intent/expect field (grep: index.ts comment only at 375, guard.ts 0 hits); write/edit are built-in writers with no override (guard.ts:42-51); run_tests rejects extra keys (tools/tests.ts:581-591).",
+    "evidence": [
+      "w10",
+      "w11",
+      "w16",
+      "w17",
+      "w18",
+      "w19"
+    ],
+    "status": "referenced"
+  },
+  "fact": {
+    "id": "f1",
+    "value": "index.ts registers the tool_call guard",
+    "source": "w10",
+    "quote": "registers the `tool_call` guard: the active model's tool set"
+  }
+}

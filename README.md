@@ -1,7 +1,7 @@
 # associate
 
 associate is a **multi-model agent harness** on [Pi](https://pi.dev) (pinned
-1.1.0). It runs one of the fleet's models on one task — reading, finding,
+1.5.2). It runs one of the fleet's models on one task — reading, finding,
 summarizing, and, for the models allowed to, changing the checkout — and hands
 back what it saw, what it did, and where, with every statement tied to the
 recorded tool calls it rests on.
@@ -101,6 +101,25 @@ ASSOCIATE_RUNS_ROOTS=/srv/associate-clones uv run associate serve
 The operator, agent and integrator guide is
 [`docs/operations/bridge.md`](docs/operations/bridge.md).
 
+## The accuracy method
+
+Every tool call states a `purpose` before it runs, and the harness records it
+with the call's arguments, source kind and saved result. At `finish` a model
+hands back facts, each a value, the walk entry it came from (`w12`) and a
+word-for-word quote of that entry's result; a deterministic matcher checks
+each quote, and the model can run the same check itself with `check_quote`.
+The run returns an answer rendered by the harness from the accepted items,
+with the model's own prose labelled unchecked, and counts of facts made,
+checked, passed and refused by source kind. `associate check <export-dir>`
+recomputes the counts for any export.
+
+A passed fact means its quote was found where it says. It does not mean the
+value is true. Every model starts in `report` mode, where nothing is refused
+and the report says what would have been; `associate run --check-mode enforce`
+refuses a failing hand-back and lets the model fix it for a few rounds. The
+checks, and the recorded failure behind each, are in
+[`docs/notes/accuracy-checks.md`](docs/notes/accuracy-checks.md).
+
 ## What is measured, and what is not
 
 **Measured live, one run each:**
@@ -113,7 +132,12 @@ The operator, agent and integrator guide is
   a walk each for `worker`, `senses` and `cortex`, a gate verdict on every
   write, the read-only fallback with the decider unreachable, a `cortex` run
   that spawned a `senses` and a `worker` child, and the mesh resident starting
-  through `pi-acp`.
+  through `pi-acp`;
+- the accuracy method on pi 1.5.2, with reasoning off and in report mode
+  ([`docs/notes/accuracy-live-acceptance.md`](docs/notes/accuracy-live-acceptance.md)):
+  six tasks each on `worker` and `cortex`. The harness's counts matched a hand
+  count in all twelve runs. `worker` had 7 of 26 facts pass and `cortex` 35 of
+  40. `senses` was not measured.
 
 **Not measured yet:**
 
@@ -142,7 +166,7 @@ bash .pi/extensions/associate/tests/run.sh  # extension tests (Node >= 22)
 uv run teken cli doctor . --strict          # the agent-first rubric gate
 ```
 
-A real run needs `pi` 1.1.0 on PATH and a lane key:
+A real run needs `pi` 1.5.2 on PATH and a lane key:
 
 ```bash
 ASSOCIATE_API_KEY=... uv run associate run --model senses "Summarize the gate design"

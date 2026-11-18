@@ -256,3 +256,14 @@ def test_delegate_run_must_stay_gated_and_never_mutating(doc):
     doc = copy.deepcopy(contract.load_models())
     doc["mutating_tools"].append("delegate_status")
     assert any("must not be a mutating tool" in e for e in validate.validate_models(doc))
+
+
+def test_check_quote_is_a_registered_read_held_by_every_active_model():
+    """Issue #20 t12: check_quote is in tool_names, on every active model, and is a pure read."""
+    models = contract.load_models()
+    assert "check_quote" in models["tool_names"]
+    assert "check_quote" not in models["mutating_tools"]
+    assert "check_quote" not in models["gated_tools"]
+    for name, m in models["models"].items():
+        assert "check_quote" in m["tools"], name
+    assert contract.load_accuracy()["source_kinds"]["check_quote"] == "harness"

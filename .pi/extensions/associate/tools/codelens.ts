@@ -116,6 +116,12 @@ export const CODE_LENS_SCHEMA = {
         "command=profile only. False (the default) passes --basic, skipping the fields that " +
         "need network access; set true to include them.",
     },
+    purpose: {
+      type: "string",
+      description:
+        "Why you are making this call: the question it settles and what you expect to see. " +
+        "It is recorded with the call; it does not change what the tool does.",
+    },
   },
 } as const;
 
@@ -202,6 +208,31 @@ export function looksUnsupported(stderr: string, command: string): boolean {
   return /invalid choice/i.test(stderr) && stderr.includes(command);
 }
 
+/**
+ * The arguments this call ran with, defaults applied, and the ones given that
+ * it did not use: an argument is used only by the command it belongs to (the
+ * schema says so for `pattern`, `count`, `depth` and `online`), and `purpose`
+ * belongs to the harness.
+ */
+export function argsReport(params: Params, given: readonly string[]): { used: Record<string, unknown>; dropped: string[] } {
+  const used: Record<string, unknown> = { command: params.command, path: params.path ?? "." };
+  switch (params.command) {
+    case "grep":
+      used.pattern = params.pattern;
+      break;
+    case "recent":
+      if (typeof params.count === "number") used.count = params.count;
+      break;
+    case "profile":
+      if (params.depth) used.depth = params.depth;
+      used.online = params.online === true;
+      break;
+    default:
+      break;
+  }
+  return { used, dropped: given.filter((key) => key !== "purpose" && !(key in used)) };
+}
+
 /** Build the `code_lens` tool definition. */
 export function createCodeLensTool(ctx: AssociateContext, deps: CodeLensDeps = {}) {
   const which = deps.which ?? ((name: string) => whichOnPath(name, deps.env));
@@ -275,6 +306,15 @@ export function createCodeLensTool(ctx: AssociateContext, deps: CodeLensDeps = {
       const bounded = boundOutput(proc.stdout, shellBudget(ctx), ctx.session.scratchDir);
       const parsed = bounded.truncated ? undefined : parseJson(proc.stdout);
 
+      const report = argsReport(params, Object.keys(rawParams ?? {}));
+      // Characters of the output the model was not shown; the notice a bounded
+      // text starts with (up to the first blank line) is not the output's.
+      let notShown = 0;
+      if (bounded.truncated) {
+        const noticeEnd = bounded.text.indexOf("\n\n");
+        const shown = noticeEnd >= 0 ? bounded.text.length - (noticeEnd + 2) : bounded.text.length;
+        notShown = Math.max(0, proc.stdout.length - shown);
+      }
       const payload: Record<string, unknown> = {
         ok: true,
         command: params.command,
@@ -283,7 +323,10 @@ export function createCodeLensTool(ctx: AssociateContext, deps: CodeLensDeps = {
         argv,
         exit_code: proc.code,
         truncated: bounded.truncated,
+        not_shown_chars: notShown,
+        args_used: report.used,
       };
+      if (report.dropped.length > 0) payload.dropped_args = report.dropped;
       // code-lens --json answers {"ok": true, "data": {...}}; anything else
       // (a human-readable body, or output the budget cut short) is handed back
       // as text rather than dressed up as structure it does not have.

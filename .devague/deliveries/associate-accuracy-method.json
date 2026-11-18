@@ -1,0 +1,61 @@
+{
+  "plan_slug": "associate-accuracy-method",
+  "schema_version": 2,
+  "created": "2026-11-17T21:34:16Z",
+  "updated": "2026-11-17T21:42:45Z",
+  "deviations": [
+    {
+      "id": "d1",
+      "what": "t9 also records a call that pi rejected before the tool_call hook (invalid arguments or an unknown tool) as a walk entry, taken from tool_execution_end, with pi's error as the reason",
+      "task_ref": "t9",
+      "reason": "pi 1.5.2 docs/extensions.md: \"An unknown tool or invalid arguments skip tool_call\"; found while writing the t1 migration note. Without it such a call has no walk entry, so the record claim (c8) and the refusal claim (c10) do not hold for it. Approved by the operator 2026-11-17.",
+      "affects": [
+        "c8",
+        "c10"
+      ],
+      "origin": "user",
+      "status": "approved",
+      "classification": "acceptable",
+      "seq": 1
+    },
+    {
+      "id": "d2",
+      "what": "t12 and t10 edit associate/contract/accuracy.json, which their confirmed instructions do not list: t12 adds the source kind of its new tool; t10 extends the checks list and adds a reason-to-check mapping, with schema, validator and loader changes",
+      "task_ref": "t10",
+      "reason": "The t2 validator requires the source-kind table to equal tool_names, and an existing test forbids check ids as literals in the extension TypeScript, so both needs can only be met in the contract file. Approved by the operator 2026-11-17.",
+      "affects": [
+        "t12",
+        "t2"
+      ],
+      "origin": "user",
+      "status": "approved",
+      "classification": "acceptable",
+      "seq": 2
+    },
+    {
+      "id": "d3",
+      "what": "run_tests, spawn_subagent, delegate_run and delegate_status still refuse an unknown argument (other than purpose) instead of reporting it as dropped",
+      "task_ref": "t8",
+      "reason": "The t8 instruction says an unknown argument is reported in used-args as dropped. The builder kept the existing refusal for these four tools because their tests and their security intent require it; a refusal with a fix is not a silent drop. Reported by the task agent, not yet approved.",
+      "affects": [],
+      "origin": "llm",
+      "status": "proposed",
+      "classification": "acceptable",
+      "seq": 3
+    },
+    {
+      "id": "d4",
+      "what": "grep, find and ls no longer stop the search process at the 200-result cap; they scan to the end or to caps.max_raw_chars to report a true total, and save the full list unredacted in the session scratch directory",
+      "task_ref": "t8",
+      "reason": "The acceptance criterion asks for the true total and a saved full result; the builder met it by scanning further. Cost: a large repository is searched longer and up to 2,000,000 characters are held in memory. Reported by the task agent, not yet approved.",
+      "affects": [],
+      "origin": "llm",
+      "status": "proposed",
+      "classification": "risky",
+      "seq": 4
+    }
+  ],
+  "evidence": [],
+  "deltas": [],
+  "supersessions": []
+}

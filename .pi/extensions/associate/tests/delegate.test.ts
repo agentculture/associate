@@ -582,6 +582,7 @@ test("d18: status reports running, then the finished associate run --json result
     assert.equal(running.ok, true);
     assert.equal(running.state, "running");
     assert.equal(running.model, "worker");
+    assert.equal(running.citation_label, started.citation_label);
     assert.equal(typeof running.elapsed_ms, "number");
 
     await launcher.runs[0]!.end(
@@ -592,6 +593,7 @@ test("d18: status reports running, then the finished associate run --json result
     assert.equal(finished.ok, true, JSON.stringify(finished));
     assert.equal(finished.state, "finished");
     assert.equal(finished.exit_code, 0);
+    assert.equal(finished.citation_label, started.citation_label);
     for (const key of ["outcome", "merge", "merge_reason", "worktree", "tests", "final_reply"]) {
       assert.ok(key in finished.result, `${key} missing from the result`);
     }
@@ -604,6 +606,40 @@ test("d18: status reports running, then the finished associate run --json result
     const record = JSON.parse(readFileSync(join(r.ctx.session.sessionRoot, "delegated", started.run_id, RECORD_FILE), "utf8"));
     assert.equal(record.exit_code, 0);
     assert.equal(record.run_id, started.run_id);
+  } finally {
+    r.dispose();
+  }
+});
+
+test("a delegated run whose hand-back was refused (exit 3) is reported as finished, with its result", async () => {
+  const r = rig();
+  try {
+    const launcher = fakeLauncher();
+    const t = tools(r, launcher);
+    const started = await call(t.run, { model: "worker", task: TASK });
+    const result = JSON.stringify({ ...JSON.parse(runResult()), handback_outcome: "refused_after_rounds", merge: "kept" });
+    await launcher.runs[0]!.end({ exitCode: 3 }, { stdout: result, stderr: "associate: the hand-back was refused\n" });
+    const out = await call(t.status, { run_id: started.run_id });
+    assert.equal(out.ok, true, JSON.stringify(out));
+    assert.equal(out.state, "finished");
+    assert.equal(out.exit_code, 3);
+    assert.equal(out.result.handback_outcome, "refused_after_rounds");
+    assert.equal(out.result.merge, "kept");
+  } finally {
+    r.dispose();
+  }
+});
+
+test("exit 3 with no readable result is still a failure", async () => {
+  const r = rig();
+  try {
+    const launcher = fakeLauncher();
+    const t = tools(r, launcher);
+    const started = await call(t.run, { model: "worker", task: TASK });
+    await launcher.runs[0]!.end({ exitCode: 3 }, { stderr: "boom\n" });
+    const out = await call(t.status, { run_id: started.run_id });
+    assert.equal(out.ok, false);
+    assert.equal(out.code, "delegate_failed");
   } finally {
     r.dispose();
   }
@@ -858,6 +894,8 @@ test("d18: each delegated run is a child line in the session walk naming the del
     const out = await call(tools(r, launcher).run, { model: "worker", task: TASK });
     const [line] = childLines(r.walk.walkPath);
     assert.equal(line.id, out.child_link);
+    assert.equal(out.citation_label, line.id, "the start result names the label the run's entries are cited under");
+    assert.match(String(out.citation_note ?? ""), new RegExp(`${line.id}:w`));
     assert.equal(line.child_model, "worker");
     assert.equal(line.child_session_id, out.run_id);
     // Exactly where `associate run --export-root <root> --session-id <id>` writes its walk.

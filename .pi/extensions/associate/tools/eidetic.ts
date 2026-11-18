@@ -25,6 +25,16 @@
  * are tagged, not refused; a recall can then tell remembered-from-the-web
  * apart from remembered-from-trusted-work.
  *
+ * Source reference (issue #20, plan t15): `eidetic_remember` takes an optional
+ * `source` (a walk id such as `w12`, or a labelled one such as `run-3:w12`, the
+ * form `facts.schema.json` allows) and an optional `quote`. A bare walk id is
+ * checked against the ids this run's walk has issued; a labelled one by
+ * pattern only. They are written, with the session id, into the record's
+ * metadata. A quote given with a current-run reference is checked by the
+ * merged matcher against the saved result and the verdict is stored beside it:
+ * a failed quote is recorded, not refused. The `purpose` argument is accepted
+ * and never stored. The taint tag above is unchanged.
+ *
  * Node builtins only; no npm dependency.
  */
 
@@ -34,6 +44,8 @@ import { homedir } from "node:os";
 import { dirname, isAbsolute, join, resolve } from "node:path";
 import { boundOutput, validateArgs, type Budget } from "../lib/contain.ts";
 import type { AssociateContext } from "../lib/context.ts";
+import { checkQuote } from "../lib/matcher.ts";
+import { loadSavedResult } from "../lib/results.ts";
 import {
   engineForToolName,
   firstLine,
@@ -63,6 +75,11 @@ export const MAX_DEPTH = 1;
 export const MAX_NODES = 25;
 /** Longest record text `eidetic_remember` accepts. */
 export const MAX_RECORD_CHARS = 4000;
+
+/** A current-run source: a walk id. */
+const CURRENT_RUN_SOURCE = /^w[1-9][0-9]*$/;
+/** Any source `facts.schema.json` allows: an optional label, then a walk id. */
+const SOURCE_PATTERN = /^([A-Za-z0-9_-]+:)?w[1-9][0-9]*$/;
 
 /** The eidetic scope both tools read and write. */
 export const MEMORY_SCOPE = "associate";
@@ -105,6 +122,7 @@ export const EIDETIC_RECALL_SCHEMA = {
       maximum: MAX_DEPTH,
       description: `Link-traversal hops from the hits (default ${MAX_DEPTH}, at most ${MAX_DEPTH}; 0 = hits only).`,
     },
+    purpose: { type: "string", description: "Why you are looking this up and what you expect to find." },
   },
 } as const;
 
@@ -120,6 +138,17 @@ export const EIDETIC_REMEMBER_SCHEMA = {
     },
     type: { type: "string", minLength: 1, description: "Record type (default note)." },
     id: { type: "string", minLength: 1, description: "Stable id; re-remembering an id updates it." },
+    source: {
+      type: "string",
+      description:
+        "Optional: where the fact came from, the walk id of the call whose result shows it (for example w12). Never a path.",
+    },
+    quote: {
+      type: "string",
+      maxLength: MAX_RECORD_CHARS,
+      description: "Optional: the exact text of that result which shows the fact. Needs source.",
+    },
+    purpose: { type: "string", description: "Why you are storing this." },
   },
 } as const;
 
@@ -183,6 +212,73 @@ function eideticBudget(ctx: AssociateContext): Budget {
     );
   }
   return budget;
+}
+
+/** Names of arguments the call carried that the tool's schema does not define. */
+function droppedArgs(schema: { properties: Record<string, unknown> }, raw: unknown): string[] {
+  if (!raw || typeof raw !== "object") return [];
+  return Object.keys(raw as Record<string, unknown>).filter((k) => !(k in schema.properties));
+}
+
+/** The walk ids this run has issued, when a recorder is attached and can say. */
+function issuedWalkIds(ctx: AssociateContext): string[] {
+  const walk = ctx.walk() as unknown as { entryIds?: () => string[] } | undefined;
+  return typeof walk?.entryIds === "function" ? walk.entryIds() : [];
+}
+
+/**
+ * The source/quote/session-id metadata for a record, or a refusal with a fix.
+ * Nothing is added when no source was given.
+ */
+function referenceMetadata(
+  ctx: AssociateContext,
+  source: string | undefined,
+  quote: string | undefined,
+): { metadata: Record<string, unknown> } | { error: ReturnType<typeof toolError> } {
+  if (source === undefined) {
+    if (quote === undefined) return { metadata: {} };
+    return {
+      error: toolError(
+        "quote_without_source",
+        "a quote was given without the source it comes from",
+        { field: "quote" },
+        "pass source, the walk id of the call whose result holds the quote (for example w12), or drop the quote",
+      ),
+    };
+  }
+  if (!SOURCE_PATTERN.test(source)) {
+    return {
+      error: toolError(
+        "invalid_source",
+        `'${source}' is not a walk id; a source is w1, w2, … (or label:w1) and never a path`,
+        { field: "source" },
+        "pass the walk id of the call whose result shows the fact, such as w12",
+      ),
+    };
+  }
+  const metadata: Record<string, unknown> = { source, session_id: ctx.session.sessionId };
+  if (quote !== undefined) metadata.quote = quote;
+  if (!CURRENT_RUN_SOURCE.test(source)) return { metadata };
+  if (!issuedWalkIds(ctx).includes(source)) {
+    return {
+      error: toolError(
+        "source_not_in_walk",
+        `'${source}' is not a walk id this run has issued`,
+        { field: "source" },
+        "cite a walk id you were given in an earlier tool result in this run, or omit source",
+      ),
+    };
+  }
+  if (quote !== undefined) {
+    const result = checkQuote(
+      quote,
+      undefined,
+      loadSavedResult(ctx.session.exportDir, source),
+      ctx.contract.accuracy.min_quote_length,
+    );
+    metadata.quote_check = { verdict: result.verdict, reason: result.reason };
+  }
+  return { metadata };
 }
 
 export interface EideticTools {
@@ -273,6 +369,7 @@ export function createEideticTools(
       const invalid = validateArgs(EIDETIC_RECALL_SCHEMA as Record<string, unknown>, rawParams ?? {});
       if (invalid) return toolResult(fromContainError(invalid));
       const params = (rawParams ?? {}) as { query: string; mode?: string; top_k?: number; depth?: number };
+      const dropped = droppedArgs(EIDETIC_RECALL_SCHEMA, rawParams);
       const prep = prepare("eidetic_recall");
       if ("error" in prep) return toolResult(prep.error);
 
@@ -308,9 +405,19 @@ export function createEideticTools(
       // The text handed back IS the bounded text — no JSON wrapper that could
       // push it past the budget.
       const bounded = boundOutput(proc.stdout, eideticBudget(ctx), ctx.session.scratchDir);
+      const notShown = bounded.truncated && bounded.cursor ? bounded.cursor.total - bounded.cursor.offset : 0;
       return {
         content: [{ type: "text" as const, text: bounded.text }],
-        details: { ok: true, truncated: bounded.truncated, spill_path: bounded.spillPath, top_k: topK, depth },
+        details: {
+          ok: true,
+          truncated: bounded.truncated,
+          spill_path: bounded.spillPath,
+          top_k: topK,
+          depth,
+          args_used: { query: params.query, mode: params.mode ?? "hybrid", top_k: topK, depth },
+          dropped_args: dropped,
+          not_shown_chars: notShown,
+        },
       };
     },
   };
@@ -330,9 +437,19 @@ export function createEideticTools(
     async execute(_id: string, rawParams: Record<string, unknown>) {
       const invalid = validateArgs(EIDETIC_REMEMBER_SCHEMA as Record<string, unknown>, rawParams ?? {});
       if (invalid) return toolResult(fromContainError(invalid));
-      const params = (rawParams ?? {}) as { text: string; type?: string; id?: string };
+      const params = (rawParams ?? {}) as {
+        text: string;
+        type?: string;
+        id?: string;
+        source?: string;
+        quote?: string;
+      };
+      const dropped = droppedArgs(EIDETIC_REMEMBER_SCHEMA, rawParams);
       const prep = prepare("eidetic_remember");
       if ("error" in prep) return toolResult(prep.error);
+
+      const reference = referenceMetadata(ctx, params.source, params.quote);
+      if ("error" in reference) return toolResult(reference.error);
 
       const provenance = taint.provenance();
       const record: Record<string, unknown> = {
@@ -340,7 +457,7 @@ export function createEideticTools(
         text: params.text,
         type: params.type ?? "note",
         // Set by the extension from observed tool use; there is no model-supplied source argument.
-        metadata: { added_via: "associate", ...(provenance ? { provenance } : {}) },
+        metadata: { added_via: "associate", ...(provenance ? { provenance } : {}), ...reference.metadata },
       };
       const argv = ["remember", JSON.stringify(record), ...pinned, "--json"];
 
@@ -362,6 +479,15 @@ export function createEideticTools(
         id: record.id,
         scope: MEMORY_SCOPE,
         provenance: provenance ?? "trusted",
+        ...(reference.metadata.quote_check ? { quote_check: reference.metadata.quote_check } : {}),
+        args_used: {
+          text: params.text,
+          type: record.type,
+          id: record.id,
+          ...(params.source !== undefined ? { source: params.source } : {}),
+          ...(params.quote !== undefined ? { quote: params.quote } : {}),
+        },
+        dropped_args: dropped,
       });
     },
   };

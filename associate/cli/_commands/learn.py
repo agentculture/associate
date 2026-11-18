@@ -46,6 +46,7 @@ Commands
   associate tokens list        List tokens (never a token or its hash).
   associate tokens revoke <id> Stop a token working.
   associate tokens overview    Describe the tokens verbs.
+  associate check <export-dir> Re-check an export's hand-back facts; print counts.
   associate cli overview       Describe the CLI surface itself.
 
 Machine-readable output
@@ -58,7 +59,9 @@ Exit-code policy
   0 success
   1 user-input error (bad flag, bad path, missing arg)
   2 environment / setup error
-  3+ reserved
+  3 `run` only: the hand-back was refused after the allowed rounds (the
+    result is still printed)
+  4+ reserved
 
 More detail
 -----------
@@ -121,12 +124,20 @@ def _as_json_payload() -> dict[str, object]:
             {"path": ["tokens", "list"], "summary": "List tokens, never the token or its hash."},
             {"path": ["tokens", "revoke"], "summary": "Revoke a service token by id."},
             {"path": ["tokens", "overview"], "summary": "Describe the tokens verbs."},
+            {
+                "path": ["check"],
+                "summary": (
+                    "Re-check an export directory's hand-back facts against its walk and "
+                    "saved results; print counts per kind and per source kind."
+                ),
+            },
             {"path": ["cli", "overview"], "summary": "Describe the CLI surface."},
         ],
         "exit_codes": {
             "0": "success",
             "1": "user-input error",
             "2": "environment/setup error",
+            "3": "run only: hand-back refused after the allowed rounds; result still printed",
         },
         "json_support": True,
         "explain_pointer": "associate explain <path>",

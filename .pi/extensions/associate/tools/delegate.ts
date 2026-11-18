@@ -119,6 +119,8 @@ export const RUN_ID_PATTERN = /^dlg-\d{8}T\d{6}Z-[0-9a-f]{8}$/;
 
 /** Linux's MAX_ARG_STRLEN (128 KiB) bounds one argv string; the task travels as one. */
 const MAX_TASK_CHARS = 100_000;
+/** `associate run` exit code for a hand-back refused after the allowed rounds; the result is still on stdout. */
+const HANDBACK_REFUSED_EXIT = 3;
 
 /** Chars of a failed run's stderr kept for the error (its end is where the reason is). */
 const STDERR_TAIL_CHARS = 4_000;
@@ -540,7 +542,7 @@ function boundedResult(
   }
   const tests = result.tests && typeof result.tests === "object" ? (result.tests as Record<string, unknown>) : undefined;
   const summary: Record<string, unknown> = {};
-  for (const key of ["outcome", "merge", "merge_reason", "worktree", "run_branch", "isolation", "walk_path", "export_dir", "session_id"]) {
+  for (const key of ["outcome", "handback_outcome", "merge", "merge_reason", "worktree", "run_branch", "isolation", "walk_path", "export_dir", "session_id"]) {
     if (key in result) summary[key] = result[key];
   }
   if (tests) summary.tests_passed = tests.passed;
@@ -610,7 +612,7 @@ export function createDelegateTools(ctx: AssociateContext, deps: DelegateDeps = 
   }
 
   function start(params: Record<string, unknown>): Result {
-    const extra = Object.keys(params).filter((key) => key !== "model" && key !== "task");
+    const extra = Object.keys(params).filter((key) => key !== "model" && key !== "task" && key !== "purpose");
     if (extra.length > 0) {
       return toolResult(
         toolError("invalid_args", `${DELEGATE_RUN_TOOL} takes only 'model' and 'task'; ${extra.join(", ")} cannot be given`, {
@@ -804,6 +806,8 @@ export function createDelegateTools(ctx: AssociateContext, deps: DelegateDeps = 
       model,
       child_walk: childWalk,
       child_link: link.id,
+      citation_label: link.id,
+      citation_note: `cite the run's walk entries as ${link.id}:w<N> (for example ${link.id}:w1), never as a bare w<N>`,
       started_at: new Date(startedAt).toISOString(),
       timeout_s: timeoutSeconds,
       test_commands: tests.commands.length,
@@ -815,7 +819,7 @@ export function createDelegateTools(ctx: AssociateContext, deps: DelegateDeps = 
   }
 
   function status(params: Record<string, unknown>): Result {
-    const extra = Object.keys(params).filter((key) => key !== "run_id");
+    const extra = Object.keys(params).filter((key) => key !== "run_id" && key !== "purpose");
     if (extra.length > 0) {
       return toolResult(
         toolError("invalid_args", `${DELEGATE_STATUS_TOOL} takes only 'run_id'; ${extra.join(", ")} cannot be given`, { field: extra[0] }),
@@ -845,7 +849,13 @@ export function createDelegateTools(ctx: AssociateContext, deps: DelegateDeps = 
             ...(typeof record.launch_error === "string" ? { error: record.launch_error } : {}),
           }
         : undefined);
-    const base = { run_id: runId, model, child_walk: childWalk };
+    const citationLabel = live?.childLink ?? (typeof record?.child_link === "string" ? record.child_link : undefined);
+    const base = {
+      run_id: runId,
+      model,
+      child_walk: childWalk,
+      ...(citationLabel ? { citation_label: citationLabel } : {}),
+    };
     const result = readJsonObject(join(dir, RESULT_FILE));
 
     if (!exit) {
@@ -872,7 +882,11 @@ export function createDelegateTools(ctx: AssociateContext, deps: DelegateDeps = 
       }
     }
 
-    if (exit && (exit.error !== undefined || exit.exitCode !== 0 || result === undefined)) {
+    // Exit 3 is `associate run`'s "the hand-back was refused after the allowed
+    // rounds" (associate/cli/_errors.py EXIT_HANDBACK_REFUSED): the run served
+    // and printed its result, so it is a finished run whose result says so.
+    const servedWithResult = exit?.exitCode === HANDBACK_REFUSED_EXIT && result !== undefined;
+    if (exit && !servedWithResult && (exit.error !== undefined || exit.exitCode !== 0 || result === undefined)) {
       const stderr = redaction.apply(readTail(join(dir, STDERR_FILE), STDERR_TAIL_CHARS));
       const error = cliError(stderr);
       const why =
@@ -942,6 +956,12 @@ export function createDelegateTools(ctx: AssociateContext, deps: DelegateDeps = 
           description: `The registry key of the model to run (${targets}).`,
         },
         task: { type: "string", description: "The task, complete and self-contained: the run sees nothing else." },
+        purpose: {
+          type: "string",
+          description:
+            "Why you are making this call: the question it settles and what you expect to see. " +
+            "It is recorded with the call; it is not given to the delegated run.",
+        },
       },
       required: ["model", "task"],
       additionalProperties: false,
@@ -969,6 +989,12 @@ export function createDelegateTools(ctx: AssociateContext, deps: DelegateDeps = 
       type: "object",
       properties: {
         run_id: { type: "string", description: "The run id delegate_run returned." },
+        purpose: {
+          type: "string",
+          description:
+            "Why you are making this call: the question it settles and what you expect to see. " +
+            "It is recorded with the call; it does not change what is reported.",
+        },
       },
       required: ["run_id"],
       additionalProperties: false,

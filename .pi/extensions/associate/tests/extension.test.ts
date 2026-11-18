@@ -235,7 +235,7 @@ test("a new prompt in the same session is not blocked by the previous prompt's f
       const next = (await pi.fireToolCall({
         toolCallId: "tc-2",
         toolName: "read",
-        input: { path: "client.py" },
+        input: { path: "client.py", purpose: "read the client for the second task" },
       })) as any;
       assert.doesNotMatch(String(next?.reason ?? ""), /handed back/, "prompt 2 must not inherit prompt 1's finish");
       assert.notEqual(next?.block, true, JSON.stringify(next));
@@ -268,7 +268,7 @@ test("the tool_call hook is registered and blocks a write into the checkout", as
       const allowed = await pi.fireToolCall({
         toolName: "read",
         toolCallId: "tc-2",
-        input: { path: "README.md" },
+        input: { path: "README.md", purpose: "check a read inside the checkout stays allowed" },
       });
       assert.equal(allowed, undefined, "reads inside the checkout stay allowed");
     });

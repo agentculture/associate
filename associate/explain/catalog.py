@@ -226,6 +226,39 @@ output_tail}], reverted}` in JSON (the output tail redacted and bounded), one
 summary line in text. Diagnostics (the
 pi version warning, the no-lane note) go to stderr.
 
+## The hand-back result (issue #20)
+
+After the model stops, the launcher re-checks the hand-back itself
+(`associate.accuracy.check`, the same code as `associate check`) over the export
+directory, the prior run named by `--continue-from` (label `prior`) and each child
+run the walk links (`c1`, `c2`, ...). The result carries:
+
+- `answer` and `answer_path`: the harness-rendered answer (`answer.md`), or null
+  when the extension left none (a refused hand-back leaves none);
+- `handback_outcome`: `accepted`; `refused_after_rounds` (enforce mode refused the
+  hand-back on every allowed round and the run ended, walk outcome `refused`);
+  `refused_unresolved` (a round was refused and the model did not hand back
+  again); or `none` (no hand-back was recorded);
+- `accuracy`: `python_recheck_ran` (false, with `not_applicable_reason`, for an
+  export with no facts), `python_recheck_verdict` (`accepted` or `refused`),
+  `check_mode_used` and `check_mode_source` (what the extension recorded),
+  `extension_accepted` (the extension's own verdict, so a disagreement shows), and
+  `report`: the counts (facts, conclusions, statements, by source kind, flags,
+  children) from the Python re-check, never the extension's. `report.unchecked_text`
+  is copied unchanged from the extension's `report.json` (it counts model text this
+  side does not have) and `accuracy.unchecked_text_source` says `extension`;
+- `check_mode`: the `--check-mode` value, or null when none was given.
+
+`passed` means a fact's quote was found in the saved result it cites; it is not a
+statement that the fact is true.
+
+`--check-mode report|enforce` overrides accuracy.json's mode for the model by
+setting `ASSOCIATE_CHECK_MODE` for this run only; an ambient value in the
+operator's environment is not inherited. In `enforce` mode a failing hand-back is
+refused and the model may answer again for accuracy.json `retry_rounds` more
+rounds; a hand-back still failing ends the run with outcome `refused`, and the verb
+exits `3`. `report` mode records what would have been refused and refuses nothing.
+
 ## How the turn ended
 
 With `--json`, the result also says how the task turn ended: `final_reply`
@@ -242,6 +275,7 @@ is empty.
     associate run "Find every caller of load_policy" --json
     associate run --model senses
     associate run --harness stub
+    associate run "Summarize the gate" --check-mode enforce --json
     associate run --continue-from <prior export dir>
     associate run --export-root <dir> --session-id <id>
     associate run "Fix the failing parser test" --test-command "uv run pytest -q"
@@ -254,6 +288,11 @@ is empty.
   non-positive `--test-timeout`, or a `--checkout` that is not a directory
 - `2` the adapter failed closed (no sentinel, or an active writer tool), pi is
   not on PATH, the run timed out, or the export root is inside the checkout
+- `3` the run served but its hand-back failed the check after the allowed rounds
+  (`handback_outcome` `refused_after_rounds`, outcome `refused`). The result
+  object is still printed on stdout, and a worktree run is kept, not merged
+  (`merge=kept`). A caller that reads only the exit code sees a failure; read the
+  result for what ran
 """
 
 _BENCH = """\
@@ -287,6 +326,36 @@ The endpoint comes from `ASSOCIATE_BASE_URL` / `ASSOCIATE_API_KEY` (never printe
   or `--model` missing
 - `2` upstream runner/scorer not on PATH or failed, its result file unreadable,
   or the suites file is malformed
+"""
+
+_CHECK = """\
+# associate check
+
+Re-checks one export directory's hand-back facts. It reads `walk.jsonl`, the saved
+results beside it (`results/wN.txt`) and the facts payload (`facts.json`), runs the
+Python re-check (the same rules as the extension's checker, compared on shared
+test vectors), and prints:
+
+- counts per kind (facts, conclusions, statements) and per source kind
+  (file, tool, web, memory, agent, harness);
+- each call's id, tool, stated purpose and outcome;
+- each fact with its source kind and verdict.
+
+`passed` means the fact's quote was found in the saved result it cites; it is not
+a statement that the fact is true. A fact that could not be checked (no saved text,
+or only part of it) is `unchecked` and is never counted as passed. An export written
+before the walk format marker has no facts: they are reported as not applicable, and
+the calls are still listed.
+
+## Usage
+
+    associate check <export-dir>
+    associate check <export-dir> --json
+
+## Exit codes
+
+- `0` the export was read
+- `1` the directory does not exist, has no `walk.jsonl`, or its facts file is unreadable
 """
 
 _CLI = """\
@@ -544,6 +613,7 @@ ENTRIES: dict[tuple[str, ...], str] = {
     ("tokens", "list"): _TOKENS,
     ("tokens", "revoke"): _TOKENS,
     ("tokens", "overview"): _TOKENS,
+    ("check",): _CHECK,
     ("cli",): _CLI,
     ("cli", "overview"): _CLI,
 }

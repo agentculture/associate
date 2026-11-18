@@ -1,0 +1,67 @@
+{
+  "_origin": "Recorded run scope20-worker-t2 (worker), pre-change export. The recorded statement \"`AGENTS.md` lines 56-65: each statement must cite walk ids (`[w3]`, `[w3, w7]`) ...\" was recorded as 'referenced' on w3 and w7, which are an `ls` of the checkout and a grep for 'truncat'; the sentence quotes example markers from the AGENTS.md read at w22. Pre-change exports hold no 'quote' field, so the facts below are built from that statement: the recorded text, the recorded cited ids (w3, w7), and the recorded w22 as the control. Entry contents are cut to the lines the test reads; paths rewritten to /checkout.",
+  "kind": "recorded",
+  "entries": [
+    {
+      "id": "w3",
+      "tool": "ls",
+      "args": {
+        "path": "."
+      },
+      "result": {
+        "content": "{\"ok\": true, \"tool\": \"ls\", \"path\": \".\", \"entries\": [{\"name\": \"AGENTS.md\", \"type\": \"file\"}, {\"name\": \"associate\", \"type\": \"directory\"}, {\"name\": \"CHANGELOG.md\", \"type\": \"file\"}]}"
+      }
+    },
+    {
+      "id": "w7",
+      "tool": "grep",
+      "args": {
+        "path": ".",
+        "pattern": "truncat"
+      },
+      "result": {
+        "content": "{\"ok\":true,\"tool\":\"grep\",\"pattern\":\"truncat\",\"path\":\".\",\"matches\":[\"/checkout/CHANGELOG.md:222:  `search_tools.py` / `readpage.py` / `truncation.py`, plus a drift note\",\"/checkout/tests/test_worktree.py:113:        run = {\\\"duration_ms\\\": 1, \\\"tool_calls\\\": 1, \\\"outcome\\\": cls.OUTCOME, \\\"truncated\\\": False}\",\"/checkout/tests/test_gate_contract.py:160:        \\\"truncated\\\": False,\",\"/checkout/tests/test_gate_contract.py:170:        \\\"run\\\": {\\\"duration_ms\\\": 1, \\\"tool_calls\\\": 0, \\\"outcome\\\": \\\"ok\\\", \\\"truncated\\\": False},\",\"/checkout/tests/test_harness_stub.py:132:        {\\\"tool\\\": \\\"read\\\", "
+      }
+    },
+    {
+      "id": "w22",
+      "tool": "read",
+      "args": {
+        "path": "AGENTS.md",
+        "start_line": 50,
+        "end_line": 70
+      },
+      "result": {
+        "content": "50\tWork in small, reversible steps. Read before you conclude or change anything.\n51\tPrefer a narrow `grep` to a wide `read`. When a tool fails, say it failed and\n52\tquote it.\n53\t\n54\t## Evidence markers: `[wN]`\n55\t\n56\tEvery tool call you make is recorded in the **walk** with a stable id — `w1`,\n57\t`w2`, `w3` — and each of your statements must cite the walk ids it rests on.\n58\tWrite them inline in prose as `[w3]` or `[w3, w7]`, and pass them as the\n59\t`evidence` field of each statement you give `finish`.\n60\t\n61\tA statement with no walk id is reported to the caller as **unreferenced**. That\n62\tis not fatal — an inference or a recommendation is allowed to be unreferenced —\n63\tbut it must be one you are willing to have labelled that way. Do not attach a"
+      }
+    }
+  ],
+  "recorded_statement": {
+    "text": "`AGENTS.md` lines 56-65: each statement must cite walk ids (`[w3]`, `[w3, w7]`); a statement with no walk id is reported as `unreferenced`.",
+    "evidence": [
+      "w3",
+      "w7"
+    ],
+    "status": "referenced"
+  },
+  "facts": [
+    {
+      "id": "f1",
+      "value": "each statement must cite walk ids",
+      "source": "w3",
+      "quote": "each statement must cite walk ids"
+    },
+    {
+      "id": "f2",
+      "value": "each statement must cite walk ids",
+      "source": "w7",
+      "quote": "each statement must cite walk ids"
+    }
+  ],
+  "control_fact": {
+    "id": "f3",
+    "value": "statements are marked with [wN]",
+    "source": "w22",
+    "quote": "Write them inline in prose as `[w3]` or `[w3, w7]`"
+  }
+}

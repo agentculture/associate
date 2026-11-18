@@ -1,0 +1,48 @@
+{
+  "_origin": "Recorded run scope20-worker-t5 (worker), pre-change export. 'final_message' is the text of the recorded statement the old recorder stored as status 'referenced' with evidence ['w999'], although w999 names no walk entry. The recorded walk had 35 entries; it is trimmed here to its first three (paths rewritten to /checkout, contents cut to a few lines) so that w999 is far outside it, as in the three-entry case the plan names.",
+  "kind": "recorded",
+  "walk": [
+    {
+      "id": "w1",
+      "tool": "read",
+      "args": {
+        "path": "/checkout/.pi/extensions/associate/index.ts",
+        "start_line": 200,
+        "end_line": 300
+      },
+      "result": {
+        "content": "200\t      return {\n201\t        content: [{ type: \"text\", text: JSON.stringify(report) }],\n202\t        details: report,"
+      }
+    },
+    {
+      "id": "w2",
+      "tool": "read",
+      "args": {
+        "path": "/checkout/.pi/extensions/associate/lib/guard.ts",
+        "start_line": 30,
+        "end_line": 90
+      },
+      "result": {
+        "content": "30\t/**\n31\t * Pi's built-in tool names that can persist a change to a checkout.\n32\t *"
+      }
+    },
+    {
+      "id": "w3",
+      "tool": "read",
+      "args": {
+        "path": "/checkout/.pi/extensions/associate/lib/guard.ts",
+        "start_line": 90,
+        "end_line": 160
+      },
+      "result": {
+        "content": "90\t  /**\n91\t   * Tool names this extension registered and declared as writers, in addition\n92\t   * to {@link BUILTIN_WRITER_TOOLS}. Supplied by the extension context so a"
+      }
+    }
+  ],
+  "final_message": "**s11 — CONFIRMED.** `recordAssistantMessage` builds statements with `parseEvidence(statementText)` and no `keepKnown` filter (statements.ts:469-470), while `recordHandback` filters (statements.ts:503). Status is \"referenced\" whenever any id is present (statements.ts:557) — so a final message citing `[w999]` in a run with three entries is recorded as referenced.",
+  "invented_id": "w999",
+  "recorded_status": "referenced",
+  "recorded_evidence": [
+    "w999"
+  ]
+}

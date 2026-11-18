@@ -1,0 +1,24 @@
+{
+  "_origin": "Recorded run scope20-cortex-t1 (cortex), pre-change export. 'summary' is the recorded finish summary, word for word (w13), whose first sentence says gate.json is 'also mirrored as a copy in `pyproject.toml`'s data table'; the read it rests on (w5, associate/contract/gate.json) has no such text, and the old harness carried the sentence into the answer unmarked. w5 is cut to its first three lines; paths rewritten to /checkout. The fact is built from the recorded sentence.",
+  "kind": "recorded",
+  "entries": [
+    {
+      "id": "w5",
+      "tool": "read",
+      "args": {
+        "path": "associate/contract/gate.json"
+      },
+      "result": {
+        "content": "1\t{\n2\t  \"$comment\": \"PROVISIONAL: every threshold below is a starting default, not a calibrated value. Bump `version` on ANY change to a question, a rule, or a threshold, so walks record which question set decided. The extension (lib/gate.ts) reads this file; it must not define its own copy. The state sent to the decider carries only the fields listed in state_fields - never a tool result or fetched web content. Since d20 (version 8) it carries one piece of file content the call did not supply: the removed lines of the checkout file a write replaces, inside the change line (redacted, framed as data like the rest of the state).\",\n3\t  \"version\": 9,"
+      }
+    }
+  ],
+  "summary": "The CLEF safety gate's thresholds, question set and version are defined in `associate/contract/gate.json` (the contract's question-set file — version **9**; also mirrored as a copy in `pyproject.toml`'s data table, same content). The gate's `clef.allow_when` block holds five threshold rules, in file order: `safe_unattended` >= 0.5, `destructive` <= 0.2, `exfiltrates` <= 0.1, `matches_task` >= 0.5, and the `reversibility` choice question's `irreversible` option <= 0.2 — with allow only when EVERY rule holds. The corresponding question texts live in the same file's `questions` block. Tools that pass the gate without being in the mutating set are the four `gated_tools` of `associate/contract/models.json` line 29: `eidetic_remember`, `web_search`, `web_page`, `delegate_run` — deliberately disjoint from `mutating_tools` (`write`, `edit`, `bash`, `ledger_append`, `run_tests`, line 28), a disjointness enforced by `associate/contract/validate.py` (`_check_gated_tools` refuses any overlap, 1 281-284). All facts below are stated with file:line provenance.",
+  "pyproject_sentence": "also mirrored as a copy in `pyproject.toml`'s data table, same content",
+  "fact": {
+    "id": "f1",
+    "value": "gate.json is mirrored in pyproject.toml",
+    "source": "w5",
+    "quote": "mirrored as a copy in `pyproject.toml`'s data table"
+  }
+}

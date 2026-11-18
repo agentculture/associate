@@ -1,0 +1,96 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://github.com/agentculture/associate/contract/report.schema.json",
+  "title": "associate accuracy report",
+  "description": "The harness-written accuracy counts for one run: per kind, per source kind, reviewer flags, whether the Python re-check ran, and child runs listed with their own counts. A passed fact means its quote was found in the saved result it cites, nothing more.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["facts", "conclusions", "statements", "by_source_kind", "flags", "python_recheck_ran"],
+  "properties": {
+    "facts": {"$ref": "#/$defs/fact_counts"},
+    "conclusions": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["made", "supported", "refuted", "open"],
+      "properties": {
+        "made": {"type": "integer"},
+        "supported": {"type": "integer"},
+        "refuted": {"type": "integer"},
+        "open": {"type": "integer"}
+      }
+    },
+    "statements": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["made", "without_fact"],
+      "properties": {
+        "made": {"type": "integer"},
+        "without_fact": {"type": "integer"}
+      }
+    },
+    "unchecked_text": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["summary_sentences", "final_message_sentences"],
+      "description": "Sentences the model wrote outside the checked items: in the hand-back's summary and in its final message. Counted by the extension; never part of the statements counts.",
+      "properties": {
+        "summary_sentences": {"type": "integer"},
+        "final_message_sentences": {"type": "integer"}
+      }
+    },
+    "by_source_kind": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["file", "tool", "web", "memory", "agent", "harness"],
+      "properties": {
+        "file": {"$ref": "#/$defs/fact_counts"},
+        "tool": {"$ref": "#/$defs/fact_counts"},
+        "web": {"$ref": "#/$defs/fact_counts"},
+        "memory": {"$ref": "#/$defs/fact_counts"},
+        "agent": {"$ref": "#/$defs/fact_counts"},
+        "harness": {"$ref": "#/$defs/fact_counts"}
+      }
+    },
+    "flags": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["check", "detail"],
+        "properties": {
+          "check": {"type": "string", "pattern": "^[a-z][a-z0-9_]*$"},
+          "detail": {"type": "string"},
+          "ref": {"type": "string", "pattern": "^([A-Za-z0-9_-]+:)?w[1-9][0-9]*$"}
+        }
+      }
+    },
+    "python_recheck_ran": {"type": "boolean"},
+    "children": {
+      "type": "array",
+      "description": "Each child or delegated run with its own counts (a report of this same shape). Listed, never summed into this run's counts.",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["label", "report"],
+        "properties": {
+          "label": {"type": "string", "pattern": "^[A-Za-z0-9_-]+$"},
+          "report": {"type": "object"}
+        }
+      }
+    }
+  },
+  "$defs": {
+    "fact_counts": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["made", "checked", "passed", "refused", "unchecked"],
+      "properties": {
+        "made": {"type": "integer"},
+        "checked": {"type": "integer"},
+        "passed": {"type": "integer"},
+        "refused": {"type": "integer"},
+        "unchecked": {"type": "integer"}
+      }
+    }
+  }
+}

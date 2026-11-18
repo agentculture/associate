@@ -56,6 +56,7 @@
 import { execFile, spawn as nodeSpawn } from "node:child_process";
 import { chmodSync, lstatSync, mkdirSync, readFileSync, readlinkSync, rmSync, symlinkSync, writeFileSync } from "node:fs";
 import { dirname, resolve, sep } from "node:path";
+import { StringDecoder } from "node:string_decoder";
 import type { AssociateContext } from "../lib/context.ts";
 import { compileRedaction, type RedactionFilter } from "../lib/walk.ts";
 import { toolError, toolResult, whichOnPath, type ToolError } from "./_procs.ts";
@@ -156,6 +157,8 @@ export interface CommandResult {
   duration_ms: number;
   output_tail: string;
   output_truncated: boolean;
+  /** Characters of the command's output (stdout and stderr together) that `output_tail` does not hold. */
+  not_shown_chars: number;
   /** Why the command could not be started, when it could not. */
   error?: string;
 }
@@ -178,11 +181,15 @@ class TailBuffer {
   private chunks: Buffer[] = [];
   private size = 0;
   private dropped = false;
+  private readonly decoder = new StringDecoder("utf8");
+  /** Characters of everything pushed, decoded as UTF-8: the full length the tail is cut from. */
+  totalChars = 0;
   private readonly keepBytes: number;
   constructor(keepBytes: number) {
     this.keepBytes = keepBytes;
   }
   push(chunk: Buffer): void {
+    this.totalChars += this.decoder.write(chunk).length;
     this.chunks.push(chunk);
     this.size += chunk.length;
     while (this.size > this.keepBytes && this.chunks.length > 1) {
@@ -218,6 +225,7 @@ function runCommand(index: number, argv: string[], options: RunOptions, env: Rec
         duration_ms: 0,
         output_tail: "",
         output_truncated: false,
+        not_shown_chars: 0,
         error: `${program} was not found on PATH (absolute PATH entries only)`,
       });
       return;
@@ -270,6 +278,7 @@ function runCommand(index: number, argv: string[], options: RunOptions, env: Rec
         duration_ms: Date.now() - started,
         output_tail: outputTail,
         output_truncated: truncated,
+        not_shown_chars: Math.max(0, tail.totalChars - outputTail.length),
       };
       if (signal) result.signal = signal;
       if (spawnError) result.error = spawnError;
@@ -554,6 +563,12 @@ export const RUN_TESTS_SCHEMA = {
       description:
         "Index of the configured test command to run (0-based). Omit it to run every configured command, in order.",
     },
+    purpose: {
+      type: "string",
+      description:
+        "Why you are making this call: the question it settles and what you expect to see. " +
+        "It is recorded with the call; it does not change which commands run.",
+    },
   },
   additionalProperties: false,
 } as const;
@@ -615,7 +630,7 @@ export function createTestsTool(ctx: AssociateContext, deps: TestsDeps = {}) {
 
   async function run(params: Record<string, unknown>): Promise<Result> {
     const keys = Object.keys(params ?? {});
-    const extra = keys.filter((key) => key !== "command");
+    const extra = keys.filter((key) => key !== "command" && key !== "purpose");
     if (extra.length > 0) {
       return toolResult(
         toolError(
@@ -669,6 +684,10 @@ export function createTestsTool(ctx: AssociateContext, deps: TestsDeps = {}) {
       reverted: restored.reverted.slice(0, listCap),
       reverted_count: restored.reverted.length,
       protection: guard.kind === "protected" ? "git" : "none",
+      // As used (issue #20): the index run, or "all" when none was given; the
+      // characters of command output the tails do not hold.
+      args_used: { command: index === undefined ? "all" : index },
+      not_shown_chars: results.reduce((sum, r) => sum + r.not_shown_chars, 0),
     };
     if (restored.reverted.length > listCap) body.reverted_truncated = true;
     if (guard.kind === "unprotected") body.protection_note = guard.note;

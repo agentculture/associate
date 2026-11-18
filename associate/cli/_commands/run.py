@@ -15,6 +15,10 @@ Exit codes
 ``1`` an unknown ``--harness`` (the error lists the registered adapters).
 ``2`` the adapter failed closed, or its environment is not usable — pi absent,
       a timeout, an export root inside the examined checkout.
+``3`` the run served but its hand-back failed the check after the allowed
+      rounds (``handback_outcome`` is ``refused_after_rounds``, outcome
+      ``refused``). The result object is still printed on stdout; a worktree run
+      is kept, not merged.
 
 Worktree isolation (spec c51, t15)
 ----------------------------------
@@ -62,7 +66,12 @@ from pathlib import Path
 from typing import Any
 
 from associate import contract
-from associate.cli._errors import EXIT_ENV_ERROR, EXIT_USER_ERROR, CliError
+from associate.cli._errors import (
+    EXIT_ENV_ERROR,
+    EXIT_HANDBACK_REFUSED,
+    EXIT_USER_ERROR,
+    CliError,
+)
 from associate.cli._output import emit_diagnostic, emit_result
 from associate.harness import available_harnesses, get_harness
 from associate.harness.base import HarnessError
@@ -83,7 +92,15 @@ _RESULT_KEYS = (
     "worktree",
     "run_branch",
     "tests",
+    "check_mode",
+    "handback_outcome",
+    "answer_path",
+    "accuracy",
 )
+
+#: The result's ``handback_outcome`` that makes the verb exit 3 (the check refused
+#: the hand-back on every allowed round and the run ended).
+_HANDBACK_REFUSED = "refused_after_rounds"
 
 
 def _build(harness_cls: type, args: argparse.Namespace) -> Any:
@@ -99,6 +116,7 @@ def _build(harness_cls: type, args: argparse.Namespace) -> Any:
         "timeout": args.timeout,
         "model": args.model,
         "untrusted_checkout": args.untrusted_checkout,
+        "check_mode": args.check_mode,
     }
     try:
         parameters = inspect.signature(harness_cls).parameters
@@ -226,7 +244,16 @@ def _run(
     elif _may_mutate(args.model):
         result = {**result, "isolation": "in-place"}
 
+    if "check_mode" not in result:
+        result = {**result, "check_mode": args.check_mode}
     emit_result(result if json_mode else _render(result), json_mode=json_mode)
+    if result.get("handback_outcome") == _HANDBACK_REFUSED:
+        emit_diagnostic(
+            "associate: the hand-back was refused by the check on every allowed round; no answer "
+            "was accepted (see check.json in the export directory)"
+            + ("; the run worktree is kept, not merged" if result.get("merge") == "kept" else "")
+        )
+        return EXIT_HANDBACK_REFUSED
     return 0
 
 
@@ -403,12 +430,29 @@ def _default_prompt() -> str:
 
 def _render(result: dict[str, Any]) -> str:
     """``key=value`` lines — the artifact paths first, so a reader sees them."""
+    skipped = {"active_tools", "answer"}
     ordered = [key for key in _RESULT_KEYS if key in result]
-    ordered += [key for key in result if key not in _RESULT_KEYS and key != "active_tools"]
+    ordered += [key for key in result if key not in _RESULT_KEYS and key not in skipped]
     shown = {**result}
     if isinstance(result.get("tests"), dict):
         shown["tests"] = _render_tests(result["tests"])
-    return "\n".join(f"{key}={shown[key]}" for key in ordered if shown[key] is not None)
+    if isinstance(result.get("accuracy"), dict):
+        shown["accuracy"] = _render_accuracy(result["accuracy"])
+    text = "\n".join(f"{key}={shown[key]}" for key in ordered if shown[key] is not None)
+    if isinstance(result.get("answer"), str) and result["answer"].strip():
+        text += "\nanswer:\n" + result["answer"].rstrip("\n")
+    return text
+
+
+def _render_accuracy(accuracy: dict[str, Any]) -> str:
+    """One line: whether the Python re-check ran, its verdict, and the fact counts."""
+    if not accuracy.get("python_recheck_ran"):
+        return f"python re-check did not run ({accuracy.get('not_applicable_reason')})"
+    facts = (accuracy.get("report") or {}).get("facts") or {}
+    counts = " ".join(
+        f"{key} {facts.get(key)}" for key in ("made", "passed", "refused", "unchecked")
+    )
+    return f"python re-check {accuracy.get('python_recheck_verdict')}; facts {counts}"
 
 
 def _render_tests(tests: dict[str, Any]) -> str:
@@ -479,6 +523,15 @@ def register(sub: argparse._SubParsersAction) -> None:
         action="store_true",
         help="Ignore the examined checkout's own .pi settings, extensions and MCP "
         "config (pi --no-approve --no-extensions). Off by default.",
+    )
+    p.add_argument(
+        "--check-mode",
+        choices=("report", "enforce"),
+        default=None,
+        help="Per-run hand-back check mode, overriding accuracy.json's mode for the model "
+        "(sets ASSOCIATE_CHECK_MODE for the run; an ambient value is not inherited). "
+        "'enforce' refuses a failing hand-back, and one still failing after the allowed "
+        "rounds exits 3. Recorded in the result as check_mode.",
     )
     p.add_argument(
         "--test-command",

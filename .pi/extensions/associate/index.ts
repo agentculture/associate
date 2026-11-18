@@ -11,7 +11,9 @@
  *    the ACP session id when present (spec c42), outside the examined checkout;
  * 3. registers `associate_ready` — the sentinel a launcher uses to prove the
  *    extension actually loaded rather than trusting that the config file is on
- *    disk (spec c34) — and `finish`, whose payload is the hand-back;
+ *    disk (spec c34) — and `finish`, whose payload is the hand-back, checked
+ *    by `lib/facts.ts` in report or enforce mode (issue #20, t11) with
+ *    facts.json, check.json, report.json and answer.md written to the export;
  * 4. registers the `tool_call` guard: the active model's tool set (plan t12),
  *    senses' no-mutation rule, and the safety gate (`lib/gate.ts`) in front of
  *    every mutating call of a model that may mutate, each decision appended to
@@ -28,19 +30,36 @@
  */
 
 import type { ExtensionAPI } from "@earendil-works/pi-coding-agent";
-import { mkdirSync, writeFileSync } from "node:fs";
+import { mkdirSync, rmSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { Type } from "typebox";
+import { checkHandback, type HandbackCheck, type HandbackReport } from "./lib/facts.ts";
 import { createGate, type Gate } from "./lib/gate.ts";
-import { decideToolCall } from "./lib/guard.ts";
-import { normalizeHandback, unreferencedCount } from "./lib/handback.ts";
+import { decideToolCall, RefusalCap } from "./lib/guard.ts";
+import {
+  ANSWER_FILENAME,
+  CHECK_FILENAME,
+  FACTS_FILENAME,
+  REPORT_FILENAME,
+  buildHandbackInput,
+  checkModeOverride,
+  factsPayload,
+  formatRefusals,
+  normalizeHandback,
+  refusalsOf,
+  resolveCheckMode,
+  unreferencedCount,
+  withUncheckedCounts,
+  type UncheckedCounts,
+} from "./lib/handback.ts";
 import { installPromptInjection } from "./lib/prompt.ts";
 import { registerAssociateProvider } from "./lib/provider.ts";
+import { countSentences, renderAnswer } from "./lib/render.ts";
 import { createAssociateContext, loadToolModules } from "./lib/runtime.ts";
-import { installStatementsRecorder } from "./lib/statements.ts";
-import { installContinueFrom } from "./lib/torch.ts";
+import { assistantMessageText, installStatementsRecorder, messageHasToolCalls } from "./lib/statements.ts";
+import { installContinueFrom, resolveContinueFrom } from "./lib/torch.ts";
 import { activeToolSet, resolveActiveModel, toolsOutsideContract } from "./lib/toolset.ts";
-import { installWalkRecorder } from "./lib/walk.ts";
+import { compileRedaction, installWalkRecorder, stampContent, stampText } from "./lib/walk.ts";
 
 /** Registered by this file rather than by a module under `tools/`. */
 export const CORE_TOOL_NAMES = ["associate_ready", "finish"] as const;
@@ -148,6 +167,66 @@ export default async function (pi: ExtensionAPI) {
   // before_agent_start below clears it when the next task begins.
   let finished = false;
 
+  // ------------------------------------------------------- hand-back check
+  // Issue #20, plan t11. finish runs the hand-back checker (lib/facts.ts) over
+  // the facts payload and writes facts.json, check.json, report.json and
+  // answer.md into the export, in every session (headless, mesh, child). The
+  // mode is accuracy.json's for the active model, overridable per run by
+  // $ASSOCIATE_CHECK_MODE (snapshotted at load, like the other ASSOCIATE_*
+  // variables). In enforce mode a failing hand-back is refused with what is
+  // wrong and the fix, `finished` stays false, and the model may answer again
+  // for accuracy.json `retry_rounds` more rounds; the last refused round — or
+  // the `refusal_cap`-th refusal in a row, counted by the same RefusalCap class
+  // the tool_call guard uses — ends the run with outcome 'refused'.
+  const accuracy = contract.accuracy;
+  const modeOverride = checkModeOverride(process.env);
+  if (modeOverride.problem) console.error(modeOverride.problem);
+  const checkMode = resolveCheckMode(accuracy, model.key, modeOverride.mode);
+  const retryRounds =
+    Number.isInteger(accuracy?.retry_rounds) && accuracy.retry_rounds >= 0 ? accuracy.retry_rounds : undefined;
+  if (retryRounds === undefined) {
+    console.error(
+      `associate: accuracy.json retry_rounds must be a non-negative integer, got ${JSON.stringify(accuracy?.retry_rounds)}; ` +
+        "in enforce mode a refused hand-back ends the run at once",
+    );
+  }
+  const continueFrom = resolveContinueFrom(process.env);
+  const redaction = compileRedaction(contract.policy);
+  // Per prompt, reset by before_agent_start with `finished`.
+  let handbackRefusals = 0;
+  let handbackEnded = false;
+  let handbackCap: RefusalCap | undefined;
+  try {
+    handbackCap = new RefusalCap(accuracy?.refusal_cap as number);
+  } catch {
+    // The tool_call guard below reports the same bad cap once; rounds still apply.
+  }
+  // The accepted hand-back of the current prompt, so the final message that
+  // follows it can be counted as unchecked text and the report rewritten.
+  let accepted:
+    | {
+        payload: Record<string, unknown>;
+        check: HandbackCheck;
+        checkRecord: Record<string, unknown>;
+        summary: string;
+        answer: string;
+      }
+    | undefined;
+
+  const writeExport = (name: string, text: string): void => {
+    try {
+      mkdirSync(session.exportDir, { recursive: true });
+      writeFileSync(join(session.exportDir, name), text, "utf8");
+    } catch (error) {
+      console.error(
+        `associate: could not write ${name} to the export (${error instanceof Error ? error.message : String(error)})`,
+      );
+    }
+  };
+  const writeJson = (name: string, value: unknown): void => writeExport(name, `${JSON.stringify(value, null, 2)}\n`);
+  const writeReport = (report: HandbackReport, counts: UncheckedCounts): void =>
+    writeJson(REPORT_FILENAME, withUncheckedCounts(report, counts));
+
   // ---------------------------------------------------------------- sentinel
   // One report, two readers (deviation d8): the `associate_ready` tool returns
   // it when a model asks, and the `session_start` hook below writes the very
@@ -205,23 +284,97 @@ export default async function (pi: ExtensionAPI) {
   });
 
   // ------------------------------------------------------------------ finish
+  // The facts-payload fields mirror associate/contract/schemas/facts.schema.json
+  // in plain JSON Schema (pi 1.5.2 validates arguments with pi-schema). Every
+  // one is optional, so a hand-back with only a summary is still valid input;
+  // the checker, not the schema, enforces the cross-field rules.
+  const text = (description: string) => Type.String({ description });
   host.registerTool({
     name: "finish",
     label: "Finish",
     description:
-      "End the task and hand the result back. The payload IS the deliverable: a summary, the " +
-      "statements you are making, each with the walk entry ids (w1, w2, …) that evidence it, " +
-      "and any file:line citations. associate never writes its result into the checkout — " +
-      "call finish instead.",
+      "End the task and hand the result back. The payload IS the deliverable: the facts you found " +
+      "(each a value, the walk id it came from, and a word-for-word quote of that entry's result), " +
+      "the alternatives you weighed, your verdicts with the facts they rest on, and what is still " +
+      "open with the check that would decide it. The harness checks every quote against the saved " +
+      "result and renders the answer from what passes; the summary is never a checked answer. " +
+      "associate never writes its result into the checkout — call finish instead.",
     promptSnippet: "Hand the finished result back as the payload; associate never writes it to disk",
     promptGuidelines: [
       "End every task with finish: its payload is the hand-back, and a result left only in chat is not delivered.",
+      "Give each fact the walk id shown on the tool result it came from and a quote copied word for word from that result.",
       "Give each statement passed to finish the walk entry ids that evidence it; a statement with none is reported as unreferenced.",
     ],
     parameters: Type.Object({
-      summary: Type.String({
-        description: "The answer, in prose. This is what the caller reads first.",
-      }),
+      summary: Type.Optional(
+        text("Free text. Delivered under an unchecked label, never as the checked answer."),
+      ),
+      facts: Type.Optional(
+        Type.Array(
+          Type.Object({
+            id: text("Fact id: f1, f2, …"),
+            value: text("The value found: a number, an identifier, a path, or a short phrase."),
+            source: text(
+              "The walk id the fact came from, exactly as the harness line on that tool result showed it " +
+                "(w3), or a run label and a walk id for a prior or child run (prior:w3, c1:w2). Never a path.",
+            ),
+            quote: text("Text copied word for word from that entry's result; it must contain a literal value."),
+            action: Type.Optional(
+              Type.Boolean({
+                description:
+                  "True when the fact states that an action happened (a tool ran, a file changed, a test passed, a record was stored).",
+              }),
+            ),
+            tool: Type.Optional(text("For an action fact: the tool whose call the fact says happened.")),
+          }),
+          { description: "What you found, each tied to one walk entry by a quote." },
+        ),
+      ),
+      alternatives: Type.Optional(
+        Type.Array(
+          Type.Object({
+            id: text("Alternative id: a1, a2, …"),
+            text: text("The alternative explanation or answer."),
+            predicts: text("What would be seen if this alternative held."),
+            refuted_by: text("What would refute it."),
+          }),
+          { description: "The alternatives you weighed." },
+        ),
+      ),
+      verdicts: Type.Optional(
+        Type.Array(
+          Type.Object({
+            id: text("Verdict id: v1, v2, …"),
+            text: text("The conclusion."),
+            verdict: text("One of: supported, refuted, open, cannot_tell."),
+            basis: Type.Array(text("A fact id of this hand-back, e.g. f1."), {
+              description: "Ids of the facts this verdict rests on.",
+            }),
+            alternative: Type.Optional(text("The alternative id this verdict decides, e.g. a1.")),
+            unread: Type.Optional(
+              Type.Array(text("Something not read that bears on this verdict."), {
+                description: "What was not read; a supported or refuted verdict must have none.",
+              }),
+            ),
+            check: Type.Optional(text("For open or cannot_tell: the check that would decide it.")),
+            closing: Type.Optional(
+              Type.Boolean({ description: "Marks the closing conclusion; otherwise the last verdict closes." }),
+            ),
+          }),
+          { description: "Your conclusions, each with the facts it rests on." },
+        ),
+      ),
+      open_items: Type.Optional(
+        Type.Array(
+          Type.Object({
+            id: text("Open item id: o1, o2, …"),
+            text: text("What is still open."),
+            check: Type.Optional(text("The check that would decide it; an open item without one is refused.")),
+            basis: Type.Optional(Type.Array(text("A fact id of this hand-back, e.g. f1."))),
+          }),
+          { description: "What is still open, each with the check that would decide it." },
+        ),
+      ),
       statements: Type.Optional(
         Type.Array(
           Type.Object({
@@ -244,16 +397,92 @@ export default async function (pi: ExtensionAPI) {
       ),
     }),
     async execute(_toolCallId, params) {
+      const raw = (params ?? {}) as Record<string, unknown>;
       // The walk's own ids are the only evidence that exists: a claim citing
       // anything else is not referenced, however well-shaped the id looks.
-      const handback = normalizeHandback(params, false, walk.entryIds());
+      const handback = normalizeHandback(raw, false, walk.entryIds());
       const unreferenced = unreferencedCount(handback);
-      const details = {
-        handback,
-        unreferenced,
-        export_dir: session.exportDir,
-        session_id: session.sessionId,
+      const payload = factsPayload(raw, redaction);
+      writeJson(FACTS_FILENAME, payload);
+
+      const check = checkHandback(
+        buildHandbackInput({ payload, exportDir: session.exportDir, walkPath: walk.walkPath, continueFrom }),
+        accuracy,
+      );
+      const refusals = refusalsOf(check, payload);
+      const summary = typeof payload.summary === "string" ? payload.summary : "";
+      const counts: UncheckedCounts = { summary_sentences: countSentences(summary), final_message_sentences: 0 };
+      const base = {
+        mode: checkMode.mode,
+        mode_source: checkMode.source,
+        accepted: check.accepted,
+        facts: check.facts,
+        verdicts: check.verdicts,
+        open_items: check.open_items,
+        unchecked_text: { ...counts, final_message: "none" },
       };
+      const where = { export_dir: session.exportDir, session_id: session.sessionId };
+
+      if (checkMode.mode === "enforce" && !check.accepted) {
+        // A refused hand-back is not a hand-back: `finished` stays false, the
+        // statements recorder gets no `details.handback`, no answer is left on
+        // disk, and tools stay callable for the next round.
+        handbackRefusals += 1;
+        const capped =
+          handbackCap?.note({
+            block: true,
+            kind: "handback_refused",
+            reason: "the hand-back failed the check",
+            fix: "fix each refused item and call finish again",
+          }).capped === true;
+        const roundsLeft = Math.max(0, (retryRounds ?? 0) - handbackRefusals + 1);
+        const last = roundsLeft === 0 || capped;
+        const why = capped
+          ? `refusal ${handbackRefusals} in a row reached accuracy.json refusal_cap (${handbackCap?.limit})`
+          : `accuracy.json retry_rounds (${retryRounds ?? 0}) allowed no further round`;
+        writeJson(CHECK_FILENAME, {
+          ...base,
+          outcome: "refused",
+          round: handbackRefusals,
+          rounds_left: roundsLeft,
+          run_ended: last,
+          refusals,
+        });
+        writeReport(check.report, counts);
+        rmSync(join(session.exportDir, ANSWER_FILENAME), { force: true });
+        accepted = undefined;
+        if (last) {
+          walk.markOutcome("refused");
+          handbackEnded = true;
+        }
+        const head = {
+          outcome: "refused",
+          accepted: false,
+          mode: checkMode.mode,
+          round: handbackRefusals,
+          rounds_left: roundsLeft,
+          run_ended: last,
+          refusals,
+        };
+        const message = last
+          ? `Hand-back refused by the check (enforce mode), round ${handbackRefusals}: ${why}. ` +
+            "The run is ended with outcome 'refused'; no result is accepted. What failed:\n" +
+            formatRefusals(refusals)
+          : `Hand-back refused by the check (enforce mode), round ${handbackRefusals}; ` +
+            `${roundsLeft} round${roundsLeft === 1 ? "" : "s"} left. Nothing was handed back. Fix each item below ` +
+            "(tools are still available), then call finish again with the whole hand-back:\n" +
+            formatRefusals(refusals);
+        const result = {
+          content: [
+            { type: "text" as const, text: JSON.stringify(head) },
+            { type: "text" as const, text: message },
+          ],
+          details: { ...head, ...where },
+        };
+        return last ? { ...result, terminate: true } : result;
+      }
+
+      // Accepted (enforce: it passed; report: whatever the checker found).
       // Deviation d9 (measured 2026-09-12 on the mesh): with `terminate: true`
       // the loop ended on this call and the model never produced a final
       // message, so culture's ACP bridge — which relays chat text, not tool
@@ -261,37 +490,166 @@ export default async function (pi: ExtensionAPI) {
       // continues for exactly one text reply, and every further tool call is
       // blocked below.
       finished = true;
+      handbackCap?.note(undefined);
+      const answer = renderAnswer({ payload, check, summary });
+      const wouldRefuse = checkMode.mode === "report" ? refusals : [];
+      const checkRecord = { ...base, outcome: "accepted", would_refuse: wouldRefuse };
+      writeJson(CHECK_FILENAME, checkRecord);
+      writeReport(check.report, counts);
+      writeExport(ANSWER_FILENAME, answer);
+      accepted = { payload, check, checkRecord, summary, answer };
+
       const count = handback.statements.length;
+      const f = check.report.facts;
+      const lines = [
+        `Hand-back recorded (${count} statement${count === 1 ? "" : "s"}, ${unreferenced} unreferenced; ` +
+          `facts: ${f.made} made, ${f.passed} quote-checked and passed, ${f.refused} refused, ${f.unchecked} unchecked; ` +
+          `check mode ${checkMode.mode}). Now reply to the requester with exactly the answer below as your final ` +
+          "message, then stop — a hand-back alone does not reach a mesh requester, and no further tool call is allowed.",
+      ];
+      if (wouldRefuse.length > 0) {
+        lines.push(
+          `In enforce mode these ${wouldRefuse.length} item${wouldRefuse.length === 1 ? "" : "s"} would have been refused ` +
+            "(report mode: recorded, not refused):",
+          formatRefusals(wouldRefuse),
+        );
+      }
       return {
         content: [
-          // The normalized hand-back stays first, as JSON, for the recorder.
-          { type: "text", text: JSON.stringify(handback) },
+          // The normalized hand-back stays first, as JSON, for the recorder and
+          // for a parent reading a child's result (tools/spawn.ts).
           {
             type: "text",
-            text:
-              `Hand-back recorded (${count} statement${count === 1 ? "" : "s"}, ` +
-              `${unreferenced} unreferenced). Now reply to the requester with the ` +
-              "summary as your final message, then stop — a hand-back alone does " +
-              "not reach a mesh requester, and no further tool call is allowed.",
+            text: JSON.stringify({ ...handback, outcome: "accepted", mode: checkMode.mode, facts_checked: f }),
           },
+          { type: "text", text: lines.join("\n") },
+          { type: "text", text: answer },
         ],
-        details,
+        details: {
+          handback,
+          unreferenced,
+          outcome: "accepted",
+          mode: checkMode.mode,
+          facts_checked: f,
+          ...where,
+        },
       };
     },
   });
 
+  // ------------------------------------------------- the final message (t11)
+  // The final message arrives after finish, in a message_end event. It is
+  // unchecked text: its sentences are counted into check.json and report.json
+  // (as statements with no fact) and it is kept in answer.md under the
+  // unchecked label. A final message that is exactly the rendered answer adds
+  // nothing. Registered after the statements recorder, which this handler
+  // never touches: only the extension's own report files are rewritten.
+  pi.on("message_end", (event) => {
+    if (!finished || !accepted) return;
+    const message = (event as { message?: unknown }).message;
+    if (!message || typeof message !== "object") return;
+    if ((message as { role?: unknown }).role !== "assistant") return;
+    if (messageHasToolCalls(message)) return;
+    const said = redaction.apply(assistantMessageText(message));
+    if (!said) return;
+    const same = said.replace(/\s+/g, " ").trim() === accepted.answer.replace(/\s+/g, " ").trim();
+    const counts: UncheckedCounts = {
+      summary_sentences: countSentences(accepted.summary),
+      final_message_sentences: same ? 0 : countSentences(said),
+    };
+    const checkRecord = {
+      ...accepted.checkRecord,
+      unchecked_text: { ...counts, final_message: same ? "rendered_answer" : "unchecked" },
+    };
+    writeJson(CHECK_FILENAME, checkRecord);
+    writeReport(accepted.check.report, counts);
+    if (!same) {
+      writeExport(
+        ANSWER_FILENAME,
+        renderAnswer({ payload: accepted.payload, check: accepted.check, summary: accepted.summary, finalMessage: said }),
+      );
+    }
+  });
+
   // --------------------------------------------------------- tool_call guard
-  // Order (lib/guard.ts decideToolCall): finished → model set → senses refuses
+  // Order (lib/guard.ts decideToolCall): finished → model set → stated purpose → senses refuses
   // repo mutations before the gate → pure reads proceed → mutations, and
   // `gated_tools` calls from any model (d6/d7: memory write, web), go through the
   // gate, its entry appended to the walk → a truncated gate state refuses.
+  //
+  // Issue #20: a call with no stated purpose is refused after the model-set
+  // check (accuracy.json `purpose_exempt_tools` excepted), and the same kind of
+  // refusal repeated up to accuracy.json `refusal_cap` ends the run — pi's
+  // documented `terminate: true` — rather than looping on it to the time
+  // limit. A cap the contract does not state as a positive integer leaves the
+  // run uncapped, said once at load.
+  //
+  // fix-refusal-cap (live run acc20-worker-gate-thresholds, pi 1.5.2): the
+  // refusals of one turn count once (RefusalCap, per `turn_start`), and the
+  // walk outcome is not pinned at the capping refusal. pi 1.5.2 stops early
+  // only when every finalized result in the batch terminates, so a capped
+  // refusal beside an allowed call does not end the run. The cap is held
+  // pending; a later `turn_start` means pi went on and forgets it (the count
+  // stays, so the next same-kind refusal caps again); `agent_end` with the
+  // cap still pending pins `refused`. pi 1.5.2 docs: agent_end fires when the
+  // low-level run ends, inside the run lifecycle and so before
+  // `session_shutdown` and the walk's finalize; pi may still retry or take a
+  // queued message after it, which shows up here as another `turn_start` and
+  // lifts that pin again.
+  let refusals: RefusalCap | undefined;
+  try {
+    refusals = new RefusalCap(contract.accuracy?.refusal_cap as number);
+  } catch (error) {
+    console.error(
+      `associate: ${error instanceof Error ? error.message : String(error)}; repeated refusals will not end the run`,
+    );
+  }
+  let countedTask = task;
+  // Monotonic over the session (pi's own turnIndex is per run). 0 until the
+  // first turn_start: a host that sends none counts every call as its own turn.
+  let turnCount = 0;
+  let capPending = false;
+  let capPinned = false;
+  pi.on("turn_start", () => {
+    turnCount += 1;
+    capPending = false;
+    if (capPinned) {
+      // pi went on after agent_end (retry, compaction retry, follow-up): the
+      // run the pin described did not end there.
+      walk.clearOutcome("refused");
+      capPinned = false;
+    }
+  });
+  pi.on("agent_end", () => {
+    if (capPending && !handbackEnded && !finished) {
+      walk.markOutcome("refused");
+      capPinned = true;
+    }
+    capPending = false;
+  });
+  pi.on("before_agent_start", () => {
+    // A new prompt: a pin left by the previous prompt's run stays (that run
+    // did end refused); only a turn of the same run lifts it.
+    capPinned = false;
+    capPending = false;
+  });
   pi.on("tool_call", async (event, eventCtx) => {
     if (finished) {
+      // Not counted toward the refusal cap: the hand-back is already recorded,
+      // and a capped outcome would misreport a delivered run as refused.
       const reason =
-        "the task was already handed back with finish; reply to the requester " +
-        "with the summary as your final message instead of calling tools";
-      walk.recordBlocked(event.toolCallId, reason);
-      return { block: true, reason };
+        "the task was already handed back with finish. Fix: reply to the requester " +
+        "with the answer finish returned as your final message instead of calling tools";
+      const entry = walk.recordBlocked(event.toolCallId, reason);
+      return { block: true, reason: entry ? stampText(entry.id, reason) : reason };
+    }
+    if (handbackEnded) {
+      // The run already ended on a refused hand-back (t11); its outcome is set.
+      const reason =
+        "the run was ended with outcome 'refused': the hand-back failed the check in its last round. " +
+        "Fix: none in this run; the operator reads check.json in the export and starts a new run";
+      const entry = walk.recordBlocked(event.toolCallId, reason);
+      return { block: true, reason: entry ? stampText(entry.id, reason) : reason, terminate: true };
     }
     const piCtx = eventCtx as { modelRegistry?: unknown; signal?: AbortSignal } | undefined;
     const decision = await decideToolCall({
@@ -317,15 +675,65 @@ export default async function (pi: ExtensionAPI) {
       // review r2/5: an allowed call holds the checkout until its tool_execution_end.
       toolCallId: event.toolCallId,
       testWindow: ctx.testWindow,
+      purposeExemptTools: contract.accuracy?.purpose_exempt_tools,
     });
+    // A new prompt is a new task (before_agent_start sets `task`): its
+    // refusals are counted afresh.
+    if (task !== countedTask) {
+      refusals?.reset();
+      countedTask = task;
+    }
+    const counted = refusals?.note(decision, turnCount > 0 ? turnCount : undefined);
+    if (!decision?.block) {
+      // An allowed call in the batch: pi does not stop on it, so no cap
+      // decided earlier in this turn ends the run.
+      capPending = false;
+      return undefined;
+    }
+    let reason = decision.reason;
+    const capped = counted?.capped === true;
+    if (capped) {
+      reason +=
+        ` This is refusal ${counted!.count} in a row of the same kind (${decision.kind}), counted once per turn, ` +
+        `the contract's refusal_cap (accuracy.json); the run is ended with outcome 'refused'.`;
+      capPending = true;
+    }
     // L4: pi sends no tool_result for a blocked call; record the refusal now.
-    if (decision?.block) walk.recordBlocked(event.toolCallId, decision.reason);
-    return decision;
+    const entry = walk.recordBlocked(event.toolCallId, reason);
+    // Plan t9: pi makes the reason the result text the model receives, so the
+    // stamp rides at its head; the entry's error keeps the unstamped reason.
+    if (entry) reason = stampText(entry.id, reason);
+    // pi's documented hook result: `fix` and `kind` already ride in the reason.
+    return capped ? { block: true, reason, terminate: true } : { block: true, reason };
   });
+
+  // ------------------------------------------------------- walk-id stamp (t9)
+  // Every tool result the model is sent begins with one harness line naming
+  // the walk id of that call (`walk id: wN`, lib/walk.ts WALK_ID_STAMP_PREFIX).
+  // pi 1.5.2 `tool_result` handlers chain in load order and may return a
+  // partial patch; this one is registered after the walk and statements
+  // recorders, so both — and the saved result the matcher reads — see the
+  // result unstamped, and the id is the one the walk recorder just wrote for
+  // this call id. Replacing `content` drops `structuredContent` unless it is
+  // returned too, so it is passed through unchanged.
+  pi.on("tool_result", (event) => {
+    const e = event as { toolCallId?: string; content?: unknown; structuredContent?: unknown };
+    const id = walk.entryIdFor(e.toolCallId);
+    if (!id) return undefined;
+    return {
+      content: stampContent(id, e.content),
+      ...(e.structuredContent !== undefined ? { structuredContent: e.structuredContent } : {}),
+    };
+  });
+
   // review r2/5: pi emits tool_execution_end for every prepared call, blocked or
   // run, so this releases exactly the holds the guard took above.
+  // Plan t9 (approved deviation): a call pi rejected before the hook (unknown
+  // tool, invalid arguments) reaches only this event; the walk records it here,
+  // and ignores every call id it already recorded or noted.
   pi.on("tool_execution_end", (event) => {
     ctx.testWindow.end(event.toolCallId);
+    walk.recordUnseenEnd(event as Parameters<typeof walk.recordUnseenEnd>[0]);
   });
 
   // ---------------------------------------------------------------- provider
@@ -401,6 +809,10 @@ export default async function (pi: ExtensionAPI) {
     const prompt = (event as { prompt?: unknown } | undefined)?.prompt;
     if (typeof prompt === "string") task = prompt;
     finished = false;
+    handbackRefusals = 0;
+    handbackEnded = false;
+    handbackCap?.reset();
+    accepted = undefined;
     applyModelToolSet();
   });
 }

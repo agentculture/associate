@@ -40,6 +40,7 @@ __all__ = [
     "assert_valid",
     "validate_models",
     "validate_gate",
+    "validate_accuracy",
     "validate_walk_gate",
 ]
 
@@ -529,3 +530,46 @@ def _walk_gate_rules(tier: str, fields: frozenset[str]) -> list[tuple[bool, str]
             "$: self_evaluated belongs to the large tier only",
         ),
     ]
+
+
+def validate_accuracy(doc: dict[str, Any], models: dict[str, Any] | None = None) -> list[str]:
+    """Cross-field rules for ``accuracy.json`` (the schema covers shape).
+
+    Modes cover exactly the registry's models, the source-kind table covers
+    exactly ``models.json`` ``tool_names``, exempt tools are registered tools,
+    check ids are unique with a non-blank ``motivating_failure``, and every
+    ``refusal_checks`` value names a listed check.
+    """
+    if models is None:
+        from associate import contract  # noqa: PLC0415 - avoid an import cycle
+
+        models = contract.load_models()
+    errors: list[str] = []
+    registry = set(models.get("models", {}))
+    tool_names = set(models.get("tool_names", []))
+    modes = set(doc.get("mode", {}))
+    for name in sorted(modes - registry):
+        errors.append(f"mode names unknown model {name!r}")
+    for name in sorted(registry - modes):
+        errors.append(f"mode is missing model {name!r}")
+    kinds = set(doc.get("source_kinds", {}))
+    for name in sorted(kinds - tool_names):
+        errors.append(f"source_kinds names unknown tool {name!r}")
+    for name in sorted(tool_names - kinds):
+        errors.append(f"source_kinds is missing tool {name!r}")
+    for name in doc.get("purpose_exempt_tools", []):
+        if name not in tool_names:
+            errors.append(f"purpose_exempt_tools names unknown tool {name!r}")
+    seen: set[str] = set()
+    for check in doc.get("checks", []):
+        cid = check.get("id")
+        if cid in seen:
+            errors.append(f"checks has duplicate id {cid!r}")
+        seen.add(cid)
+        failure = check.get("motivating_failure")
+        if not isinstance(failure, str) or not failure.strip():
+            errors.append(f"check {cid!r} has no motivating_failure")
+    for reason, cid in sorted(doc.get("refusal_checks", {}).items()):
+        if cid not in seen:
+            errors.append(f"refusal_checks maps {reason!r} to unknown check {cid!r}")
+    return errors

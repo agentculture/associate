@@ -1322,3 +1322,65 @@ test("review: a caller's truncated state still goes to the large path, never to 
   assert.notEqual(entry.tier, "clef");
   assert.equal(entry.decision, "refuse");
 });
+
+// ------------------------------------------- issue #20 t7: the purpose stays out of the gate
+
+import { decideToolCall } from "../lib/guard.ts";
+import { resolveActiveModel } from "../lib/toolset.ts";
+import { ensureRefusalReason } from "../lib/gate.ts";
+
+test("t7 criterion 2: the decider gets byte-identical requests with and without a purpose, and gate.json stays at version 9", async () => {
+  assert.equal(GATE.version, 9, "gate.json version must stay 9: the purpose changes nothing CLEF is asked");
+  const args = { path: "README.md", edits: [{ oldText: "teh", newText: "the" }] };
+  const fixedNow = () => new Date("2026-11-17T00:00:00.000Z");
+
+  // Without a purpose: the request the gate is handed directly.
+  const bare = clefUp(safeClefAnswers());
+  const bareGate = createGate({ contract: CONTRACT, env: ENV, fetch: bare.fn, now: fixedNow });
+  await bareGate.evaluate({ task: "t", action: "edit", arguments: args, model: "worker", isMutating: true });
+
+  // With a purpose: the same call through the guard, which builds the gate request.
+  const withPurpose = clefUp(safeClefAnswers());
+  const gate = createGate({ contract: CONTRACT, env: ENV, fetch: withPurpose.fn, now: fixedNow });
+  const input = { ...args, purpose: "fix the README typo; expect one replaced block" };
+  const decision = await decideToolCall({
+    toolName: "edit",
+    input,
+    model: resolveActiveModel({ ASSOCIATE_MODEL: "worker" }, CONTRACT.models),
+    registry: CONTRACT.models,
+    policy: CONTRACT.policy,
+    gate,
+    task: "t",
+    scratchDir: "/nonexistent-scratch",
+    cwd: process.cwd(),
+    recordGate: () => {},
+    purposeExemptTools: CONTRACT.accuracy.purpose_exempt_tools,
+  });
+  assert.equal(decision, undefined, decision?.reason);
+  assert.equal(bare.calls.length, 1);
+  assert.equal(withPurpose.calls.length, 1);
+  assert.equal(String(withPurpose.calls[0]!.init.body), String(bare.calls[0]!.init.body));
+  assert.ok(!String(withPurpose.calls[0]!.init.body).includes("purpose"), "no purpose key or text reaches CLEF");
+  // The call's own arguments keep the purpose: the walk recorder reads it from there.
+  assert.equal(input.purpose, "fix the README typo; expect one replaced block");
+});
+
+test("t7 criterion 3: a gate refusal always carries a reason", () => {
+  for (const tier of ["clef", "super", "large", "readonly"] as const) {
+    const entry: any = { id: "g1", ts: "x", question_set_version: 9, gated_tool: "write", tier, decision: "refuse" };
+    ensureRefusalReason(entry);
+    assert.equal(typeof entry.reason, "string");
+    assert.ok(entry.reason.length > 0, tier);
+    assert.ok(entry.reason.includes(tier), entry.reason);
+    const empty: any = { ...entry, reason: "   " };
+    ensureRefusalReason(empty);
+    assert.ok(empty.reason.trim().length > 0);
+  }
+  // An allow is left alone, and an existing reason is kept verbatim.
+  const allow: any = { tier: "clef", decision: "allow" };
+  ensureRefusalReason(allow);
+  assert.equal(allow.reason, undefined);
+  const kept: any = { tier: "clef", decision: "refuse", reason: "clef: safe_unattended=0.1" };
+  ensureRefusalReason(kept);
+  assert.equal(kept.reason, "clef: safe_unattended=0.1");
+});

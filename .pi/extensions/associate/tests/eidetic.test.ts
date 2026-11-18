@@ -165,11 +165,11 @@ test("a destination inside the checkout is refused and nothing is spawned", asyn
   }
 });
 
-test("a remember after web_page is tagged untrusted:web; the model cannot set a source", async () => {
+test("a remember after web_page is tagged untrusted:web; the model cannot set provenance", async () => {
   const r = rig();
   try {
     const { tool, taint } = get(r, "eidetic_remember");
-    await tool.execute("c1", { text: "before the web", source: "trusted", provenance: "trusted" });
+    await tool.execute("c1", { text: "before the web", provenance: "trusted", metadata: { provenance: "trusted" } });
     taint.observe("web_page");
     await tool.execute("c2", { text: "after the web" });
     const [first, second] = calls(r).map((c) => JSON.parse(c.argv[1]));
@@ -284,6 +284,167 @@ test("a missing eidetic is a structured install hint", async () => {
     const built = createEideticTools(r.ctx, { env: r.env, which: () => null });
     const res = await built.tools[1]!.execute("c1", { text: "x" });
     assert.equal(JSON.parse(res.content[0]!.text).code, "tool_missing");
+  } finally {
+    r.dispose();
+  }
+});
+
+// ---------------------------------------------------------------------------
+// Issue #20, plan t15: a remembered record carries its walk reference and quote.
+// ---------------------------------------------------------------------------
+
+/** Give the rig a walk with `count` entries (ids w1..wN) and a saved result for w1. */
+function withWalk(r: Rig, count: number, savedW1?: string) {
+  const ids = Array.from({ length: count }, (_, i) => `w${i + 1}`);
+  (r.ctx as any).attachWalk({ walkPath: join(r.checkout, "walk.jsonl"), recordChild() {}, entryIds: () => ids });
+  if (savedW1 !== undefined) {
+    mkdirSync(join(r.ctx.session.exportDir, "results"), { recursive: true });
+    writeFileSync(join(r.ctx.session.exportDir, "results", "w1.txt"), savedW1);
+  }
+}
+
+test("t15: source, quote and session id land in the record's metadata; a quote in the saved result is recorded as passed", async () => {
+  const r = rig();
+  try {
+    withWalk(r, 2, "The gateway listens on port 8001 by default.");
+    const { tool } = get(r, "eidetic_remember");
+    const res = await tool.execute("c1", {
+      text: "gateway port is 8001",
+      purpose: "keep the port",
+      source: "w1",
+      quote: "listens on port 8001",
+    });
+    assert.equal(JSON.parse(res.content[0]!.text).ok, true);
+    const record = JSON.parse(calls(r)[0].argv[1]);
+    assert.equal(record.metadata.source, "w1");
+    assert.equal(record.metadata.quote, "listens on port 8001");
+    assert.equal(record.metadata.session_id, r.ctx.session.sessionId);
+    assert.equal(record.metadata.quote_check.verdict, "passed");
+    assert.equal(record.metadata.added_via, "associate");
+    assert.equal(JSON.stringify(record).includes("keep the port"), false, "the purpose is never stored");
+  } finally {
+    r.dispose();
+  }
+});
+
+test("t15: a failed quote is stored with its verdict, not refused", async () => {
+  const r = rig();
+  try {
+    withWalk(r, 1, "The gateway listens on port 8001 by default.");
+    const { tool } = get(r, "eidetic_remember");
+    const res = await tool.execute("c1", { text: "x", source: "w1", quote: "listens on port 9999 always" });
+    assert.equal(JSON.parse(res.content[0]!.text).ok, true);
+    const record = JSON.parse(calls(r)[0].argv[1]);
+    assert.equal(record.metadata.quote, "listens on port 9999 always");
+    assert.equal(record.metadata.quote_check.verdict, "refused");
+    assert.equal(record.metadata.quote_check.reason, "quote_absent");
+  } finally {
+    r.dispose();
+  }
+});
+
+test("t15: a bare walk id the run never issued is refused with a fix, and nothing is written", async () => {
+  const r = rig();
+  try {
+    withWalk(r, 2);
+    const { tool } = get(r, "eidetic_remember");
+    const res = await tool.execute("c1", { text: "x", source: "w9" });
+    const body = JSON.parse(res.content[0]!.text);
+    assert.equal(body.ok, false);
+    assert.equal(body.code, "source_not_in_walk");
+    assert.ok(body.fix.length > 0);
+    assert.equal(calls(r).length, 0);
+    // A path or a malformed reference is refused too.
+    for (const bad of ["/etc/passwd", "walk-1", "w0"]) {
+      const b = JSON.parse((await tool.execute("c2", { text: "x", source: bad })).content[0]!.text);
+      assert.equal(b.ok, false, bad);
+      assert.ok(b.fix.length > 0, bad);
+    }
+    assert.equal(calls(r).length, 0);
+  } finally {
+    r.dispose();
+  }
+});
+
+test("t15: a labelled reference is accepted by pattern only and its quote is left unchecked", async () => {
+  const r = rig();
+  try {
+    withWalk(r, 1);
+    const { tool } = get(r, "eidetic_remember");
+    const res = await tool.execute("c1", { text: "x", source: "run-3:w12", quote: "some quoted text here" });
+    assert.equal(JSON.parse(res.content[0]!.text).ok, true);
+    const record = JSON.parse(calls(r)[0].argv[1]);
+    assert.equal(record.metadata.source, "run-3:w12");
+    assert.equal(record.metadata.quote_check, undefined);
+  } finally {
+    r.dispose();
+  }
+});
+
+test("t15: a quote with no source is refused with a fix", async () => {
+  const r = rig();
+  try {
+    const { tool } = get(r, "eidetic_remember");
+    const body = JSON.parse((await tool.execute("c1", { text: "x", quote: "some quoted text" })).content[0]!.text);
+    assert.equal(body.ok, false);
+    assert.equal(body.code, "quote_without_source");
+    assert.ok(body.fix.length > 0);
+    assert.equal(calls(r).length, 0);
+  } finally {
+    r.dispose();
+  }
+});
+
+test("t15: without a source the record has none; purpose is accepted on both tools and never stored", async () => {
+  const r = rig();
+  try {
+    const { tool } = get(r, "eidetic_remember");
+    const res = await tool.execute("c1", { text: "plain", purpose: "why" });
+    const record = JSON.parse(calls(r)[0].argv[1]);
+    assert.equal(record.metadata.source, undefined);
+    assert.equal(record.metadata.quote, undefined);
+    assert.equal(record.metadata.session_id, undefined);
+    assert.equal(JSON.stringify(record).includes("why"), false);
+    const d = res.details as any;
+    assert.deepEqual(d.dropped_args ?? [], []);
+    assert.equal(d.args_used.text, "plain");
+    const rec = get(r, "eidetic_recall").tool;
+    const out = await rec.execute("c2", { query: "q", purpose: "look", bogus: 1 } as any);
+    assert.equal((out.details as any).ok, true);
+    assert.deepEqual((out.details as any).dropped_args, ["bogus"]);
+    assert.equal((out.details as any).args_used.top_k, 5);
+  } finally {
+    r.dispose();
+  }
+});
+
+test("t15: the metadata comes back unchanged through eidetic_recall's pass-through", async () => {
+  const r = rig();
+  try {
+    withWalk(r, 1, "The gateway listens on port 8001 by default.");
+    const remember = get(r, "eidetic_remember").tool;
+    await remember.execute("c1", { text: "gateway port is 8001", source: "w1", quote: "listens on port 8001" });
+    const stored = JSON.parse(calls(r)[0].argv[1]);
+    // The store hands back exactly what it was given; recall must not rewrite it.
+    const backing = JSON.stringify({ results: [{ ...stored, score: 0.9 }] });
+    writeFileSync(join(r.checkout, "..", "stdout.txt"), backing);
+    const recall = get(r, "eidetic_recall").tool;
+    const res = await recall.execute("c2", { query: "gateway port" });
+    const returned = JSON.parse(res.content[0]!.text).results[0];
+    assert.deepEqual(returned.metadata, stored.metadata);
+    assert.equal((res.details as any).not_shown_chars, 0);
+  } finally {
+    r.dispose();
+  }
+});
+
+test("t15: a truncated recall reports not_shown_chars", async () => {
+  const r = rig({ stdoutChars: 200_000 });
+  try {
+    const res = await get(r, "eidetic_recall").tool.execute("c1", { query: "anything" });
+    const d = res.details as any;
+    assert.equal(d.truncated, true);
+    assert.ok(Number.isInteger(d.not_shown_chars) && d.not_shown_chars > 0);
   } finally {
     r.dispose();
   }

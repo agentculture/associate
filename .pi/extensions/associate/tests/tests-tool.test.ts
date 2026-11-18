@@ -201,7 +201,8 @@ test("the model can never supply argv, flags or extra arguments", async () => {
       assert.equal(out.code, "invalid_args");
     }
     const schema = t.parameters as { properties: Record<string, unknown> };
-    assert.deepEqual(Object.keys(schema.properties), ["command"]);
+    // `purpose` is the harness's argument: it is recorded and changes nothing.
+    assert.deepEqual(Object.keys(schema.properties), ["command", "purpose"]);
   } finally {
     r.dispose();
   }

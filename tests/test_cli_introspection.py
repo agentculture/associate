@@ -101,6 +101,31 @@ def test_explain_run_mentions_turn_fields(capsys: pytest.CaptureFixture[str]) ->
     assert "lane_error" in out
 
 
+def test_explain_run_documents_the_accuracy_fields_and_exit_3(
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    """`associate explain run` documents the hand-back result fields and exit code 3."""
+    rc = main(["explain", "run"])
+    assert rc == 0
+    out = capsys.readouterr().out
+    for needle in (
+        "answer",
+        "answer_path",
+        "handback_outcome",
+        "refused_after_rounds",
+        "refused_unresolved",
+        "python_recheck_ran",
+        "python_recheck_verdict",
+        "unchecked_text",
+        "--check-mode",
+        "check_mode",
+        "ASSOCIATE_CHECK_MODE",
+        "Exit codes",
+        "`3`",
+    ):
+        assert needle in out, needle
+
+
 def test_doctor_recognizes_declared_backend(capsys: pytest.CaptureFixture[str]) -> None:
     """The repo's own declared backend must be a known one — doctor stays healthy.
 

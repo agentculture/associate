@@ -78,6 +78,7 @@ def test_stub_runs_end_to_end_and_writes_valid_artifacts(tmp_path):
     lines = walk_path.read_text(encoding="utf-8").splitlines()
     entries = [json.loads(line) for line in lines]
     run_record = entries.pop()["run"]
+    assert entries.pop(0) == {"format": {"name": "associate-walk", "version": 2}}
 
     entry_schema = contract.walk_entry_schema()
     for entry in entries:
@@ -144,6 +145,7 @@ def test_stub_replays_a_caller_supplied_script(tmp_path):
 
     entries = [json.loads(line) for line in Path(result["walk_path"]).read_text().splitlines()]
     run_record = entries.pop()["run"]
+    entries.pop(0)  # the format marker
     assert [e["tool"] for e in entries] == ["shell", "read"]
     assert entries[1]["truncated"] is True
     assert run_record["truncated"] is True

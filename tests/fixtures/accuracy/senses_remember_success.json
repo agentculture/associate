@@ -1,0 +1,13 @@
+{
+  "_origin": "REBUILT FROM A NOTE, NOT A RECORDED WALK. Run A2 of the t20 live acceptance (model senses) has no recorded walk; the only record is docs/notes/t20-live-acceptance.md, finding 3: 'In A2 it reported \"Eidetic remember: Success\", but its walk has no `eidetic_remember` call.' This fixture is the smallest walk that fits that sentence: a recall and a read, no eidetic_remember. The entry contents are invented placeholders, not text the run saw; only the claim text and the absence of an eidetic_remember call come from the note.",
+  "kind": "rebuilt-from-note",
+  "entries": [
+    {"id": "w1", "tool": "eidetic_recall", "args": {"query": "gate thresholds"}, "result": {"content": "{\"query\": \"gate thresholds\", \"items\": []}"}},
+    {"id": "w2", "tool": "read", "args": {"path": "/checkout/associate/contract/gate.json"}, "result": {"content": "1\t{\n2\t  \"version\": 9\n3\t}"}}
+  ],
+  "claim": "Eidetic remember: Success",
+  "facts": [
+    {"id": "f1", "value": "Eidetic remember: Success", "source": "w1", "quote": "\"query\": \"gate thresholds\"", "action": true, "tool": "eidetic_remember"},
+    {"id": "f2", "value": "Eidetic remember: Success", "source": "w3", "quote": "Eidetic remember: Success", "action": true, "tool": "eidetic_remember"}
+  ]
+}

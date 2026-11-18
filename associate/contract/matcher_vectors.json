@@ -1,0 +1,2818 @@
+{
+  "$comment": "Shared test vectors for the quote matcher (issue #20, t5). The Python matcher (associate/accuracy/matcher.py) and the TypeScript matcher (.pi/extensions/associate/lib/matcher.ts) must return the same verdict, reason and nearest span on every case. Both test suites read this one file.",
+  "version": 1,
+  "normalisation": "Each line of the saved text and of the quote loses a leading '<digits><tab>' read line stamp; then every run of space, tab, newline, carriage return, form feed and vertical tab becomes one space and the ends are trimmed. Case and punctuation are never changed. Lengths and offsets count Unicode code points.",
+  "nearest_span": "Only on a refusal for a quote absent from the saved text. Let q be the normalised quote and t the normalised saved text. matched is the largest k such that the first k code points of q occur in t (0 when none does). offset is the lowest position in t where that k-prefix occurs (0 when matched is 0). text is the window of t that starts at offset and is as long as q, clipped at the end of t.",
+  "verdicts": ["passed", "refused", "unchecked"],
+  "reasons": ["quote_short", "quote_absent", "literal_not_in_quote", "no_saved_text"],
+  "cases": [
+    {
+      "name": "exact match",
+      "min_quote_length": 8,
+      "quote": "brown fox jumps",
+      "literal": null,
+      "saved_text": "The quick brown fox jumps over the lazy dog",
+      "expect": { "verdict": "passed", "reason": null, "nearest": null }
+    },
+    {
+      "name": "whitespace differences",
+      "min_quote_length": 8,
+      "quote": "alpha beta gamma delta",
+      "literal": null,
+      "saved_text": "alpha   beta\n\ngamma\tdelta",
+      "expect": { "verdict": "passed", "reason": null, "nearest": null }
+    },
+    {
+      "name": "read line stamps in the saved text",
+      "min_quote_length": 8,
+      "quote": "import sys def main():",
+      "literal": null,
+      "saved_text": "12\timport os\n13\timport sys\n14\t\n15\tdef main():",
+      "expect": { "verdict": "passed", "reason": null, "nearest": null }
+    },
+    {
+      "name": "read line stamps in the quote",
+      "min_quote_length": 8,
+      "quote": "13\timport sys\n15\tdef main():",
+      "literal": null,
+      "saved_text": "12\timport os\n13\timport sys\n14\t\n15\tdef main():",
+      "expect": { "verdict": "passed", "reason": null, "nearest": null }
+    },
+    {
+      "name": "a stamp-like pair inside a line is kept",
+      "min_quote_length": 8,
+      "quote": "value 12 of it",
+      "literal": null,
+      "saved_text": "x\n7\tvalue 12\tof it",
+      "expect": { "verdict": "passed", "reason": null, "nearest": null }
+    },
+    {
+      "name": "quote absent with a partial prefix",
+      "min_quote_length": 8,
+      "quote": "brown fox leaps",
+      "literal": null,
+      "saved_text": "The quick brown fox jumps over the lazy dog",
+      "expect": {
+        "verdict": "refused",
+        "reason": "quote_absent",
+        "nearest": { "offset": 10, "matched": 10, "text": "brown fox jumps" }
+      }
+    },
+    {
+      "name": "case is not normalised",
+      "min_quote_length": 8,
+      "quote": "BROWN FOX JUMPS",
+      "literal": null,
+      "saved_text": "The quick brown fox jumps over the lazy dog",
+      "expect": {
+        "verdict": "refused",
+        "reason": "quote_absent",
+        "nearest": { "offset": 0, "matched": 0, "text": "The quick brown" }
+      }
+    },
+    {
+      "name": "punctuation is not normalised, window clipped at the end",
+      "min_quote_length": 8,
+      "quote": "lazy dog.",
+      "literal": null,
+      "saved_text": "the lazy dog",
+      "expect": {
+        "verdict": "refused",
+        "reason": "quote_absent",
+        "nearest": { "offset": 4, "matched": 8, "text": "lazy dog" }
+      }
+    },
+    {
+      "name": "ties go to the lowest offset",
+      "min_quote_length": 8,
+      "quote": "abcdefgh zz",
+      "literal": null,
+      "saved_text": "abcdefgh xx abcdefgh yy",
+      "expect": {
+        "verdict": "refused",
+        "reason": "quote_absent",
+        "nearest": { "offset": 0, "matched": 9, "text": "abcdefgh xx" }
+      }
+    },
+    {
+      "name": "offsets count code points, not UTF-16 units",
+      "min_quote_length": 8,
+      "quote": "😀 emoji tesT",
+      "literal": null,
+      "saved_text": "naïve 😀 emoji test line",
+      "expect": {
+        "verdict": "refused",
+        "reason": "quote_absent",
+        "nearest": { "offset": 6, "matched": 11, "text": "😀 emoji test" }
+      }
+    },
+    {
+      "name": "empty saved text",
+      "min_quote_length": 8,
+      "quote": "anything long enough",
+      "literal": null,
+      "saved_text": "",
+      "expect": {
+        "verdict": "refused",
+        "reason": "quote_absent",
+        "nearest": { "offset": 0, "matched": 0, "text": "" }
+      }
+    },
+    {
+      "name": "quote shorter than the minimum",
+      "min_quote_length": 8,
+      "quote": "fox",
+      "literal": null,
+      "saved_text": "The quick brown fox jumps over the lazy dog",
+      "expect": { "verdict": "refused", "reason": "quote_short", "nearest": null }
+    },
+    {
+      "name": "length is measured after normalisation",
+      "min_quote_length": 8,
+      "quote": "ab    cd",
+      "literal": null,
+      "saved_text": "ab cd",
+      "expect": { "verdict": "refused", "reason": "quote_short", "nearest": null }
+    },
+    {
+      "name": "quote exactly at the minimum passes",
+      "min_quote_length": 8,
+      "quote": "lazy dog",
+      "literal": null,
+      "saved_text": "the lazy dog",
+      "expect": { "verdict": "passed", "reason": null, "nearest": null }
+    },
+    {
+      "name": "minimum comes from the argument",
+      "min_quote_length": 3,
+      "quote": "fox",
+      "literal": null,
+      "saved_text": "The quick brown fox jumps over the lazy dog",
+      "expect": { "verdict": "passed", "reason": null, "nearest": null }
+    },
+    {
+      "name": "literal present in the quote",
+      "min_quote_length": 8,
+      "quote": "timeout_ms is 600000 here",
+      "literal": "600000",
+      "saved_text": "note: timeout_ms is 600000 here, per policy",
+      "expect": { "verdict": "passed", "reason": null, "nearest": null }
+    },
+    {
+      "name": "literal missing from its quote",
+      "min_quote_length": 8,
+      "quote": "the answer is forty two",
+      "literal": "42",
+      "saved_text": "so the answer is forty two, as stated",
+      "expect": { "verdict": "refused", "reason": "literal_not_in_quote", "nearest": null }
+    },
+    {
+      "name": "literal comparison is case sensitive",
+      "min_quote_length": 8,
+      "quote": "status is OK today",
+      "literal": "ok",
+      "saved_text": "status is OK today",
+      "expect": { "verdict": "refused", "reason": "literal_not_in_quote", "nearest": null }
+    },
+    {
+      "name": "source with no saved text",
+      "min_quote_length": 8,
+      "quote": "brown fox jumps",
+      "literal": null,
+      "saved_text": null,
+      "expect": { "verdict": "unchecked", "reason": "no_saved_text", "nearest": null }
+    },
+    {
+      "name": "no saved text is unchecked even for a short quote",
+      "min_quote_length": 8,
+      "quote": "fox",
+      "literal": "fox",
+      "saved_text": null,
+      "expect": { "verdict": "unchecked", "reason": "no_saved_text", "nearest": null }
+    },
+    {
+      "name": "an empty quote is refused at the contract minimum",
+      "min_quote_length": 8,
+      "quote": "",
+      "literal": null,
+      "saved_text": "The quick brown fox",
+      "expect": {
+        "verdict": "refused",
+        "reason": "quote_short",
+        "nearest": null
+      }
+    },
+    {
+      "name": "an empty quote is refused even when the minimum is zero",
+      "min_quote_length": 0,
+      "quote": "",
+      "literal": null,
+      "saved_text": "The quick brown fox",
+      "expect": {
+        "verdict": "refused",
+        "reason": "quote_short",
+        "nearest": null
+      }
+    },
+    {
+      "name": "a quote of only whitespace and line stamps is empty and refused",
+      "min_quote_length": 0,
+      "quote": " \t\n12\t \n",
+      "literal": null,
+      "saved_text": "The quick brown fox",
+      "expect": {
+        "verdict": "refused",
+        "reason": "quote_short",
+        "nearest": null
+      }
+    }
+  ],
+  "handback_comment": "Whole-hand-back cases for the hand-back checker (issue #20, t10): checkHandback in .pi/extensions/associate/lib/facts.ts and the Python checker must return the same accepted flag, per-fact verdicts (id, run, verdict, reason, check, nearest, source_kind, first_hand), per-verdict and per-open-item outcomes (id, outcome, reason, check) and the same report. results maps a walk id to its saved result text; prior_runs maps a run label to that run's entries and results; children are child runs with their own label and payload. Fix texts are not compared.",
+  "handback_cases": [
+    {
+      "name": "one refused fact leaves the others untouched",
+      "input": {
+        "payload": {
+          "facts": [
+            {"id": "f1", "value": "quick brown fox", "source": "w1", "quote": "quick brown fox jumps"},
+            {"id": "f2", "value": "leaps", "source": "w1", "quote": "brown fox leaps"},
+            {"id": "f3", "value": "grep hit", "source": "w8", "quote": "some grep output"},
+            {"id": "f4", "value": "lazy", "source": "w1", "quote": "over the lazy dog"},
+            {"id": "f5", "value": "cat", "source": "w1", "quote": "over the lazy dog"},
+            {"id": "f6", "value": "first part", "source": "w9", "quote": "the first part of a long file"}
+          ]
+        },
+        "entries": [
+          {
+            "id": "w1",
+            "ts": "2026-11-17T10:00:00Z",
+            "tool": "read",
+            "args": {},
+            "result": {},
+            "truncated": false,
+            "source_kind": "file",
+            "saved_result": "results/w1.txt"
+          },
+          {
+            "id": "w2",
+            "ts": "2026-11-17T10:00:00Z",
+            "tool": "eidetic_recall",
+            "args": {},
+            "result": {},
+            "truncated": false,
+            "source_kind": "memory",
+            "saved_result": "results/w2.txt"
+          },
+          {
+            "id": "w3",
+            "ts": "2026-11-17T10:00:00Z",
+            "tool": "spawn_subagent",
+            "args": {},
+            "result": {},
+            "truncated": false,
+            "source_kind": "agent",
+            "saved_result": "results/w3.txt"
+          },
+          {
+            "id": "w4",
+            "ts": "2026-11-17T10:00:00Z",
+            "tool": "delegate_status",
+            "args": {},
+            "result": {},
+            "truncated": false,
+            "source_kind": "agent",
+            "saved_result": "results/w4.txt"
+          },
+          {
+            "id": "w5",
+            "ts": "2026-11-17T10:00:00Z",
+            "tool": "eidetic_remember",
+            "args": {},
+            "result": {},
+            "truncated": false,
+            "source_kind": "memory",
+            "partial": true,
+            "error": "refused: the safety gate refused this call"
+          },
+          {
+            "id": "w6",
+            "ts": "2026-11-17T10:00:00Z",
+            "tool": "ledger_append",
+            "args": {},
+            "result": {},
+            "truncated": false,
+            "source_kind": "tool",
+            "saved_result": "results/w6.txt"
+          },
+          {
+            "id": "w7",
+            "ts": "2026-11-17T10:00:00Z",
+            "tool": "eidetic_remember",
+            "args": {},
+            "result": {},
+            "truncated": false,
+            "source_kind": "memory",
+            "saved_result": "results/w7.txt"
+          },
+          {"id": "w8", "ts": "2026-11-17T10:00:00Z", "tool": "grep", "args": {}, "result": {}, "truncated": false, "source_kind": "tool", "partial": true},
+          {
+            "id": "w9",
+            "ts": "2026-11-17T10:00:00Z",
+            "tool": "read",
+            "args": {},
+            "result": {},
+            "truncated": false,
+            "source_kind": "file",
+            "saved_result": "results/w9.txt",
+            "partial": true
+          }
+        ],
+        "results": {
+          "w1": "The quick brown fox jumps over the lazy dog",
+          "w2": "memory: safe_unattended threshold is 0.5 for every model",
+          "w3": "{\"ok\":true,\"reply\":\"child says: the gate threshold is 0.5 in gate.json\"}",
+          "w4": "{\"ok\":true,\"run_id\":\"dlg-1\",\"state\":\"finished\",\"result\":{\"outcome\":\"ok\",\"merge\":\"merged\",\"merge_reason\":\"clean run, tests passed\",\"final_reply\":\"I changed walk.ts and every test passed\"}}",
+          "w6": "{\"ok\":false,\"code\":\"tool_missing\",\"message\":\"ledger is not installed\"}",
+          "w7": "{\"ok\":true,\"stored\":\"mem-1\",\"scope\":\"associate\"}",
+          "w9": "the first part of a long file that was cut"
+        }
+      },
+      "expect": {
+        "accepted": false,
+        "facts": [
+          {"id": "f1", "run": null, "verdict": "passed", "reason": null, "check": null, "nearest": null, "source_kind": "file", "first_hand": true},
+          {
+            "id": "f2",
+            "run": null,
+            "verdict": "refused",
+            "reason": "quote_absent",
+            "check": "quote_not_in_result",
+            "nearest": {"offset": 10, "matched": 10, "text": "brown fox jumps"},
+            "source_kind": "file",
+            "first_hand": true
+          },
+          {
+            "id": "f3",
+            "run": null,
+            "verdict": "unchecked",
+            "reason": "no_saved_text",
+            "check": null,
+            "nearest": null,
+            "source_kind": "tool",
+            "first_hand": true
+          },
+          {"id": "f4", "run": null, "verdict": "passed", "reason": null, "check": null, "nearest": null, "source_kind": "file", "first_hand": true},
+          {
+            "id": "f5",
+            "run": null,
+            "verdict": "refused",
+            "reason": "literal_not_in_quote",
+            "check": "literal_outside_quote",
+            "nearest": null,
+            "source_kind": "file",
+            "first_hand": true
+          },
+          {
+            "id": "f6",
+            "run": null,
+            "verdict": "unchecked",
+            "reason": "partial_result",
+            "check": null,
+            "nearest": null,
+            "source_kind": "file",
+            "first_hand": true
+          }
+        ],
+        "verdicts": [],
+        "open_items": [],
+        "report": {
+          "facts": {"made": 6, "checked": 4, "passed": 2, "refused": 2, "unchecked": 2},
+          "conclusions": {"made": 0, "supported": 0, "refuted": 0, "open": 0},
+          "statements": {"made": 0, "without_fact": 0},
+          "by_source_kind": {
+            "file": {"made": 5, "checked": 4, "passed": 2, "refused": 2, "unchecked": 1},
+            "tool": {"made": 1, "checked": 0, "passed": 0, "refused": 0, "unchecked": 1},
+            "web": {"made": 0, "checked": 0, "passed": 0, "refused": 0, "unchecked": 0},
+            "memory": {"made": 0, "checked": 0, "passed": 0, "refused": 0, "unchecked": 0},
+            "agent": {"made": 0, "checked": 0, "passed": 0, "refused": 0, "unchecked": 0},
+            "harness": {"made": 0, "checked": 0, "passed": 0, "refused": 0, "unchecked": 0}
+          },
+          "flags": [
+            {"check": "quote_not_in_result", "detail": "f2: quote_absent", "ref": "w1"},
+            {"check": "literal_outside_quote", "detail": "f5: literal_not_in_quote", "ref": "w1"}
+          ],
+          "python_recheck_ran": false,
+          "children": []
+        }
+      }
+    },
+    {
+      "name": "an action fact needs a successful call of that tool (t20 A2: Eidetic remember: Success)",
+      "input": {
+        "payload": {
+          "facts": [
+            {
+              "id": "f1",
+              "value": "Eidetic remember: Success",
+              "source": "w2",
+              "quote": "safe_unattended threshold is 0.5",
+              "action": true,
+              "tool": "eidetic_remember"
+            },
+            {
+              "id": "f2",
+              "value": "Eidetic remember: Success",
+              "source": "w12",
+              "quote": "Eidetic remember: Success",
+              "action": true,
+              "tool": "eidetic_remember"
+            },
+            {"id": "f3", "value": "record stored", "source": "w7", "quote": "\"stored\":\"mem-1\"", "action": true, "tool": "eidetic_remember"},
+            {"id": "f4", "value": "record stored", "source": "w5", "quote": "the safety gate refused", "action": true, "tool": "eidetic_remember"},
+            {"id": "f5", "value": "ledger entry appended", "source": "w6", "quote": "ledger is not installed", "action": true, "tool": "ledger_append"},
+            {"id": "f6", "value": "record stored", "source": "w7", "quote": "\"stored\":\"mem-1\"", "action": true}
+          ]
+        },
+        "entries": [
+          {
+            "id": "w1",
+            "ts": "2026-11-17T10:00:00Z",
+            "tool": "read",
+            "args": {},
+            "result": {},
+            "truncated": false,
+            "source_kind": "file",
+            "saved_result": "results/w1.txt"
+          },
+          {
+            "id": "w2",
+            "ts": "2026-11-17T10:00:00Z",
+            "tool": "eidetic_recall",
+            "args": {},
+            "result": {},
+            "truncated": false,
+            "source_kind": "memory",
+            "saved_result": "results/w2.txt"
+          },
+          {
+            "id": "w3",
+            "ts": "2026-11-17T10:00:00Z",
+            "tool": "spawn_subagent",
+            "args": {},
+            "result": {},
+            "truncated": false,
+            "source_kind": "agent",
+            "saved_result": "results/w3.txt"
+          },
+          {
+            "id": "w4",
+            "ts": "2026-11-17T10:00:00Z",
+            "tool": "delegate_status",
+            "args": {},
+            "result": {},
+            "truncated": false,
+            "source_kind": "agent",
+            "saved_result": "results/w4.txt"
+          },
+          {
+            "id": "w5",
+            "ts": "2026-11-17T10:00:00Z",
+            "tool": "eidetic_remember",
+            "args": {},
+            "result": {},
+            "truncated": false,
+            "source_kind": "memory",
+            "partial": true,
+            "error": "refused: the safety gate refused this call"
+          },
+          {
+            "id": "w6",
+            "ts": "2026-11-17T10:00:00Z",
+            "tool": "ledger_append",
+            "args": {},
+            "result": {},
+            "truncated": false,
+            "source_kind": "tool",
+            "saved_result": "results/w6.txt"
+          },
+          {
+            "id": "w7",
+            "ts": "2026-11-17T10:00:00Z",
+            "tool": "eidetic_remember",
+            "args": {},
+            "result": {},
+            "truncated": false,
+            "source_kind": "memory",
+            "saved_result": "results/w7.txt"
+          },
+          {"id": "w8", "ts": "2026-11-17T10:00:00Z", "tool": "grep", "args": {}, "result": {}, "truncated": false, "source_kind": "tool", "partial": true},
+          {
+            "id": "w9",
+            "ts": "2026-11-17T10:00:00Z",
+            "tool": "read",
+            "args": {},
+            "result": {},
+            "truncated": false,
+            "source_kind": "file",
+            "saved_result": "results/w9.txt",
+            "partial": true
+          }
+        ],
+        "results": {
+          "w1": "The quick brown fox jumps over the lazy dog",
+          "w2": "memory: safe_unattended threshold is 0.5 for every model",
+          "w3": "{\"ok\":true,\"reply\":\"child says: the gate threshold is 0.5 in gate.json\"}",
+          "w4": "{\"ok\":true,\"run_id\":\"dlg-1\",\"state\":\"finished\",\"result\":{\"outcome\":\"ok\",\"merge\":\"merged\",\"merge_reason\":\"clean run, tests passed\",\"final_reply\":\"I changed walk.ts and every test passed\"}}",
+          "w6": "{\"ok\":false,\"code\":\"tool_missing\",\"message\":\"ledger is not installed\"}",
+          "w7": "{\"ok\":true,\"stored\":\"mem-1\",\"scope\":\"associate\"}",
+          "w9": "the first part of a long file that was cut"
+        }
+      },
+      "expect": {
+        "accepted": false,
+        "facts": [
+          {
+            "id": "f1",
+            "run": null,
+            "verdict": "refused",
+            "reason": "action_wrong_tool",
+            "check": "action_without_call",
+            "nearest": null,
+            "source_kind": "memory",
+            "first_hand": false
+          },
+          {
+            "id": "f2",
+            "run": null,
+            "verdict": "refused",
+            "reason": "source_unknown",
+            "check": "unknown_source",
+            "nearest": null,
+            "source_kind": null,
+            "first_hand": null
+          },
+          {"id": "f3", "run": null, "verdict": "passed", "reason": null, "check": null, "nearest": null, "source_kind": "memory", "first_hand": false},
+          {
+            "id": "f4",
+            "run": null,
+            "verdict": "refused",
+            "reason": "action_failed",
+            "check": "action_without_call",
+            "nearest": null,
+            "source_kind": "memory",
+            "first_hand": false
+          },
+          {
+            "id": "f5",
+            "run": null,
+            "verdict": "refused",
+            "reason": "action_failed",
+            "check": "action_without_call",
+            "nearest": null,
+            "source_kind": "tool",
+            "first_hand": true
+          },
+          {
+            "id": "f6",
+            "run": null,
+            "verdict": "refused",
+            "reason": "action_tool_missing",
+            "check": "action_without_call",
+            "nearest": null,
+            "source_kind": "memory",
+            "first_hand": false
+          }
+        ],
+        "verdicts": [],
+        "open_items": [],
+        "report": {
+          "facts": {"made": 6, "checked": 6, "passed": 1, "refused": 5, "unchecked": 0},
+          "conclusions": {"made": 0, "supported": 0, "refuted": 0, "open": 0},
+          "statements": {"made": 0, "without_fact": 0},
+          "by_source_kind": {
+            "file": {"made": 0, "checked": 0, "passed": 0, "refused": 0, "unchecked": 0},
+            "tool": {"made": 1, "checked": 1, "passed": 0, "refused": 1, "unchecked": 0},
+            "web": {"made": 0, "checked": 0, "passed": 0, "refused": 0, "unchecked": 0},
+            "memory": {"made": 4, "checked": 4, "passed": 1, "refused": 3, "unchecked": 0},
+            "agent": {"made": 0, "checked": 0, "passed": 0, "refused": 0, "unchecked": 0},
+            "harness": {"made": 0, "checked": 0, "passed": 0, "refused": 0, "unchecked": 0}
+          },
+          "flags": [
+            {"check": "action_without_call", "detail": "f1: action_wrong_tool", "ref": "w2"},
+            {"check": "unknown_source", "detail": "f2: source_unknown", "ref": "w12"},
+            {"check": "action_without_call", "detail": "f4: action_failed", "ref": "w5"},
+            {"check": "action_without_call", "detail": "f5: action_failed", "ref": "w6"},
+            {"check": "action_without_call", "detail": "f6: action_tool_missing", "ref": "w7"}
+          ],
+          "python_recheck_ran": false,
+          "children": []
+        }
+      }
+    },
+    {
+      "name": "a closing conclusion resting only on memory and agent entries is refused",
+      "input": {
+        "payload": {
+          "facts": [
+            {"id": "f1", "value": "0.5", "source": "w2", "quote": "safe_unattended threshold is 0.5"},
+            {"id": "f2", "value": "0.5", "source": "w3", "quote": "the gate threshold is 0.5 in gate.json"},
+            {"id": "f3", "value": "walk.ts", "source": "w4", "quote": "I changed walk.ts and every test passed"},
+            {"id": "f4", "value": "merged", "source": "w4", "quote": "\"merge\":\"merged\",\"merge_reason\":\"clean run, tests passed\""},
+            {"id": "f5", "value": "fox", "source": "w1", "quote": "quick brown fox jumps"}
+          ],
+          "verdicts": [
+            {"id": "v1", "text": "the threshold is 0.5", "verdict": "supported", "basis": ["f1", "f3"]},
+            {"id": "v2", "text": "the threshold is 0.5 everywhere", "verdict": "supported", "basis": ["f1", "f2", "f3"], "closing": true}
+          ]
+        },
+        "entries": [
+          {
+            "id": "w1",
+            "ts": "2026-11-17T10:00:00Z",
+            "tool": "read",
+            "args": {},
+            "result": {},
+            "truncated": false,
+            "source_kind": "file",
+            "saved_result": "results/w1.txt"
+          },
+          {
+            "id": "w2",
+            "ts": "2026-11-17T10:00:00Z",
+            "tool": "eidetic_recall",
+            "args": {},
+            "result": {},
+            "truncated": false,
+            "source_kind": "memory",
+            "saved_result": "results/w2.txt"
+          },
+          {
+            "id": "w3",
+            "ts": "2026-11-17T10:00:00Z",
+            "tool": "spawn_subagent",
+            "args": {},
+            "result": {},
+            "truncated": false,
+            "source_kind": "agent",
+            "saved_result": "results/w3.txt"
+          },
+          {
+            "id": "w4",
+            "ts": "2026-11-17T10:00:00Z",
+            "tool": "delegate_status",
+            "args": {},
+            "result": {},
+            "truncated": false,
+            "source_kind": "agent",
+            "saved_result": "results/w4.txt"
+          },
+          {
+            "id": "w5",
+            "ts": "2026-11-17T10:00:00Z",
+            "tool": "eidetic_remember",
+            "args": {},
+            "result": {},
+            "truncated": false,
+            "source_kind": "memory",
+            "partial": true,
+            "error": "refused: the safety gate refused this call"
+          },
+          {
+            "id": "w6",
+            "ts": "2026-11-17T10:00:00Z",
+            "tool": "ledger_append",
+            "args": {},
+            "result": {},
+            "truncated": false,
+            "source_kind": "tool",
+            "saved_result": "results/w6.txt"
+          },
+          {
+            "id": "w7",
+            "ts": "2026-11-17T10:00:00Z",
+            "tool": "eidetic_remember",
+            "args": {},
+            "result": {},
+            "truncated": false,
+            "source_kind": "memory",
+            "saved_result": "results/w7.txt"
+          },
+          {"id": "w8", "ts": "2026-11-17T10:00:00Z", "tool": "grep", "args": {}, "result": {}, "truncated": false, "source_kind": "tool", "partial": true},
+          {
+            "id": "w9",
+            "ts": "2026-11-17T10:00:00Z",
+            "tool": "read",
+            "args": {},
+            "result": {},
+            "truncated": false,
+            "source_kind": "file",
+            "saved_result": "results/w9.txt",
+            "partial": true
+          }
+        ],
+        "results": {
+          "w1": "The quick brown fox jumps over the lazy dog",
+          "w2": "memory: safe_unattended threshold is 0.5 for every model",
+          "w3": "{\"ok\":true,\"reply\":\"child says: the gate threshold is 0.5 in gate.json\"}",
+          "w4": "{\"ok\":true,\"run_id\":\"dlg-1\",\"state\":\"finished\",\"result\":{\"outcome\":\"ok\",\"merge\":\"merged\",\"merge_reason\":\"clean run, tests passed\",\"final_reply\":\"I changed walk.ts and every test passed\"}}",
+          "w6": "{\"ok\":false,\"code\":\"tool_missing\",\"message\":\"ledger is not installed\"}",
+          "w7": "{\"ok\":true,\"stored\":\"mem-1\",\"scope\":\"associate\"}",
+          "w9": "the first part of a long file that was cut"
+        }
+      },
+      "expect": {
+        "accepted": false,
+        "facts": [
+          {"id": "f1", "run": null, "verdict": "passed", "reason": null, "check": null, "nearest": null, "source_kind": "memory", "first_hand": false},
+          {"id": "f2", "run": null, "verdict": "passed", "reason": null, "check": null, "nearest": null, "source_kind": "agent", "first_hand": false},
+          {"id": "f3", "run": null, "verdict": "passed", "reason": null, "check": null, "nearest": null, "source_kind": "agent", "first_hand": false},
+          {"id": "f4", "run": null, "verdict": "passed", "reason": null, "check": null, "nearest": null, "source_kind": "agent", "first_hand": true},
+          {"id": "f5", "run": null, "verdict": "passed", "reason": null, "check": null, "nearest": null, "source_kind": "file", "first_hand": true}
+        ],
+        "verdicts": [
+          {"id": "v1", "outcome": "accepted", "reason": null, "check": null},
+          {"id": "v2", "outcome": "refused", "reason": "closing_second_hand", "check": "closing_conclusion_second_hand"}
+        ],
+        "open_items": [],
+        "report": {
+          "facts": {"made": 5, "checked": 5, "passed": 5, "refused": 0, "unchecked": 0},
+          "conclusions": {"made": 2, "supported": 2, "refuted": 0, "open": 0},
+          "statements": {"made": 2, "without_fact": 0},
+          "by_source_kind": {
+            "file": {"made": 1, "checked": 1, "passed": 1, "refused": 0, "unchecked": 0},
+            "tool": {"made": 0, "checked": 0, "passed": 0, "refused": 0, "unchecked": 0},
+            "web": {"made": 0, "checked": 0, "passed": 0, "refused": 0, "unchecked": 0},
+            "memory": {"made": 1, "checked": 1, "passed": 1, "refused": 0, "unchecked": 0},
+            "agent": {"made": 3, "checked": 3, "passed": 3, "refused": 0, "unchecked": 0},
+            "harness": {"made": 0, "checked": 0, "passed": 0, "refused": 0, "unchecked": 0}
+          },
+          "flags": [{"check": "closing_conclusion_second_hand", "detail": "v2: closing_second_hand"}],
+          "python_recheck_ran": false,
+          "children": []
+        }
+      }
+    },
+    {
+      "name": "delegate_status harness fields count as first-hand",
+      "input": {
+        "payload": {
+          "facts": [
+            {"id": "f1", "value": "0.5", "source": "w2", "quote": "safe_unattended threshold is 0.5"},
+            {"id": "f2", "value": "0.5", "source": "w3", "quote": "the gate threshold is 0.5 in gate.json"},
+            {"id": "f3", "value": "walk.ts", "source": "w4", "quote": "I changed walk.ts and every test passed"},
+            {"id": "f4", "value": "merged", "source": "w4", "quote": "\"merge\":\"merged\",\"merge_reason\":\"clean run, tests passed\""},
+            {"id": "f5", "value": "fox", "source": "w1", "quote": "quick brown fox jumps"}
+          ],
+          "verdicts": [{"id": "v1", "text": "the delegated run merged", "verdict": "supported", "basis": ["f4", "f2"], "closing": true}]
+        },
+        "entries": [
+          {
+            "id": "w1",
+            "ts": "2026-11-17T10:00:00Z",
+            "tool": "read",
+            "args": {},
+            "result": {},
+            "truncated": false,
+            "source_kind": "file",
+            "saved_result": "results/w1.txt"
+          },
+          {
+            "id": "w2",
+            "ts": "2026-11-17T10:00:00Z",
+            "tool": "eidetic_recall",
+            "args": {},
+            "result": {},
+            "truncated": false,
+            "source_kind": "memory",
+            "saved_result": "results/w2.txt"
+          },
+          {
+            "id": "w3",
+            "ts": "2026-11-17T10:00:00Z",
+            "tool": "spawn_subagent",
+            "args": {},
+            "result": {},
+            "truncated": false,
+            "source_kind": "agent",
+            "saved_result": "results/w3.txt"
+          },
+          {
+            "id": "w4",
+            "ts": "2026-11-17T10:00:00Z",
+            "tool": "delegate_status",
+            "args": {},
+            "result": {},
+            "truncated": false,
+            "source_kind": "agent",
+            "saved_result": "results/w4.txt"
+          },
+          {
+            "id": "w5",
+            "ts": "2026-11-17T10:00:00Z",
+            "tool": "eidetic_remember",
+            "args": {},
+            "result": {},
+            "truncated": false,
+            "source_kind": "memory",
+            "partial": true,
+            "error": "refused: the safety gate refused this call"
+          },
+          {
+            "id": "w6",
+            "ts": "2026-11-17T10:00:00Z",
+            "tool": "ledger_append",
+            "args": {},
+            "result": {},
+            "truncated": false,
+            "source_kind": "tool",
+            "saved_result": "results/w6.txt"
+          },
+          {
+            "id": "w7",
+            "ts": "2026-11-17T10:00:00Z",
+            "tool": "eidetic_remember",
+            "args": {},
+            "result": {},
+            "truncated": false,
+            "source_kind": "memory",
+            "saved_result": "results/w7.txt"
+          },
+          {"id": "w8", "ts": "2026-11-17T10:00:00Z", "tool": "grep", "args": {}, "result": {}, "truncated": false, "source_kind": "tool", "partial": true},
+          {
+            "id": "w9",
+            "ts": "2026-11-17T10:00:00Z",
+            "tool": "read",
+            "args": {},
+            "result": {},
+            "truncated": false,
+            "source_kind": "file",
+            "saved_result": "results/w9.txt",
+            "partial": true
+          }
+        ],
+        "results": {
+          "w1": "The quick brown fox jumps over the lazy dog",
+          "w2": "memory: safe_unattended threshold is 0.5 for every model",
+          "w3": "{\"ok\":true,\"reply\":\"child says: the gate threshold is 0.5 in gate.json\"}",
+          "w4": "{\"ok\":true,\"run_id\":\"dlg-1\",\"state\":\"finished\",\"result\":{\"outcome\":\"ok\",\"merge\":\"merged\",\"merge_reason\":\"clean run, tests passed\",\"final_reply\":\"I changed walk.ts and every test passed\"}}",
+          "w6": "{\"ok\":false,\"code\":\"tool_missing\",\"message\":\"ledger is not installed\"}",
+          "w7": "{\"ok\":true,\"stored\":\"mem-1\",\"scope\":\"associate\"}",
+          "w9": "the first part of a long file that was cut"
+        }
+      },
+      "expect": {
+        "accepted": true,
+        "facts": [
+          {"id": "f1", "run": null, "verdict": "passed", "reason": null, "check": null, "nearest": null, "source_kind": "memory", "first_hand": false},
+          {"id": "f2", "run": null, "verdict": "passed", "reason": null, "check": null, "nearest": null, "source_kind": "agent", "first_hand": false},
+          {"id": "f3", "run": null, "verdict": "passed", "reason": null, "check": null, "nearest": null, "source_kind": "agent", "first_hand": false},
+          {"id": "f4", "run": null, "verdict": "passed", "reason": null, "check": null, "nearest": null, "source_kind": "agent", "first_hand": true},
+          {"id": "f5", "run": null, "verdict": "passed", "reason": null, "check": null, "nearest": null, "source_kind": "file", "first_hand": true}
+        ],
+        "verdicts": [{"id": "v1", "outcome": "accepted", "reason": null, "check": null}],
+        "open_items": [],
+        "report": {
+          "facts": {"made": 5, "checked": 5, "passed": 5, "refused": 0, "unchecked": 0},
+          "conclusions": {"made": 1, "supported": 1, "refuted": 0, "open": 0},
+          "statements": {"made": 1, "without_fact": 0},
+          "by_source_kind": {
+            "file": {"made": 1, "checked": 1, "passed": 1, "refused": 0, "unchecked": 0},
+            "tool": {"made": 0, "checked": 0, "passed": 0, "refused": 0, "unchecked": 0},
+            "web": {"made": 0, "checked": 0, "passed": 0, "refused": 0, "unchecked": 0},
+            "memory": {"made": 1, "checked": 1, "passed": 1, "refused": 0, "unchecked": 0},
+            "agent": {"made": 3, "checked": 3, "passed": 3, "refused": 0, "unchecked": 0},
+            "harness": {"made": 0, "checked": 0, "passed": 0, "refused": 0, "unchecked": 0}
+          },
+          "flags": [],
+          "python_recheck_ran": false,
+          "children": []
+        }
+      }
+    },
+    {
+      "name": "a delegate_status final_reply alone does not close; the last verdict closes when none is marked",
+      "input": {
+        "payload": {
+          "facts": [
+            {"id": "f1", "value": "0.5", "source": "w2", "quote": "safe_unattended threshold is 0.5"},
+            {"id": "f2", "value": "0.5", "source": "w3", "quote": "the gate threshold is 0.5 in gate.json"},
+            {"id": "f3", "value": "walk.ts", "source": "w4", "quote": "I changed walk.ts and every test passed"},
+            {"id": "f4", "value": "merged", "source": "w4", "quote": "\"merge\":\"merged\",\"merge_reason\":\"clean run, tests passed\""},
+            {"id": "f5", "value": "fox", "source": "w1", "quote": "quick brown fox jumps"}
+          ],
+          "verdicts": [
+            {"id": "v1", "text": "the fox is in the file", "verdict": "supported", "basis": ["f5"]},
+            {"id": "v2", "text": "walk.ts was not changed", "verdict": "refuted", "basis": ["f3"]}
+          ]
+        },
+        "entries": [
+          {
+            "id": "w1",
+            "ts": "2026-11-17T10:00:00Z",
+            "tool": "read",
+            "args": {},
+            "result": {},
+            "truncated": false,
+            "source_kind": "file",
+            "saved_result": "results/w1.txt"
+          },
+          {
+            "id": "w2",
+            "ts": "2026-11-17T10:00:00Z",
+            "tool": "eidetic_recall",
+            "args": {},
+            "result": {},
+            "truncated": false,
+            "source_kind": "memory",
+            "saved_result": "results/w2.txt"
+          },
+          {
+            "id": "w3",
+            "ts": "2026-11-17T10:00:00Z",
+            "tool": "spawn_subagent",
+            "args": {},
+            "result": {},
+            "truncated": false,
+            "source_kind": "agent",
+            "saved_result": "results/w3.txt"
+          },
+          {
+            "id": "w4",
+            "ts": "2026-11-17T10:00:00Z",
+            "tool": "delegate_status",
+            "args": {},
+            "result": {},
+            "truncated": false,
+            "source_kind": "agent",
+            "saved_result": "results/w4.txt"
+          },
+          {
+            "id": "w5",
+            "ts": "2026-11-17T10:00:00Z",
+            "tool": "eidetic_remember",
+            "args": {},
+            "result": {},
+            "truncated": false,
+            "source_kind": "memory",
+            "partial": true,
+            "error": "refused: the safety gate refused this call"
+          },
+          {
+            "id": "w6",
+            "ts": "2026-11-17T10:00:00Z",
+            "tool": "ledger_append",
+            "args": {},
+            "result": {},
+            "truncated": false,
+            "source_kind": "tool",
+            "saved_result": "results/w6.txt"
+          },
+          {
+            "id": "w7",
+            "ts": "2026-11-17T10:00:00Z",
+            "tool": "eidetic_remember",
+            "args": {},
+            "result": {},
+            "truncated": false,
+            "source_kind": "memory",
+            "saved_result": "results/w7.txt"
+          },
+          {"id": "w8", "ts": "2026-11-17T10:00:00Z", "tool": "grep", "args": {}, "result": {}, "truncated": false, "source_kind": "tool", "partial": true},
+          {
+            "id": "w9",
+            "ts": "2026-11-17T10:00:00Z",
+            "tool": "read",
+            "args": {},
+            "result": {},
+            "truncated": false,
+            "source_kind": "file",
+            "saved_result": "results/w9.txt",
+            "partial": true
+          }
+        ],
+        "results": {
+          "w1": "The quick brown fox jumps over the lazy dog",
+          "w2": "memory: safe_unattended threshold is 0.5 for every model",
+          "w3": "{\"ok\":true,\"reply\":\"child says: the gate threshold is 0.5 in gate.json\"}",
+          "w4": "{\"ok\":true,\"run_id\":\"dlg-1\",\"state\":\"finished\",\"result\":{\"outcome\":\"ok\",\"merge\":\"merged\",\"merge_reason\":\"clean run, tests passed\",\"final_reply\":\"I changed walk.ts and every test passed\"}}",
+          "w6": "{\"ok\":false,\"code\":\"tool_missing\",\"message\":\"ledger is not installed\"}",
+          "w7": "{\"ok\":true,\"stored\":\"mem-1\",\"scope\":\"associate\"}",
+          "w9": "the first part of a long file that was cut"
+        }
+      },
+      "expect": {
+        "accepted": false,
+        "facts": [
+          {"id": "f1", "run": null, "verdict": "passed", "reason": null, "check": null, "nearest": null, "source_kind": "memory", "first_hand": false},
+          {"id": "f2", "run": null, "verdict": "passed", "reason": null, "check": null, "nearest": null, "source_kind": "agent", "first_hand": false},
+          {"id": "f3", "run": null, "verdict": "passed", "reason": null, "check": null, "nearest": null, "source_kind": "agent", "first_hand": false},
+          {"id": "f4", "run": null, "verdict": "passed", "reason": null, "check": null, "nearest": null, "source_kind": "agent", "first_hand": true},
+          {"id": "f5", "run": null, "verdict": "passed", "reason": null, "check": null, "nearest": null, "source_kind": "file", "first_hand": true}
+        ],
+        "verdicts": [
+          {"id": "v1", "outcome": "accepted", "reason": null, "check": null},
+          {"id": "v2", "outcome": "refused", "reason": "closing_second_hand", "check": "closing_conclusion_second_hand"}
+        ],
+        "open_items": [],
+        "report": {
+          "facts": {"made": 5, "checked": 5, "passed": 5, "refused": 0, "unchecked": 0},
+          "conclusions": {"made": 2, "supported": 1, "refuted": 1, "open": 0},
+          "statements": {"made": 2, "without_fact": 0},
+          "by_source_kind": {
+            "file": {"made": 1, "checked": 1, "passed": 1, "refused": 0, "unchecked": 0},
+            "tool": {"made": 0, "checked": 0, "passed": 0, "refused": 0, "unchecked": 0},
+            "web": {"made": 0, "checked": 0, "passed": 0, "refused": 0, "unchecked": 0},
+            "memory": {"made": 1, "checked": 1, "passed": 1, "refused": 0, "unchecked": 0},
+            "agent": {"made": 3, "checked": 3, "passed": 3, "refused": 0, "unchecked": 0},
+            "harness": {"made": 0, "checked": 0, "passed": 0, "refused": 0, "unchecked": 0}
+          },
+          "flags": [{"check": "closing_conclusion_second_hand", "detail": "v2: closing_second_hand"}],
+          "python_recheck_ran": false,
+          "children": []
+        }
+      }
+    },
+    {
+      "name": "verdict rules: unread items, open without a check, cannot tell with a check",
+      "input": {
+        "payload": {
+          "facts": [{"id": "f1", "value": "fox", "source": "w1", "quote": "quick brown fox jumps"}],
+          "verdicts": [
+            {"id": "v1", "text": "the run line is checked", "verdict": "supported", "basis": ["f1"], "unread": ["associate/harness/pi.py"]},
+            {"id": "v2", "text": "maybe", "verdict": "open", "basis": []},
+            {
+              "id": "v3",
+              "text": "cannot tell whether pi.py checks it",
+              "verdict": "cannot_tell",
+              "basis": ["f1"],
+              "check": "read associate/harness/pi.py lines 900-940",
+              "closing": true
+            },
+            {"id": "v4", "text": "true with nothing behind it", "verdict": "supported", "basis": []},
+            {"id": "v5", "text": "true on a fact never given", "verdict": "refuted", "basis": ["f9"]}
+          ],
+          "open_items": [{"id": "o1", "text": "does walkstats read it", "check": "grep OUTCOMES associate/bench/walkstats.py"}, {"id": "o2", "text": "is it documented"}]
+        },
+        "entries": [
+          {
+            "id": "w1",
+            "ts": "2026-11-17T10:00:00Z",
+            "tool": "read",
+            "args": {},
+            "result": {},
+            "truncated": false,
+            "source_kind": "file",
+            "saved_result": "results/w1.txt"
+          },
+          {
+            "id": "w2",
+            "ts": "2026-11-17T10:00:00Z",
+            "tool": "eidetic_recall",
+            "args": {},
+            "result": {},
+            "truncated": false,
+            "source_kind": "memory",
+            "saved_result": "results/w2.txt"
+          },
+          {
+            "id": "w3",
+            "ts": "2026-11-17T10:00:00Z",
+            "tool": "spawn_subagent",
+            "args": {},
+            "result": {},
+            "truncated": false,
+            "source_kind": "agent",
+            "saved_result": "results/w3.txt"
+          },
+          {
+            "id": "w4",
+            "ts": "2026-11-17T10:00:00Z",
+            "tool": "delegate_status",
+            "args": {},
+            "result": {},
+            "truncated": false,
+            "source_kind": "agent",
+            "saved_result": "results/w4.txt"
+          },
+          {
+            "id": "w5",
+            "ts": "2026-11-17T10:00:00Z",
+            "tool": "eidetic_remember",
+            "args": {},
+            "result": {},
+            "truncated": false,
+            "source_kind": "memory",
+            "partial": true,
+            "error": "refused: the safety gate refused this call"
+          },
+          {
+            "id": "w6",
+            "ts": "2026-11-17T10:00:00Z",
+            "tool": "ledger_append",
+            "args": {},
+            "result": {},
+            "truncated": false,
+            "source_kind": "tool",
+            "saved_result": "results/w6.txt"
+          },
+          {
+            "id": "w7",
+            "ts": "2026-11-17T10:00:00Z",
+            "tool": "eidetic_remember",
+            "args": {},
+            "result": {},
+            "truncated": false,
+            "source_kind": "memory",
+            "saved_result": "results/w7.txt"
+          },
+          {"id": "w8", "ts": "2026-11-17T10:00:00Z", "tool": "grep", "args": {}, "result": {}, "truncated": false, "source_kind": "tool", "partial": true},
+          {
+            "id": "w9",
+            "ts": "2026-11-17T10:00:00Z",
+            "tool": "read",
+            "args": {},
+            "result": {},
+            "truncated": false,
+            "source_kind": "file",
+            "saved_result": "results/w9.txt",
+            "partial": true
+          }
+        ],
+        "results": {
+          "w1": "The quick brown fox jumps over the lazy dog",
+          "w2": "memory: safe_unattended threshold is 0.5 for every model",
+          "w3": "{\"ok\":true,\"reply\":\"child says: the gate threshold is 0.5 in gate.json\"}",
+          "w4": "{\"ok\":true,\"run_id\":\"dlg-1\",\"state\":\"finished\",\"result\":{\"outcome\":\"ok\",\"merge\":\"merged\",\"merge_reason\":\"clean run, tests passed\",\"final_reply\":\"I changed walk.ts and every test passed\"}}",
+          "w6": "{\"ok\":false,\"code\":\"tool_missing\",\"message\":\"ledger is not installed\"}",
+          "w7": "{\"ok\":true,\"stored\":\"mem-1\",\"scope\":\"associate\"}",
+          "w9": "the first part of a long file that was cut"
+        }
+      },
+      "expect": {
+        "accepted": false,
+        "facts": [{"id": "f1", "run": null, "verdict": "passed", "reason": null, "check": null, "nearest": null, "source_kind": "file", "first_hand": true}],
+        "verdicts": [
+          {"id": "v1", "outcome": "refused", "reason": "verdict_with_unread", "check": "closing_conclusion_unread"},
+          {"id": "v2", "outcome": "refused", "reason": "open_without_check", "check": "open_item_undecided"},
+          {"id": "v3", "outcome": "accepted", "reason": null, "check": null},
+          {"id": "v4", "outcome": "refused", "reason": "no_basis", "check": "conclusion_without_fact"},
+          {"id": "v5", "outcome": "refused", "reason": "unknown_fact", "check": "conclusion_without_fact"}
+        ],
+        "open_items": [
+          {"id": "o1", "outcome": "accepted", "reason": null, "check": null},
+          {"id": "o2", "outcome": "refused", "reason": "open_without_check", "check": "open_item_undecided"}
+        ],
+        "report": {
+          "facts": {"made": 1, "checked": 1, "passed": 1, "refused": 0, "unchecked": 0},
+          "conclusions": {"made": 5, "supported": 2, "refuted": 1, "open": 2},
+          "statements": {"made": 7, "without_fact": 5},
+          "by_source_kind": {
+            "file": {"made": 1, "checked": 1, "passed": 1, "refused": 0, "unchecked": 0},
+            "tool": {"made": 0, "checked": 0, "passed": 0, "refused": 0, "unchecked": 0},
+            "web": {"made": 0, "checked": 0, "passed": 0, "refused": 0, "unchecked": 0},
+            "memory": {"made": 0, "checked": 0, "passed": 0, "refused": 0, "unchecked": 0},
+            "agent": {"made": 0, "checked": 0, "passed": 0, "refused": 0, "unchecked": 0},
+            "harness": {"made": 0, "checked": 0, "passed": 0, "refused": 0, "unchecked": 0}
+          },
+          "flags": [
+            {"check": "closing_conclusion_unread", "detail": "v1: verdict_with_unread"},
+            {"check": "open_item_undecided", "detail": "v2: open_without_check"},
+            {"check": "conclusion_without_fact", "detail": "v4: no_basis"},
+            {"check": "conclusion_without_fact", "detail": "v5: unknown_fact"},
+            {"check": "open_item_undecided", "detail": "o2: open_without_check"}
+          ],
+          "python_recheck_ran": false,
+          "children": []
+        }
+      }
+    },
+    {
+      "name": "cannot tell with a named check is accepted",
+      "input": {
+        "payload": {
+          "facts": [{"id": "f1", "value": "fox", "source": "w1", "quote": "quick brown fox jumps"}],
+          "verdicts": [
+            {
+              "id": "v1",
+              "text": "cannot tell whether pyproject.toml has the table",
+              "verdict": "cannot_tell",
+              "basis": [],
+              "check": "grep -c safe_unattended pyproject.toml"
+            }
+          ]
+        },
+        "entries": [
+          {
+            "id": "w1",
+            "ts": "2026-11-17T10:00:00Z",
+            "tool": "read",
+            "args": {},
+            "result": {},
+            "truncated": false,
+            "source_kind": "file",
+            "saved_result": "results/w1.txt"
+          },
+          {
+            "id": "w2",
+            "ts": "2026-11-17T10:00:00Z",
+            "tool": "eidetic_recall",
+            "args": {},
+            "result": {},
+            "truncated": false,
+            "source_kind": "memory",
+            "saved_result": "results/w2.txt"
+          },
+          {
+            "id": "w3",
+            "ts": "2026-11-17T10:00:00Z",
+            "tool": "spawn_subagent",
+            "args": {},
+            "result": {},
+            "truncated": false,
+            "source_kind": "agent",
+            "saved_result": "results/w3.txt"
+          },
+          {
+            "id": "w4",
+            "ts": "2026-11-17T10:00:00Z",
+            "tool": "delegate_status",
+            "args": {},
+            "result": {},
+            "truncated": false,
+            "source_kind": "agent",
+            "saved_result": "results/w4.txt"
+          },
+          {
+            "id": "w5",
+            "ts": "2026-11-17T10:00:00Z",
+            "tool": "eidetic_remember",
+            "args": {},
+            "result": {},
+            "truncated": false,
+            "source_kind": "memory",
+            "partial": true,
+            "error": "refused: the safety gate refused this call"
+          },
+          {
+            "id": "w6",
+            "ts": "2026-11-17T10:00:00Z",
+            "tool": "ledger_append",
+            "args": {},
+            "result": {},
+            "truncated": false,
+            "source_kind": "tool",
+            "saved_result": "results/w6.txt"
+          },
+          {
+            "id": "w7",
+            "ts": "2026-11-17T10:00:00Z",
+            "tool": "eidetic_remember",
+            "args": {},
+            "result": {},
+            "truncated": false,
+            "source_kind": "memory",
+            "saved_result": "results/w7.txt"
+          },
+          {"id": "w8", "ts": "2026-11-17T10:00:00Z", "tool": "grep", "args": {}, "result": {}, "truncated": false, "source_kind": "tool", "partial": true},
+          {
+            "id": "w9",
+            "ts": "2026-11-17T10:00:00Z",
+            "tool": "read",
+            "args": {},
+            "result": {},
+            "truncated": false,
+            "source_kind": "file",
+            "saved_result": "results/w9.txt",
+            "partial": true
+          }
+        ],
+        "results": {
+          "w1": "The quick brown fox jumps over the lazy dog",
+          "w2": "memory: safe_unattended threshold is 0.5 for every model",
+          "w3": "{\"ok\":true,\"reply\":\"child says: the gate threshold is 0.5 in gate.json\"}",
+          "w4": "{\"ok\":true,\"run_id\":\"dlg-1\",\"state\":\"finished\",\"result\":{\"outcome\":\"ok\",\"merge\":\"merged\",\"merge_reason\":\"clean run, tests passed\",\"final_reply\":\"I changed walk.ts and every test passed\"}}",
+          "w6": "{\"ok\":false,\"code\":\"tool_missing\",\"message\":\"ledger is not installed\"}",
+          "w7": "{\"ok\":true,\"stored\":\"mem-1\",\"scope\":\"associate\"}",
+          "w9": "the first part of a long file that was cut"
+        }
+      },
+      "expect": {
+        "accepted": true,
+        "facts": [{"id": "f1", "run": null, "verdict": "passed", "reason": null, "check": null, "nearest": null, "source_kind": "file", "first_hand": true}],
+        "verdicts": [{"id": "v1", "outcome": "accepted", "reason": null, "check": null}],
+        "open_items": [],
+        "report": {
+          "facts": {"made": 1, "checked": 1, "passed": 1, "refused": 0, "unchecked": 0},
+          "conclusions": {"made": 1, "supported": 0, "refuted": 0, "open": 1},
+          "statements": {"made": 1, "without_fact": 1},
+          "by_source_kind": {
+            "file": {"made": 1, "checked": 1, "passed": 1, "refused": 0, "unchecked": 0},
+            "tool": {"made": 0, "checked": 0, "passed": 0, "refused": 0, "unchecked": 0},
+            "web": {"made": 0, "checked": 0, "passed": 0, "refused": 0, "unchecked": 0},
+            "memory": {"made": 0, "checked": 0, "passed": 0, "refused": 0, "unchecked": 0},
+            "agent": {"made": 0, "checked": 0, "passed": 0, "refused": 0, "unchecked": 0},
+            "harness": {"made": 0, "checked": 0, "passed": 0, "refused": 0, "unchecked": 0}
+          },
+          "flags": [],
+          "python_recheck_ran": false,
+          "children": []
+        }
+      }
+    },
+    {
+      "name": "a verdict resting on a refused fact is refused",
+      "input": {
+        "payload": {
+          "facts": [
+            {"id": "f1", "value": "fox", "source": "w1", "quote": "quick brown fox jumps"},
+            {"id": "f2", "value": "leaps", "source": "w1", "quote": "brown fox leaps"}
+          ],
+          "verdicts": [
+            {"id": "v1", "text": "a fox is there", "verdict": "supported", "basis": ["f1"]},
+            {"id": "v2", "text": "the fox leaps", "verdict": "supported", "basis": ["f1", "f2"], "closing": true}
+          ]
+        },
+        "entries": [
+          {
+            "id": "w1",
+            "ts": "2026-11-17T10:00:00Z",
+            "tool": "read",
+            "args": {},
+            "result": {},
+            "truncated": false,
+            "source_kind": "file",
+            "saved_result": "results/w1.txt"
+          },
+          {
+            "id": "w2",
+            "ts": "2026-11-17T10:00:00Z",
+            "tool": "eidetic_recall",
+            "args": {},
+            "result": {},
+            "truncated": false,
+            "source_kind": "memory",
+            "saved_result": "results/w2.txt"
+          },
+          {
+            "id": "w3",
+            "ts": "2026-11-17T10:00:00Z",
+            "tool": "spawn_subagent",
+            "args": {},
+            "result": {},
+            "truncated": false,
+            "source_kind": "agent",
+            "saved_result": "results/w3.txt"
+          },
+          {
+            "id": "w4",
+            "ts": "2026-11-17T10:00:00Z",
+            "tool": "delegate_status",
+            "args": {},
+            "result": {},
+            "truncated": false,
+            "source_kind": "agent",
+            "saved_result": "results/w4.txt"
+          },
+          {
+            "id": "w5",
+            "ts": "2026-11-17T10:00:00Z",
+            "tool": "eidetic_remember",
+            "args": {},
+            "result": {},
+            "truncated": false,
+            "source_kind": "memory",
+            "partial": true,
+            "error": "refused: the safety gate refused this call"
+          },
+          {
+            "id": "w6",
+            "ts": "2026-11-17T10:00:00Z",
+            "tool": "ledger_append",
+            "args": {},
+            "result": {},
+            "truncated": false,
+            "source_kind": "tool",
+            "saved_result": "results/w6.txt"
+          },
+          {
+            "id": "w7",
+            "ts": "2026-11-17T10:00:00Z",
+            "tool": "eidetic_remember",
+            "args": {},
+            "result": {},
+            "truncated": false,
+            "source_kind": "memory",
+            "saved_result": "results/w7.txt"
+          },
+          {"id": "w8", "ts": "2026-11-17T10:00:00Z", "tool": "grep", "args": {}, "result": {}, "truncated": false, "source_kind": "tool", "partial": true},
+          {
+            "id": "w9",
+            "ts": "2026-11-17T10:00:00Z",
+            "tool": "read",
+            "args": {},
+            "result": {},
+            "truncated": false,
+            "source_kind": "file",
+            "saved_result": "results/w9.txt",
+            "partial": true
+          }
+        ],
+        "results": {
+          "w1": "The quick brown fox jumps over the lazy dog",
+          "w2": "memory: safe_unattended threshold is 0.5 for every model",
+          "w3": "{\"ok\":true,\"reply\":\"child says: the gate threshold is 0.5 in gate.json\"}",
+          "w4": "{\"ok\":true,\"run_id\":\"dlg-1\",\"state\":\"finished\",\"result\":{\"outcome\":\"ok\",\"merge\":\"merged\",\"merge_reason\":\"clean run, tests passed\",\"final_reply\":\"I changed walk.ts and every test passed\"}}",
+          "w6": "{\"ok\":false,\"code\":\"tool_missing\",\"message\":\"ledger is not installed\"}",
+          "w7": "{\"ok\":true,\"stored\":\"mem-1\",\"scope\":\"associate\"}",
+          "w9": "the first part of a long file that was cut"
+        }
+      },
+      "expect": {
+        "accepted": false,
+        "facts": [
+          {"id": "f1", "run": null, "verdict": "passed", "reason": null, "check": null, "nearest": null, "source_kind": "file", "first_hand": true},
+          {
+            "id": "f2",
+            "run": null,
+            "verdict": "refused",
+            "reason": "quote_absent",
+            "check": "quote_not_in_result",
+            "nearest": {"offset": 10, "matched": 10, "text": "brown fox jumps"},
+            "source_kind": "file",
+            "first_hand": true
+          }
+        ],
+        "verdicts": [
+          {"id": "v1", "outcome": "accepted", "reason": null, "check": null},
+          {"id": "v2", "outcome": "refused", "reason": "basis_refused", "check": "conclusion_without_fact"}
+        ],
+        "open_items": [],
+        "report": {
+          "facts": {"made": 2, "checked": 2, "passed": 1, "refused": 1, "unchecked": 0},
+          "conclusions": {"made": 2, "supported": 2, "refuted": 0, "open": 0},
+          "statements": {"made": 2, "without_fact": 0},
+          "by_source_kind": {
+            "file": {"made": 2, "checked": 2, "passed": 1, "refused": 1, "unchecked": 0},
+            "tool": {"made": 0, "checked": 0, "passed": 0, "refused": 0, "unchecked": 0},
+            "web": {"made": 0, "checked": 0, "passed": 0, "refused": 0, "unchecked": 0},
+            "memory": {"made": 0, "checked": 0, "passed": 0, "refused": 0, "unchecked": 0},
+            "agent": {"made": 0, "checked": 0, "passed": 0, "refused": 0, "unchecked": 0},
+            "harness": {"made": 0, "checked": 0, "passed": 0, "refused": 0, "unchecked": 0}
+          },
+          "flags": [{"check": "quote_not_in_result", "detail": "f2: quote_absent", "ref": "w1"}, {"check": "conclusion_without_fact", "detail": "v2: basis_refused"}],
+          "python_recheck_ran": false,
+          "children": []
+        }
+      }
+    },
+    {
+      "name": "source references: labels resolve to their run, paths are refused, prior ids are flagged",
+      "input": {
+        "payload": {
+          "facts": [
+            {"id": "f1", "value": "prior_function", "source": "prior:w1", "quote": "def prior_function()"},
+            {"id": "f2", "value": "x", "source": "prior:w4", "quote": "I changed walk.ts and every test passed"},
+            {"id": "f3", "value": "fox", "source": "prior:w2", "quote": "The quick brown fox"},
+            {"id": "f4", "value": "x", "source": "../results/w1.txt", "quote": "quick brown fox jumps"},
+            {"id": "f5", "value": "x", "source": "prior/w1", "quote": "def prior_function()"},
+            {"id": "f6", "value": "fox", "source": "w1", "quote": "quick brown fox jumps"},
+            {"id": "f7", "value": "x", "source": "ghost:w1", "quote": "quick brown fox jumps"},
+            {"id": "f8", "value": "x", "source": "W1", "quote": "quick brown fox jumps"}
+          ]
+        },
+        "entries": [
+          {
+            "id": "w1",
+            "ts": "2026-11-17T10:00:00Z",
+            "tool": "read",
+            "args": {},
+            "result": {},
+            "truncated": false,
+            "source_kind": "file",
+            "saved_result": "results/w1.txt"
+          },
+          {
+            "id": "w2",
+            "ts": "2026-11-17T10:00:00Z",
+            "tool": "eidetic_recall",
+            "args": {},
+            "result": {},
+            "truncated": false,
+            "source_kind": "memory",
+            "saved_result": "results/w2.txt"
+          },
+          {
+            "id": "w3",
+            "ts": "2026-11-17T10:00:00Z",
+            "tool": "spawn_subagent",
+            "args": {},
+            "result": {},
+            "truncated": false,
+            "source_kind": "agent",
+            "saved_result": "results/w3.txt"
+          },
+          {
+            "id": "w4",
+            "ts": "2026-11-17T10:00:00Z",
+            "tool": "delegate_status",
+            "args": {},
+            "result": {},
+            "truncated": false,
+            "source_kind": "agent",
+            "saved_result": "results/w4.txt"
+          },
+          {
+            "id": "w5",
+            "ts": "2026-11-17T10:00:00Z",
+            "tool": "eidetic_remember",
+            "args": {},
+            "result": {},
+            "truncated": false,
+            "source_kind": "memory",
+            "partial": true,
+            "error": "refused: the safety gate refused this call"
+          },
+          {
+            "id": "w6",
+            "ts": "2026-11-17T10:00:00Z",
+            "tool": "ledger_append",
+            "args": {},
+            "result": {},
+            "truncated": false,
+            "source_kind": "tool",
+            "saved_result": "results/w6.txt"
+          },
+          {
+            "id": "w7",
+            "ts": "2026-11-17T10:00:00Z",
+            "tool": "eidetic_remember",
+            "args": {},
+            "result": {},
+            "truncated": false,
+            "source_kind": "memory",
+            "saved_result": "results/w7.txt"
+          },
+          {"id": "w8", "ts": "2026-11-17T10:00:00Z", "tool": "grep", "args": {}, "result": {}, "truncated": false, "source_kind": "tool", "partial": true},
+          {
+            "id": "w9",
+            "ts": "2026-11-17T10:00:00Z",
+            "tool": "read",
+            "args": {},
+            "result": {},
+            "truncated": false,
+            "source_kind": "file",
+            "saved_result": "results/w9.txt",
+            "partial": true
+          }
+        ],
+        "results": {
+          "w1": "The quick brown fox jumps over the lazy dog",
+          "w2": "memory: safe_unattended threshold is 0.5 for every model",
+          "w3": "{\"ok\":true,\"reply\":\"child says: the gate threshold is 0.5 in gate.json\"}",
+          "w4": "{\"ok\":true,\"run_id\":\"dlg-1\",\"state\":\"finished\",\"result\":{\"outcome\":\"ok\",\"merge\":\"merged\",\"merge_reason\":\"clean run, tests passed\",\"final_reply\":\"I changed walk.ts and every test passed\"}}",
+          "w6": "{\"ok\":false,\"code\":\"tool_missing\",\"message\":\"ledger is not installed\"}",
+          "w7": "{\"ok\":true,\"stored\":\"mem-1\",\"scope\":\"associate\"}",
+          "w9": "the first part of a long file that was cut"
+        },
+        "prior_runs": {
+          "prior": {
+            "entries": [
+              {
+                "id": "w1",
+                "ts": "2026-11-17T10:00:00Z",
+                "tool": "read",
+                "args": {},
+                "result": {},
+                "truncated": false,
+                "source_kind": "file",
+                "saved_result": "results/w1.txt"
+              },
+              {
+                "id": "w2",
+                "ts": "2026-11-17T10:00:00Z",
+                "tool": "grep",
+                "args": {},
+                "result": {},
+                "truncated": false,
+                "source_kind": "tool",
+                "saved_result": "results/w2.txt"
+              }
+            ],
+            "results": {"w1": "def prior_function(): return 22", "w2": "walk.ts:476 outcome ok"}
+          }
+        }
+      },
+      "expect": {
+        "accepted": false,
+        "facts": [
+          {"id": "f1", "run": "prior", "verdict": "passed", "reason": null, "check": null, "nearest": null, "source_kind": "file", "first_hand": true},
+          {
+            "id": "f2",
+            "run": "prior",
+            "verdict": "refused",
+            "reason": "source_unknown",
+            "check": "unknown_source",
+            "nearest": null,
+            "source_kind": null,
+            "first_hand": null
+          },
+          {
+            "id": "f3",
+            "run": "prior",
+            "verdict": "refused",
+            "reason": "quote_absent",
+            "check": "quote_not_in_result",
+            "nearest": {"offset": 0, "matched": 0, "text": "walk.ts:476 outcome"},
+            "source_kind": "tool",
+            "first_hand": true
+          },
+          {
+            "id": "f4",
+            "run": null,
+            "verdict": "refused",
+            "reason": "source_path",
+            "check": "source_is_path",
+            "nearest": null,
+            "source_kind": null,
+            "first_hand": null
+          },
+          {
+            "id": "f5",
+            "run": null,
+            "verdict": "refused",
+            "reason": "source_path",
+            "check": "source_is_path",
+            "nearest": null,
+            "source_kind": null,
+            "first_hand": null
+          },
+          {"id": "f6", "run": null, "verdict": "passed", "reason": null, "check": null, "nearest": null, "source_kind": "file", "first_hand": true},
+          {
+            "id": "f7",
+            "run": "ghost",
+            "verdict": "refused",
+            "reason": "source_unknown",
+            "check": "unknown_source",
+            "nearest": null,
+            "source_kind": null,
+            "first_hand": null
+          },
+          {
+            "id": "f8",
+            "run": null,
+            "verdict": "refused",
+            "reason": "source_malformed",
+            "check": "unknown_source",
+            "nearest": null,
+            "source_kind": null,
+            "first_hand": null
+          }
+        ],
+        "verdicts": [],
+        "open_items": [],
+        "report": {
+          "facts": {"made": 8, "checked": 8, "passed": 2, "refused": 6, "unchecked": 0},
+          "conclusions": {"made": 0, "supported": 0, "refuted": 0, "open": 0},
+          "statements": {"made": 0, "without_fact": 0},
+          "by_source_kind": {
+            "file": {"made": 2, "checked": 2, "passed": 2, "refused": 0, "unchecked": 0},
+            "tool": {"made": 1, "checked": 1, "passed": 0, "refused": 1, "unchecked": 0},
+            "web": {"made": 0, "checked": 0, "passed": 0, "refused": 0, "unchecked": 0},
+            "memory": {"made": 0, "checked": 0, "passed": 0, "refused": 0, "unchecked": 0},
+            "agent": {"made": 0, "checked": 0, "passed": 0, "refused": 0, "unchecked": 0},
+            "harness": {"made": 0, "checked": 0, "passed": 0, "refused": 0, "unchecked": 0}
+          },
+          "flags": [
+            {"check": "unknown_source", "detail": "f2: source_unknown", "ref": "prior:w4"},
+            {"check": "quote_not_in_result", "detail": "f3: quote_absent", "ref": "prior:w2"},
+            {"check": "source_is_path", "detail": "f4: source_path"},
+            {"check": "source_is_path", "detail": "f5: source_path"},
+            {"check": "ambiguous_run_label", "detail": "f6: ambiguous_reference", "ref": "w1"},
+            {"check": "unknown_source", "detail": "f7: source_unknown", "ref": "ghost:w1"},
+            {"check": "unknown_source", "detail": "f8: source_malformed"}
+          ],
+          "python_recheck_ran": false,
+          "children": []
+        }
+      }
+    },
+    {
+      "name": "child runs are listed with their own counts and never summed in",
+      "input": {
+        "payload": {
+          "facts": [
+            {"id": "f1", "value": "x", "source": "child-1:w1", "quote": "child read text"},
+            {"id": "f2", "value": "fox", "source": "w1", "quote": "quick brown fox jumps"}
+          ]
+        },
+        "entries": [
+          {
+            "id": "w1",
+            "ts": "2026-11-17T10:00:00Z",
+            "tool": "read",
+            "args": {},
+            "result": {},
+            "truncated": false,
+            "source_kind": "file",
+            "saved_result": "results/w1.txt"
+          },
+          {
+            "id": "w2",
+            "ts": "2026-11-17T10:00:00Z",
+            "tool": "eidetic_recall",
+            "args": {},
+            "result": {},
+            "truncated": false,
+            "source_kind": "memory",
+            "saved_result": "results/w2.txt"
+          },
+          {
+            "id": "w3",
+            "ts": "2026-11-17T10:00:00Z",
+            "tool": "spawn_subagent",
+            "args": {},
+            "result": {},
+            "truncated": false,
+            "source_kind": "agent",
+            "saved_result": "results/w3.txt"
+          },
+          {
+            "id": "w4",
+            "ts": "2026-11-17T10:00:00Z",
+            "tool": "delegate_status",
+            "args": {},
+            "result": {},
+            "truncated": false,
+            "source_kind": "agent",
+            "saved_result": "results/w4.txt"
+          },
+          {
+            "id": "w5",
+            "ts": "2026-11-17T10:00:00Z",
+            "tool": "eidetic_remember",
+            "args": {},
+            "result": {},
+            "truncated": false,
+            "source_kind": "memory",
+            "partial": true,
+            "error": "refused: the safety gate refused this call"
+          },
+          {
+            "id": "w6",
+            "ts": "2026-11-17T10:00:00Z",
+            "tool": "ledger_append",
+            "args": {},
+            "result": {},
+            "truncated": false,
+            "source_kind": "tool",
+            "saved_result": "results/w6.txt"
+          },
+          {
+            "id": "w7",
+            "ts": "2026-11-17T10:00:00Z",
+            "tool": "eidetic_remember",
+            "args": {},
+            "result": {},
+            "truncated": false,
+            "source_kind": "memory",
+            "saved_result": "results/w7.txt"
+          },
+          {"id": "w8", "ts": "2026-11-17T10:00:00Z", "tool": "grep", "args": {}, "result": {}, "truncated": false, "source_kind": "tool", "partial": true},
+          {
+            "id": "w9",
+            "ts": "2026-11-17T10:00:00Z",
+            "tool": "read",
+            "args": {},
+            "result": {},
+            "truncated": false,
+            "source_kind": "file",
+            "saved_result": "results/w9.txt",
+            "partial": true
+          }
+        ],
+        "results": {
+          "w1": "The quick brown fox jumps over the lazy dog",
+          "w2": "memory: safe_unattended threshold is 0.5 for every model",
+          "w3": "{\"ok\":true,\"reply\":\"child says: the gate threshold is 0.5 in gate.json\"}",
+          "w4": "{\"ok\":true,\"run_id\":\"dlg-1\",\"state\":\"finished\",\"result\":{\"outcome\":\"ok\",\"merge\":\"merged\",\"merge_reason\":\"clean run, tests passed\",\"final_reply\":\"I changed walk.ts and every test passed\"}}",
+          "w6": "{\"ok\":false,\"code\":\"tool_missing\",\"message\":\"ledger is not installed\"}",
+          "w7": "{\"ok\":true,\"stored\":\"mem-1\",\"scope\":\"associate\"}",
+          "w9": "the first part of a long file that was cut"
+        },
+        "children": [
+          {
+            "label": "child-1",
+            "payload": {
+              "facts": [
+                {"id": "f1", "value": "x", "source": "w1", "quote": "child read text"},
+                {"id": "f2", "value": "x", "source": "w1", "quote": "child wrote nothing"}
+              ]
+            },
+            "entries": [
+              {
+                "id": "w1",
+                "ts": "2026-11-17T10:00:00Z",
+                "tool": "read",
+                "args": {},
+                "result": {},
+                "truncated": false,
+                "source_kind": "file",
+                "saved_result": "results/w1.txt"
+              }
+            ],
+            "results": {"w1": "child read text here ok"}
+          }
+        ]
+      },
+      "expect": {
+        "accepted": true,
+        "facts": [
+          {"id": "f1", "run": "child-1", "verdict": "passed", "reason": null, "check": null, "nearest": null, "source_kind": "file", "first_hand": true},
+          {"id": "f2", "run": null, "verdict": "passed", "reason": null, "check": null, "nearest": null, "source_kind": "file", "first_hand": true}
+        ],
+        "verdicts": [],
+        "open_items": [],
+        "report": {
+          "facts": {"made": 2, "checked": 2, "passed": 2, "refused": 0, "unchecked": 0},
+          "conclusions": {"made": 0, "supported": 0, "refuted": 0, "open": 0},
+          "statements": {"made": 0, "without_fact": 0},
+          "by_source_kind": {
+            "file": {"made": 2, "checked": 2, "passed": 2, "refused": 0, "unchecked": 0},
+            "tool": {"made": 0, "checked": 0, "passed": 0, "refused": 0, "unchecked": 0},
+            "web": {"made": 0, "checked": 0, "passed": 0, "refused": 0, "unchecked": 0},
+            "memory": {"made": 0, "checked": 0, "passed": 0, "refused": 0, "unchecked": 0},
+            "agent": {"made": 0, "checked": 0, "passed": 0, "refused": 0, "unchecked": 0},
+            "harness": {"made": 0, "checked": 0, "passed": 0, "refused": 0, "unchecked": 0}
+          },
+          "flags": [],
+          "python_recheck_ran": false,
+          "children": [
+            {
+              "label": "child-1",
+              "report": {
+                "facts": {"made": 2, "checked": 2, "passed": 1, "refused": 1, "unchecked": 0},
+                "conclusions": {"made": 0, "supported": 0, "refuted": 0, "open": 0},
+                "statements": {"made": 0, "without_fact": 0},
+                "by_source_kind": {
+                  "file": {"made": 2, "checked": 2, "passed": 1, "refused": 1, "unchecked": 0},
+                  "tool": {"made": 0, "checked": 0, "passed": 0, "refused": 0, "unchecked": 0},
+                  "web": {"made": 0, "checked": 0, "passed": 0, "refused": 0, "unchecked": 0},
+                  "memory": {"made": 0, "checked": 0, "passed": 0, "refused": 0, "unchecked": 0},
+                  "agent": {"made": 0, "checked": 0, "passed": 0, "refused": 0, "unchecked": 0},
+                  "harness": {"made": 0, "checked": 0, "passed": 0, "refused": 0, "unchecked": 0}
+                },
+                "flags": [{"check": "quote_not_in_result", "detail": "f2: quote_absent", "ref": "w1"}],
+                "python_recheck_ran": false,
+                "children": []
+              }
+            }
+          ]
+        }
+      }
+    },
+    {
+      "name": "a number or boolean fact value is a literal and must occur inside its quote",
+      "input": {
+        "payload": {
+          "facts": [
+            {
+              "id": "f1",
+              "value": 42,
+              "source": "w1",
+              "quote": "retry_rounds is 42"
+            },
+            {
+              "id": "f2",
+              "value": 42,
+              "source": "w1",
+              "quote": "threshold is 0.5"
+            },
+            {
+              "id": "f3",
+              "value": 0.5,
+              "source": "w1",
+              "quote": "threshold is 0.5"
+            },
+            {
+              "id": "f4",
+              "value": 0.75,
+              "source": "w1",
+              "quote": "threshold is 0.5"
+            },
+            {
+              "id": "f5",
+              "value": true,
+              "source": "w1",
+              "quote": "enabled is true"
+            },
+            {
+              "id": "f6",
+              "value": false,
+              "source": "w1",
+              "quote": "enabled is true"
+            },
+            {
+              "id": "f7",
+              "value": 7.0,
+              "source": "w1",
+              "quote": "other 7 here"
+            },
+            {
+              "id": "f8",
+              "value": {
+                "n": 99
+              },
+              "source": "w1",
+              "quote": "other 7 here"
+            }
+          ]
+        },
+        "entries": [
+          {
+            "id": "w1",
+            "ts": "2026-11-17T10:00:00Z",
+            "tool": "read",
+            "args": {},
+            "result": {},
+            "truncated": false,
+            "source_kind": "file",
+            "saved_result": "results/w1.txt"
+          }
+        ],
+        "results": {
+          "w1": "retry_rounds is 42; threshold is 0.5; enabled is true; other 7 here"
+        }
+      },
+      "expect": {
+        "accepted": false,
+        "facts": [
+          {
+            "id": "f1",
+            "run": null,
+            "verdict": "passed",
+            "reason": null,
+            "check": null,
+            "nearest": null,
+            "source_kind": "file",
+            "first_hand": true
+          },
+          {
+            "id": "f2",
+            "run": null,
+            "verdict": "refused",
+            "reason": "literal_not_in_quote",
+            "check": "literal_outside_quote",
+            "nearest": null,
+            "source_kind": "file",
+            "first_hand": true
+          },
+          {
+            "id": "f3",
+            "run": null,
+            "verdict": "passed",
+            "reason": null,
+            "check": null,
+            "nearest": null,
+            "source_kind": "file",
+            "first_hand": true
+          },
+          {
+            "id": "f4",
+            "run": null,
+            "verdict": "refused",
+            "reason": "literal_not_in_quote",
+            "check": "literal_outside_quote",
+            "nearest": null,
+            "source_kind": "file",
+            "first_hand": true
+          },
+          {
+            "id": "f5",
+            "run": null,
+            "verdict": "passed",
+            "reason": null,
+            "check": null,
+            "nearest": null,
+            "source_kind": "file",
+            "first_hand": true
+          },
+          {
+            "id": "f6",
+            "run": null,
+            "verdict": "refused",
+            "reason": "literal_not_in_quote",
+            "check": "literal_outside_quote",
+            "nearest": null,
+            "source_kind": "file",
+            "first_hand": true
+          },
+          {
+            "id": "f7",
+            "run": null,
+            "verdict": "passed",
+            "reason": null,
+            "check": null,
+            "nearest": null,
+            "source_kind": "file",
+            "first_hand": true
+          },
+          {
+            "id": "f8",
+            "run": null,
+            "verdict": "passed",
+            "reason": null,
+            "check": null,
+            "nearest": null,
+            "source_kind": "file",
+            "first_hand": true
+          }
+        ],
+        "verdicts": [],
+        "open_items": [],
+        "report": {
+          "facts": {
+            "made": 8,
+            "checked": 8,
+            "passed": 5,
+            "refused": 3,
+            "unchecked": 0
+          },
+          "conclusions": {
+            "made": 0,
+            "supported": 0,
+            "refuted": 0,
+            "open": 0
+          },
+          "statements": {
+            "made": 0,
+            "without_fact": 0
+          },
+          "by_source_kind": {
+            "file": {
+              "made": 8,
+              "checked": 8,
+              "passed": 5,
+              "refused": 3,
+              "unchecked": 0
+            },
+            "tool": {
+              "made": 0,
+              "checked": 0,
+              "passed": 0,
+              "refused": 0,
+              "unchecked": 0
+            },
+            "web": {
+              "made": 0,
+              "checked": 0,
+              "passed": 0,
+              "refused": 0,
+              "unchecked": 0
+            },
+            "memory": {
+              "made": 0,
+              "checked": 0,
+              "passed": 0,
+              "refused": 0,
+              "unchecked": 0
+            },
+            "agent": {
+              "made": 0,
+              "checked": 0,
+              "passed": 0,
+              "refused": 0,
+              "unchecked": 0
+            },
+            "harness": {
+              "made": 0,
+              "checked": 0,
+              "passed": 0,
+              "refused": 0,
+              "unchecked": 0
+            }
+          },
+          "flags": [
+            {
+              "check": "literal_outside_quote",
+              "detail": "f2: literal_not_in_quote",
+              "ref": "w1"
+            },
+            {
+              "check": "literal_outside_quote",
+              "detail": "f4: literal_not_in_quote",
+              "ref": "w1"
+            },
+            {
+              "check": "literal_outside_quote",
+              "detail": "f6: literal_not_in_quote",
+              "ref": "w1"
+            }
+          ],
+          "python_recheck_ran": false,
+          "children": []
+        }
+      }
+    },
+    {
+      "name": "a child with a malformed label or that is not an object is skipped, never thrown on",
+      "input": {
+        "payload": {
+          "facts": [
+            {
+              "id": "f1",
+              "value": "child",
+              "source": "c1:w1",
+              "quote": "child read text"
+            }
+          ]
+        },
+        "entries": [
+          {
+            "id": "w1",
+            "ts": "2026-11-17T10:00:00Z",
+            "tool": "read",
+            "args": {},
+            "result": {},
+            "truncated": false,
+            "source_kind": "file",
+            "saved_result": "results/w1.txt"
+          }
+        ],
+        "results": {
+          "w1": "parent text"
+        },
+        "children": [
+          {
+            "label": "c1",
+            "payload": {
+              "facts": []
+            },
+            "entries": [
+              {
+                "id": "w1",
+                "ts": "2026-11-17T10:00:00Z",
+                "tool": "read",
+                "args": {},
+                "result": {},
+                "truncated": false,
+                "source_kind": "file",
+                "saved_result": "results/w1.txt"
+              }
+            ],
+            "results": {
+              "w1": "child read text here ok"
+            }
+          },
+          {
+            "label": "../c2",
+            "payload": {},
+            "entries": [],
+            "results": {}
+          },
+          {
+            "label": "child one",
+            "payload": {},
+            "entries": [],
+            "results": {}
+          },
+          {
+            "label": "",
+            "payload": {},
+            "entries": [],
+            "results": {}
+          },
+          {
+            "label": 7,
+            "payload": {},
+            "entries": [],
+            "results": {}
+          },
+          {
+            "payload": {},
+            "entries": [],
+            "results": {}
+          },
+          null,
+          "c3",
+          [
+            "c4"
+          ]
+        ]
+      },
+      "expect": {
+        "accepted": true,
+        "facts": [
+          {
+            "id": "f1",
+            "run": "c1",
+            "verdict": "passed",
+            "reason": null,
+            "check": null,
+            "nearest": null,
+            "source_kind": "file",
+            "first_hand": true
+          }
+        ],
+        "verdicts": [],
+        "open_items": [],
+        "report": {
+          "facts": {
+            "made": 1,
+            "checked": 1,
+            "passed": 1,
+            "refused": 0,
+            "unchecked": 0
+          },
+          "conclusions": {
+            "made": 0,
+            "supported": 0,
+            "refuted": 0,
+            "open": 0
+          },
+          "statements": {
+            "made": 0,
+            "without_fact": 0
+          },
+          "by_source_kind": {
+            "file": {
+              "made": 1,
+              "checked": 1,
+              "passed": 1,
+              "refused": 0,
+              "unchecked": 0
+            },
+            "tool": {
+              "made": 0,
+              "checked": 0,
+              "passed": 0,
+              "refused": 0,
+              "unchecked": 0
+            },
+            "web": {
+              "made": 0,
+              "checked": 0,
+              "passed": 0,
+              "refused": 0,
+              "unchecked": 0
+            },
+            "memory": {
+              "made": 0,
+              "checked": 0,
+              "passed": 0,
+              "refused": 0,
+              "unchecked": 0
+            },
+            "agent": {
+              "made": 0,
+              "checked": 0,
+              "passed": 0,
+              "refused": 0,
+              "unchecked": 0
+            },
+            "harness": {
+              "made": 0,
+              "checked": 0,
+              "passed": 0,
+              "refused": 0,
+              "unchecked": 0
+            }
+          },
+          "flags": [],
+          "python_recheck_ran": false,
+          "children": [
+            {
+              "label": "c1",
+              "report": {
+                "facts": {
+                  "made": 0,
+                  "checked": 0,
+                  "passed": 0,
+                  "refused": 0,
+                  "unchecked": 0
+                },
+                "conclusions": {
+                  "made": 0,
+                  "supported": 0,
+                  "refuted": 0,
+                  "open": 0
+                },
+                "statements": {
+                  "made": 0,
+                  "without_fact": 0
+                },
+                "by_source_kind": {
+                  "file": {
+                    "made": 0,
+                    "checked": 0,
+                    "passed": 0,
+                    "refused": 0,
+                    "unchecked": 0
+                  },
+                  "tool": {
+                    "made": 0,
+                    "checked": 0,
+                    "passed": 0,
+                    "refused": 0,
+                    "unchecked": 0
+                  },
+                  "web": {
+                    "made": 0,
+                    "checked": 0,
+                    "passed": 0,
+                    "refused": 0,
+                    "unchecked": 0
+                  },
+                  "memory": {
+                    "made": 0,
+                    "checked": 0,
+                    "passed": 0,
+                    "refused": 0,
+                    "unchecked": 0
+                  },
+                  "agent": {
+                    "made": 0,
+                    "checked": 0,
+                    "passed": 0,
+                    "refused": 0,
+                    "unchecked": 0
+                  },
+                  "harness": {
+                    "made": 0,
+                    "checked": 0,
+                    "passed": 0,
+                    "refused": 0,
+                    "unchecked": 0
+                  }
+                },
+                "flags": [],
+                "python_recheck_ran": false,
+                "children": []
+              }
+            }
+          ]
+        }
+      }
+    }
+  ],
+  "literal_comment": "A fact value is a literal, and must occur inside its quote, when it is a string with no whitespace (trimmed), a JSON number or a JSON boolean. A number is written as ECMAScript Number::toString writes it (String(n) in TypeScript, which is what JSON.stringify gives): the shortest decimal that reads back as the same double, with no '.0' on an integer-valued number (7.0 is '7'), '0' for -0, plain digits from 1e-6 up to below 1e21 and exponent form outside that ('1e-7', '1e+21'); an integer beyond 2^53 is first rounded to the nearest double, as JSON.parse does. A boolean is 'true' or 'false'. Null, objects, arrays and non-finite numbers are not literals. Both checkers must give each value below the same literal (null: not a literal).",
+  "literal_cases": [
+    {"value": 42, "literal": "42"},
+    {"value": -12.25, "literal": "-12.25"},
+    {"value": 0.5, "literal": "0.5"},
+    {"value": 7.0, "literal": "7"},
+    {"value": -0.0, "literal": "0"},
+    {"value": 0, "literal": "0"},
+    {"value": 100, "literal": "100"},
+    {"value": 1e+20, "literal": "100000000000000000000"},
+    {"value": 1e+21, "literal": "1e+21"},
+    {"value": 1.5e+300, "literal": "1.5e+300"},
+    {"value": 1e-06, "literal": "0.000001"},
+    {"value": 1e-07, "literal": "1e-7"},
+    {"value": 1.23e-18, "literal": "1.23e-18"},
+    {"value": 123456.789, "literal": "123456.789"},
+    {"value": 0.1, "literal": "0.1"},
+    {"value": 9007199254740993, "literal": "9007199254740992"},
+    {"value": 12345678901234567890, "literal": "12345678901234567000"},
+    {"value": true, "literal": "true"},
+    {"value": false, "literal": "false"},
+    {"value": null, "literal": null},
+    {"value": [1], "literal": null},
+    {"value": {"a": 1}, "literal": null},
+    {"value": "  src/x.ts  ", "literal": "src/x.ts"},
+    {"value": "two words", "literal": null},
+    {"value": "", "literal": null}
+  ],
+  "contract_comment": "A min_quote_length that is not a positive integer (missing, null, zero, negative, a fraction, a string, a boolean, an array or object) is a broken contract. The checker fails closed: every fact is refused with reason quote_short before its source is looked up, and its flag detail names the contract value. An integer-valued number such as 8.0 is a positive integer. Each case runs contract_input with the accuracy contract's min_quote_length replaced by the case's value (removed when the case has none) and compares accepted, per-fact id/verdict/reason/check, per-verdict id/outcome/reason/check and the report's flags.",
+  "contract_input": {
+    "payload": {
+      "facts": [
+        {
+          "id": "f1",
+          "value": "lazy",
+          "source": "w1",
+          "quote": "over the lazy dog"
+        },
+        {
+          "id": "f2",
+          "value": "x",
+          "source": "nowhere",
+          "quote": "whatever it was"
+        }
+      ],
+      "verdicts": [
+        {
+          "id": "v1",
+          "verdict": "supported",
+          "basis": [
+            "f1"
+          ]
+        }
+      ]
+    },
+    "entries": [
+      {
+        "id": "w1",
+        "ts": "2026-11-17T10:00:00Z",
+        "tool": "read",
+        "args": {},
+        "result": {},
+        "truncated": false,
+        "source_kind": "file",
+        "saved_result": "results/w1.txt"
+      }
+    ],
+    "results": {
+      "w1": "The quick brown fox jumps over the lazy dog"
+    }
+  },
+  "contract_cases": [
+    {
+      "name": "missing",
+      "expect": {
+        "accepted": false,
+        "facts": [
+          {
+            "id": "f1",
+            "verdict": "refused",
+            "reason": "quote_short",
+            "check": "quote_too_short"
+          },
+          {
+            "id": "f2",
+            "verdict": "refused",
+            "reason": "quote_short",
+            "check": "quote_too_short"
+          }
+        ],
+        "verdicts": [
+          {
+            "id": "v1",
+            "outcome": "refused",
+            "reason": "basis_refused",
+            "check": "conclusion_without_fact"
+          }
+        ],
+        "flags": [
+          {
+            "check": "quote_too_short",
+            "detail": "f1: quote_short (accuracy.json min_quote_length is missing, not a positive integer)",
+            "ref": "w1"
+          },
+          {
+            "check": "quote_too_short",
+            "detail": "f2: quote_short (accuracy.json min_quote_length is missing, not a positive integer)"
+          },
+          {
+            "check": "conclusion_without_fact",
+            "detail": "v1: basis_refused"
+          }
+        ]
+      }
+    },
+    {
+      "name": "null",
+      "min_quote_length": null,
+      "expect": {
+        "accepted": false,
+        "facts": [
+          {
+            "id": "f1",
+            "verdict": "refused",
+            "reason": "quote_short",
+            "check": "quote_too_short"
+          },
+          {
+            "id": "f2",
+            "verdict": "refused",
+            "reason": "quote_short",
+            "check": "quote_too_short"
+          }
+        ],
+        "verdicts": [
+          {
+            "id": "v1",
+            "outcome": "refused",
+            "reason": "basis_refused",
+            "check": "conclusion_without_fact"
+          }
+        ],
+        "flags": [
+          {
+            "check": "quote_too_short",
+            "detail": "f1: quote_short (accuracy.json min_quote_length is null, not a positive integer)",
+            "ref": "w1"
+          },
+          {
+            "check": "quote_too_short",
+            "detail": "f2: quote_short (accuracy.json min_quote_length is null, not a positive integer)"
+          },
+          {
+            "check": "conclusion_without_fact",
+            "detail": "v1: basis_refused"
+          }
+        ]
+      }
+    },
+    {
+      "name": "zero",
+      "min_quote_length": 0,
+      "expect": {
+        "accepted": false,
+        "facts": [
+          {
+            "id": "f1",
+            "verdict": "refused",
+            "reason": "quote_short",
+            "check": "quote_too_short"
+          },
+          {
+            "id": "f2",
+            "verdict": "refused",
+            "reason": "quote_short",
+            "check": "quote_too_short"
+          }
+        ],
+        "verdicts": [
+          {
+            "id": "v1",
+            "outcome": "refused",
+            "reason": "basis_refused",
+            "check": "conclusion_without_fact"
+          }
+        ],
+        "flags": [
+          {
+            "check": "quote_too_short",
+            "detail": "f1: quote_short (accuracy.json min_quote_length is 0, not a positive integer)",
+            "ref": "w1"
+          },
+          {
+            "check": "quote_too_short",
+            "detail": "f2: quote_short (accuracy.json min_quote_length is 0, not a positive integer)"
+          },
+          {
+            "check": "conclusion_without_fact",
+            "detail": "v1: basis_refused"
+          }
+        ]
+      }
+    },
+    {
+      "name": "negative",
+      "min_quote_length": -3,
+      "expect": {
+        "accepted": false,
+        "facts": [
+          {
+            "id": "f1",
+            "verdict": "refused",
+            "reason": "quote_short",
+            "check": "quote_too_short"
+          },
+          {
+            "id": "f2",
+            "verdict": "refused",
+            "reason": "quote_short",
+            "check": "quote_too_short"
+          }
+        ],
+        "verdicts": [
+          {
+            "id": "v1",
+            "outcome": "refused",
+            "reason": "basis_refused",
+            "check": "conclusion_without_fact"
+          }
+        ],
+        "flags": [
+          {
+            "check": "quote_too_short",
+            "detail": "f1: quote_short (accuracy.json min_quote_length is -3, not a positive integer)",
+            "ref": "w1"
+          },
+          {
+            "check": "quote_too_short",
+            "detail": "f2: quote_short (accuracy.json min_quote_length is -3, not a positive integer)"
+          },
+          {
+            "check": "conclusion_without_fact",
+            "detail": "v1: basis_refused"
+          }
+        ]
+      }
+    },
+    {
+      "name": "fraction",
+      "min_quote_length": 2.5,
+      "expect": {
+        "accepted": false,
+        "facts": [
+          {
+            "id": "f1",
+            "verdict": "refused",
+            "reason": "quote_short",
+            "check": "quote_too_short"
+          },
+          {
+            "id": "f2",
+            "verdict": "refused",
+            "reason": "quote_short",
+            "check": "quote_too_short"
+          }
+        ],
+        "verdicts": [
+          {
+            "id": "v1",
+            "outcome": "refused",
+            "reason": "basis_refused",
+            "check": "conclusion_without_fact"
+          }
+        ],
+        "flags": [
+          {
+            "check": "quote_too_short",
+            "detail": "f1: quote_short (accuracy.json min_quote_length is 2.5, not a positive integer)",
+            "ref": "w1"
+          },
+          {
+            "check": "quote_too_short",
+            "detail": "f2: quote_short (accuracy.json min_quote_length is 2.5, not a positive integer)"
+          },
+          {
+            "check": "conclusion_without_fact",
+            "detail": "v1: basis_refused"
+          }
+        ]
+      }
+    },
+    {
+      "name": "string",
+      "min_quote_length": "8",
+      "expect": {
+        "accepted": false,
+        "facts": [
+          {
+            "id": "f1",
+            "verdict": "refused",
+            "reason": "quote_short",
+            "check": "quote_too_short"
+          },
+          {
+            "id": "f2",
+            "verdict": "refused",
+            "reason": "quote_short",
+            "check": "quote_too_short"
+          }
+        ],
+        "verdicts": [
+          {
+            "id": "v1",
+            "outcome": "refused",
+            "reason": "basis_refused",
+            "check": "conclusion_without_fact"
+          }
+        ],
+        "flags": [
+          {
+            "check": "quote_too_short",
+            "detail": "f1: quote_short (accuracy.json min_quote_length is \"8\", not a positive integer)",
+            "ref": "w1"
+          },
+          {
+            "check": "quote_too_short",
+            "detail": "f2: quote_short (accuracy.json min_quote_length is \"8\", not a positive integer)"
+          },
+          {
+            "check": "conclusion_without_fact",
+            "detail": "v1: basis_refused"
+          }
+        ]
+      }
+    },
+    {
+      "name": "boolean",
+      "min_quote_length": true,
+      "expect": {
+        "accepted": false,
+        "facts": [
+          {
+            "id": "f1",
+            "verdict": "refused",
+            "reason": "quote_short",
+            "check": "quote_too_short"
+          },
+          {
+            "id": "f2",
+            "verdict": "refused",
+            "reason": "quote_short",
+            "check": "quote_too_short"
+          }
+        ],
+        "verdicts": [
+          {
+            "id": "v1",
+            "outcome": "refused",
+            "reason": "basis_refused",
+            "check": "conclusion_without_fact"
+          }
+        ],
+        "flags": [
+          {
+            "check": "quote_too_short",
+            "detail": "f1: quote_short (accuracy.json min_quote_length is true, not a positive integer)",
+            "ref": "w1"
+          },
+          {
+            "check": "quote_too_short",
+            "detail": "f2: quote_short (accuracy.json min_quote_length is true, not a positive integer)"
+          },
+          {
+            "check": "conclusion_without_fact",
+            "detail": "v1: basis_refused"
+          }
+        ]
+      }
+    },
+    {
+      "name": "array",
+      "min_quote_length": [
+        8
+      ],
+      "expect": {
+        "accepted": false,
+        "facts": [
+          {
+            "id": "f1",
+            "verdict": "refused",
+            "reason": "quote_short",
+            "check": "quote_too_short"
+          },
+          {
+            "id": "f2",
+            "verdict": "refused",
+            "reason": "quote_short",
+            "check": "quote_too_short"
+          }
+        ],
+        "verdicts": [
+          {
+            "id": "v1",
+            "outcome": "refused",
+            "reason": "basis_refused",
+            "check": "conclusion_without_fact"
+          }
+        ],
+        "flags": [
+          {
+            "check": "quote_too_short",
+            "detail": "f1: quote_short (accuracy.json min_quote_length is an array, not a positive integer)",
+            "ref": "w1"
+          },
+          {
+            "check": "quote_too_short",
+            "detail": "f2: quote_short (accuracy.json min_quote_length is an array, not a positive integer)"
+          },
+          {
+            "check": "conclusion_without_fact",
+            "detail": "v1: basis_refused"
+          }
+        ]
+      }
+    },
+    {
+      "name": "integer-valued float is a positive integer",
+      "min_quote_length": 8.0,
+      "expect": {
+        "accepted": false,
+        "facts": [
+          {
+            "id": "f1",
+            "verdict": "passed",
+            "reason": null,
+            "check": null
+          },
+          {
+            "id": "f2",
+            "verdict": "refused",
+            "reason": "source_malformed",
+            "check": "unknown_source"
+          }
+        ],
+        "verdicts": [
+          {
+            "id": "v1",
+            "outcome": "accepted",
+            "reason": null,
+            "check": null
+          }
+        ],
+        "flags": [
+          {
+            "check": "unknown_source",
+            "detail": "f2: source_malformed"
+          }
+        ]
+      }
+    }
+  ]
+}

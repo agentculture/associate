@@ -10,11 +10,18 @@ Lifecycle::
     harness = get_harness("stub")()
     harness.start(checkout, contract_dir, session_id, export_dir)
     harness.submit(task)          # task validated against task.schema.json
-    result = harness.collect()    # {"walk_path", "statements_path", "outcome"}
+    result = harness.collect()    # {"walk_path", "statements_path", "outcome", ...}
 
 ``collect()`` returns *paths*, not content: persistence is the harness's job
 (c30), so the artifacts exist on disk whether or not the model ever wrote a
 file.
+
+After the model stops, an adapter adds the accuracy fields by calling
+:func:`associate.accuracy.check.accuracy_result` on the export directory
+(issue #20, h32): ``answer`` and ``answer_path`` (the harness-rendered answer),
+``handback_outcome``, ``check_mode`` and an ``accuracy`` object holding the
+counts from the Python re-check and whether it ran. An adapter that does not
+write the hand-back files simply reports ``handback_outcome`` ``none``.
 """
 
 from __future__ import annotations
@@ -92,6 +99,7 @@ class Harness(abc.ABC):
         """Return the run's artifacts.
 
         Keys: ``walk_path`` and ``statements_path`` (strings), ``outcome``
-        (one of the walk schema's run outcomes). An adapter that did not
-        exercise a real model must also set ``plumbing_only`` to ``True``.
+        (one of the walk schema's run outcomes), and the accuracy fields named
+        in the module docstring. An adapter that did not exercise a real model
+        must also set ``plumbing_only`` to ``True``.
         """

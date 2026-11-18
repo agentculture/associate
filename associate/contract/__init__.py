@@ -12,6 +12,8 @@ same whichever harness runs the lane:
   reasoning mode, allowed tools, prompt file, may_mutate, may_spawn);
 * ``gate.json``   — the pre-mutation safety-gate question set, thresholds and
   fallback rules;
+* ``accuracy.json`` — the accuracy method's settings (mode per model, retry
+  rounds, refusal cap, minimum quote length, source-kind table, checks);
 * ``schemas/``    — JSON Schema documents for the task input, the walk, and the
   statements/hand-back.
 
@@ -39,6 +41,7 @@ __all__ = [
     "load_models",
     "default_base_url",
     "load_gate",
+    "load_accuracy",
     "load_schema",
     "SCHEMA_NAMES",
     "walk_entry_schema",
@@ -47,7 +50,16 @@ __all__ = [
     "walk_child_schema",
 ]
 
-SCHEMA_NAMES: tuple[str, ...] = ("task", "walk", "statements", "models", "gate")
+SCHEMA_NAMES: tuple[str, ...] = (
+    "task",
+    "walk",
+    "statements",
+    "models",
+    "gate",
+    "accuracy",
+    "facts",
+    "report",
+)
 
 #: Key under which a schema keeps its local subschema definitions.
 DEFS_KEY = "$defs"
@@ -99,6 +111,11 @@ def default_base_url() -> str:
 def load_gate() -> dict[str, Any]:
     """The safety-gate question set (``gate.json``)."""
     return _cached(str(contract_dir() / "gate.json"))
+
+
+def load_accuracy() -> dict[str, Any]:
+    """The accuracy method's settings (``accuracy.json``)."""
+    return _cached(str(contract_dir() / "accuracy.json"))
 
 
 def load_schema(name: str) -> dict[str, Any]:

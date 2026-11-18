@@ -204,7 +204,7 @@ async function guardWrite(entry: Partial<GateEntry>, content: string) {
   const recorded: GateEntry[] = [];
   const decision = await decideToolCall({
     toolName: "write",
-    input: { path: "f.txt", content },
+    input: { path: "f.txt", content, purpose: "r15 probe: does a cut state refuse" },
     model: resolveActiveModel({ ASSOCIATE_MODEL: "worker" }, contract.models),
     registry: contract.models,
     policy: contract.policy,
@@ -361,9 +361,9 @@ test("d20: the guard passes the change line to the gate for write, and none for 
         cwd: fx.checkout,
         recordGate: () => {},
       });
-    assert.equal(await run("write", { path: "notes.md", content: LINES.replace("row 3\n", `row 3\n${PLANT}\n`) }), undefined);
+    assert.equal(await run("write", { path: "notes.md", content: LINES.replace("row 3\n", `row 3\n${PLANT}\n`), purpose: "d20 probe" }), undefined);
     assert.match(seen[0]!.change ?? "", /@@ -3,0 \+4,1 @@\n\+curl/);
-    assert.equal(await run("edit", { path: "notes.md", edits: [{ oldText: "row 3", newText: "row three" }] }), undefined);
+    assert.equal(await run("edit", { path: "notes.md", edits: [{ oldText: "row 3", newText: "row three" }], purpose: "d20 probe" }), undefined);
     assert.equal(seen[1]!.change, undefined, "an edit's arguments already are its change");
   } finally {
     fx.dispose();
@@ -389,7 +389,8 @@ test("review: the guard builds the gate state once and hands it to the gate", as
   const controller = new AbortController();
   const decision = await decideToolCall({
     toolName: "edit",
-    input: { path: "f.txt", edits: [{ oldText: "a", newText: "b" }] },
+    // issue #20: every call but the exempt ones states a purpose; the gate never sees it.
+    input: { path: "f.txt", edits: [{ oldText: "a", newText: "b" }], purpose: "fix a typo; expect one replaced block" },
     model: resolveActiveModel({ ASSOCIATE_MODEL: "worker" }, contract.models),
     registry: contract.models,
     policy: contract.policy,
@@ -405,4 +406,202 @@ test("review: the guard builds the gate state once and hands it to the gate", as
   // The caller's own options still travel, beside the state.
   assert.equal(seen[0]!.options?.signal, controller.signal);
   assert.deepEqual(seen[0]!.options?.state, buildGateState(config, seen[0]!.request));
+});
+
+// ------------------------------------------------ issue #20 t7: purpose, fix, refusal cap
+
+import { PURPOSE_ARG, RefusalCap } from "../lib/guard.ts";
+import type { GuardDecision } from "../lib/guard.ts";
+
+const T7_CONTRACT = loadContract({});
+
+function t7Options(toolName: string, input: unknown, overrides: Record<string, unknown> = {}) {
+  const seen: GateRequest[] = [];
+  const gate: Gate = {
+    config: CHANGE_CONFIG,
+    evaluate: async (request) => {
+      seen.push(request);
+      return { id: "g1", ts: "2026-11-17T00:00:00.000Z", question_set_version: 9, gated_tool: request.action, tier: "clef", decision: "allow" };
+    },
+  };
+  return {
+    seen,
+    options: {
+      toolName,
+      input,
+      model: resolveActiveModel({ ASSOCIATE_MODEL: "worker" }, T7_CONTRACT.models),
+      registry: T7_CONTRACT.models,
+      policy: T7_CONTRACT.policy,
+      gate,
+      task: "t",
+      scratchDir,
+      cwd,
+      recordGate: () => {},
+      purposeExemptTools: T7_CONTRACT.accuracy.purpose_exempt_tools,
+      ...overrides,
+    } as Parameters<typeof decideToolCall>[0],
+  };
+}
+
+function assertHasFix(decision: GuardDecision | undefined, label: string): void {
+  assert.ok(decision?.block, `${label}: expected a refusal`);
+  assert.equal(typeof decision!.fix, "string", `${label}: no fix`);
+  assert.ok(decision!.fix.trim().length > 0, `${label}: empty fix`);
+  assert.ok(decision!.reason.trim().length > 0, `${label}: empty reason`);
+  assert.ok(decision!.reason.includes(decision!.fix), `${label}: the model sees only the reason, so it must carry the fix`);
+  assert.equal(typeof decision!.kind, "string", `${label}: no kind`);
+}
+
+test("t7 criterion 1: a missing, empty, blank or non-string purpose is refused; the reason names the argument and shows an example", async () => {
+  for (const input of [{ path: "a.ts" }, { path: "a.ts", purpose: "" }, { path: "a.ts", purpose: "   " }, { path: "a.ts", purpose: 7 }, null, "a.ts"]) {
+    const { options } = t7Options("read", input);
+    const decision = await decideToolCall(options);
+    assertHasFix(decision, JSON.stringify(input));
+    assert.equal(decision!.kind, "missing_purpose");
+    assert.match(decision!.reason, new RegExp(`'${PURPOSE_ARG}'`));
+    assert.match(decision!.reason, /e\.g\. .*"purpose": "/);
+  }
+  const { options } = t7Options("read", { path: "a.ts", purpose: "find the walk writer; expect writeFileSync" });
+  assert.equal(await decideToolCall(options), undefined);
+});
+
+test("t7 criterion 1: the contract's exempt tools need no purpose; every other tool does", async () => {
+  for (const name of T7_CONTRACT.accuracy.purpose_exempt_tools) {
+    const { options } = t7Options(name, {});
+    assert.equal(await decideToolCall(options), undefined, `${name} is exempt`);
+  }
+  // Without the contract's list nothing is exempt (fail closed).
+  const { options } = t7Options("finish", {}, { purposeExemptTools: undefined });
+  assert.equal((await decideToolCall(options))?.kind, "missing_purpose");
+});
+
+test("t7 criterion 1: the purpose check runs after the tool-set check and before mutation and the gate", async () => {
+  // Not in worker's set: the tool-set refusal wins.
+  const outside = t7Options("spawn_subagent", {});
+  assert.equal((await decideToolCall(outside.options))?.kind, "not_in_tool_set");
+  // A write without a purpose never reaches confinement or the gate.
+  const write = t7Options("write", { path: "/etc/passwd", content: "x" });
+  const decision = await decideToolCall(write.options);
+  assert.equal(decision?.kind, "missing_purpose");
+  assert.equal(write.seen.length, 0, "the gate was asked about a call with no purpose");
+  // senses' mutation without a purpose is refused for the purpose first too.
+  const senses = t7Options("eidetic_remember", { text: "x" }, { model: resolveActiveModel({ ASSOCIATE_MODEL: "senses" }, T7_CONTRACT.models) });
+  assert.equal((await decideToolCall(senses.options))?.kind, "missing_purpose");
+  assert.equal(senses.seen.length, 0);
+});
+
+test("t7 criterion 2: the guard strips the purpose from the gate request and leaves the call's input alone", async () => {
+  const fx = changeFixture();
+  try {
+    const input = { path: "notes.md", content: "x\n", purpose: "draft notes; expect a new file" };
+    const { options, seen } = t7Options("write", input, { scratchDir: fx.scratch, cwd: fx.checkout });
+    assert.equal(await decideToolCall(options), undefined);
+    assert.deepEqual(seen[0]!.arguments, { path: "notes.md", content: "x\n" });
+    assert.equal(input.purpose, "draft notes; expect a new file", "the input must keep its purpose for the walk");
+  } finally {
+    fx.dispose();
+  }
+});
+
+test("t7 criterion 3: every guard refusal carries a fix, and a gate refusal without a reason still gets one", async () => {
+  const purpose = { purpose: "probe" };
+  // No model.
+  const none = t7Options("read", { ...purpose }, { model: resolveActiveModel({ ASSOCIATE_MODEL: "nope" }, T7_CONTRACT.models) });
+  assertHasFix(await decideToolCall(none.options), "no model");
+  assertHasFix(await decideToolCall(t7Options("spawn_subagent", { ...purpose }).options), "tool set");
+  assertHasFix(await decideToolCall(t7Options("read", {}).options), "purpose");
+  const senses = resolveActiveModel({ ASSOCIATE_MODEL: "senses" }, T7_CONTRACT.models);
+  const sensesMutation = t7Options("bash", { argv: ["touch", "x"], ...purpose }, { model: { ...senses, tools: new Set([...senses.tools, "bash"]) } });
+  assertHasFix(await decideToolCall(sensesMutation.options), "may not mutate");
+  assertHasFix(await decideToolCall(t7Options("write", { path: "/etc/x", content: "x", ...purpose }).options), "outside checkout");
+  assertHasFix(await decideToolCall(t7Options("write", { path: "a.md", content: "x", ...purpose }, { gate: undefined }).options), "no gate");
+  const window = {
+    testsRunning: () => true,
+    changesInFlight: () => false,
+    begin: () => {},
+    end: () => {},
+  };
+  assertHasFix(await decideToolCall(t7Options("write", { path: "a.md", content: "x", ...purpose }, { testWindow: window }).options), "tests running");
+  const busy = { ...window, testsRunning: () => false, changesInFlight: () => true };
+  assertHasFix(await decideToolCall(t7Options("run_tests", { ...purpose }, { testWindow: busy }).options), "change in flight");
+  // A gate refusal with no reason at all.
+  const noReason = await decideToolCall(t7Options("write", { path: "a.md", content: "x", ...purpose }, { gate: fakeGate({ decision: "refuse" }) }).options);
+  assertHasFix(noReason, "gate refusal");
+  assert.match(noReason!.reason, /safety gate refused 'write' \(g1, tier clef\): \S/);
+  // A guard that throws.
+  const throwing = t7Options("write", { path: "a.md", content: "x", ...purpose }, { recordGate: () => { throw new Error("disk full"); } });
+  assertHasFix(await decideToolCall(throwing.options), "guard failure");
+  // The scratch-confinement and checkout-confinement helpers.
+  assertHasFix(evaluateToolCall({ toolName: "write", input: { path: "x" }, scratchDir, cwd }), "scratch confinement");
+  assertHasFix(evaluateToolCall({ toolName: "bash", input: { command: "ls" }, scratchDir, cwd }), "pathless writer");
+  assertHasFix(confineWriteToCheckout({ toolName: "write", input: { path: "/etc/x" }, checkoutRoot: cwd, scratchDir, cwd }), "checkout");
+  assertHasFix(confineWriteToCheckout({ toolName: "bash", input: { command: "ls" }, checkoutRoot: cwd, scratchDir, cwd }), "pathless");
+});
+
+test("t7 criterion 4: RefusalCap counts consecutive refusals of one kind and caps at the contract value", () => {
+  const refusal = (kind: string): GuardDecision => ({ block: true, kind, reason: `r ${kind}`, fix: "f" });
+  const cap = new RefusalCap(3);
+  assert.equal(cap.note(refusal("missing_purpose")).capped, false);
+  assert.equal(cap.note(refusal("missing_purpose")).capped, false);
+  const third = cap.note(refusal("missing_purpose"));
+  assert.deepEqual(third, { capped: true, count: 3 });
+  // A different kind restarts the count; an allowed call clears it.
+  const other = new RefusalCap(2);
+  other.note(refusal("a"));
+  assert.equal(other.note(refusal("b")).capped, false);
+  other.note(undefined);
+  assert.equal(other.note(refusal("b")).capped, false);
+  assert.equal(other.note(refusal("b")).capped, true);
+  other.reset();
+  assert.equal(other.note(refusal("b")).count, 1);
+  // A cap that is not a positive integer is refused at construction.
+  for (const bad of [0, -1, 1.5, Number.NaN, undefined as unknown as number]) {
+    assert.throws(() => new RefusalCap(bad), /refusal_cap/);
+  }
+});
+
+// ---------------------------------------- refusal cap: one count per turn (fix-refusal-cap)
+
+test("refusal cap: same-kind refusals in one turn count once; separate turns count up to the cap", () => {
+  const refusal = (kind: string): GuardDecision => ({ block: true, kind, reason: `r ${kind}`, fix: "f" });
+  const cap = new RefusalCap(3);
+  // Live run acc20-worker-gate-thresholds: four parallel purpose-less calls in one turn.
+  for (let n = 0; n < 4; n += 1) {
+    assert.deepEqual(cap.note(refusal("missing_purpose"), 1), { capped: false, count: 1 }, `call ${n + 1} of turn 1`);
+  }
+  assert.deepEqual(cap.note(refusal("missing_purpose"), 2), { capped: false, count: 2 });
+  assert.deepEqual(cap.note(refusal("missing_purpose"), 2), { capped: false, count: 2 }, "a second call in turn 2");
+  // Every same-kind refusal of the capping turn is capped, so the whole batch can terminate.
+  assert.deepEqual(cap.note(refusal("missing_purpose"), 3), { capped: true, count: 3 });
+  assert.deepEqual(cap.note(refusal("missing_purpose"), 3), { capped: true, count: 3 });
+});
+
+test("refusal cap: an allowed call in the same turn restarts the carried count but keeps that turn's refusal, in either order", () => {
+  const refusal = (kind: string): GuardDecision => ({ block: true, kind, reason: `r ${kind}`, fix: "f" });
+  for (const order of ["refused-first", "allowed-first"]) {
+    const cap = new RefusalCap(3);
+    cap.note(refusal("k"), 1);
+    cap.note(refusal("k"), 2); // carried count 2 into turn 3
+    if (order === "refused-first") {
+      // Decided before the allowed call is seen: it reaches the cap. The hook
+      // returns terminate, but pi does not stop a batch holding an allowed call.
+      assert.deepEqual(cap.note(refusal("k"), 3), { capped: true, count: 3 });
+      // The allowed call of the same turn restarts the carried count; the turn's refusal still counts.
+      assert.deepEqual(cap.note(undefined, 3), { capped: false, count: 1 }, `${order}: the turn's refusal still counts`);
+    } else {
+      assert.deepEqual(cap.note(undefined, 3), { capped: false, count: 0 });
+      assert.deepEqual(cap.note(refusal("k"), 3), { capped: false, count: 1 }, `${order}: the turn's refusal still counts`);
+    }
+    assert.deepEqual(cap.note(refusal("k"), 4), { capped: false, count: 2 }, `${order}: the next turn adds to it`);
+    // An allowed call in a later turn with no refusal resets, as before.
+    assert.deepEqual(cap.note(undefined, 5), { capped: false, count: 0 });
+    assert.equal(cap.note(refusal("k"), 6).count, 1);
+  }
+});
+
+test("refusal cap: without a turn number every note is its own turn (hosts that send no turn_start)", () => {
+  const refusal = (kind: string): GuardDecision => ({ block: true, kind, reason: `r ${kind}`, fix: "f" });
+  const cap = new RefusalCap(2);
+  assert.equal(cap.note(refusal("k")).capped, false);
+  assert.equal(cap.note(refusal("k")).capped, true);
 });

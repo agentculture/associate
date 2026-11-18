@@ -131,7 +131,9 @@ def load_run_record(walk_path: Path) -> dict[str, Any]:
     for parsed in _parsed_lines(_read_walk_text(walk_path)):
         if isinstance(parsed, dict) and set(parsed) == {"run"} and isinstance(parsed["run"], dict):
             record = dict(parsed["run"])
-        elif isinstance(parsed, dict):
+        elif isinstance(parsed, dict) and "id" in parsed and "tool" in parsed:
+            # Only a tool entry is a call: the format marker, gate and child
+            # lines are not. A walk with no marker is a pre-change export.
             entries += 1
 
     if not record:
@@ -196,7 +198,9 @@ class Stats:
 
     @property
     def failures(self) -> int:
-        return sum(count for name, count in self.outcomes.items() if name in FAILURE_OUTCOMES)
+        # Any outcome but a clean finish is a failure, including one a later
+        # contract adds that this table does not know by name yet.
+        return sum(count for name, count in self.outcomes.items() if name != "ok")
 
     @property
     def failure_rate(self) -> float:
@@ -209,7 +213,10 @@ class Stats:
             "ok": self.outcomes.get("ok", 0),
             "failures": self.failures,
             "failure_rate": round(self.failure_rate, 4),
-            "outcomes": {name: self.outcomes[name] for name in OUTCOMES if name in self.outcomes},
+            "outcomes": {
+                **{name: self.outcomes[name] for name in OUTCOMES if name in self.outcomes},
+                **{name: n for name, n in sorted(self.outcomes.items()) if name not in OUTCOMES},
+            },
             "truncated": self.truncated,
             "p50_ms": int(percentile(self.durations, 0.50)),
             "p90_ms": int(percentile(self.durations, 0.90)),
@@ -226,7 +233,7 @@ def aggregate(records: Iterable[dict[str, Any]], label: str = "all") -> Stats:
     for record in records:
         stats.runs += 1
         outcome = record.get("outcome") or "incomplete"
-        if outcome not in OUTCOMES:
+        if not isinstance(outcome, str):
             outcome = "incomplete"
         stats.outcomes[outcome] = stats.outcomes.get(outcome, 0) + 1
         duration = record.get("duration_ms")

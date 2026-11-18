@@ -6,7 +6,14 @@
  * entry**. So this module hooks `tool_call` and `tool_result` and writes one
  * entry per completed tool event; nothing here invents a call the model did not
  * make, and nothing here is reachable by the model (h24: the walk cannot be
- * hallucinated, only the statements can be wrong).
+ * hallucinated, only the statements can be wrong). A call pi rejects before
+ * the hook (an unknown tool, invalid arguments) has no `tool_call` or
+ * `tool_result`; `index.ts` records it from its `tool_execution_end` through
+ * {@link WalkRecorder.recordUnseenEnd} (plan t9, approved deviation).
+ *
+ * Plan t9: the recorder binds each entry's id to the call id it was written
+ * for ({@link WalkRecorder.entryIdFor}), and `index.ts` stamps the result the
+ * model is sent with that id ({@link WALK_ID_STAMP_PREFIX}).
  *
  * Spec c23/h17: the export happens by default, with no flag — persistence is
  * the harness's job, not the model's habit. The recorder therefore starts
@@ -28,19 +35,129 @@
  * an absent run record is the honest signal that the run did not finish.
  *
  * On-disk shape, matching `associate/contract/schemas/walk.schema.json`:
- * one `$defs/entry` per line, interleaved `{"gate": <$defs/gate>}` and
+ * a first `{"format": <$defs/format>}` line naming the walk format, then one
+ * `$defs/entry` per line, interleaved `{"gate": <$defs/gate>}` and
  * `{"child": <$defs/child>}` lines, then a final `{"run": <$defs/run>}` line.
+ * A walk with no format line was written before format 2 (issue #20) and is
+ * read as format 1; a recorder continuing such a walk never adds the marker
+ * mid-file.
+ *
+ * **The entry is the full action record (issue #20, plan t6).** Besides id,
+ * ts, tool, args, result and truncated, an entry carries:
+ *
+ * - `purpose` — the purpose the model stated on the call: the string value of
+ *   the call's `purpose` argument as the `tool_call` event carried it,
+ *   redacted. Absent when the call had none (an exempt tool such as finish, a
+ *   pre-change walk). The purpose also stays inside `args`, which is complete.
+ * - `args` — the arguments **as asked**: a deep copy taken at `tool_call`
+ *   (`noteToolCall`), before any later hook can patch `event.input` in place
+ *   (pi 1.5.2: "event.input is mutable").
+ * - `args_used` / `dropped_args` — the arguments **as used**, when the tool
+ *   reports them. The tools fill two keys of their result `details`:
+ *     - `details.args_used` (an object): the arguments the tool actually ran
+ *       with, defaults applied and ignored arguments left out;
+ *     - `details.dropped_args` (an array of strings): names of arguments the
+ *       tool ignored.
+ *   When a tool reports neither, the entry simply has no "as used" value.
+ * - `source_kind` — what kind of source the result is (file, tool, web,
+ *   memory, agent, harness), looked up by tool name in the contract's
+ *   `accuracy.json` `source_kinds` table, never from model text. Absent for a
+ *   tool the table does not list.
+ * - `saved_result` — the name, relative to the export directory, of the file
+ *   holding the result text (`results/w<N>.txt`, see `lib/results.ts`).
+ *   Absent when nothing was saved (a refused or unresolved call).
+ * - `not_shown_chars` — characters of the result the model was not shown. A
+ *   tool that cuts its output reports the count in `details.not_shown_chars`
+ *   (a non-negative integer). A result the tool did not mark truncated counts
+ *   0; a truncated result with no reported count carries no value (unknown is
+ *   never written as 0).
+ * - `partial` — true when the saved file does not hold the whole text the
+ *   recorder received: above `caps.max_raw_chars`, or nothing saved at all.
  */
 
-import { appendFileSync, existsSync, readFileSync } from "node:fs";
+import { appendFileSync, existsSync, readFileSync, statSync } from "node:fs";
 import { createHash } from "node:crypto";
 import { join } from "node:path";
-import { policySection, type ContractPolicy } from "./contract.ts";
+import { policySection, type ContractPolicy, type SourceKind } from "./contract.ts";
+import { saveResult } from "./results.ts";
 import type { AssociateContext } from "./context.ts";
 import type { GateEntry } from "./gate.ts";
 
 /** The walk's file name inside the session export directory. */
 export const WALK_FILENAME = "walk.jsonl";
+
+/**
+ * The format marker written as the walk's first line, `{"format": WALK_FORMAT}`.
+ * Not a policy value: it names the shape this writer produces, and
+ * `walk.schema.json` `$defs/format` pins the same name and version (a test
+ * keeps them equal). Version 1 is every walk written before the marker.
+ */
+export const WALK_FORMAT: Readonly<{ name: string; version: number }> = Object.freeze({
+  name: "associate-walk",
+  version: 2,
+});
+
+/** Result-details key a tool fills with the arguments it actually used (an object). */
+export const ARGS_USED_KEY = "args_used";
+
+/** Result-details key a tool fills with the names of arguments it ignored (string array). */
+export const DROPPED_ARGS_KEY = "dropped_args";
+
+/** Result-details key a tool fills with the characters it did not show the model. */
+export const NOT_SHOWN_CHARS_KEY = "not_shown_chars";
+
+/** The call argument carrying the model's stated purpose. */
+export const PURPOSE_ARG = "purpose";
+
+/**
+ * The harness line every tool result the model sees begins with (issue #20,
+ * plan t9): `walk id: w12` on its own first line, naming the walk entry the
+ * recorder wrote for that call, so a fact cites an id the model was given
+ * instead of one it counted. Not a policy value: it is the shape this
+ * extension writes, and the prompts and the matcher refer to it by this
+ * constant. The stamp is added after the entry and its saved result are
+ * written, so neither the walk, the saved result nor the matcher ever sees it.
+ */
+export const WALK_ID_STAMP_PREFIX = "walk id: ";
+
+/** A leading stamp line (`walk id: wN`, then a newline or the end of the text). */
+export const WALK_ID_STAMP_PATTERN = /^walk id: (w[1-9][0-9]*)(?:\n|$)/;
+
+/** The stamp line for walk id `id`, without a trailing newline. */
+export function walkIdStampLine(id: string): string {
+  return `${WALK_ID_STAMP_PREFIX}${id}`;
+}
+
+/** `text` with a leading stamp line removed; any other text is returned unchanged. */
+export function stripWalkIdStamp(text: string): string {
+  return text.replace(WALK_ID_STAMP_PATTERN, "");
+}
+
+/** `text` with the stamp line for `id` put in front of it. */
+export function stampText(id: string, text: string): string {
+  return text === "" ? walkIdStampLine(id) : `${walkIdStampLine(id)}\n${text}`;
+}
+
+/**
+ * A tool result's `content` with the stamp line for `id` in front.
+ *
+ * The line is merged into the first block when that block is text, so the
+ * text the model reads begins with it however a provider joins blocks; a
+ * result whose first block is not text (an image) gets a text block of its
+ * own in front. Every other block is kept as it was.
+ */
+export function stampContent(id: string, content: unknown): unknown {
+  if (typeof content === "string") return stampText(id, content);
+  if (!Array.isArray(content)) {
+    if (content == null) return [{ type: "text", text: walkIdStampLine(id) }];
+    return content;
+  }
+  const first = content[0] as { type?: unknown; text?: unknown } | undefined;
+  if (first && typeof first === "object" && first.type === "text" && typeof first.text === "string") {
+    return [{ ...first, text: stampText(id, first.text) }, ...content.slice(1)];
+  }
+  return [{ type: "text", text: walkIdStampLine(id) }, ...content];
+}
 
 /**
  * Tool names whose result is file content, so the entry carries both the
@@ -71,8 +188,23 @@ export interface WalkEntry {
   id: string;
   ts: string;
   tool: string;
+  /** The model's stated purpose, redacted; absent when the call had none. */
+  purpose?: string;
+  /** Arguments as asked, captured at tool_call. */
   args: Record<string, unknown>;
+  /** Arguments as used, when the tool reported them (`details.args_used`). */
+  args_used?: Record<string, unknown>;
+  /** Arguments the tool ignored, when it reported them (`details.dropped_args`). */
+  dropped_args?: string[];
+  /** From the contract's `source_kinds` table; absent for a tool it does not list. */
+  source_kind?: SourceKind;
   result: WalkResult;
+  /** Saved result file, relative to the export directory. */
+  saved_result?: string;
+  /** Characters the model was not shown; absent when unknown. */
+  not_shown_chars?: number;
+  /** True when the saved file does not hold the whole result text. */
+  partial: boolean;
   truncated: boolean;
   error?: string;
 }
@@ -239,6 +371,11 @@ export interface WalkRecorderOptions {
   model?: string;
   /** The active model's lobes role (its wire id), when a model was resolved. */
   lobes_role?: string;
+  /**
+   * The contract's tool-name → source-kind table (`accuracy.json`
+   * `source_kinds`). Absent: entries carry no `source_kind`.
+   */
+  sourceKinds?: Readonly<Record<string, SourceKind>>;
 }
 
 /**
@@ -256,9 +393,20 @@ export class WalkRecorder {
   /** Inline cap from the contract's `caps.max_raw_chars`; 0 means no cap. */
   private readonly inlineLimit: number;
   private readonly startedAt: number;
+  private readonly exportDir: string;
+  private readonly sourceKinds: Readonly<Record<string, SourceKind>>;
+  /** Whether the format marker question has been settled for this file. */
+  private formatChecked = false;
   private readonly pending = new Map<string, { toolName: string; args: unknown }>();
   /** Calls the guard refused (L4): recorded at refusal, never again from a late tool_result. */
   private readonly blocked = new Set<string>();
+  /**
+   * The walk id of the entry written for each call id (plan t9), so the
+   * handler that stamps a result — or a refusal reason — names the very entry
+   * this recorder wrote for that call, and `tool_execution_end` can tell a
+   * call that was already recorded from one pi rejected before the hook.
+   */
+  private readonly entryIdByCall = new Map<string, string>();
 
   private nextId: number;
   private nextChildId: number;
@@ -272,6 +420,8 @@ export class WalkRecorder {
 
   constructor(options: WalkRecorderOptions) {
     this.walkPath = join(options.exportDir, WALK_FILENAME);
+    this.exportDir = options.exportDir;
+    this.sourceKinds = options.sourceKinds ?? {};
     this.filter = compileRedaction(options.policy);
     this.now = options.now ?? (() => new Date());
     this.isReadTool = options.isReadTool ?? isReadToolName;
@@ -316,9 +466,27 @@ export class WalkRecorder {
     return ids;
   }
 
+  /**
+   * The walk id of the entry this recorder wrote for `toolCallId`, or
+   * undefined when it wrote none (yet). Used to stamp the result the model is
+   * sent with the id of its own entry (plan t9).
+   */
+  entryIdFor(toolCallId: string | undefined): string | undefined {
+    return toolCallId ? this.entryIdByCall.get(toolCallId) : undefined;
+  }
+
   /** Pin the run's outcome; the guard or a launcher may know better than us. */
   markOutcome(outcome: WalkOutcome): void {
     this.explicitOutcome = outcome;
+  }
+
+  /**
+   * Lift a pinned outcome, only when it is still `outcome` — for a pin whose
+   * premise turned out false (the refusal cap's `agent_end` pin, when pi
+   * starts another turn of the same run). A different pin is left alone.
+   */
+  clearOutcome(outcome: WalkOutcome): void {
+    if (this.explicitOutcome === outcome) this.explicitOutcome = undefined;
   }
 
   /**
@@ -333,9 +501,12 @@ export class WalkRecorder {
   noteToolCall(event: ToolCallEventLike): void {
     const toolCallId = typeof event.toolCallId === "string" ? event.toolCallId : undefined;
     if (!toolCallId) return;
+    // A deep copy, taken now: these are the arguments *as asked*. pi lets a
+    // later tool_call hook mutate event.input in place, and the object the
+    // tool_result event carries may be that patched one.
     this.pending.set(toolCallId, {
       toolName: typeof event.toolName === "string" ? event.toolName : "unknown",
-      args: event.input ?? event.args,
+      args: snapshot(event.input ?? event.args),
     });
   }
 
@@ -357,10 +528,46 @@ export class WalkRecorder {
       this.buildEntry({
         tool: pendingCall.toolName,
         args: pendingCall.args ?? {},
-        text: "",
+        text: undefined,
         truncated: false,
         error: `refused: ${reason}`,
       }),
+      toolCallId,
+    );
+  }
+
+  /**
+   * Record a call pi ended without ever sending it to the `tool_call` hook
+   * (approved deviation, 2026-11-17, plan t9). pi 1.5.2: "An unknown tool or
+   * invalid arguments skip `tool_call`; … Each of these still gets
+   * `tool_execution_end` with an error result". Such a call is a real event
+   * the model caused and saw an error for, so it gets one entry: the tool
+   * name, the arguments when the event carries them, pi's error text as
+   * `error`, and no saved result.
+   *
+   * A call id this recorder already knows — noted at `tool_call` (pending, or
+   * an aborted call {@link finalize} will flush), refused, or recorded from
+   * its `tool_result` — is ignored, so no call is written twice. Nothing is
+   * written once the walk is finalized. Returns the entry written, if any.
+   */
+  recordUnseenEnd(event: ToolResultEventLike & { result?: unknown }): WalkEntry | undefined {
+    const toolCallId = typeof event.toolCallId === "string" ? event.toolCallId : undefined;
+    if (!toolCallId || this.finalized) return undefined;
+    if (this.pending.has(toolCallId) || this.blocked.has(toolCallId) || this.entryIdByCall.has(toolCallId)) {
+      return undefined;
+    }
+    const result = event.result as { content?: unknown } | undefined;
+    const text = contentToText(result && typeof result === "object" ? result.content : event.content);
+    this.toolCalls += 1;
+    return this.append(
+      this.buildEntry({
+        tool: typeof event.toolName === "string" ? event.toolName : "unknown",
+        args: snapshot(event.args ?? event.input ?? {}),
+        text: undefined,
+        truncated: false,
+        error: text || "pi ended this tool call before the tool_call hook, with no error text",
+      }),
+      toolCallId,
     );
   }
 
@@ -376,23 +583,26 @@ export class WalkRecorder {
       (typeof event.toolName === "string" ? event.toolName : undefined) ??
       remembered?.toolName ??
       "unknown";
-    const rawArgs = event.input ?? event.args ?? remembered?.args ?? {};
+    // As asked: the copy taken at tool_call wins over whatever the result
+    // event carries; a result with no preceding call falls back to its own.
+    const rawArgs = remembered ? (remembered.args ?? {}) : (event.input ?? event.args ?? {});
     const text = contentToText(event.content);
-    const details = event.details;
-    const detailTruncated =
-      !!details &&
-      typeof details === "object" &&
-      (details as Record<string, unknown>).truncated === true;
+    const details =
+      event.details && typeof event.details === "object" && !Array.isArray(event.details)
+        ? (event.details as Record<string, unknown>)
+        : {};
+    const detailTruncated = details.truncated === true;
 
     const entry = this.buildEntry({
       tool,
       args: rawArgs,
       text,
       truncated: detailTruncated,
+      details,
       error: event.isError === true ? text || "tool call failed" : undefined,
     });
     this.toolCalls += 1;
-    return this.append(entry);
+    return this.append(entry, toolCallId);
   }
 
   /**
@@ -410,7 +620,7 @@ export class WalkRecorder {
       throw new Error("the walk is already finalized; a gate decision can no longer be recorded");
     }
     const redacted = redactValue(entry, this.filter);
-    appendFileSync(this.walkPath, `${JSON.stringify({ gate: redacted })}\n`, "utf8");
+    this.writeLine({ gate: redacted });
     return redacted;
   }
 
@@ -439,7 +649,7 @@ export class WalkRecorder {
       },
       this.filter,
     );
-    appendFileSync(this.walkPath, `${JSON.stringify({ child: entry })}\n`, "utf8");
+    this.writeLine({ child: entry });
     this.nextChildId += 1;
     return entry;
   }
@@ -454,18 +664,19 @@ export class WalkRecorder {
 
     // Calls Pi fired but never resolved are real events, so they are recorded —
     // as entries carrying why they have no result, never silently dropped.
-    for (const [, pendingCall] of this.pending) {
+    for (const [toolCallId, pendingCall] of this.pending) {
       this.unresolved += 1;
       this.toolCalls += 1;
       this.append(
         this.buildEntry({
           tool: pendingCall.toolName,
           args: pendingCall.args ?? {},
-          text: "",
+          text: undefined,
           truncated: false,
           error:
             "no tool_result was received for this tool call: the run ended first",
         }),
+        toolCallId,
       );
     }
     this.pending.clear();
@@ -480,7 +691,7 @@ export class WalkRecorder {
       ...(this.model !== undefined ? { model: this.model } : {}),
       ...(this.lobes_role !== undefined ? { lobes_role: this.lobes_role } : {}),
     };
-    appendFileSync(this.walkPath, `${JSON.stringify({ run })}\n`, "utf8");
+    this.writeLine({ run });
     this.finalized = run;
     return run;
   }
@@ -490,14 +701,17 @@ export class WalkRecorder {
   private buildEntry(input: {
     tool: string;
     args: unknown;
-    text: string;
+    /** The result text; undefined when the call produced no result at all. */
+    text: string | undefined;
     truncated: boolean;
+    details?: Record<string, unknown>;
     error?: string;
   }): WalkEntry {
+    const id = `w${this.nextId}`;
     // Redact first, digest second: the sha256 is of the content this file
     // stores, so a reader can recompute it from the walk instead of taking it
     // on trust — and no unredacted byte is ever hashed into the artifact.
-    const content = this.filter.apply(input.text);
+    const content = this.filter.apply(input.text ?? "");
     const bytes = Buffer.byteLength(content, "utf8");
     const overLimit = this.inlineLimit > 0 && content.length > this.inlineLimit;
     const sha256 = createHash("sha256").update(content, "utf8").digest("hex");
@@ -511,28 +725,106 @@ export class WalkRecorder {
     // The schema types `args` as an object; a tool called with a bare value
     // still has to be recorded, so it is wrapped rather than dropped.
     const args = redactValue(input.args, this.filter);
-    const argsObject =
-      args && typeof args === "object" && !Array.isArray(args)
-        ? (args as Record<string, unknown>)
-        : { value: args };
+    const argsObject = isPlainObject(args) ? args : { value: args };
 
+    // The saved result: the same redacted text, in full up to the cap. It is
+    // written before the entry line, so an entry never names a missing file.
+    let savedResult: string | undefined;
+    let partial = true;
+    if (input.text !== undefined) {
+      try {
+        const saved = saveResult(this.exportDir, id, content, this.inlineLimit);
+        savedResult = saved.name;
+        partial = saved.partial;
+      } catch {
+        // Not saved: the entry is still recorded, without a file, as partial.
+      }
+    }
+
+    const details = input.details ?? {};
     const entry: WalkEntry = {
-      id: `w${this.nextId}`,
+      id,
       ts: this.now().toISOString(),
       tool: input.tool,
       args: argsObject,
       result,
+      partial,
       truncated: input.truncated || overLimit,
     };
+
+    const purpose = isPlainObject(input.args) ? input.args[PURPOSE_ARG] : undefined;
+    if (typeof purpose === "string") entry.purpose = this.filter.apply(purpose);
+
+    const used = details[ARGS_USED_KEY];
+    if (isPlainObject(used)) entry.args_used = redactValue(used, this.filter);
+    const dropped = details[DROPPED_ARGS_KEY];
+    if (Array.isArray(dropped) && dropped.every((name) => typeof name === "string")) {
+      entry.dropped_args = dropped.map((name) => this.filter.apply(name));
+    }
+
+    if (Object.hasOwn(this.sourceKinds, input.tool)) entry.source_kind = this.sourceKinds[input.tool];
+    if (savedResult !== undefined) entry.saved_result = savedResult;
+
+    if (input.text !== undefined) {
+      const reported = details[NOT_SHOWN_CHARS_KEY];
+      if (typeof reported === "number" && Number.isInteger(reported) && reported >= 0) {
+        entry.not_shown_chars = reported;
+      } else if (!input.truncated) {
+        entry.not_shown_chars = 0;
+      }
+    }
+
     if (input.error) entry.error = this.filter.apply(input.error);
     return entry;
   }
 
-  private append(entry: WalkEntry): WalkEntry {
-    appendFileSync(this.walkPath, `${JSON.stringify(entry)}\n`, "utf8");
+  /**
+   * Write one entry and issue its id. The id was allocated by
+   * {@link buildEntry} from `nextId`; it is bound to `toolCallId` here, only
+   * after the line is on disk, so a stamp never names an entry that was not
+   * written.
+   */
+  private append(entry: WalkEntry, toolCallId?: string): WalkEntry {
+    this.writeLine(entry);
+    if (toolCallId) this.entryIdByCall.set(toolCallId, entry.id);
     this.nextId += 1;
     if (entry.truncated) this.anyTruncated = true;
     return entry;
+  }
+
+  /**
+   * Append one complete JSON line. The only place the walk file is written:
+   * every line is `JSON.stringify` of a record, so no text inside a record —
+   * a purpose, an argument, a result — can ever start a line of its own.
+   * The first line ever written to an empty or absent file is preceded by the
+   * format marker.
+   */
+  private writeLine(record: unknown): void {
+    if (!this.formatChecked) {
+      if (!existsSync(this.walkPath) || statSync(this.walkPath).size === 0) {
+        appendFileSync(this.walkPath, `${JSON.stringify({ format: WALK_FORMAT })}\n`, "utf8");
+      }
+      this.formatChecked = true;
+    }
+    appendFileSync(this.walkPath, `${JSON.stringify(record)}\n`, "utf8");
+  }
+}
+
+function isPlainObject(value: unknown): value is Record<string, unknown> {
+  return !!value && typeof value === "object" && !Array.isArray(value);
+}
+
+/**
+ * A deep copy of a call's arguments as they are now. Arguments are JSON from
+ * the model, so `structuredClone` covers them; anything it cannot copy is
+ * kept by reference rather than dropped.
+ */
+function snapshot(value: unknown): unknown {
+  if (value === null || typeof value !== "object") return value;
+  try {
+    return structuredClone(value);
+  } catch {
+    return value;
   }
 }
 
@@ -544,8 +836,12 @@ function countExistingEntries(walkPath: string): number {
     if (!line.trim()) continue;
     try {
       const record = JSON.parse(line) as Record<string, unknown>;
-      // Run, gate and child lines are not tool entries and take no walk id.
-      if (record && typeof record === "object" && ("run" in record || "gate" in record || "child" in record)) {
+      // Run, gate, child and format lines are not tool entries and take no walk id.
+      if (
+        record &&
+        typeof record === "object" &&
+        ("run" in record || "gate" in record || "child" in record || "format" in record)
+      ) {
         continue;
       }
     } catch {
@@ -588,6 +884,7 @@ export function installWalkRecorder(
   const recorder = new WalkRecorder({
     exportDir: ctx.session.exportDir,
     policy: ctx.policy,
+    sourceKinds: ctx.contract?.accuracy?.source_kinds,
     model: options.model,
     lobes_role: options.lobes_role,
   });

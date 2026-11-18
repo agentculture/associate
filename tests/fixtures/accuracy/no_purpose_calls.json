@@ -1,0 +1,29 @@
+{
+  "_origin": "Recorded run scope20-cortex-t1 (cortex), pre-change export: the arguments of its first tool calls (w1 eidetic_recall, w3 grep, w5 read), none of which stated a purpose (the walk then had no purpose field at all). Paths rewritten to /checkout.",
+  "kind": "recorded",
+  "calls": [
+    {
+      "id": "w1",
+      "tool": "eidetic_recall",
+      "args": {
+        "query": "CLEF safety gate thresholds gated tools mutating set"
+      }
+    },
+    {
+      "id": "w3",
+      "tool": "grep",
+      "args": {
+        "pattern": "safety",
+        "case_insensitive": true,
+        "glob": "*.py"
+      }
+    },
+    {
+      "id": "w5",
+      "tool": "read",
+      "args": {
+        "path": "associate/contract/gate.json"
+      }
+    }
+  ]
+}

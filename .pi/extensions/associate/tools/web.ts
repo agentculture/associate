@@ -57,6 +57,14 @@ const BROWSER_INSTALL_STEP = "playwright install --with-deps chromium";
 /** Only http(s). A `file:`, `data:` or `chrome:` URL is not a web fetch. */
 const URL_PATTERN = "^https?://[^\\s]+$";
 
+/** The `purpose` argument: stated on every call, read by the harness, never sent to the web. */
+const PURPOSE_PROPERTY = {
+  type: "string",
+  description:
+    "Why you are making this call: the question it settles and what you expect to see. " +
+    "It is recorded with the call; it does not change what the tool does.",
+} as const;
+
 export const WEB_SEARCH_SCHEMA = {
   type: "object",
   required: ["query"],
@@ -66,6 +74,7 @@ export const WEB_SEARCH_SCHEMA = {
       type: "integer",
       description: "Maximum results to return (webglass's own default is 10).",
     },
+    purpose: PURPOSE_PROPERTY,
   },
 } as const;
 
@@ -78,6 +87,7 @@ export const WEB_PAGE_SCHEMA = {
       pattern: URL_PATTERN,
       description: "Absolute http(s) URL to open. Loopback and private-network targets are denied.",
     },
+    purpose: PURPOSE_PROPERTY,
   },
 } as const;
 
@@ -399,7 +409,22 @@ export function createWebTools(ctx: AssociateContext, deps: WebDeps = {}): ToolD
   function bodyText(payload: Json) {
     const untrusted = untrustedContent(payload);
     const raw = untrusted === undefined ? "" : JSON.stringify(untrusted);
-    return boundOutput(raw, webBudget(ctx), ctx.session.scratchDir);
+    const bounded = boundOutput(raw, webBudget(ctx), ctx.session.scratchDir);
+    // Characters of the body the model was not shown. A bounded text starts
+    // with a notice (up to the first blank line) that is not the body's.
+    let notShown = 0;
+    if (bounded.truncated) {
+      const noticeEnd = bounded.text.indexOf("\n\n");
+      const shown = noticeEnd >= 0 ? bounded.text.length - (noticeEnd + 2) : bounded.text.length;
+      notShown = Math.max(0, raw.length - shown);
+    }
+    return { ...bounded, notShown };
+  }
+
+  /** The walk's "as used" keys: the arguments the call ran with, and the ones given that it does not take. */
+  function argsReport(params: Record<string, unknown>, used: Record<string, unknown>): Record<string, unknown> {
+    const dropped = Object.keys(params ?? {}).filter((key) => key !== "purpose" && !(key in used));
+    return { args_used: used, ...(dropped.length > 0 ? { dropped_args: dropped } : {}) };
   }
 
   const searchTool: ToolDefinition = {
@@ -443,6 +468,11 @@ export function createWebTools(ctx: AssociateContext, deps: WebDeps = {}): ToolD
           result_urls: resultUrls,
           truncated: bounded.truncated,
           spill_path: bounded.spillPath,
+          not_shown_chars: bounded.notShown,
+          ...argsReport(rawParams ?? {}, {
+            query: params.query,
+            ...(typeof params.limit === "number" ? { limit: params.limit } : {}),
+          }),
         }),
       );
     },
@@ -489,6 +519,8 @@ export function createWebTools(ctx: AssociateContext, deps: WebDeps = {}): ToolD
           truncated: bounded.truncated,
           spill_path: bounded.spillPath,
           cursor: bounded.cursor,
+          not_shown_chars: bounded.notShown,
+          ...argsReport(rawParams ?? {}, { url: params.url }),
         }),
       );
     },

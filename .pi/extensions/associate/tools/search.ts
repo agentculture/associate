@@ -46,7 +46,8 @@
  */
 
 import { spawn as nodeSpawn, type ChildProcessWithoutNullStreams } from "node:child_process";
-import { existsSync, readdirSync } from "node:fs";
+import { createHash } from "node:crypto";
+import { existsSync, mkdirSync, readdirSync, writeFileSync } from "node:fs";
 import { homedir } from "node:os";
 import { join } from "node:path";
 import { StringDecoder } from "node:string_decoder";
@@ -105,14 +106,23 @@ export function resolveBinary(name: BinaryName, env: NodeJS.ProcessEnv = process
  * get already-split, already-bounded `lines`.
  */
 export interface ProcessResult {
-  /** Complete, non-empty output lines, at most `limits.maxLines` of them. */
+  /**
+   * Complete, non-empty output lines: every line the child printed, until the
+   * scan ceiling (`limits.maxTotalChars`). The caller caps what it shows; the
+   * rest is how the true total is known and what is saved.
+   */
   lines: string[];
   /** Bounded stderr — only ever used to build an error message. */
   stderr: string;
   /** Exit status, or `null` when the child was stopped early by a limit. */
   code: number | null;
-  /** Set when a limit bit: the line cap, the per-line bound, or the total ceiling. */
+  /** Set when a limit bit: the per-line bound or the scan ceiling. */
   truncated: boolean;
+  /**
+   * False when the scan ceiling stopped the run before the child finished, so
+   * `lines.length` is a lower bound on the total, not the total.
+   */
+  complete: boolean;
 }
 
 /**
@@ -120,11 +130,9 @@ export interface ProcessResult {
  * `policy.json` by {@link streamLimits} — no limit is a literal in this file.
  */
 export interface StreamLimits {
-  /** Stop consuming (and kill the child) once this many lines have arrived. */
-  maxLines: number;
   /** Maximum characters kept for any single line; the rest of that line is dropped. */
   maxLineChars: number;
-  /** Hard ceiling on total buffered output characters. */
+  /** Hard ceiling on total buffered output characters: the scan stops (and the child is killed) there. */
   maxTotalChars: number;
 }
 
@@ -143,21 +151,21 @@ const defaultSpawner: Spawner = (bin, argv, options) =>
  * streaming stdout line by line under *limits*. `shell: false` is passed
  * explicitly so no argument here is ever handed to a shell for interpretation.
  *
- * **Why streaming rather than "collect everything, then cap".** `rg` on a large
- * tree, or `fd` on a large checkout, can emit output orders of magnitude bigger
- * than the `max_results` cap the answer is sliced to. Buffering all of it and
- * slicing afterwards makes the peak memory of a search a function of the
- * *repository*, not of the policy. So output is split on newlines as it
- * arrives, results are counted as they land, and the moment `limits.maxLines`
- * is reached the child's pipes are destroyed, it is sent `SIGTERM`, and the
- * promise resolves with `truncated: true` — the rest of that output is never
- * read, let alone stored.
+ * **Why streaming, and why a scan ceiling.** `rg` on a large tree, or `fd` on a
+ * large checkout, can emit output orders of magnitude bigger than the
+ * `max_results` cap the answer is cut to. The answer still says how many there
+ * were (the true total) and the full list is saved, so output is split on
+ * newlines as it arrives and every line is kept — but only up to a ceiling on
+ * total buffered characters (`caps.max_raw_chars`). At the ceiling the child's
+ * pipes are destroyed, it is sent `SIGTERM`, and the promise resolves with
+ * `complete: false` — the total is then a lower bound, and the rest of that
+ * output is never read, let alone stored. So the peak memory of a search is a
+ * function of the policy, not of the repository.
  *
- * Three independent bounds, all from the contract (see {@link streamLimits}):
- * the line cap above; a per-line character bound, so a single pathological
- * 10 MB line is clipped to the budget and the remainder of that line is dropped
- * without ever being buffered; and a hard ceiling on total buffered characters.
- * stderr is bounded by the same per-line budget.
+ * Two independent bounds, both from the contract (see {@link streamLimits}):
+ * a per-line character bound, so a single pathological 10 MB line is clipped
+ * to the budget and the remainder of that line is dropped without ever being
+ * buffered; and the ceiling above. stderr is bounded by the same per-line budget.
  *
  * Rejects only when the child cannot run at all (a synchronous throw from
  * `spawn`, or the child's `error` event). Callers convert that into a
@@ -187,19 +195,21 @@ export function runProcess(
     let bufferedChars = 0;
     let stderr = "";
     let truncated = false;
+    let complete = true;
     let settled = false;
 
     const finish = (code: number | null) => {
       if (settled) return;
       settled = true;
       // A final line with no trailing newline is still a result.
-      if (pending.length > 0 && lines.length < limits.maxLines) lines.push(pending);
-      resolvePromise({ lines, stderr, code, truncated });
+      if (pending.length > 0) lines.push(pending);
+      resolvePromise({ lines, stderr, code, truncated, complete });
     };
 
-    /** A limit bit: stop consuming, kill the child, answer with what we have. */
+    /** The ceiling bit: stop consuming, kill the child, answer with what we have. */
     const stopEarly = () => {
       truncated = true;
+      complete = false;
       pending = "";
       try {
         child.stdout?.destroy?.();
@@ -261,7 +271,7 @@ export function runProcess(
 
         lines.push(line);
         bufferedChars += line.length;
-        if (lines.length >= limits.maxLines || bufferedChars >= limits.maxTotalChars) {
+        if (bufferedChars >= limits.maxTotalChars) {
           stopEarly();
           return;
         }
@@ -386,9 +396,6 @@ function totalCharCeiling(ctx: AssociateContext, cap: number, lineChars: number)
 function streamLimits(ctx: AssociateContext, cap: number): StreamLimits {
   const maxLineChars = outputCharBudget(ctx);
   return {
-    // One past the cap: enough to know the cap *bit* without consuming a line
-    // more than that.
-    maxLines: cap + 1,
     maxLineChars,
     maxTotalChars: totalCharCeiling(ctx, cap, maxLineChars),
   };
@@ -400,6 +407,14 @@ function streamLimits(ctx: AssociateContext, cap: number): StreamLimits {
 // supports: type, required, properties, items, enum, pattern).
 // ---------------------------------------------------------------------------
 
+/** The `purpose` argument: stated on every call, read by the harness, never by this tool's own logic. */
+const PURPOSE_PROPERTY = {
+  type: "string",
+  description:
+    "Why you are making this call: the question it settles and what you expect to see. " +
+    "It is recorded with the call; it does not change what the tool does.",
+};
+
 const GREP_SCHEMA = {
   type: "object",
   required: ["pattern"],
@@ -408,6 +423,7 @@ const GREP_SCHEMA = {
     path: { type: "string", description: "Directory or file to search, relative to the checkout root." },
     glob: { type: "string", description: "Optional glob restricting which files are searched." },
     case_insensitive: { type: "boolean", description: "Match case-insensitively." },
+    purpose: PURPOSE_PROPERTY,
   },
 };
 
@@ -416,6 +432,7 @@ const FIND_SCHEMA = {
   properties: {
     pattern: { type: "string", description: "Regex pattern matched against file names (fd syntax)." },
     path: { type: "string", description: "Directory to search, relative to the checkout root." },
+    purpose: PURPOSE_PROPERTY,
   },
 };
 
@@ -423,8 +440,78 @@ const LS_SCHEMA = {
   type: "object",
   properties: {
     path: { type: "string", description: "Directory to list, relative to the checkout root." },
+    purpose: PURPOSE_PROPERTY,
   },
 };
+
+// ---------------------------------------------------------------------------
+// What the walk is told (issue #20, plan t8): arguments as used, the true
+// total, the saved full result
+// ---------------------------------------------------------------------------
+
+/** Names in `params` that the tool does not use (and is not the harness's `purpose`). */
+function droppedArgs(params: unknown, used: readonly string[]): string[] {
+  if (!params || typeof params !== "object") return [];
+  return Object.keys(params as object).filter((key) => key !== "purpose" && !used.includes(key));
+}
+
+/** The result fields shared by grep, find and ls once a list has been capped. */
+interface Listing {
+  total: number;
+  /** False when the scan ceiling stopped the count: `total` is then a lower bound. */
+  total_exact: boolean;
+  /** Characters of the full list (one line per item) the model was not shown. */
+  not_shown_chars: number;
+  /** Where the full list is saved, when anything was not shown. */
+  spill_path?: string;
+  args_used: Record<string, unknown>;
+  dropped_args?: string[];
+}
+
+/**
+ * Save the full list, one item per line, in the session scratch directory,
+ * named by its hash so the same list is the same file. Nothing is saved when
+ * nothing was hidden. A file that cannot be written leaves `spill_path` out:
+ * the result still says how many were not shown.
+ */
+function saveFullList(ctx: AssociateContext, lines: readonly string[]): string | undefined {
+  const body = `${lines.join("\n")}\n`;
+  const dir = join(ctx.session.scratchDir, "search");
+  const file = join(dir, `${createHash("sha256").update(body, "utf8").digest("hex")}.txt`);
+  try {
+    mkdirSync(dir, { recursive: true });
+    writeFileSync(file, body, { encoding: "utf8", flag: "wx", mode: 0o600 });
+  } catch (error) {
+    // The same list already saved is the same file.
+    if ((error as NodeJS.ErrnoException).code !== "EEXIST") return undefined;
+  }
+  return file;
+}
+
+function listing(
+  ctx: AssociateContext,
+  lines: readonly string[],
+  cap: number,
+  exact: boolean,
+  used: Record<string, unknown>,
+  params: unknown,
+  usedKeys: readonly string[],
+): Listing {
+  const hidden = lines.slice(cap);
+  const out: Listing = {
+    total: lines.length,
+    total_exact: exact,
+    not_shown_chars: hidden.reduce((sum, line) => sum + line.length + 1, 0),
+    args_used: used,
+  };
+  if (hidden.length > 0) {
+    const saved = saveFullList(ctx, lines);
+    if (saved !== undefined) out.spill_path = saved;
+  }
+  const dropped = droppedArgs(params, usedKeys);
+  if (dropped.length > 0) out.dropped_args = dropped;
+  return out;
+}
 
 // ---------------------------------------------------------------------------
 // grep
@@ -437,17 +524,13 @@ export interface GrepParams {
   case_insensitive?: unknown;
 }
 
-export interface GrepSuccess {
+export interface GrepSuccess extends Listing {
   ok: true;
   tool: "grep";
   pattern: string;
   path: string;
   matches: string[];
-  /**
-   * How many matches are in `matches`. When `truncated` is true the search was
-   * stopped at the cap, so the true total is deliberately *not* reported — it
-   * was never counted, which is the whole point of stopping early.
-   */
+  /** How many matches are in `matches` (at most `cap`); `total` is how many there were. */
   count: number;
   cap: number;
   truncated: boolean;
@@ -496,6 +579,10 @@ export async function runGrep(
   }
 
   const capped = capResults(result.lines, cap);
+  const usedKeys = ["pattern", "path", "glob", "case_insensitive"];
+  const used: Record<string, unknown> = { pattern, path: relPath };
+  if (typeof params.glob === "string" && params.glob.length > 0) used.glob = params.glob;
+  if (params.case_insensitive === true) used.case_insensitive = true;
   return {
     ok: true,
     tool: "grep",
@@ -505,6 +592,7 @@ export async function runGrep(
     count: capped.items.length,
     cap,
     truncated: capped.truncated || result.truncated,
+    ...listing(ctx, result.lines, cap, result.complete, used, rawParams, usedKeys),
   };
 }
 
@@ -517,13 +605,13 @@ export interface FindParams {
   path?: unknown;
 }
 
-export interface FindSuccess {
+export interface FindSuccess extends Listing {
   ok: true;
   tool: "find";
   pattern: string;
   path: string;
   matches: string[];
-  /** As {@link GrepSuccess.count}: the returned count, not a total, once truncated. */
+  /** As {@link GrepSuccess.count}: the returned count; `total` is how many there were. */
   count: number;
   cap: number;
   truncated: boolean;
@@ -550,11 +638,9 @@ export async function runFind(
   if (!confined.ok) return confined;
 
   const cap = maxResultsCap(ctx);
-  // Unlike rg's per-file `--max-count`, fd's `--max-results` is a whole-run
-  // cap, so the bound is pushed down into the binary as well as enforced by
-  // the streaming collector. One past the cap, so `truncated` still reports
-  // honestly when more existed.
-  const argv = ["--color", "never", "--max-results", String(cap + 1), "--", pattern, confined.path];
+  // No `--max-results`: the true total is reported, so fd runs to the end (or
+  // to the collector's scan ceiling, which kills it).
+  const argv = ["--color", "never", "--", pattern, confined.path];
   const bin = resolveBinary("fd");
   let result: ProcessResult;
   try {
@@ -580,6 +666,7 @@ export async function runFind(
     count: capped.items.length,
     cap,
     truncated: capped.truncated || result.truncated,
+    ...listing(ctx, result.lines, cap, result.complete, { pattern, path: relPath }, rawParams, ["pattern", "path"]),
   };
 }
 
@@ -598,7 +685,7 @@ export interface LsEntry {
   type: EntryType;
 }
 
-export interface LsSuccess {
+export interface LsSuccess extends Listing {
   ok: true;
   tool: "ls";
   path: string;
@@ -651,9 +738,18 @@ export function runLs(ctx: AssociateContext, rawParams: unknown): LsSuccess | St
     tool: "ls",
     path: relPath,
     entries: capped.items,
-    count: capped.count,
+    count: capped.items.length,
     cap,
     truncated: capped.truncated,
+    ...listing(
+      ctx,
+      entries.map((entry) => `${entry.name}\t${entry.type}`),
+      cap,
+      true,
+      { path: relPath },
+      rawParams,
+      ["path"],
+    ),
   };
 }
 

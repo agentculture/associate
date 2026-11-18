@@ -1,0 +1,87 @@
+{
+  "$comment": "The fixed measurement task set for the accuracy method (issue #20, plan task t3). Each task is a read or find question on this repository with an answer that was checked BY HAND against the files, never taken from a model run: the evidence lists the file, the line and the exact text that settles it. tests/test_accuracy_tasks.py loads this file and checks every item against the checkout. A file with stable=false may be edited by later tasks of the plan; the test then reports the line drift as a warning and still requires the text to be present. A not_found task has no evidence line: it lists the patterns that were searched for and are absent, and the test checks they are still absent. This file was committed before any measuring run.",
+  "checked_against_commit": "424a50a182e789f6db9b73485b5366529a02c294",
+  "checked_on": "2026-11-17",
+  "tasks": [
+    {
+      "id": "gate-thresholds",
+      "kind": "find",
+      "reused_from_2026_11_17": true,
+      "prompt": "Which file defines the CLEF safety gate's thresholds, what is that file's version, what are the names of the threshold questions and their threshold values, and which tools are gated without being in the mutating set?",
+      "answer": "associate/contract/gate.json, version 9. The clef.allow_when rules are safe_unattended >= 0.5, destructive <= 0.2, exfiltrates <= 0.1, matches_task >= 0.5, and reversibility option irreversible <= 0.2. The gated tools that are not in the mutating set are eidetic_remember, web_search, web_page and delegate_run (associate/contract/models.json gated_tools; mutating_tools is write, edit, bash, ledger_append, run_tests).",
+      "evidence": [
+        {"file": "associate/contract/gate.json", "line": 3, "text": "\"version\": 9,", "stable": false},
+        {"file": "associate/contract/gate.json", "line": 67, "text": "{\"question\": \"safe_unattended\", \"op\": \">=\", \"value\": 0.5}", "stable": true},
+        {"file": "associate/contract/gate.json", "line": 68, "text": "{\"question\": \"destructive\", \"op\": \"<=\", \"value\": 0.2}", "stable": true},
+        {"file": "associate/contract/gate.json", "line": 69, "text": "{\"question\": \"exfiltrates\", \"op\": \"<=\", \"value\": 0.1}", "stable": true},
+        {"file": "associate/contract/gate.json", "line": 70, "text": "{\"question\": \"matches_task\", \"op\": \">=\", \"value\": 0.5}", "stable": true},
+        {"file": "associate/contract/gate.json", "line": 71, "text": "{\"question\": \"reversibility\", \"option\": \"irreversible\", \"op\": \"<=\", \"value\": 0.2}", "stable": true},
+        {"file": "associate/contract/models.json", "line": 28, "text": "\"mutating_tools\": [\"write\", \"edit\", \"bash\", \"ledger_append\", \"run_tests\"],", "stable": false},
+        {"file": "associate/contract/models.json", "line": 29, "text": "\"gated_tools\": [\"eidetic_remember\", \"web_search\", \"web_page\", \"delegate_run\"],", "stable": false}
+      ]
+    },
+    {
+      "id": "worktree-merge-refusals",
+      "kind": "find",
+      "reused_from_2026_11_17": false,
+      "stable_replacement_for": "walk-recording (the second prompt run on 2026-11-17), whose answers live in files this plan edits",
+      "prompt": "Under what four conditions does the harness refuse to merge a mutating run's worktree branch into main, per associate/harness/worktree.py?",
+      "answer": "It keeps the branch and worktree and reports the reason when: the repository has no main branch; the run's base commit is not on main; main is checked out somewhere with uncommitted tracked changes; or the merge does not apply cleanly (it is aborted first, so main is untouched). Source: the module docstring, step 4.",
+      "evidence": [
+        {"file": "associate/harness/worktree.py", "line": 26, "text": "Refused (branch and worktree kept, reason reported) when: the repository has", "stable": true},
+        {"file": "associate/harness/worktree.py", "line": 27, "text": "no ``main`` branch; the run's base commit is not on ``main`` (merging would", "stable": true},
+        {"file": "associate/harness/worktree.py", "line": 29, "text": "somewhere with uncommitted tracked changes; or the merge does not apply", "stable": true},
+        {"file": "associate/harness/worktree.py", "line": 30, "text": "cleanly (it is aborted first, so ``main`` is untouched). Otherwise:", "stable": true}
+      ]
+    },
+    {
+      "id": "read-budget",
+      "kind": "read",
+      "reused_from_2026_11_17": false,
+      "prompt": "What limits does associate/contract/policy.json set on one read of a file (maximum lines, maximum output characters, maximum bytes), and does an over-limit read spill to disk?",
+      "answer": "budgets.read sets max_lines 1000, max_output_chars 25000, max_bytes 1048576, and spill_to_disk true.",
+      "evidence": [
+        {"file": "associate/contract/policy.json", "line": 72, "text": "\"read\": {", "stable": false},
+        {"file": "associate/contract/policy.json", "line": 73, "text": "\"max_lines\": 1000,", "stable": false},
+        {"file": "associate/contract/policy.json", "line": 74, "text": "\"max_output_chars\": 25000,", "stable": false},
+        {"file": "associate/contract/policy.json", "line": 75, "text": "\"max_bytes\": 1048576,", "stable": false},
+        {"file": "associate/contract/policy.json", "line": 76, "text": "\"spill_to_disk\": true", "stable": false}
+      ]
+    },
+    {
+      "id": "senses-rights",
+      "kind": "read",
+      "reused_from_2026_11_17": false,
+      "prompt": "In associate/contract/models.json, may the senses model change the checkout (may_mutate), and which registry models may it delegate a task to?",
+      "answer": "The senses entry has may_mutate false and may_delegate [\"worker\"], so it cannot change the checkout itself and may hand a task to worker through delegate_run.",
+      "evidence": [
+        {"file": "associate/contract/models.json", "line": 47, "text": "\"senses\": {", "stable": false},
+        {"file": "associate/contract/models.json", "line": 59, "text": "\"may_mutate\": false,", "stable": false},
+        {"file": "associate/contract/models.json", "line": 61, "text": "\"may_delegate\": [\"worker\"]", "stable": false}
+      ]
+    },
+    {
+      "id": "forbidden-decisions",
+      "kind": "find",
+      "reused_from_2026_11_17": false,
+      "prompt": "Which decisions does the harness-wide role contract forbid every registry model from taking, and in which file?",
+      "answer": "associate/contract/role.json lists forbidden: final_decision and security_decision.",
+      "evidence": [
+        {"file": "associate/contract/role.json", "line": 15, "text": "\"forbidden\": [", "stable": true},
+        {"file": "associate/contract/role.json", "line": 16, "text": "\"final_decision\",", "stable": true},
+        {"file": "associate/contract/role.json", "line": 17, "text": "\"security_decision\"", "stable": true}
+      ]
+    },
+    {
+      "id": "decider-retry-count",
+      "kind": "not_found",
+      "reused_from_2026_11_17": false,
+      "prompt": "What is the maximum number of retries, and the backoff between them, that the CLEF safety gate applies to a failed call to the decider?",
+      "answer": "Not found. The gate has no retry or backoff setting: a case-insensitive search for retry, retries, backoff and attempts finds nothing in associate/contract/gate.json or in .pi/extensions/associate/lib/gate.ts. The one nearby hit is the comment at gate.ts line 19 saying a decider failure is \"NOT retried on a laxer tier\", which says there is no retry. When the decider is unreachable the gate falls through to the Super tier and then the read-only fallback (gate.json readonly_fallback), it does not retry.",
+      "absent": [
+        {"file": "associate/contract/gate.json", "patterns": ["retry", "retries", "backoff", "attempts"]},
+        {"file": ".pi/extensions/associate/lib/gate.ts", "patterns": ["retry", "retries", "backoff", "attempts"]}
+      ]
+    }
+  ]
+}

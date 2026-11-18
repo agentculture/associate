@@ -37,10 +37,12 @@ location.
 **Read this before believing the description.** This repo was scaffolded from
 `culture-agent-template` (`guild create`); `CHANGELOG.md` entries before `0.8.0`
 are *template* history with the names substituted, not things that happened
-here. Two devague plans have run since:
+here. Three devague plans have run since:
 `docs/plans/2026-09-12-associate-on-pi-with-opinionated-tools.md` (the Pi
-harness, 0.9.x) and `docs/plans/2026-10-27-associate-multi-model-on-pi-1-1-0.md`
-(this multi-model work, 0.10.0).
+harness, 0.9.x), `docs/plans/2026-10-27-associate-multi-model-on-pi-1-1-0.md`
+(the multi-model work, 0.10.0) and
+`docs/plans/2026-11-17-associate-accuracy-method.md` (the accuracy method,
+issue #20, 0.12.0).
 
 **Before the multi-model plan** (commit `5f023e7`, 0.9.1 — check each with
 `git show 5f023e7:<path>`): associate was bound to one model — the lobes
@@ -58,8 +60,9 @@ follow-up r26).
 `node --test` suite against fakes; see "Measured vs. not measured" for what has
 run live):
 
-- **Pi 1.1.0.** The extension and harness moved from the 0.84.2 pin; every
-  breaking change in between has a verdict in `docs/notes/pi-1.1.0-migration.md`.
+- **Pi 1.5.2.** The extension and harness moved from the 0.84.2 pin to 1.1.0
+  and then to 1.5.2; every breaking change in between has a verdict in
+  `docs/notes/pi-1.1.0-migration.md` and `docs/notes/pi-1.5.2-migration.md`.
 - **A model registry** in the portable contract,
   `associate/contract/models.json`: `worker` (Pi label "bolt", the default),
   `senses`, `cortex`, and `super-vl` (status `pending`, no lobes role yet —
@@ -179,6 +182,45 @@ run live):
   dropped (plan task t9). Every suite entry is `verified: false`.
 - `walkstats` (`associate/bench/walkstats.py`) reports gate-tier shares and
   read-only fallback counts over a set of walks.
+- **The accuracy method** (issue #20; settings in
+  `associate/contract/accuracy.json`, checks and the failure behind each in
+  `docs/notes/accuracy-checks.md`):
+  - **A purpose on every call.** Every tool call except `finish` and
+    `associate_ready` must carry a `purpose` argument; the `tool_call` hook
+    refuses one without it (`lib/guard.ts`), with the fix in the refusal. The
+    purpose is recorded in the walk and stripped from what the safety gate is
+    sent, so `gate.json` is unchanged.
+  - **The walk entry is the action record** (`lib/walk.ts`, walk format 2,
+    first line a format marker): purpose, arguments as asked and as used,
+    source kind (from the contract table), and the name of a saved result file
+    (`results/wN.txt` in the export, written by `lib/results.ts`). Every tool
+    result the model sees starts with a `walk id: wN` line. A call pi rejects
+    before the hook is recorded from `tool_execution_end`.
+  - **Facts are checked.** `finish` accepts facts (value, source, quote),
+    alternatives, verdicts and open items (`facts.schema.json`).
+    `lib/facts.ts` checks each quote against the saved result of the entry it
+    cites with a deterministic matcher (`lib/matcher.ts`), refuses a fact that
+    an action happened unless it cites a successful call of that tool, and
+    refuses a closing conclusion that rests only on an agent's report or a
+    memory record. The model can run the same matcher with the `check_quote`
+    tool. A source is `wN`, or labelled `prior:wN` (a `--continue-from` run) or
+    `cN:wN` (a child); labels are looked up, never opened.
+  - **Report and enforce modes.** `accuracy.json` `mode` is per model and is
+    `report` for every model: nothing is refused and `report.json` lists what
+    would have been. In `enforce` a failing hand-back is refused with each fix
+    and the model may answer again for `retry_rounds`; after the last round
+    the run ends `refused`. `associate run --check-mode` (the
+    `ASSOCIATE_CHECK_MODE` variable) overrides the mode for one run.
+  - **What a run leaves and returns.** The export gains `facts.json`,
+    `check.json`, `report.json` and `answer.md` (the answer rendered by the
+    harness from accepted items; the model's own summary and final message are
+    kept under an unchecked label and counted). `associate run --json` carries
+    the rendered answer, the counts from a Python re-check
+    (`associate/accuracy/`), and `handback_outcome`; a hand-back refused after
+    the allowed rounds exits 3 with the result still printed.
+    `associate check <export-dir>` prints the same counts for any export.
+  - **A passed fact means its quote was found** in the saved result it cites.
+    It does not mean the value is true. Never call that count accuracy.
 
 ### Measured vs. not measured
 
@@ -202,6 +244,16 @@ It runs as a systemd user unit that passes only the gateway key, with
 in `docs/notes/gate-calibration.md`, that is the whole of the live evidence.
 Each item is one run, not a rate.
 
+**The accuracy method, measured live** (2026-11-17/18, pi 1.5.2, reasoning off
+for both models, report mode; `docs/notes/accuracy-live-acceptance.md`): six
+tasks each on `worker` and `cortex` handed back, with the extension's counts,
+the Python re-check and a hand count agreeing in 12 of 12 runs and none of the
+42 passed facts failing a separate re-check. `worker` had 7 of 26 facts pass,
+`cortex` 35 of 40. One enforce-mode worker run was refused twice and accepted
+on its third `finish`; another ended with no `finish`. A continued cortex run
+reviewed a real change and cited the earlier run with a `prior:` label. Each
+is one run.
+
 **Not measured yet. Do not describe any of it as working:**
 
 - the resident's first reply on the mesh: it paused under the 23:00–08:00
@@ -212,11 +264,21 @@ Each item is one run, not a rate.
   started live. While the resident's checkout is on a branch whose base is not
   on `main`, the harness keeps (does not merge) every delegated run — see
   `associate/harness/worktree.py`;
-- **any** benchmark score: no row of the 8-row matrix has run (t21).
+- **any** benchmark score: no row of the 8-row matrix has run (t21);
+- the accuracy method on `senses` (the gateway reported the role not feasible
+  on the measuring machine), with reasoning on, on the mesh path, in spawned
+  children or delegated runs, with a real `ledger` binary, or in enforce mode
+  beyond two worker runs; the recording of calls pi rejects before the hook is
+  tested against a fake pi only.
 
-Say "built and unit-tested", never "works", for these. Two live findings
-remain open: worker sometimes ends without `finish`, and a senses statement
-claimed an action it never took.
+Say "built and unit-tested", never "works", for these. Live findings that
+remain open: worker sometimes ends without `finish` (seen again in an
+enforce-mode run); neither model replied with exactly the rendered answer in
+any measured run, so its final message is always counted as unchecked text;
+and the action rule refuses a true report that a call failed. The senses
+statement that claimed an action it never took is now a replay test
+(`tests/fixtures/accuracy/`), rebuilt from the note; it has not been
+re-measured live.
 
 **One known inconsistency in the inherited scaffold** — don't "fix" it by
 guessing which side is right; ask. The `remember` skill's `SKILL.md` frontmatter
@@ -319,20 +381,25 @@ associate/                  # Python package (top level — no src/ wrapper)
 ├── server/                 # the bridge's HTTP API: app, serve, tokenstore (server extra)
 ├── bridge/                 # cited framework: auth, policy, Access, tokens, MCP server,
 │                           #   static UI serving, origin check
+├── accuracy/               # the Python re-check: matcher.py, check.py, counts.py
 └── bench/                  # public suites (suites.json, public.py), walkstats
 web/                        # the web UI (Vite + React + TS); built into the wheel as
                             #   associate/web_dist by hatch_build.py (never committed)
 .pi/extensions/associate/   # the Pi extension (TypeScript, no npm deps)
 ├── index.ts                # loader: registry model, tool surface, guard, gate
-├── lib/                    # provider, guard, gate, walk, session, contain, …
+├── lib/                    # provider, guard, gate, walk, session, contain,
+│                           #   results, matcher, facts, handback, render, …
 ├── tools/                  # read, search, shell, web, codelens, eidetic,
-│                           #   ledger, tests (run_tests), spawn, delegate
+│                           #   ledger, tests (run_tests), spawn, delegate,
+│                           #   check (check_quote)
 ├── prompts/                # one prompt per registry model
 └── tests/                  # node --test suite (run.sh)
 tests/                      # pytest — CLI, contract, run, worktree, gate, …
 .claude/skills/<name>/      # SKILL.md + scripts/ per skill (cite-don't-import)
 docs/skill-sources.md       # skill provenance ledger — authoritative
-docs/notes/                 # pi-1.1.0 migration, gate calibration, resident model
+docs/notes/                 # pi migrations, gate calibration, resident model,
+                            #   accuracy checks and live acceptance
+docs/accuracy/tasks.json    # the fixed measurement tasks, hand-checked answers
 docs/operations/            # the bridge: operators, agents and integrators
 culture.yaml                # agent suffix + backend + model (a registry key)
 sonar-project.properties    # SonarCloud key agentculture_associate
@@ -427,6 +494,9 @@ manifest; the root `package.json` stays the Pi manifest with no dependencies.
 - **Plumbing check:** `uv run associate run --harness stub` — the run verb
   against the stub adapter; labelled `plumbing_only`, never a claim about a
   model.
+- **Re-check an export:** `uv run associate check <export-dir>` — the calls
+  with their purposes, each fact with its source kind, and the counts,
+  recomputed from the saved files. Reads only; works on old exports.
 - **Public benchmarks (operator-side, never CI):**
   `uv run associate bench` lists the suites in `associate/bench/suites.json`;
   `uv run associate bench --suite bfcl --model worker` launches the upstream
@@ -570,18 +640,22 @@ install hint rather than blocking a clone):
 What a Pi-driven associate run depends on, pinned exactly because they are the
 versions the extension's tests and the worker live runs used:
 
-- **`pi`** (`@earendil-works/pi-coding-agent`) — **1.1.0**. Migrated from
-  0.84.2; every breaking change in between has a verdict in
-  `docs/notes/pi-1.1.0-migration.md`. The pin lives in
-  `associate/harness/pi.py`.
+- **`pi`** (`@earendil-works/pi-coding-agent`) — **1.5.2**. Migrated from
+  0.84.2 through 1.1.0; every breaking change in between has a verdict in
+  `docs/notes/pi-1.1.0-migration.md` and `docs/notes/pi-1.5.2-migration.md`.
+  The pin lives in `associate/harness/pi.py`.
 - **`pi-acp`** — **0.0.33**. Bridges ACP JSON-RPC over stdio to
-  `pi --mode rpc`; MVP-grade and Zed-centred per its own README. The mesh path
-  through it is not yet measured on 1.1.0 (t20).
+  `pi --mode rpc`; MVP-grade and Zed-centred per its own README. It has not
+  been checked against pi 1.5.2, and the mesh path through it is not measured.
 - **Node** — **>=22** (pi-acp's floor, and the extension test runner's).
 - **the portable contract** (`associate/contract/`) — `models.json` version 1,
-  `gate.json` version 9 (d18 added the `delegate_run` effect). A
+  `gate.json` version 9 (d18 added the `delegate_run` effect),
+  `accuracy.json` version 1, walk format 2. A
   contract-version bump is a compatibility event, not a patch note; a `gate.json` bump changes what CLEF is asked, so record why
-  (`docs/notes/gate-calibration.md`).
+  (`docs/notes/gate-calibration.md`). 0.12.0 changed the contract without a
+  version bump of `models.json`: the tool name `check_quote` was added to
+  `tool_names` and to every model, and the walk schema gained fields (old
+  exports still load).
 - **CLIs the tools shell out to** — `eidetic` (eidetic-cli) for
   `eidetic_recall` / `eidetic_remember`, and `ledger` from **workledger-cli
   0.8.0** (the release that ships `ledger append` / `ledger list`) for the
@@ -627,6 +701,7 @@ value is not inherited.
 | `ASSOCIATE_RUNS_DIR` | `$XDG_STATE_HOME/associate/runs`, else `$HOME/.local/state/associate/runs` | `associate/harness/checkoutlock.py` | The state directory holding `locks/<sha256 of the checkout's real path>.lock`, the one-run-per-checkout lock `associate run --checkout-lock` holds (a kernel `flock`). Must be outside every checkout. |
 | `ASSOCIATE_EIDETIC_DIR` | `$HOME/.eidetic/memory` | `tools/eidetic.ts` | The eidetic store the memory tools pin (`EIDETIC_DATA_DIR`); must be absolute and outside the examined checkout. |
 | `ASSOCIATE_LEDGER_PATH` | `$HOME/.workledger/associate.jsonl` | `tools/ledger.ts` | The workledger file the ledger tools pin (`WORKLEDGER_PATH`); must be absolute and outside the examined checkout. |
+| `ASSOCIATE_CHECK_MODE` | absent (the model's `mode` in `accuracy.json`) | `lib/handback.ts`; set by `associate run --check-mode`, never inherited | `report` or `enforce` for this run's hand-back check; any other value is ignored with one stderr line. |
 | `ASSOCIATE_RUNS_DIR` | `$XDG_STATE_HOME/associate/runs` (else `~/.local/state/associate/runs`) | `associate/runs/service.py` | The state directory of `associate runs` (one directory per run id, plus the per-checkout lock files); refused inside a checkout. Never inherited by a run. |
 | `ASSOCIATE_RUNS_ROOTS` | empty | `associate/runs/service.py` | The `os.pathsep`-separated directories a `runs start` checkout must be in (by real path). Empty: the HTTP API refuses every start; the local CLI is not restricted. Never inherited by a run. |
 | `ASSOCIATE_SERVER_TOKENS` | `$XDG_STATE_HOME/associate/service_tokens.json` | `associate/server/tokenstore.py` (`default_token_path`, `open_tokens`) | The file-backed service-token store (`associate/bridge/filetokens.py`; hashes only) that `associate tokens` writes and `associate serve` reads. Never inherited by a run. |
@@ -717,6 +792,12 @@ root key** — see invariant 3 under "Adding a verb".
   (t20) — and don't quote a benchmark number until t21 commits one. The worker
   live runs listed under "Measured vs. not measured" are the only live evidence;
   say exactly what exists and what doesn't; don't round up.
+- **Don't call the quote-checked count accuracy, and don't set a model to
+  `enforce`** in `accuracy.json` without a recorded live run in report mode
+  (`docs/notes/accuracy-live-acceptance.md`). The settings there
+  (`retry_rounds`, `refusal_cap`, `min_quote_length`) are first values, not
+  measured ones. A new check needs a recorded failure in its
+  `motivating_failure`.
 - **Don't treat the 0.5 gate thresholds as calibrated.** They are tentative
   (deviation d9); change them only with new measurements recorded in
   `docs/notes/gate-calibration.md`, or from the issue #13 benchmark.

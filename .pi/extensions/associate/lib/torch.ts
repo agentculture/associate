@@ -22,7 +22,7 @@
  */
 
 import { existsSync, readFileSync } from "node:fs";
-import { join } from "node:path";
+import { dirname, join } from "node:path";
 import { policySection, type ContractPolicy } from "./contract.ts";
 import type { AssociateContext } from "./context.ts";
 import { WALK_FILENAME } from "./walk.ts";
@@ -43,6 +43,19 @@ export const CONTINUE_FROM_MESSAGE_TYPE = "associate-continue-from";
 
 /** Fallback bound on the injected context when the contract names none. */
 const DEFAULT_CONTEXT_CHARS = 25000;
+
+/**
+ * The run label of the prior run loaded by `--continue-from` (spec c58). Its
+ * entries are cited as `prior:w10`; a bare `w10` is always the current run's
+ * own entry. The form is the one `facts.schema.json` fixes:
+ * `^([A-Za-z0-9_-]+:)?w[1-9][0-9]*$`.
+ */
+export const PRIOR_RUN_LABEL = "prior";
+
+/** `prior:w10` for `w10`; an id that already carries a label is left alone. */
+export function priorReference(id: string): string {
+  return id.includes(":") ? id : `${PRIOR_RUN_LABEL}:${id}`;
+}
 
 export interface PriorWalk {
   /** The export directory the artifacts were read from. */
@@ -146,6 +159,10 @@ export function renderPriorContext(
     "",
     `Source: ${prior.walkPath}`,
     "",
+    `Every entry below carries the run label \`${PRIOR_RUN_LABEL}:\` (for example \`${PRIOR_RUN_LABEL}:w1\`).`,
+    "A bare `w1` is this session's own entry, never one of these. Cite a prior entry only",
+    `with its label, as \`${PRIOR_RUN_LABEL}:w1\`.`,
+    "",
     `## Prior walk entries (${prior.entries.length})`,
     "",
   ];
@@ -158,7 +175,7 @@ export function renderPriorContext(
       const flags = [entry.truncated === true ? "truncated" : "", entry.error ? "error" : ""]
         .filter(Boolean)
         .join(", ");
-      lines.push(`- [${entry.id}] ${entry.tool}${args ? ` ${args}` : ""}${flags ? ` (${flags})` : ""}`);
+      lines.push(`- [${priorReference(entry.id)}] ${entry.tool}${args ? ` ${args}` : ""}${flags ? ` (${flags})` : ""}`);
       if (entry.error) lines.push(`  error: ${clip(entry.error, 300).text}`);
       const content = entry.result?.content;
       if (typeof content === "string" && content.trim()) {
@@ -191,7 +208,7 @@ export function renderPriorContext(
         lines.push(
           renderStatementLine({
             text: statement.text,
-            evidence: Array.isArray(statement.evidence) ? statement.evidence : [],
+            evidence: Array.isArray(statement.evidence) ? statement.evidence.map(priorReference) : [],
             status: statement.status === "referenced" ? "referenced" : "unreferenced",
             citations: [],
           }),
@@ -214,6 +231,66 @@ export function renderPriorContext(
   const rendered = lines.join("\n");
   if (rendered.length <= maxChars) return rendered;
   return `${rendered.slice(0, maxChars)}\n\n(prior walk context truncated at ${maxChars} characters)\n`;
+}
+
+/** What {@link resolveRunLabel} answers: the run's export directory, or why not. */
+export type RunLabelResolution =
+  | { ok: true; label: string; dir: string }
+  | { ok: false; reason: "unknown_label"; message: string };
+
+/** The export directory holding the prior walk: the directory itself, or its `export/` child. */
+function priorExportDirectory(dir: string): string | undefined {
+  for (const candidate of [dir, join(dir, "export")]) {
+    if (existsSync(join(candidate, WALK_FILENAME))) return candidate;
+  }
+  return undefined;
+}
+
+/** The `child_walk` of the child line `label` in `walkPath`, if any. */
+function childWalkFor(walkPath: string, label: string): string | undefined {
+  if (!existsSync(walkPath)) return undefined;
+  for (const line of readFileSync(walkPath, "utf8").split("\n")) {
+    if (!line.trim()) continue;
+    let record: unknown;
+    try {
+      record = JSON.parse(line);
+    } catch {
+      continue;
+    }
+    const child = (record as { child?: Record<string, unknown> } | null)?.child;
+    if (child && child.id === label && typeof child.child_walk === "string") return child.child_walk;
+  }
+  return undefined;
+}
+
+/**
+ * Resolve a run label to that run's export directory (plan t13).
+ *
+ * `prior` is the `--continue-from` directory; `cN` is the directory of the
+ * walk named by the `cN` child line of the current walk. The label is looked
+ * up, never opened: anything that is not exactly `prior` or a `c<digits>` id
+ * present in the walk — a path, a walk id, an empty string — is
+ * `unknown_label`, so a model cannot name a directory through it.
+ */
+export function resolveRunLabel(
+  label: string,
+  context: { continueFrom?: string; walkPath: string },
+): RunLabelResolution {
+  const unknown = (why: string): RunLabelResolution => ({
+    ok: false,
+    reason: "unknown_label",
+    message: `unknown run label ${JSON.stringify(String(label).slice(0, 80))}: ${why}`,
+  });
+  if (label === PRIOR_RUN_LABEL) {
+    if (!context.continueFrom) return unknown("this session was not started with --continue-from");
+    const dir = priorExportDirectory(context.continueFrom);
+    return dir ? { ok: true, label, dir } : unknown("the prior export has no walk to cite");
+  }
+  if (typeof label === "string" && /^c[1-9][0-9]*$/.test(label)) {
+    const childWalk = childWalkFor(context.walkPath, label);
+    return childWalk ? { ok: true, label, dir: dirname(childWalk) } : unknown("no such child in this session's walk");
+  }
+  return unknown(`known labels are \`${PRIOR_RUN_LABEL}\` and the child ids of this session's walk (c1, c2, …)`);
 }
 
 /**

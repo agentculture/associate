@@ -273,6 +273,98 @@ test("register: ledger_list is a declared non-writer, ledger_append is not", () 
   }
 });
 
+// ---- t14: refs shaped like walk ids are checked against the walk ----------
+
+/** Attach a recorder double that has issued `n` walk ids (w1..wn), as `index.ts` does with the real one. */
+function attachWalk(r: Rig, n: number) {
+  const ids = Array.from({ length: n }, (_, i) => `w${i + 1}`);
+  r.ctx.attachWalk({
+    walkPath: join(r.root, "walk.jsonl"),
+    recordChild: () => { throw new Error("not used"); },
+    entryIds: () => ids,
+  } as any);
+}
+
+test("t14: a walk-id-shaped ref the walk never issued is refused with the fix, nothing spawned", async () => {
+  const r = rig();
+  try {
+    attachWalk(r, 2);
+    r.setFake("{}");
+    const res = await get(r, "ledger_append").execute("c", { action: "a", summary: "s", refs: ["w9"], purpose: "p" });
+    const d = payload(res);
+    assert.equal(d.ok, false);
+    assert.equal(d.error.code, "unknown_walk_id");
+    assert.deepEqual(d.error.detail.refs, ["w9"]);
+    assert.ok(typeof d.error.fix === "string" && d.error.fix.includes("w1"), d.error.fix);
+    assert.equal(calls(r).length, 0);
+  } finally {
+    r.dispose();
+  }
+});
+
+test("t14: a ref that exists passes, and refs that are not walk ids are untouched", async () => {
+  const r = rig();
+  try {
+    attachWalk(r, 3);
+    r.setFake("{}");
+    const refs = ["w3", "a.md", "https://x.example/w99", "prior:w9", "c1:w2", "w0", "w01", "W5", "w9x"];
+    const res = await get(r, "ledger_append").execute("c", { action: "a", summary: "s", refs, purpose: "p" });
+    assert.equal(payload(res).ok, true, JSON.stringify(payload(res)));
+    assert.deepEqual(JSON.parse(calls(r)[0].argv[1]).refs, refs);
+  } finally {
+    r.dispose();
+  }
+});
+
+test("t14: with no walk attached the refs are passed through (nothing to check against)", async () => {
+  const r = rig();
+  try {
+    r.setFake("{}");
+    const res = await get(r, "ledger_append").execute("c", { action: "a", summary: "s", refs: ["w9"] });
+    assert.equal(payload(res).ok, true);
+  } finally {
+    r.dispose();
+  }
+});
+
+test("t14: purpose is accepted, never written to the entry; args_used and dropped_args are reported", async () => {
+  const r = rig();
+  try {
+    attachWalk(r, 1);
+    r.setFake("{}");
+    const res = await get(r, "ledger_append").execute("c", {
+      action: "a", summary: "s", refs: ["w1"], purpose: "why I record this", agent: "x",
+    });
+    const d = payload(res);
+    assert.equal(d.ok, true);
+    const entry = JSON.parse(calls(r)[0].argv[1]);
+    assert.ok(!("purpose" in entry));
+    assert.deepEqual(d.args_used, { action: "a", summary: "s", refs: ["w1"] });
+    assert.deepEqual(d.dropped_args, ["agent"]);
+    assert.ok(JSON.stringify((get(r, "ledger_append").parameters as any).properties.purpose).includes("string"));
+    assert.ok("purpose" in (get(r, "ledger_list").parameters as any).properties);
+  } finally {
+    r.dispose();
+  }
+});
+
+test("t14: ledger_list reports args_used and not_shown_chars when its output is cut", async () => {
+  const r = rig();
+  try {
+    const budget = (r.ctx.policy.budgets as any).shell.max_output_chars as number;
+    const big = Array.from({ length: 40 }, (_, i) => ({ id: `e${i}`, summary: "x".repeat(Math.ceil(budget / 10)) }));
+    r.setFake(JSON.stringify(big));
+    const res = await get(r, "ledger_list").execute("c", { action: "probe", purpose: "p" });
+    const d = payload(res);
+    assert.equal(d.truncated, true);
+    assert.ok(d.not_shown_chars > 0);
+    assert.equal(d.args_used.action, "probe");
+    assert.equal(d.args_used.limit, DEFAULT_LIST_LIMIT);
+  } finally {
+    r.dispose();
+  }
+});
+
 const realLedger = whichOnPath("ledger");
 test("real released ledger CLI round-trips append and list", { skip: realLedger ? false : "ledger not installed" }, async () => {
   const r = rig({ PATH: process.env.PATH! });

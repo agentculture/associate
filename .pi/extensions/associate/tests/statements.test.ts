@@ -549,7 +549,7 @@ test("the extension installs the statements hooks and writes the artifact from f
     // One recorded read, so a citation has something to resolve into.
     const toolCallId = "tc-1";
     for (const handler of pi.handlers.get("tool_call") ?? []) {
-      await handler({ toolName: "read", toolCallId, input: { path: "a.ts" } });
+      await handler({ toolName: "read", toolCallId, input: { path: "a.ts", purpose: "read a.ts so a citation can resolve" } });
     }
     for (const handler of pi.handlers.get("tool_result") ?? []) {
       await handler({
@@ -635,4 +635,23 @@ test("a hand-back statement citing a walk id that does not exist is unreferenced
     assert.deepEqual(artifact.statements.map((s) => s.status), ["referenced", "unreferenced"]);
     assert.deepEqual(artifact.statements[0]!.evidence, ["w1"]);
     assert.deepEqual(artifact.statements[1]!.evidence, [], "w999 names no walk entry");
+  }));
+
+test("a final message citing a walk id the walk never issued is unreferenced", () =>
+  withDir((dir) => {
+    const walkPath = writeWalk(dir, [
+      { id: "w1", args: { path: "lib/walk.ts" }, content: stamp(1, ["alpha"]) },
+      { id: "w2", args: { path: "lib/walk.ts" }, content: stamp(1, ["beta"]) },
+      { id: "w3", args: { path: "lib/walk.ts" }, content: stamp(1, ["gamma"]) },
+    ]);
+    const recorder = recorderIn(dir, walkPath);
+    recorder.recordAssistantMessage("The walk only saw w1–w3, not this one [w999].");
+    recorder.finalize();
+
+    const artifact = readJson(dir) as {
+      statements: Array<{ status: string; evidence: string[] }>;
+    };
+    assert.equal(artifact.statements.length, 1);
+    assert.equal(artifact.statements[0]!.status, "unreferenced");
+    assert.deepEqual(artifact.statements[0]!.evidence, [], "w999 names no walk entry");
   }));

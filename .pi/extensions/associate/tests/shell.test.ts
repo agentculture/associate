@@ -402,7 +402,7 @@ test("the loaded extension's tool list carries exactly one bash and it is the ov
     // bash as a path-less writer, and this is not that tool.
     const decision = await loaded.pi.fireToolCall({
       toolName: "bash",
-      input: { argv: ["git", "log"] },
+      input: { argv: ["git", "log"], purpose: "check the guard lets the safe shell through" },
     });
     assert.equal(decision, undefined, "the guard must not block the extension's own shell");
 
