@@ -1,0 +1,687 @@
+{
+  "slug": "associate-graded-measurement-groundwork",
+  "title": "associate graded measurement groundwork",
+  "frame_slug": "associate-graded-measurement-groundwork",
+  "schema_version": 5,
+  "status": "drafting",
+  "created": "2026-11-18T15:43:53Z",
+  "updated": "2026-11-18T15:45:20Z",
+  "targets": [
+    {
+      "id": "c1",
+      "kind": "announcement",
+      "text": "associate can show whether a harness change makes answers more often correct: one command runs 24 fixed tasks in three repositories against clones that do not hold the answers, evidence-cli grades every run right or wrong, and the results are stored per arm",
+      "deferred": false,
+      "deferred_reason": ""
+    },
+    {
+      "id": "h17",
+      "kind": "honesty",
+      "text": "the command exists, runs against clones that a test shows hold no answers, and its stored results include a grade from evidence-cli for each completed run",
+      "deferred": false,
+      "deferred_reason": ""
+    },
+    {
+      "id": "c2",
+      "kind": "requirement",
+      "text": "during a measured run the model cannot read the answer key by any tool (read, shell, grep, find); a test proves the key is absent from the checkout a measured run examines",
+      "deferred": false,
+      "deferred_reason": ""
+    },
+    {
+      "id": "h12",
+      "kind": "honesty",
+      "text": "a test builds the filtered clone and fails if any tracked file or any reachable git revision in it contains the answer key; after a measured run, no walk entry names the key's path",
+      "deferred": false,
+      "deferred_reason": ""
+    },
+    {
+      "id": "c3",
+      "kind": "requirement",
+      "text": "each measurement task carries structured expected values that a script can grade right or wrong without a model, and the grader scores the final answer, not only the fact quotes",
+      "deferred": false,
+      "deferred_reason": ""
+    },
+    {
+      "id": "h13",
+      "kind": "honesty",
+      "text": "grading the same export twice gives the same grade, and for every task a hand-written wrong answer is graded wrong and the recorded answer is graded right",
+      "deferred": false,
+      "deferred_reason": ""
+    },
+    {
+      "id": "c4",
+      "kind": "requirement",
+      "text": "a committed runner starts every arm of the comparison (tasks by harness version by mode by repeat) with fixed settings and stores each run's graded result, so no step is done by hand",
+      "deferred": false,
+      "deferred_reason": ""
+    },
+    {
+      "id": "h14",
+      "kind": "honesty",
+      "text": "starting the runner with a list of arms produces one stored result per task, arm and repeat with no manual edit of any contract file between runs",
+      "deferred": false,
+      "deferred_reason": ""
+    },
+    {
+      "id": "c5",
+      "kind": "requirement",
+      "text": "a run that hits its time limit still returns a result object naming the timeout, with whatever the export holds, and reasoning can be set for one run without editing the contract (issue #22)",
+      "deferred": false,
+      "deferred_reason": ""
+    },
+    {
+      "id": "h15",
+      "kind": "honesty",
+      "text": "a run killed at its time limit prints a result object with a timeout outcome and exits with the documented code, and a run started with the per-run reasoning setting records that setting in its result",
+      "deferred": false,
+      "deferred_reason": ""
+    },
+    {
+      "id": "c14",
+      "kind": "boundary",
+      "text": "gate.json is not changed and stays version 9; nothing in lobes-cli or colleague is changed; no third-party runtime dependency is added to associate, and the only first-party one added is evidence-cli",
+      "deferred": false,
+      "deferred_reason": ""
+    },
+    {
+      "id": "h16",
+      "kind": "honesty",
+      "text": "git diff against main shows no change under associate/contract/gate.json, and pyproject.toml lists evidence-cli as its only dependency",
+      "deferred": false,
+      "deferred_reason": ""
+    },
+    {
+      "id": "c16",
+      "kind": "audience",
+      "text": "the operator, who decides from the results whether a harness change is kept; Claude Code sessions that run the comparison and read its table; and the evidence-cli maintainers, whose package becomes the grader and the re-check",
+      "deferred": false,
+      "deferred_reason": ""
+    },
+    {
+      "id": "h1",
+      "kind": "honesty",
+      "text": "the stored results name, for every run, the task, arm, repeat, model, reasoning setting, harness commit and grade, so a reader needs nothing else to interpret a row",
+      "deferred": false,
+      "deferred_reason": ""
+    },
+    {
+      "id": "c17",
+      "kind": "before_state",
+      "text": "today nothing shows that the accuracy method improved answers: the old-harness and new-harness runs used different tasks and reasoning settings, answers were never graded right or wrong, each result is one run, the answer key was readable in the checkout and both models quoted it, every step of the measurement was manual, a run that hits its time limit returns no result, and the Python re-check exists only inside associate",
+      "deferred": false,
+      "deferred_reason": ""
+    },
+    {
+      "id": "h2",
+      "kind": "honesty",
+      "text": "each statement in this claim is recorded in docs/notes/accuracy-live-acceptance.md or in issue #30, #22 or #32",
+      "deferred": false,
+      "deferred_reason": ""
+    },
+    {
+      "id": "c18",
+      "kind": "after_state",
+      "text": "one associate command runs every arm of a comparison on 24 tasks in three repositories, each against a clone without the answers; every run ends with a result object even when it times out; evidence-cli grades each run right or wrong from its export and the task's expected values; associate's own re-check is evidence-cli, imported; the results are stored and printed as one table per arm with correct answers, time, calls and runs that ended without a hand-back",
+      "deferred": false,
+      "deferred_reason": ""
+    },
+    {
+      "id": "h3",
+      "kind": "honesty",
+      "text": "running the command twice on the same stored exports prints the same table, and the table's correct-answer count for an arm equals a count made by hand from the per-run files",
+      "deferred": false,
+      "deferred_reason": ""
+    },
+    {
+      "id": "c19",
+      "kind": "why_it_matters",
+      "text": "without a graded, repeatable comparison no change to the harness, including the decider score that comes next, can be shown to help or to hurt",
+      "deferred": false,
+      "deferred_reason": ""
+    },
+    {
+      "id": "h4",
+      "kind": "honesty",
+      "text": "the decider-score spec names this comparison as the way its effect is measured",
+      "deferred": false,
+      "deferred_reason": ""
+    },
+    {
+      "id": "c20",
+      "kind": "success_signal",
+      "text": "a comparison of the commit before PR #27 against current main in report mode, on worker and cortex, yields a graded result for at least 95% of its 288 runs (24 tasks, 3 repeats, 2 arms, 2 models); grading the same exports a second time changes 0 grades; and 0 of the walks contain a read of the answer key",
+      "deferred": false,
+      "deferred_reason": ""
+    },
+    {
+      "id": "h5",
+      "kind": "honesty",
+      "text": "the three numbers are computed by a committed script from the stored results, not counted by hand",
+      "deferred": false,
+      "deferred_reason": ""
+    },
+    {
+      "id": "c21",
+      "kind": "requirement",
+      "text": "evidence-cli provides two things associate uses: the export re-check (the matcher, the checker and the counts now in associate/accuracy, moved with their tests and still passing the shared vectors), and a grade command that takes an export directory and a task's expected values and returns right, wrong or cannot grade, with no model call",
+      "deferred": false,
+      "deferred_reason": ""
+    },
+    {
+      "id": "h6",
+      "kind": "honesty",
+      "text": "the shared matcher and hand-back vectors pass in evidence-cli, the TypeScript extension still passes the same vectors, and associate check prints the same output for the saved test exports before and after the move",
+      "deferred": false,
+      "deferred_reason": ""
+    },
+    {
+      "id": "c22",
+      "kind": "requirement",
+      "text": "associate's dependency rule is rewritten in CLAUDE.md and in the tests that enforce it: no third-party runtime dependency; a first-party AgentCulture package with zero dependencies of its own may be imported with a version floor; evidence-cli is the first",
+      "deferred": false,
+      "deferred_reason": ""
+    },
+    {
+      "id": "h7",
+      "kind": "honesty",
+      "text": "a test fails if pyproject.toml gains a dependency that is not on a named first-party list, and fails if a listed package declares dependencies of its own",
+      "deferred": false,
+      "deferred_reason": ""
+    },
+    {
+      "id": "c23",
+      "kind": "requirement",
+      "text": "the task set grows to 24 tasks, 8 each in associate and two sibling repositories, each with a prompt, structured expected values and a pinned commit of the repository it is asked about; every answer is checked by hand and by a second, independent check before it is used",
+      "deferred": false,
+      "deferred_reason": ""
+    },
+    {
+      "id": "h8",
+      "kind": "honesty",
+      "text": "for every task the expected values are found in the repository at its pinned commit by a test, and a recorded second check exists that did not use the first checker's notes",
+      "deferred": false,
+      "deferred_reason": ""
+    },
+    {
+      "id": "c24",
+      "kind": "requirement",
+      "text": "the runner can run an arm on an older harness commit, so the commit before PR #27 can be measured on the same tasks as current main",
+      "deferred": false,
+      "deferred_reason": ""
+    },
+    {
+      "id": "h9",
+      "kind": "honesty",
+      "text": "one task run on the commit before PR #27 through the runner produces a stored, graded result",
+      "deferred": false,
+      "deferred_reason": ""
+    },
+    {
+      "id": "c25",
+      "kind": "boundary",
+      "text": "the TypeScript checker and matcher stay in the extension, because they run inside pi and cannot import Python; the shared vectors remain the contract between the two sides, now held in two repositories",
+      "deferred": false,
+      "deferred_reason": ""
+    },
+    {
+      "id": "h10",
+      "kind": "honesty",
+      "text": "git diff shows no behaviour change in lib/facts.ts or lib/matcher.ts, and a test fails if the vector files in the two repositories differ",
+      "deferred": false,
+      "deferred_reason": ""
+    },
+    {
+      "id": "c26",
+      "kind": "boundary",
+      "text": "this spec does not add the decider score, does not move any model to enforce mode, and does not report any number as a benchmark score",
+      "deferred": false,
+      "deferred_reason": ""
+    },
+    {
+      "id": "h11",
+      "kind": "honesty",
+      "text": "no file under associate/contract/ gains a decider-score setting in this work, and every printed table carries a line saying it is an internal measurement",
+      "deferred": false,
+      "deferred_reason": ""
+    },
+    {
+      "id": "c29",
+      "kind": "requirement",
+      "text": "every measured run starts with an empty memory store and an empty ledger file of its own, so nothing one run remembered can reach another",
+      "deferred": false,
+      "deferred_reason": ""
+    },
+    {
+      "id": "h18",
+      "kind": "honesty",
+      "text": "two runs of the same task in sequence: the second run's eidetic_recall returns no record written by the first",
+      "deferred": false,
+      "deferred_reason": ""
+    },
+    {
+      "id": "c30",
+      "kind": "requirement",
+      "text": "the runner marks a run contaminated, excludes it from the table and counts it, when its walk shows the answer key's path, a web search or page fetch that reaches this repository's hosting, or a recalled record; the measured clone has one commit and no history, and files that restate task answers are removed from it",
+      "deferred": false,
+      "deferred_reason": ""
+    },
+    {
+      "id": "h19",
+      "kind": "honesty",
+      "text": "a run whose walk holds a web_page call to the repository's hosting is stored as contaminated and is absent from the correct-answer count",
+      "deferred": false,
+      "deferred_reason": ""
+    },
+    {
+      "id": "c31",
+      "kind": "requirement",
+      "text": "each run gets a fresh clone: a clean run by a writing model commits and merges into its checkout's main, so a reused clone would differ from run to run",
+      "deferred": false,
+      "deferred_reason": ""
+    },
+    {
+      "id": "h20",
+      "kind": "honesty",
+      "text": "the clone's HEAD is the same commit at the start of every run of a task, shown by the stored result",
+      "deferred": false,
+      "deferred_reason": ""
+    },
+    {
+      "id": "c32",
+      "kind": "requirement",
+      "text": "the grader reads the same input for every arm: the text the run returned as its answer, not the facts list, because the older harness has no facts; what counts as that text is fixed in the spec of the grade command",
+      "deferred": false,
+      "deferred_reason": ""
+    },
+    {
+      "id": "h21",
+      "kind": "honesty",
+      "text": "the grade of a run is unchanged when its facts.json is deleted",
+      "deferred": false,
+      "deferred_reason": ""
+    },
+    {
+      "id": "c33",
+      "kind": "requirement",
+      "text": "before any table is read, a sample of at least 48 graded runs is graded by hand and the agreement with the grader is reported; below 95% agreement the grader or the expected values are fixed first",
+      "deferred": false,
+      "deferred_reason": ""
+    },
+    {
+      "id": "h22",
+      "kind": "honesty",
+      "text": "the committed results include the hand grades of the sample and the agreement figure",
+      "deferred": false,
+      "deferred_reason": ""
+    },
+    {
+      "id": "c34",
+      "kind": "requirement",
+      "text": "the runner can be stopped and restarted: it skips runs already stored, stores every failed launch with its reason, and never leaves a run counted twice",
+      "deferred": false,
+      "deferred_reason": ""
+    },
+    {
+      "id": "h23",
+      "kind": "honesty",
+      "text": "killing the runner mid-comparison and starting it again yields exactly one stored result per task, arm and repeat",
+      "deferred": false,
+      "deferred_reason": ""
+    },
+    {
+      "id": "c35",
+      "kind": "requirement",
+      "text": "when evidence-cli is missing or older than the floor, associate run and associate check fail with a CliError that names the package and the install command, never a traceback",
+      "deferred": false,
+      "deferred_reason": ""
+    },
+    {
+      "id": "h24",
+      "kind": "honesty",
+      "text": "with evidence-cli uninstalled, associate check exits with the documented code and a remediation line",
+      "deferred": false,
+      "deferred_reason": ""
+    },
+    {
+      "id": "c36",
+      "kind": "requirement",
+      "text": "the size of difference between two arms that will be called a change is written down before the runs start, and the table reports counts per task as well as totals",
+      "deferred": false,
+      "deferred_reason": ""
+    },
+    {
+      "id": "h25",
+      "kind": "honesty",
+      "text": "the note with the stated difference is committed before the first stored run's timestamp",
+      "deferred": false,
+      "deferred_reason": ""
+    },
+    {
+      "id": "c37",
+      "kind": "requirement",
+      "text": "The text given to the answer check is the model's own answer without any line the harness wrote, and expected values avoid bare small numbers. Found in the evidence-cli live test of 2026-11-18 (agentculture/evidence-cli docs/notes/2026-11-18-live-test.md, finding 2): the rendered answer.md holds harness lines such as '2 items were refused' and 'Finish summary (3 sentences)', and a deliberately wrong answer was reported as holding the expected 2 and 3 because of them.",
+      "deferred": false,
+      "deferred_reason": ""
+    },
+    {
+      "id": "h26",
+      "kind": "honesty",
+      "text": "the wrong answer from the live test (5 and 7 where 2 and 3 are expected, with the harness lines present in answer.md) is reported as not matching when graded the way the runner grades",
+      "deferred": false,
+      "deferred_reason": ""
+    },
+    {
+      "id": "c38",
+      "kind": "requirement",
+      "text": "A finish call whose facts field is a string holding a JSON list is either accepted or refused with a fix that names the cause, and a run that times out after a rejected finish keeps that payload in its result, labelled as rejected. Found in the same live test (associate issue 22, comment of 2026-11-18): a worker run lost a complete, correct answer this way.",
+      "deferred": false,
+      "deferred_reason": ""
+    },
+    {
+      "id": "h27",
+      "kind": "honesty",
+      "text": "replaying the rejected finish payload from the 2026-11-18 worker review run (facts as one quoted JSON list) either yields a hand-back with its eight facts or a refusal whose fix names the quoted list, and a run that times out after it carries the payload in its result, labelled rejected",
+      "deferred": false,
+      "deferred_reason": ""
+    }
+  ],
+  "tasks": [
+    {
+      "id": "t1",
+      "summary": "Import the re-check from evidence-cli and rewrite the dependency rule",
+      "origin": "llm",
+      "status": "proposed",
+      "acceptance_criteria": [
+        "associate check prints the same output for the saved test exports before and after the change, apart from differences named in evidence-cli's 0.7.0 changelog, each listed in the test",
+        "a test fails if pyproject.toml gains a dependency not on the named first-party list, and fails if a listed package declares dependencies of its own",
+        "with evidence-cli made unimportable, associate check and associate run exit with the documented code and a remediation line naming the install command, with no traceback",
+        "a test fails if associate/contract/matcher_vectors.json differs from the copy in the installed evidence package; the extension's node tests still pass",
+        "git diff against main shows no change to associate/contract/gate.json, lib/facts.ts or lib/matcher.ts"
+      ],
+      "deps": [],
+      "covers": [
+        "c21",
+        "h6",
+        "c22",
+        "h7",
+        "c14",
+        "h16",
+        "c25",
+        "h10",
+        "c35",
+        "h24"
+      ],
+      "instruction": "Replace associate/accuracy/ with imports from evidence.accuracy (the eight names in evidence-cli docs/library.md); delete the moved modules and their duplicated tests, keeping tests that exercise associate's own verbs. Add evidence-cli with a version floor of 0.7.0 to pyproject.toml. Rewrite the rule in CLAUDE.md ('What not to invent') and in tests/test_pi_config.py and tests/test_base_install.py: no third-party runtime dependency; a named first-party list, each member with no dependencies of its own. A missing or too-old evidence-cli raises a CliError naming the package and the install command in associate run and associate check. Add a test that the vector file in associate/contract equals the one shipped in the installed evidence package. Note evidence-cli 0.7.0 behaviour differences listed in its changelog (unsupported formats, link guard, load_export format value) and adapt associate check's output to them. Do not touch lib/facts.ts or lib/matcher.ts. Files owned: associate/accuracy/, associate/cli/_commands/check.py, pyproject.toml, uv.lock, the two dependency tests, tests/test_accuracy_*.py, CLAUDE.md dependency section only."
+    },
+    {
+      "id": "t2",
+      "summary": "A timed-out run returns a result, and reasoning can be set for one run",
+      "origin": "llm",
+      "status": "proposed",
+      "acceptance_criteria": [
+        "a run killed at its time limit prints a result object with a timeout outcome and the export path, and exits with the documented code",
+        "the timeout result carries the Python re-check counts when the export holds facts, and says so when it holds none",
+        "a run started with the per-run reasoning setting records it in its result, and models.json is unchanged afterwards",
+        "the new exit code and flag appear in learn and explain, and the rubric gate passes"
+      ],
+      "deps": [],
+      "covers": [
+        "c5",
+        "h15"
+      ],
+      "instruction": "In associate/harness/pi.py and the run command: when pi does not finish within --timeout, build the result object from whatever the export holds (walk, any hand-back files), mark the outcome as a timeout, print it, and exit with a documented code (reserve one in _errors.py and document it in learn and explain). Add --reasoning to associate run, passed for that run only without editing models.json, recorded in the result. Issue #22. Tests against the stub harness and a fake pi that sleeps. Files owned: associate/harness/pi.py, associate/cli/_commands/run.py, their tests, the run entries of learn and explain."
+    },
+    {
+      "id": "t3",
+      "summary": "A quoted facts list in finish is handled, and a rejected hand-back is kept",
+      "origin": "llm",
+      "status": "proposed",
+      "acceptance_criteria": [
+        "replaying the fixture payload yields a hand-back with its eight facts, or a refusal whose fix text names the quoted list",
+        "after a rejected finish the export holds the rejected payload in a file whose name and label say rejected, and answer.md does not present it as checked",
+        "a run that times out after a rejected finish carries that payload in its result under the rejected label",
+        "gate.json is unchanged and the purpose rule still exempts finish"
+      ],
+      "deps": [
+        "t2"
+      ],
+      "covers": [
+        "c38",
+        "h27"
+      ],
+      "instruction": "In the Pi extension (lib/handback.ts, index.ts, facts.schema.json as needed): a finish call whose facts (or another list field) is a string holding a JSON list is either parsed and accepted or refused with a fix that names the quoted list. Every finish payload that is rejected, by schema validation or by the check, is written to the export as a labelled rejected hand-back file (latest one kept). On the Python side the timeout result from the previous task includes that payload under a rejected label. Replay fixture: the rejected payload of the 2026-11-18 worker review run, trimmed of machine paths. Files owned: .pi/extensions/associate/lib/handback.ts, index.ts hand-back section, their node tests, tests/fixtures/accuracy/ (one new fixture), the result assembly in associate/harness/pi.py for the rejected label."
+    },
+    {
+      "id": "t4",
+      "summary": "Build the filtered clone a measured run examines",
+      "origin": "llm",
+      "status": "proposed",
+      "acceptance_criteria": [
+        "a test fails if any tracked file or any reachable git revision in the clone contains the answer key text or an excluded path",
+        "two clones of the same source and commit have the same HEAD tree, and that commit id is returned for the stored result",
+        "the clone has exactly one commit and no remote pointing at the source's hosting",
+        "the source repository's working tree and refs are unchanged after cloning (checked by status and ref listing)"
+      ],
+      "deps": [],
+      "covers": [
+        "c2",
+        "h12",
+        "c31",
+        "h20"
+      ],
+      "instruction": "New module associate/measure/clone.py: given a source repository, a pinned commit and a list of excluded paths (the answer key directory docs/accuracy and the task files), produce a fresh clone holding one commit with no history and no excluded path, in a new directory outside the source. A fresh clone is made for every run. Record the clone's HEAD and the source commit. Tests build clones of a small fixture repository created in tmp_path. Files owned: associate/measure/__init__.py, clone.py, tests/test_measure_clone.py."
+    },
+    {
+      "id": "t5",
+      "summary": "Give each measured run its own empty memory and ledger, and detect contaminated runs",
+      "origin": "llm",
+      "status": "proposed",
+      "acceptance_criteria": [
+        "two runs of the same task in sequence get different, empty memory and ledger locations, and a record written in the first is not returned by a recall in the second (shown with a fake eidetic binary)",
+        "a walk holding a web_page call to the repository's hosting is reported contaminated with the reason and the walk id",
+        "a walk naming the answer key path in any tool argument is reported contaminated; a walk with none of the three signs is clean",
+        "a recalled record marks the run contaminated, and an empty recall does not"
+      ],
+      "deps": [],
+      "covers": [
+        "c29",
+        "h18",
+        "c30",
+        "h19"
+      ],
+      "instruction": "New module associate/measure/isolation.py: per-run ASSOCIATE_EIDETIC_DIR and ASSOCIATE_LEDGER_PATH pointing at new empty locations under the run's directory. New module associate/measure/contamination.py: read a run's walk and report contamination when an entry names the answer key's path, when a web_search or web_page call reaches the measured repository's hosting (host and owner/name from the task), or when eidetic_recall returned a record. Pure functions over the walk; no network. Files owned: those two modules and tests/test_measure_isolation.py, tests/test_measure_contamination.py."
+    },
+    {
+      "id": "t6",
+      "summary": "Define the task file format with structured expected values and a checker for it",
+      "origin": "llm",
+      "status": "proposed",
+      "acceptance_criteria": [
+        "every task in the file validates, and a task with an unknown key, no pinned commit or a bare small number is refused with the reason",
+        "for each of the six converted tasks the recorded answer is graded as matching and a hand-written wrong answer as not matching, using evidence.answer.grade",
+        "the repository check finds each expected value at the pinned commit or names the deriving command, and fails on a planted value that is not there",
+        "grading the same answer twice returns equal results"
+      ],
+      "deps": [
+        "t1"
+      ],
+      "covers": [
+        "c3",
+        "h13"
+      ],
+      "instruction": "New task format (associate/measure/tasks.py and a schema under associate/contract/schemas/): each task has an id, the repository it asks about, a pinned commit, a prompt, and expected values in evidence-cli's expected-values schema version 1. A validator refuses a task whose expected values are a bare number below 100 with kind number unless the item sits in text form with its label (the weakness found in the evidence-cli live test), and refuses an unknown key. A function checks that every expected text can be found in the repository at the pinned commit, or is marked as derived with the command that derives it. Convert the six existing tasks in docs/accuracy/tasks.json to the new format as the first entries. Files owned: associate/measure/tasks.py, the schema file, docs/accuracy/tasks.json, tests/test_measure_tasks.py."
+    },
+    {
+      "id": "t7",
+      "summary": "Extract the model's own answer text, the same way for every harness version",
+      "origin": "llm",
+      "status": "proposed",
+      "acceptance_criteria": [
+        "the grade of a run is unchanged when its facts.json is deleted",
+        "the wrong answer from the evidence-cli live test (5 and 7 where 2 and 3 are expected, harness lines present in answer.md) is reported as not matching",
+        "for an export from the older harness and one from the current harness the same function returns the model's text, and neither contains a harness-written line (checked against the list of lines the renderer writes)",
+        "a run with no answer text gets cannot tell with its cause, not a failure"
+      ],
+      "deps": [
+        "t1"
+      ],
+      "covers": [
+        "c32",
+        "h21",
+        "c37",
+        "h26"
+      ],
+      "instruction": "New module associate/measure/answer.py: from a run's result and export, return the text the model gave as its answer with no line the harness wrote: the final reply for a harness that has no hand-back, and for the current harness the model's final message and finish summary, never the rendered answer.md furniture and never the facts list. The rule is one function used for every arm. Then grade it with evidence.answer.grade. Fixtures: one export from the commit before PR #27 and one current export, trimmed. Files owned: associate/measure/answer.py, tests/test_measure_answer.py, tests/fixtures/measure/."
+    },
+    {
+      "id": "t8",
+      "summary": "Write the 24 tasks: 8 each in associate and two sibling repositories",
+      "origin": "llm",
+      "status": "proposed",
+      "acceptance_criteria": [
+        "the file holds 24 tasks, 8 per repository, and every one validates and passes the repository check at its pinned commit",
+        "each task has two recorded checks, and the second names what it was given and that it did not see the first",
+        "every disagreement between the two checks is recorded with how it was settled, and no task is kept with an unsettled one",
+        "no expected value is a bare small number"
+      ],
+      "deps": [
+        "t6"
+      ],
+      "covers": [
+        "c23",
+        "h8"
+      ],
+      "instruction": "Add 18 tasks to the 6 converted ones: 2 more in associate, 8 in workledger-cli and 8 in coherence-cli (the spec's assumption for the two sibling repositories), each pinned to a commit, with a prompt and structured expected values. Mix lookups, counts and review questions; no task answerable from the task text alone. Each answer is checked by hand against the repository at its pinned commit, then checked a second time by a separate agent that is given the task and the repository but not the first checker's notes; both checks are recorded per task in docs/accuracy/checks/. Files owned: docs/accuracy/tasks.json (new entries only), docs/accuracy/checks/."
+    },
+    {
+      "id": "t9",
+      "summary": "Build the runner: arms by tasks by repeats, resumable, with an older-harness arm",
+      "origin": "llm",
+      "status": "proposed",
+      "acceptance_criteria": [
+        "starting the runner with a list of arms produces exactly one stored result per task, arm and repeat, each naming task, arm, repeat, model, reasoning setting, harness commit and grade",
+        "killing the runner mid-comparison and starting it again yields exactly one stored result per task, arm and repeat, and no finished run is started twice",
+        "one task run on an older harness commit through the runner produces a stored, graded result (shown with a fixture harness commit in a temporary repository)",
+        "a failed launch is stored with its reason and counted as not graded, and git status shows no contract file changed after a full fake comparison"
+      ],
+      "deps": [
+        "t2",
+        "t4",
+        "t5",
+        "t7"
+      ],
+      "covers": [
+        "c4",
+        "h14",
+        "c24",
+        "h9",
+        "c34",
+        "h23",
+        "c16",
+        "h1"
+      ],
+      "instruction": "New module associate/measure/runner.py: an arm names a harness commit, a model, a mode and a reasoning setting; the runner runs every task for every arm and repeat. For each run: build a fresh filtered clone, set the per-run memory and ledger, start associate run from a worktree of the arm's harness commit (so the commit before PR #27 can be measured), wait with the timeout, then store one result file holding task, arm, repeat, model, reasoning, harness commit, clone HEAD, outcome, contamination, the extracted answer text, the grade and, where the export has facts, the re-check counts. A run already stored is skipped; a failed launch is stored with its reason; storing is atomic so a killed runner never leaves a half file or a double count. No contract file is edited between runs. Tests use the stub harness and a fake launcher. Files owned: associate/measure/runner.py, tests/test_measure_runner.py."
+    },
+    {
+      "id": "t10",
+      "summary": "Build the comparison table and the hand-grading sample",
+      "origin": "llm",
+      "status": "proposed",
+      "acceptance_criteria": [
+        "running the report twice on the same stored results prints byte-identical output, and an arm's matching count equals a hand count written in the test",
+        "a contaminated run is absent from the matching count and present in the contaminated count",
+        "every printed table carries the internal-measurement line and none contains the words benchmark score as a claim or the word accuracy",
+        "the sample function returns the same at least 48 runs for the same seed, and the agreement figure equals a hand count on a fixture of hand grades"
+      ],
+      "deps": [
+        "t9"
+      ],
+      "covers": [
+        "c18",
+        "h3",
+        "c26",
+        "h11",
+        "c33",
+        "h22",
+        "h5"
+      ],
+      "instruction": "New module associate/measure/report.py: from stored results print, per arm, the count of runs graded matching, not matching, cannot tell, not graded (timeout, failed launch) and contaminated (excluded from the counts and reported separately), per task and in total, with the line that this is an internal measurement and not a benchmark score. The same stored results always print the same table. A second function draws a fixed-seed sample of at least 48 graded runs for hand grading, reads the hand grades back from a committed file and reports the agreement with the grader. A third computes the three success numbers (share of runs graded, grade changes on re-grade, walks reading the key). Files owned: associate/measure/report.py, tests/test_measure_report.py."
+    },
+    {
+      "id": "t11",
+      "summary": "Add the associate measure command",
+      "origin": "llm",
+      "status": "proposed",
+      "acceptance_criteria": [
+        "associate measure run on the stub harness stores one graded result per task, arm and repeat against clones that a test shows hold no answer key",
+        "associate measure run refuses to start without the committed difference note and says where it must be",
+        "associate measure report prints the table for stored results in text and --json",
+        "the rubric gate passes and explain and learn describe the verb"
+      ],
+      "deps": [
+        "t9",
+        "t10"
+      ],
+      "covers": [
+        "c1",
+        "h17",
+        "c36"
+      ],
+      "instruction": "New verb associate measure with sub-actions run (takes an arms file, a tasks file, repeats, an output directory), report and sample, wired to the runner and report modules; register it in the four places the repository's rule for adding a verb requires (command module, parser, explain catalog, learn text and JSON). It refuses to start a comparison when no committed note states the difference that will be called a change, and names the note's path. Files owned: associate/cli/_commands/measure.py, associate/cli/__init__.py, associate/explain/catalog.py, associate/cli/_commands/learn.py, tests/test_measure_command.py."
+    },
+    {
+      "id": "t12",
+      "summary": "Run the comparison and record it",
+      "origin": "llm",
+      "status": "proposed",
+      "acceptance_criteria": [
+        "the difference note's commit is earlier than the first stored run's timestamp",
+        "the committed results hold a graded result for at least 95% of the 288 runs, or the note states the share reached and why it fell short",
+        "grading the same exports a second time changes 0 grades, and 0 walks read the answer key, both computed by the committed script",
+        "the hand grades of the sample and the agreement figure are committed; below 95% agreement the table is not presented as a result",
+        "every statement about the state before this work cites docs/notes/accuracy-live-acceptance.md or issue #30, #22 or #32, and the decider-score spec names this comparison as how its effect is measured"
+      ],
+      "deps": [
+        "t3",
+        "t11"
+      ],
+      "covers": [
+        "c20",
+        "h25",
+        "c17",
+        "h2",
+        "c19",
+        "h4"
+      ],
+      "instruction": "Run by the main agent, not a subagent: it needs the gateway key and many hours of model time. First commit the note stating the difference that will be called a change (before any stored run). Then run the comparison: the commit before PR #27 against current main, report mode, worker and cortex, reasoning off, 24 tasks, 3 repeats (288 runs). Hand-grade the sample of at least 48 runs. Commit the stored results (trimmed of machine paths), the hand grades, the table and a note in docs/notes/ that states each number as computed by the committed script, what was not measured, and that it is an internal measurement. Update CLAUDE.md's measured and not-measured lists and the decider-score spec's reference to this comparison. Bump the version and write the changelog entry."
+    }
+  ],
+  "risks": [
+    {
+      "id": "r1",
+      "text": "evidence-cli 0.7.0 must be installable from PyPI before the import task merges; until then it can be developed against a local path",
+      "kind": "unknown_nonblocking",
+      "task_id": null,
+      "resolved": false,
+      "resolution": ""
+    },
+    {
+      "id": "r2",
+      "text": "288 live runs at 4 to 25 minutes each is tens of hours of model time, and half of six runs timed out in the 2026-11-18 live test; the 95 percent graded target may not be reachable at a 25 minute limit",
+      "kind": "unknown_nonblocking",
+      "task_id": null,
+      "resolved": false,
+      "resolution": ""
+    },
+    {
+      "id": "r3",
+      "text": "the two sibling repositories for tasks (workledger-cli, coherence-cli) are an assumption of the spec, not an operator decision",
+      "kind": "unknown_nonblocking",
+      "task_id": null,
+      "resolved": false,
+      "resolution": ""
+    }
+  ],
+  "obligations": []
+}
