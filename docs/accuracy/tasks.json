@@ -1,6 +1,7 @@
 {
   "$comment": "The fixed measurement task set for the accuracy method (issue #20, plan task t3). Each task is a read or find question on this repository with an answer that was checked BY HAND against the files, never taken from a model run: the evidence lists the file, the line and the exact text that settles it. tests/test_accuracy_tasks.py loads this file and checks every item against the checkout. A file with stable=false may be edited by later tasks of the plan; the test then reports the line drift as a warning and still requires the text to be present. A not_found task has no evidence line: it lists the patterns that were searched for and are absent, and the test checks they are still absent. This file was committed before any measuring run.",
   "checked_against_commit": "424a50a182e789f6db9b73485b5366529a02c294",
+  "checked_against_commit_note": "A commit of the local integration branch accuracy/issue-20, made before any measuring run. That branch reached main as one change, so this hash is not in the published history; tests/test_accuracy_tasks.py re-checks every answer against the current files instead.",
   "checked_on": "2026-11-17",
   "tasks": [
     {
