@@ -59,6 +59,10 @@
   - honesty: with evidence-cli uninstalled, associate check exits with the documented code and a remediation line
 - the size of difference between two arms that will be called a change is written down before the runs start, and the table reports counts per task as well as totals
   - honesty: the note with the stated difference is committed before the first stored run's timestamp
+- The text given to the answer check is the model's own answer without any line the harness wrote, and expected values avoid bare small numbers. Found in the evidence-cli live test of 2026-11-18 (agentculture/evidence-cli docs/notes/2026-11-18-live-test.md, finding 2): the rendered answer.md holds harness lines such as '2 items were refused' and 'Finish summary (3 sentences)', and a deliberately wrong answer was reported as holding the expected 2 and 3 because of them.
+  - honesty: the wrong answer from the live test (5 and 7 where 2 and 3 are expected, with the harness lines present in answer.md) is reported as not matching when graded the way the runner grades
+- A finish call whose facts field is a string holding a JSON list is either accepted or refused with a fix that names the cause, and a run that times out after a rejected finish keeps that payload in its result, labelled as rejected. Found in the same live test (associate issue 22, comment of 2026-11-18): a worker run lost a complete, correct answer this way.
+  - honesty: replaying the rejected finish payload from the 2026-11-18 worker review run (facts as one quoted JSON list) either yields a hand-back with its eight facts or a refusal whose fix names the quoted list, and a run that times out after it carries the payload in its result, labelled rejected
 
 ## Honesty conditions
 

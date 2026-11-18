@@ -4,7 +4,7 @@
   "schema_version": 6,
   "status": "exported",
   "created": "2026-11-18T08:35:07Z",
-  "updated": "2026-11-18T14:44:13Z",
+  "updated": "2026-11-18T15:42:13Z",
   "claims": [
     {
       "id": "c1",
@@ -623,7 +623,7 @@
         {
           "id": "h26",
           "text": "the wrong answer from the live test (5 and 7 where 2 and 3 are expected, with the harness lines present in answer.md) is reported as not matching when graded the way the runner grades",
-          "status": "proposed",
+          "status": "confirmed",
           "instruction": ""
         }
       ],
@@ -642,7 +642,7 @@
         {
           "id": "h27",
           "text": "replaying the rejected finish payload from the 2026-11-18 worker review run (facts as one quoted JSON list) either yields a hand-back with its eight facts or a refusal whose fix names the quoted list, and a run that times out after it carries the payload in its result, labelled rejected",
-          "status": "proposed",
+          "status": "confirmed",
           "instruction": ""
         }
       ],
