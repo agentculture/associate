@@ -5,7 +5,7 @@
   "schema_version": 5,
   "status": "exported",
   "created": "2026-11-18T15:43:53Z",
-  "updated": "2026-11-18T19:54:26Z",
+  "updated": "2026-11-18T20:09:07Z",
   "targets": [
     {
       "id": "c1",
@@ -721,6 +721,14 @@
       "task_id": "t12",
       "resolved": false,
       "resolution": ""
+    },
+    {
+      "id": "r9",
+      "text": "With the ledger binary installed, a run can answer a workledger-cli task by calling the ledger tools instead of reading the pinned clone: in pilot 2, worker before PR 27 on wl-entry-fields called ledger_list, ledger_append and ledger_list and read the entry's fields from the tool's output. The installed tool is workledger-cli 0.8.0; the task is pinned to commit 71ef513. Affects the 8 workledger-cli tasks in both arms.",
+      "kind": "unknown_nonblocking",
+      "task_id": null,
+      "resolved": true,
+      "resolution": "Operator, 2026-11-18: leave the ledger tools available on every task; count the runs that called a ledger tool on a workledger-cli task and report that count beside the table."
     }
   ],
   "obligations": []
