@@ -4,7 +4,7 @@
   "schema_version": 6,
   "status": "drafting",
   "created": "2026-11-18T07:39:16Z",
-  "updated": "2026-11-18T07:41:06Z",
+  "updated": "2026-11-18T07:44:20Z",
   "claims": [
     {
       "id": "c1",
@@ -220,6 +220,54 @@
       "hard_questions": [],
       "links": [],
       "instruction": "Grounded in scope finding s3. Not measured; check it with children and a second session before relying on it.",
+      "revisions": []
+    },
+    {
+      "id": "c19",
+      "kind": "decision",
+      "text": "the answer key is kept from the model by a filtered clone: the measurement runner builds a scratch git clone with docs/accuracy removed and committed and runs against it; the key and its test stay in the repo (operator, 2026-11-18, resolves q1)",
+      "origin": "user",
+      "status": "confirmed",
+      "honesty_conditions": [],
+      "hard_questions": [],
+      "links": [],
+      "instruction": "",
+      "revisions": []
+    },
+    {
+      "id": "c20",
+      "kind": "decision",
+      "text": "an in-house graded comparison is an internal measurement of the harness: never reported as a benchmark score, always stated with its tasks, runs and grader; benchmark numbers still come only from a public suite's own scorer (operator, 2026-11-18, resolves q2)",
+      "origin": "user",
+      "status": "confirmed",
+      "honesty_conditions": [],
+      "hard_questions": [],
+      "links": [],
+      "instruction": "",
+      "revisions": []
+    },
+    {
+      "id": "c21",
+      "kind": "decision",
+      "text": "the work is two specs: the measurement groundwork and grader first (issues #30, #22, #32), then the decider score (#31) (operator, 2026-11-18, resolves q3)",
+      "origin": "user",
+      "status": "confirmed",
+      "honesty_conditions": [],
+      "hard_questions": [],
+      "links": [],
+      "instruction": "",
+      "revisions": []
+    },
+    {
+      "id": "c22",
+      "kind": "decision",
+      "text": "the decider scores only facts whose quote was found in the cited result (operator, 2026-11-18, resolves q4)",
+      "origin": "user",
+      "status": "confirmed",
+      "honesty_conditions": [],
+      "hard_questions": [],
+      "links": [],
+      "instruction": "",
       "revisions": []
     }
   ],
