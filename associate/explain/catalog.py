@@ -643,6 +643,7 @@ runs; it is never a score.
     associate measure status RESULTS
     associate measure report RESULTS [--reading answer_text|answer_text_plus_handback_values]
     associate measure sample RESULTS [--sheet PATH] [--seed N] [--size N] [--reading R]
+    associate measure agreement RESULTS --sheet PATH
     associate measure overview
 
 Every sub-verb takes `--json`.
@@ -685,6 +686,19 @@ whether a runner holds the lock and whether that process is alive; and the log p
 readings of the grade is counted. `sample` writes the blank hand-grading sheet for a
 fixed-seed draw (it refuses to replace a sheet without `--overwrite`).
 
+## agreement
+
+Reads only; it never writes the sheet or the results. It reads the sheet's seed,
+reading and number of entries, redraws the same sample from the stored results and
+refuses (exit 1, with a remediation) when the redrawn runs are not exactly the sheet's
+runs, which means the stored results changed since the sheet was drawn, or when the
+sheet is missing, is not JSON or lacks those fields. It then prints how many hand-graded
+runs agree with the grader (agreed over hand-graded; a missing or invalid hand grade is
+never agreement) and states two conditions, each met or not met with its numbers: at
+least 48 hand-graded runs, and agreement on at least 95% of them. A share is never
+rounded up to reach 95%. `--json` carries the same numbers and the share, null when no
+run is hand graded.
+
 ## Exit codes
 
 - `0` done
@@ -723,6 +737,7 @@ ENTRIES: dict[tuple[str, ...], str] = {
     ("measure", "status"): _MEASURE,
     ("measure", "report"): _MEASURE,
     ("measure", "sample"): _MEASURE,
+    ("measure", "agreement"): _MEASURE,
     ("cli",): _CLI,
     ("cli", "overview"): _CLI,
 }

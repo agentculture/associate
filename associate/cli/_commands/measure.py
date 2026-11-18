@@ -12,6 +12,8 @@ Sub-verbs
             holds the lock, and where the log is.
 ``report``  the table of the stored results, text or ``--json``.
 ``sample``  the blank hand-grading sheet for a fixed-seed draw of the stored runs.
+``agreement`` read-only: a filled sheet against the grader, and whether the sample meets
+            the two conditions the comparison needs (48 hand-graded runs, 95% agreement).
 ``overview`` describe these verbs.
 
 The difference note
@@ -796,6 +798,141 @@ def cmd_sample(args: argparse.Namespace) -> int:
     return 0
 
 
+# ------------------------------------------------------------------- agreement
+
+AGREEMENT_MIN_HAND_GRADED = 48
+AGREEMENT_MIN_PERCENT = 95
+_K_SHEET = "sheet"
+_K_SEED = "seed"
+_K_AGREED = "agreed"
+_K_HAND_GRADED = "hand_graded"
+_K_REQUIRED = "required"
+_K_MET = "met"
+
+
+def _sheet_refusal(sheet: Path, why: str) -> CliError:
+    return _user_error(
+        f"the hand-grading sheet {sheet} {why}",
+        "pass the sheet written by `associate measure sample`, with hand_grade filled in",
+    )
+
+
+def _sheet_entry_key(entry: Any) -> tuple[str, str, int] | None:
+    if not isinstance(entry, dict) or not isinstance(entry.get("repeat"), int):
+        return None
+    return (str(entry.get("task")), str(entry.get("arm")), entry["repeat"])
+
+
+def _load_sheet(sheet: Path) -> tuple[int, str, list[tuple[str, str, int]]]:
+    """The sheet's seed, reading and entry keys; a CliError when it is not a usable sheet."""
+    try:
+        doc = json.loads(sheet.read_text(encoding=_UTF8))
+    except (OSError, ValueError) as exc:
+        raise _sheet_refusal(sheet, f"cannot be read as JSON: {exc}") from exc
+    entries = doc.get("entries") if isinstance(doc, dict) else None
+    seed = doc.get(_K_SEED) if isinstance(doc, dict) else None
+    reading = doc.get(_K_READING) if isinstance(doc, dict) else None
+    if not isinstance(entries, list) or not entries:
+        raise _sheet_refusal(sheet, "has no entries")
+    if not isinstance(seed, int) or isinstance(seed, bool):
+        raise _sheet_refusal(sheet, "has no whole-number seed")
+    if reading not in (READING_ANSWER, READING_WITH_HANDBACK):
+        raise _sheet_refusal(sheet, "has no known reading")
+    keys = [_sheet_entry_key(entry) for entry in entries]
+    if any(key is None for key in keys):
+        raise _sheet_refusal(sheet, "has an entry without task, arm and a whole-number repeat")
+    return seed, reading, [key for key in keys if key is not None]
+
+
+def _redraw(records: list[dict[str, Any]], sheet: Path) -> Any:
+    seed, reading, keys = _load_sheet(sheet)
+    sample = _report().draw_sample(records, seed, len(keys), reading)
+    if sorted(run.key for run in sample.runs) != sorted(keys):
+        raise _user_error(
+            f"the stored results changed since {sheet} was drawn: redrawing with seed {seed} "
+            "gives different runs",
+            "grade against the results the sheet was drawn from, or draw a new sheet with "
+            "`associate measure sample`",
+        )
+    return sample
+
+
+def _share_percent_floor(agreed: int, graded: int) -> str:
+    """The share as a percentage with one decimal, cut down and never rounded up."""
+    tenths = agreed * 1000 // graded
+    return f"{tenths // 10}.{tenths % 10}%"
+
+
+def _conditions(found: Any) -> dict[str, dict[str, Any]]:
+    met_share = found.agreed * 100 >= AGREEMENT_MIN_PERCENT * found.hand_graded
+    return {
+        "enough_hand_graded": {
+            _K_REQUIRED: AGREEMENT_MIN_HAND_GRADED,
+            "actual": found.hand_graded,
+            _K_MET: found.hand_graded >= AGREEMENT_MIN_HAND_GRADED,
+        },
+        "enough_agreement": {
+            "required_percent": AGREEMENT_MIN_PERCENT,
+            _K_AGREED: found.agreed,
+            _K_HAND_GRADED: found.hand_graded,
+            "share": found.share,
+            _K_MET: bool(found.hand_graded) and met_share,
+        },
+    }
+
+
+def _agreement_payload(found: Any, sample: Any, sheet: Path) -> dict[str, Any]:
+    return {
+        _K_SHEET: str(sheet),
+        _K_SEED: sample.seed,
+        _K_READING: sample.reading,
+        "sampled": found.sampled,
+        _K_HAND_GRADED: found.hand_graded,
+        _K_AGREED: found.agreed,
+        "disagreed": found.disagreed,
+        "missing": [list(key) for key in found.missing],
+        "invalid": [list(key) for key in found.invalid],
+        "extra": [list(key) for key in found.extra],
+        "disagreements": [list(key) for key in found.disagreements],
+        "share": found.share,
+        "conditions": _conditions(found),
+        "note": _report().INTERNAL_LINE,
+    }
+
+
+def _met_word(met: bool) -> str:
+    return _K_MET if met else "not met"
+
+
+def _condition_lines(conditions: dict[str, dict[str, Any]]) -> list[str]:
+    count = conditions["enough_hand_graded"]
+    share = conditions["enough_agreement"]
+    graded = share[_K_HAND_GRADED]
+    state = _met_word(count[_K_MET])
+    lines = [f"at least {count[_K_REQUIRED]} hand-graded runs: {state} ({count['actual']})"]
+    state = _met_word(share[_K_MET])
+    seen = f"{share[_K_AGREED]} of {graded}"
+    if graded:
+        seen += f", {_share_percent_floor(share[_K_AGREED], graded)}"
+    lines.append(f"agreement on at least {share['required_percent']}%: {state} ({seen})")
+    return lines
+
+
+def cmd_agreement(args: argparse.Namespace) -> int:
+    results = Path(args.output_dir).resolve()
+    records, _manifest_unused = _stored_records(results)
+    sheet = Path(args.sheet)
+    sample = _redraw(records, sheet)
+    found = _report().compare_hand_grades(sample, sheet)
+    payload = _agreement_payload(found, sample, sheet)
+    if _json_mode(args):
+        emit_result(payload, json_mode=True)
+        return 0
+    text = _report().render_agreement(found).rstrip("\n")
+    emit_result("\n".join([text, "", *_condition_lines(payload["conditions"])]), json_mode=False)
+    return 0
+
+
 # ------------------------------------------------------------ overview, parser
 
 _VERBS = [
@@ -804,6 +941,8 @@ _VERBS = [
     "measure status <output-dir> — runs stored, failed and not yet stored; the lock; the log",
     "measure report <output-dir> — the table of stored results (--reading, --json)",
     "measure sample <output-dir> — the blank hand-grading sheet for a fixed-seed draw",
+    "measure agreement <output-dir> --sheet PATH — a filled sheet against the grader; the 48 "
+    "hand-graded runs and 95% agreement conditions, met or not met",
     "measure overview — describe these verbs",
 ]
 
@@ -894,6 +1033,11 @@ def _register_read_verbs(noun_sub: Any) -> None:
     _register_reading(sp)
     _add_json(sp)
     sp.set_defaults(func=cmd_sample)
+    ag = noun_sub.add_parser("agreement", help="Read a filled sheet back; compare with the grader.")
+    _add_output_dir(ag)
+    ag.add_argument("--sheet", required=True, help="The hand-graded sheet to read (never written).")
+    _add_json(ag)
+    ag.set_defaults(func=cmd_agreement)
 
 
 def _no_verb(args: argparse.Namespace) -> int:
