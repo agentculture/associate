@@ -1,0 +1,1819 @@
+{
+ "_origin": "Recorded by running `associate check` (text and --json) over each scenario built by tests/test_accuracy_check_outputs.py, with associate/accuracy/ as it was at commit 362293c (the same code as 266dad3), before the re-check moved to evidence-cli. Paths under the temporary root are replaced by <ROOT>.",
+ "scenarios": {
+  "absolute_child": {
+   "error": null,
+   "json": {
+    "accepted": true,
+    "applicable": true,
+    "calls": [
+     {
+      "error": null,
+      "id": "w1",
+      "outcome": "ok",
+      "partial": false,
+      "purpose": null,
+      "source_kind": "file",
+      "tool": "read"
+     }
+    ],
+    "export": "<ROOT>/export",
+    "facts": [
+     {
+      "check": null,
+      "first_hand": true,
+      "id": "f1",
+      "nearest": null,
+      "reason": null,
+      "run": "c1",
+      "source": "c1:w1",
+      "source_kind": "file",
+      "verdict": "passed"
+     }
+    ],
+    "not_applicable_reason": null,
+    "open_items": [],
+    "report": {
+     "by_source_kind": {
+      "agent": {
+       "checked": 0,
+       "made": 0,
+       "passed": 0,
+       "refused": 0,
+       "unchecked": 0
+      },
+      "file": {
+       "checked": 1,
+       "made": 1,
+       "passed": 1,
+       "refused": 0,
+       "unchecked": 0
+      },
+      "harness": {
+       "checked": 0,
+       "made": 0,
+       "passed": 0,
+       "refused": 0,
+       "unchecked": 0
+      },
+      "memory": {
+       "checked": 0,
+       "made": 0,
+       "passed": 0,
+       "refused": 0,
+       "unchecked": 0
+      },
+      "tool": {
+       "checked": 0,
+       "made": 0,
+       "passed": 0,
+       "refused": 0,
+       "unchecked": 0
+      },
+      "web": {
+       "checked": 0,
+       "made": 0,
+       "passed": 0,
+       "refused": 0,
+       "unchecked": 0
+      }
+     },
+     "children": [
+      {
+       "label": "c1",
+       "report": {
+        "by_source_kind": {
+         "agent": {
+          "checked": 0,
+          "made": 0,
+          "passed": 0,
+          "refused": 0,
+          "unchecked": 0
+         },
+         "file": {
+          "checked": 1,
+          "made": 1,
+          "passed": 1,
+          "refused": 0,
+          "unchecked": 0
+         },
+         "harness": {
+          "checked": 0,
+          "made": 0,
+          "passed": 0,
+          "refused": 0,
+          "unchecked": 0
+         },
+         "memory": {
+          "checked": 0,
+          "made": 0,
+          "passed": 0,
+          "refused": 0,
+          "unchecked": 0
+         },
+         "tool": {
+          "checked": 0,
+          "made": 0,
+          "passed": 0,
+          "refused": 0,
+          "unchecked": 0
+         },
+         "web": {
+          "checked": 0,
+          "made": 0,
+          "passed": 0,
+          "refused": 0,
+          "unchecked": 0
+         }
+        },
+        "children": [],
+        "conclusions": {
+         "made": 0,
+         "open": 0,
+         "refuted": 0,
+         "supported": 0
+        },
+        "facts": {
+         "checked": 1,
+         "made": 1,
+         "passed": 1,
+         "refused": 0,
+         "unchecked": 0
+        },
+        "flags": [],
+        "python_recheck_ran": false,
+        "statements": {
+         "made": 0,
+         "without_fact": 0
+        }
+       }
+      }
+     ],
+     "conclusions": {
+      "made": 0,
+      "open": 0,
+      "refuted": 0,
+      "supported": 0
+     },
+     "facts": {
+      "checked": 1,
+      "made": 1,
+      "passed": 1,
+      "refused": 0,
+      "unchecked": 0
+     },
+     "flags": [],
+     "python_recheck_ran": true,
+     "statements": {
+      "made": 0,
+      "without_fact": 0
+     }
+    },
+    "verdicts": [],
+    "walk_format": 2
+   },
+   "rc": 0,
+   "text": "export: <ROOT>/export (walk format 2)\n\nCalls\n  w1  read  ok  purpose: (no purpose stated)\n\nFacts\n  all      made 1  checked 1  passed 1  refused 0  unchecked 0\n  By source kind\n  file     made 1  checked 1  passed 1  refused 0  unchecked 0\n  tool     made 0  checked 0  passed 0  refused 0  unchecked 0\n  web      made 0  checked 0  passed 0  refused 0  unchecked 0\n  memory   made 0  checked 0  passed 0  refused 0  unchecked 0\n  agent    made 0  checked 0  passed 0  refused 0  unchecked 0\n  harness  made 0  checked 0  passed 0  refused 0  unchecked 0\n  Each fact\n  f1  c1:w1  source kind: file  passed\n\nConclusions: made 0  supported 0  refuted 0  open 0\nStatements: made 0  without a fact 0\n\npassed means the quote was found in the saved result the fact cites; it is not a\nstatement that the fact is true. Unchecked facts are never counted as passed.\n",
+   "text_err": ""
+  },
+  "bad_facts": {
+   "error": {
+    "code": 1,
+    "message": "cannot read <ROOT>/export/facts.json: Expecting property name enclosed in double quotes: line 1 column 2 (char 1)",
+    "remediation": "pass an export directory holding walk.jsonl (<session>/export)"
+   },
+   "json": null,
+   "rc": 1,
+   "text": "",
+   "text_err": "error: cannot read <ROOT>/export/facts.json: Expecting property name enclosed in double quotes: line 1 column 2 (char 1)\nhint: pass an export directory holding walk.jsonl (<session>/export)\n"
+  },
+  "continued": {
+   "error": null,
+   "json": {
+    "accepted": true,
+    "applicable": true,
+    "calls": [
+     {
+      "error": null,
+      "id": "w1",
+      "outcome": "ok",
+      "partial": false,
+      "purpose": null,
+      "source_kind": "file",
+      "tool": "read"
+     }
+    ],
+    "export": "<ROOT>/export",
+    "facts": [
+     {
+      "check": null,
+      "first_hand": true,
+      "id": "f1",
+      "nearest": null,
+      "reason": null,
+      "run": "prior",
+      "source": "prior:w1",
+      "source_kind": "file",
+      "verdict": "passed"
+     }
+    ],
+    "not_applicable_reason": null,
+    "open_items": [],
+    "report": {
+     "by_source_kind": {
+      "agent": {
+       "checked": 0,
+       "made": 0,
+       "passed": 0,
+       "refused": 0,
+       "unchecked": 0
+      },
+      "file": {
+       "checked": 1,
+       "made": 1,
+       "passed": 1,
+       "refused": 0,
+       "unchecked": 0
+      },
+      "harness": {
+       "checked": 0,
+       "made": 0,
+       "passed": 0,
+       "refused": 0,
+       "unchecked": 0
+      },
+      "memory": {
+       "checked": 0,
+       "made": 0,
+       "passed": 0,
+       "refused": 0,
+       "unchecked": 0
+      },
+      "tool": {
+       "checked": 0,
+       "made": 0,
+       "passed": 0,
+       "refused": 0,
+       "unchecked": 0
+      },
+      "web": {
+       "checked": 0,
+       "made": 0,
+       "passed": 0,
+       "refused": 0,
+       "unchecked": 0
+      }
+     },
+     "children": [],
+     "conclusions": {
+      "made": 0,
+      "open": 0,
+      "refuted": 0,
+      "supported": 0
+     },
+     "facts": {
+      "checked": 1,
+      "made": 1,
+      "passed": 1,
+      "refused": 0,
+      "unchecked": 0
+     },
+     "flags": [],
+     "python_recheck_ran": true,
+     "statements": {
+      "made": 0,
+      "without_fact": 0
+     }
+    },
+    "verdicts": [],
+    "walk_format": 2
+   },
+   "rc": 0,
+   "text": "export: <ROOT>/export (walk format 2)\n\nCalls\n  w1  read  ok  purpose: (no purpose stated)\n\nFacts\n  all      made 1  checked 1  passed 1  refused 0  unchecked 0\n  By source kind\n  file     made 1  checked 1  passed 1  refused 0  unchecked 0\n  tool     made 0  checked 0  passed 0  refused 0  unchecked 0\n  web      made 0  checked 0  passed 0  refused 0  unchecked 0\n  memory   made 0  checked 0  passed 0  refused 0  unchecked 0\n  agent    made 0  checked 0  passed 0  refused 0  unchecked 0\n  harness  made 0  checked 0  passed 0  refused 0  unchecked 0\n  Each fact\n  f1  prior:w1  source kind: file  passed\n\nConclusions: made 0  supported 0  refuted 0  open 0\nStatements: made 0  without a fact 0\n\npassed means the quote was found in the saved result the fact cites; it is not a\nstatement that the fact is true. Unchecked facts are never counted as passed.\n",
+   "text_err": ""
+  },
+  "deep_facts": {
+   "error": {
+    "code": 1,
+    "message": "unexpected: RecursionError: maximum recursion depth exceeded while decoding a JSON array from a unicode string",
+    "remediation": "file a bug at https://github.com/agentculture/associate/issues"
+   },
+   "json": null,
+   "rc": 1,
+   "text": "",
+   "text_err": "error: unexpected: RecursionError: maximum recursion depth exceeded while decoding a JSON array from a unicode string\nhint: file a bug at https://github.com/agentculture/associate/issues\n"
+  },
+  "deep_walk_line": {
+   "error": {
+    "code": 1,
+    "message": "unexpected: RecursionError: maximum recursion depth exceeded while decoding a JSON array from a unicode string",
+    "remediation": "file a bug at https://github.com/agentculture/associate/issues"
+   },
+   "json": null,
+   "rc": 1,
+   "text": "",
+   "text_err": "error: unexpected: RecursionError: maximum recursion depth exceeded while decoding a JSON array from a unicode string\nhint: file a bug at https://github.com/agentculture/associate/issues\n"
+  },
+  "facts_linked_outside": {
+   "error": null,
+   "json": {
+    "accepted": true,
+    "applicable": true,
+    "calls": [
+     {
+      "error": null,
+      "id": "w1",
+      "outcome": "ok",
+      "partial": false,
+      "purpose": null,
+      "source_kind": "file",
+      "tool": "read"
+     }
+    ],
+    "export": "<ROOT>/export",
+    "facts": [
+     {
+      "check": null,
+      "first_hand": true,
+      "id": "f1",
+      "nearest": null,
+      "reason": null,
+      "run": null,
+      "source": "w1",
+      "source_kind": "file",
+      "verdict": "passed"
+     }
+    ],
+    "not_applicable_reason": null,
+    "open_items": [],
+    "report": {
+     "by_source_kind": {
+      "agent": {
+       "checked": 0,
+       "made": 0,
+       "passed": 0,
+       "refused": 0,
+       "unchecked": 0
+      },
+      "file": {
+       "checked": 1,
+       "made": 1,
+       "passed": 1,
+       "refused": 0,
+       "unchecked": 0
+      },
+      "harness": {
+       "checked": 0,
+       "made": 0,
+       "passed": 0,
+       "refused": 0,
+       "unchecked": 0
+      },
+      "memory": {
+       "checked": 0,
+       "made": 0,
+       "passed": 0,
+       "refused": 0,
+       "unchecked": 0
+      },
+      "tool": {
+       "checked": 0,
+       "made": 0,
+       "passed": 0,
+       "refused": 0,
+       "unchecked": 0
+      },
+      "web": {
+       "checked": 0,
+       "made": 0,
+       "passed": 0,
+       "refused": 0,
+       "unchecked": 0
+      }
+     },
+     "children": [],
+     "conclusions": {
+      "made": 0,
+      "open": 0,
+      "refuted": 0,
+      "supported": 0
+     },
+     "facts": {
+      "checked": 1,
+      "made": 1,
+      "passed": 1,
+      "refused": 0,
+      "unchecked": 0
+     },
+     "flags": [],
+     "python_recheck_ran": true,
+     "statements": {
+      "made": 0,
+      "without_fact": 0
+     }
+    },
+    "verdicts": [],
+    "walk_format": 2
+   },
+   "rc": 0,
+   "text": "export: <ROOT>/export (walk format 2)\n\nCalls\n  w1  read  ok  purpose: (no purpose stated)\n\nFacts\n  all      made 1  checked 1  passed 1  refused 0  unchecked 0\n  By source kind\n  file     made 1  checked 1  passed 1  refused 0  unchecked 0\n  tool     made 0  checked 0  passed 0  refused 0  unchecked 0\n  web      made 0  checked 0  passed 0  refused 0  unchecked 0\n  memory   made 0  checked 0  passed 0  refused 0  unchecked 0\n  agent    made 0  checked 0  passed 0  refused 0  unchecked 0\n  harness  made 0  checked 0  passed 0  refused 0  unchecked 0\n  Each fact\n  f1  w1  source kind: file  passed\n\nConclusions: made 0  supported 0  refuted 0  open 0\nStatements: made 0  without a fact 0\n\npassed means the quote was found in the saved result the fact cites; it is not a\nstatement that the fact is true. Unchecked facts are never counted as passed.\n",
+   "text_err": ""
+  },
+  "format_3": {
+   "error": null,
+   "json": {
+    "accepted": true,
+    "applicable": true,
+    "calls": [
+     {
+      "error": null,
+      "id": "w1",
+      "outcome": "ok",
+      "partial": false,
+      "purpose": null,
+      "source_kind": "file",
+      "tool": "read"
+     }
+    ],
+    "export": "<ROOT>/export",
+    "facts": [
+     {
+      "check": null,
+      "first_hand": true,
+      "id": "f1",
+      "nearest": null,
+      "reason": null,
+      "run": null,
+      "source": "w1",
+      "source_kind": "file",
+      "verdict": "passed"
+     }
+    ],
+    "not_applicable_reason": null,
+    "open_items": [],
+    "report": {
+     "by_source_kind": {
+      "agent": {
+       "checked": 0,
+       "made": 0,
+       "passed": 0,
+       "refused": 0,
+       "unchecked": 0
+      },
+      "file": {
+       "checked": 1,
+       "made": 1,
+       "passed": 1,
+       "refused": 0,
+       "unchecked": 0
+      },
+      "harness": {
+       "checked": 0,
+       "made": 0,
+       "passed": 0,
+       "refused": 0,
+       "unchecked": 0
+      },
+      "memory": {
+       "checked": 0,
+       "made": 0,
+       "passed": 0,
+       "refused": 0,
+       "unchecked": 0
+      },
+      "tool": {
+       "checked": 0,
+       "made": 0,
+       "passed": 0,
+       "refused": 0,
+       "unchecked": 0
+      },
+      "web": {
+       "checked": 0,
+       "made": 0,
+       "passed": 0,
+       "refused": 0,
+       "unchecked": 0
+      }
+     },
+     "children": [],
+     "conclusions": {
+      "made": 0,
+      "open": 0,
+      "refuted": 0,
+      "supported": 0
+     },
+     "facts": {
+      "checked": 1,
+      "made": 1,
+      "passed": 1,
+      "refused": 0,
+      "unchecked": 0
+     },
+     "flags": [],
+     "python_recheck_ran": true,
+     "statements": {
+      "made": 0,
+      "without_fact": 0
+     }
+    },
+    "verdicts": [],
+    "walk_format": 3
+   },
+   "rc": 0,
+   "text": "export: <ROOT>/export (walk format 3)\n\nCalls\n  w1  read  ok  purpose: (no purpose stated)\n\nFacts\n  all      made 1  checked 1  passed 1  refused 0  unchecked 0\n  By source kind\n  file     made 1  checked 1  passed 1  refused 0  unchecked 0\n  tool     made 0  checked 0  passed 0  refused 0  unchecked 0\n  web      made 0  checked 0  passed 0  refused 0  unchecked 0\n  memory   made 0  checked 0  passed 0  refused 0  unchecked 0\n  agent    made 0  checked 0  passed 0  refused 0  unchecked 0\n  harness  made 0  checked 0  passed 0  refused 0  unchecked 0\n  Each fact\n  f1  w1  source kind: file  passed\n\nConclusions: made 0  supported 0  refuted 0  open 0\nStatements: made 0  without a fact 0\n\npassed means the quote was found in the saved result the fact cites; it is not a\nstatement that the fact is true. Unchecked facts are never counted as passed.\n",
+   "text_err": ""
+  },
+  "format_string": {
+   "error": null,
+   "json": {
+    "accepted": null,
+    "applicable": false,
+    "calls": [
+     {
+      "error": null,
+      "id": "w1",
+      "outcome": "ok",
+      "partial": false,
+      "purpose": null,
+      "source_kind": "file",
+      "tool": "read"
+     }
+    ],
+    "export": "<ROOT>/export",
+    "facts": [],
+    "not_applicable_reason": "pre-change export: the walk has no format marker, so it carries no facts",
+    "report": null,
+    "walk_format": 1
+   },
+   "rc": 0,
+   "text": "export: <ROOT>/export (walk format 1)\n\nCalls\n  w1  read  ok  purpose: (no purpose stated)\n\nFacts\n  not applicable: pre-change export: the walk has no format marker, so it carries no facts\n",
+   "text_err": ""
+  },
+  "hand_count": {
+   "error": null,
+   "json": {
+    "accepted": false,
+    "applicable": true,
+    "calls": [
+     {
+      "error": null,
+      "id": "w1",
+      "outcome": "ok",
+      "partial": false,
+      "purpose": "read the config",
+      "source_kind": "file",
+      "tool": "read"
+     },
+     {
+      "error": null,
+      "id": "w2",
+      "outcome": "ok",
+      "partial": false,
+      "purpose": "find the call",
+      "source_kind": "tool",
+      "tool": "grep"
+     },
+     {
+      "error": null,
+      "id": "w3",
+      "outcome": "ok",
+      "partial": false,
+      "purpose": "run the check",
+      "source_kind": "tool",
+      "tool": "bash"
+     },
+     {
+      "error": "refused: gate",
+      "id": "w4",
+      "outcome": "error",
+      "partial": true,
+      "purpose": null,
+      "source_kind": "tool",
+      "tool": "ledger_append"
+     }
+    ],
+    "export": "<ROOT>/export",
+    "facts": [
+     {
+      "check": null,
+      "first_hand": true,
+      "id": "f1",
+      "nearest": null,
+      "reason": null,
+      "run": null,
+      "source": "w1",
+      "source_kind": "file",
+      "verdict": "passed"
+     },
+     {
+      "check": "quote_not_in_result",
+      "first_hand": true,
+      "id": "f2",
+      "nearest": {
+       "matched": 10,
+       "offset": 10,
+       "text": "brown fox jumps"
+      },
+      "reason": "quote_absent",
+      "run": null,
+      "source": "w1",
+      "source_kind": "file",
+      "verdict": "refused"
+     },
+     {
+      "check": null,
+      "first_hand": true,
+      "id": "f3",
+      "nearest": null,
+      "reason": "no_saved_text",
+      "run": null,
+      "source": "w2",
+      "source_kind": "tool",
+      "verdict": "unchecked"
+     },
+     {
+      "check": "literal_outside_quote",
+      "first_hand": true,
+      "id": "f4",
+      "nearest": null,
+      "reason": "literal_not_in_quote",
+      "run": null,
+      "source": "w3",
+      "source_kind": "tool",
+      "verdict": "refused"
+     },
+     {
+      "check": "unknown_source",
+      "first_hand": null,
+      "id": "f5",
+      "nearest": null,
+      "reason": "source_malformed",
+      "run": null,
+      "source": "nowhere",
+      "source_kind": null,
+      "verdict": "refused"
+     }
+    ],
+    "not_applicable_reason": null,
+    "open_items": [],
+    "report": {
+     "by_source_kind": {
+      "agent": {
+       "checked": 0,
+       "made": 0,
+       "passed": 0,
+       "refused": 0,
+       "unchecked": 0
+      },
+      "file": {
+       "checked": 2,
+       "made": 2,
+       "passed": 1,
+       "refused": 1,
+       "unchecked": 0
+      },
+      "harness": {
+       "checked": 0,
+       "made": 0,
+       "passed": 0,
+       "refused": 0,
+       "unchecked": 0
+      },
+      "memory": {
+       "checked": 0,
+       "made": 0,
+       "passed": 0,
+       "refused": 0,
+       "unchecked": 0
+      },
+      "tool": {
+       "checked": 1,
+       "made": 2,
+       "passed": 0,
+       "refused": 1,
+       "unchecked": 1
+      },
+      "web": {
+       "checked": 0,
+       "made": 0,
+       "passed": 0,
+       "refused": 0,
+       "unchecked": 0
+      }
+     },
+     "children": [],
+     "conclusions": {
+      "made": 1,
+      "open": 0,
+      "refuted": 0,
+      "supported": 1
+     },
+     "facts": {
+      "checked": 4,
+      "made": 5,
+      "passed": 1,
+      "refused": 3,
+      "unchecked": 1
+     },
+     "flags": [
+      {
+       "check": "quote_not_in_result",
+       "detail": "f2: quote_absent",
+       "ref": "w1"
+      },
+      {
+       "check": "literal_outside_quote",
+       "detail": "f4: literal_not_in_quote",
+       "ref": "w3"
+      },
+      {
+       "check": "unknown_source",
+       "detail": "f5: source_malformed"
+      }
+     ],
+     "python_recheck_ran": true,
+     "statements": {
+      "made": 1,
+      "without_fact": 0
+     }
+    },
+    "verdicts": [
+     {
+      "check": null,
+      "id": "v1",
+      "outcome": "accepted",
+      "reason": null
+     }
+    ],
+    "walk_format": 2
+   },
+   "rc": 0,
+   "text": "export: <ROOT>/export (walk format 2)\n\nCalls\n  w1  read  ok  purpose: read the config\n  w2  grep  ok  purpose: find the call\n  w3  bash  ok  purpose: run the check\n  w4  ledger_append  error - refused: gate  purpose: (no purpose stated)\n\nFacts\n  all      made 5  checked 4  passed 1  refused 3  unchecked 1\n  By source kind\n  file     made 2  checked 2  passed 1  refused 1  unchecked 0\n  tool     made 2  checked 1  passed 0  refused 1  unchecked 1\n  web      made 0  checked 0  passed 0  refused 0  unchecked 0\n  memory   made 0  checked 0  passed 0  refused 0  unchecked 0\n  agent    made 0  checked 0  passed 0  refused 0  unchecked 0\n  harness  made 0  checked 0  passed 0  refused 0  unchecked 0\n  Each fact\n  f1  w1  source kind: file  passed\n  f2  w1  source kind: file  refused (quote_absent)\n  f3  w2  source kind: tool  unchecked (no_saved_text)\n  f4  w3  source kind: tool  refused (literal_not_in_quote)\n  f5  nowhere  source kind: none  refused (source_malformed)\n\nConclusions: made 1  supported 1  refuted 0  open 0\nStatements: made 1  without a fact 0\n\npassed means the quote was found in the saved result the fact cites; it is not a\nstatement that the fact is true. Unchecked facts are never counted as passed.\n",
+   "text_err": ""
+  },
+  "marker_extra_key": {
+   "error": null,
+   "json": {
+    "accepted": null,
+    "applicable": false,
+    "calls": [
+     {
+      "error": null,
+      "id": "w1",
+      "outcome": "ok",
+      "partial": false,
+      "purpose": null,
+      "source_kind": "file",
+      "tool": "read"
+     }
+    ],
+    "export": "<ROOT>/export",
+    "facts": [],
+    "not_applicable_reason": "pre-change export: the walk has no format marker, so it carries no facts",
+    "report": null,
+    "walk_format": 1
+   },
+   "rc": 0,
+   "text": "export: <ROOT>/export (walk format 1)\n\nCalls\n  w1  read  ok  purpose: (no purpose stated)\n\nFacts\n  not applicable: pre-change export: the walk has no format marker, so it carries no facts\n",
+   "text_err": ""
+  },
+  "missing_dir": {
+   "error": {
+    "code": 1,
+    "message": "<ROOT>/missing is not a directory",
+    "remediation": "pass an export directory holding walk.jsonl (<session>/export)"
+   },
+   "json": null,
+   "rc": 1,
+   "text": "",
+   "text_err": "error: <ROOT>/missing is not a directory\nhint: pass an export directory holding walk.jsonl (<session>/export)\n"
+  },
+  "no_facts": {
+   "error": null,
+   "json": {
+    "accepted": null,
+    "applicable": false,
+    "calls": [
+     {
+      "error": null,
+      "id": "w1",
+      "outcome": "ok",
+      "partial": false,
+      "purpose": null,
+      "source_kind": "file",
+      "tool": "read"
+     }
+    ],
+    "export": "<ROOT>/export",
+    "facts": [],
+    "not_applicable_reason": "no facts.json in the export: no hand-back facts were written",
+    "report": null,
+    "walk_format": 2
+   },
+   "rc": 0,
+   "text": "export: <ROOT>/export (walk format 2)\n\nCalls\n  w1  read  ok  purpose: (no purpose stated)\n\nFacts\n  not applicable: no facts.json in the export: no hand-back facts were written\n",
+   "text_err": ""
+  },
+  "non_utf8_line": {
+   "error": {
+    "code": 1,
+    "message": "unexpected: UnicodeDecodeError: 'utf-8' codec can't decode bytes in position 339-340: unexpected end of data",
+    "remediation": "file a bug at https://github.com/agentculture/associate/issues"
+   },
+   "json": null,
+   "rc": 1,
+   "text": "",
+   "text_err": "error: unexpected: UnicodeDecodeError: 'utf-8' codec can't decode bytes in position 339-340: unexpected end of data\nhint: file a bug at https://github.com/agentculture/associate/issues\n"
+  },
+  "partial_entry": {
+   "error": null,
+   "json": {
+    "accepted": true,
+    "applicable": true,
+    "calls": [
+     {
+      "error": null,
+      "id": "w1",
+      "outcome": "ok",
+      "partial": true,
+      "purpose": null,
+      "source_kind": "file",
+      "tool": "read"
+     }
+    ],
+    "export": "<ROOT>/export",
+    "facts": [
+     {
+      "check": null,
+      "first_hand": true,
+      "id": "f1",
+      "nearest": null,
+      "reason": "partial_result",
+      "run": null,
+      "source": "w1",
+      "source_kind": "file",
+      "verdict": "unchecked"
+     }
+    ],
+    "not_applicable_reason": null,
+    "open_items": [],
+    "report": {
+     "by_source_kind": {
+      "agent": {
+       "checked": 0,
+       "made": 0,
+       "passed": 0,
+       "refused": 0,
+       "unchecked": 0
+      },
+      "file": {
+       "checked": 0,
+       "made": 1,
+       "passed": 0,
+       "refused": 0,
+       "unchecked": 1
+      },
+      "harness": {
+       "checked": 0,
+       "made": 0,
+       "passed": 0,
+       "refused": 0,
+       "unchecked": 0
+      },
+      "memory": {
+       "checked": 0,
+       "made": 0,
+       "passed": 0,
+       "refused": 0,
+       "unchecked": 0
+      },
+      "tool": {
+       "checked": 0,
+       "made": 0,
+       "passed": 0,
+       "refused": 0,
+       "unchecked": 0
+      },
+      "web": {
+       "checked": 0,
+       "made": 0,
+       "passed": 0,
+       "refused": 0,
+       "unchecked": 0
+      }
+     },
+     "children": [],
+     "conclusions": {
+      "made": 0,
+      "open": 0,
+      "refuted": 0,
+      "supported": 0
+     },
+     "facts": {
+      "checked": 0,
+      "made": 1,
+      "passed": 0,
+      "refused": 0,
+      "unchecked": 1
+     },
+     "flags": [],
+     "python_recheck_ran": true,
+     "statements": {
+      "made": 0,
+      "without_fact": 0
+     }
+    },
+    "verdicts": [],
+    "walk_format": 2
+   },
+   "rc": 0,
+   "text": "export: <ROOT>/export (walk format 2)\n\nCalls\n  w1  read  ok  purpose: (no purpose stated)\n\nFacts\n  all      made 1  checked 0  passed 0  refused 0  unchecked 1\n  By source kind\n  file     made 1  checked 0  passed 0  refused 0  unchecked 1\n  tool     made 0  checked 0  passed 0  refused 0  unchecked 0\n  web      made 0  checked 0  passed 0  refused 0  unchecked 0\n  memory   made 0  checked 0  passed 0  refused 0  unchecked 0\n  agent    made 0  checked 0  passed 0  refused 0  unchecked 0\n  harness  made 0  checked 0  passed 0  refused 0  unchecked 0\n  Each fact\n  f1  w1  source kind: file  unchecked (partial_result)\n\nConclusions: made 0  supported 0  refuted 0  open 0\nStatements: made 0  without a fact 0\n\npassed means the quote was found in the saved result the fact cites; it is not a\nstatement that the fact is true. Unchecked facts are never counted as passed.\n",
+   "text_err": ""
+  },
+  "pre_marker": {
+   "error": null,
+   "json": {
+    "accepted": null,
+    "applicable": false,
+    "calls": [
+     {
+      "error": null,
+      "id": "w1",
+      "outcome": "ok",
+      "partial": false,
+      "purpose": null,
+      "source_kind": "file",
+      "tool": "read"
+     }
+    ],
+    "export": "<ROOT>/export",
+    "facts": [],
+    "not_applicable_reason": "pre-change export: the walk has no format marker, so it carries no facts",
+    "report": null,
+    "walk_format": 1
+   },
+   "rc": 0,
+   "text": "export: <ROOT>/export (walk format 1)\n\nCalls\n  w1  read  ok  purpose: (no purpose stated)\n\nFacts\n  not applicable: pre-change export: the walk has no format marker, so it carries no facts\n",
+   "text_err": ""
+  },
+  "prior_format_3": {
+   "error": null,
+   "json": {
+    "accepted": true,
+    "applicable": true,
+    "calls": [
+     {
+      "error": null,
+      "id": "w1",
+      "outcome": "ok",
+      "partial": false,
+      "purpose": null,
+      "source_kind": "file",
+      "tool": "read"
+     }
+    ],
+    "export": "<ROOT>/export",
+    "facts": [
+     {
+      "check": null,
+      "first_hand": true,
+      "id": "f1",
+      "nearest": null,
+      "reason": null,
+      "run": "prior",
+      "source": "prior:w1",
+      "source_kind": "file",
+      "verdict": "passed"
+     }
+    ],
+    "not_applicable_reason": null,
+    "open_items": [],
+    "report": {
+     "by_source_kind": {
+      "agent": {
+       "checked": 0,
+       "made": 0,
+       "passed": 0,
+       "refused": 0,
+       "unchecked": 0
+      },
+      "file": {
+       "checked": 1,
+       "made": 1,
+       "passed": 1,
+       "refused": 0,
+       "unchecked": 0
+      },
+      "harness": {
+       "checked": 0,
+       "made": 0,
+       "passed": 0,
+       "refused": 0,
+       "unchecked": 0
+      },
+      "memory": {
+       "checked": 0,
+       "made": 0,
+       "passed": 0,
+       "refused": 0,
+       "unchecked": 0
+      },
+      "tool": {
+       "checked": 0,
+       "made": 0,
+       "passed": 0,
+       "refused": 0,
+       "unchecked": 0
+      },
+      "web": {
+       "checked": 0,
+       "made": 0,
+       "passed": 0,
+       "refused": 0,
+       "unchecked": 0
+      }
+     },
+     "children": [],
+     "conclusions": {
+      "made": 0,
+      "open": 0,
+      "refuted": 0,
+      "supported": 0
+     },
+     "facts": {
+      "checked": 1,
+      "made": 1,
+      "passed": 1,
+      "refused": 0,
+      "unchecked": 0
+     },
+     "flags": [],
+     "python_recheck_ran": true,
+     "statements": {
+      "made": 0,
+      "without_fact": 0
+     }
+    },
+    "verdicts": [],
+    "walk_format": 2
+   },
+   "rc": 0,
+   "text": "export: <ROOT>/export (walk format 2)\n\nCalls\n  w1  read  ok  purpose: (no purpose stated)\n\nFacts\n  all      made 1  checked 1  passed 1  refused 0  unchecked 0\n  By source kind\n  file     made 1  checked 1  passed 1  refused 0  unchecked 0\n  tool     made 0  checked 0  passed 0  refused 0  unchecked 0\n  web      made 0  checked 0  passed 0  refused 0  unchecked 0\n  memory   made 0  checked 0  passed 0  refused 0  unchecked 0\n  agent    made 0  checked 0  passed 0  refused 0  unchecked 0\n  harness  made 0  checked 0  passed 0  refused 0  unchecked 0\n  Each fact\n  f1  prior:w1  source kind: file  passed\n\nConclusions: made 0  supported 0  refuted 0  open 0\nStatements: made 0  without a fact 0\n\npassed means the quote was found in the saved result the fact cites; it is not a\nstatement that the fact is true. Unchecked facts are never counted as passed.\n",
+   "text_err": ""
+  },
+  "relative_child": {
+   "error": null,
+   "json": {
+    "accepted": false,
+    "applicable": true,
+    "calls": [
+     {
+      "error": null,
+      "id": "w1",
+      "outcome": "ok",
+      "partial": false,
+      "purpose": null,
+      "source_kind": "file",
+      "tool": "read"
+     }
+    ],
+    "export": "<ROOT>/export",
+    "facts": [
+     {
+      "check": "unknown_source",
+      "first_hand": null,
+      "id": "f1",
+      "nearest": null,
+      "reason": "source_unknown",
+      "run": "c1",
+      "source": "c1:w1",
+      "source_kind": null,
+      "verdict": "refused"
+     }
+    ],
+    "not_applicable_reason": null,
+    "open_items": [],
+    "report": {
+     "by_source_kind": {
+      "agent": {
+       "checked": 0,
+       "made": 0,
+       "passed": 0,
+       "refused": 0,
+       "unchecked": 0
+      },
+      "file": {
+       "checked": 0,
+       "made": 0,
+       "passed": 0,
+       "refused": 0,
+       "unchecked": 0
+      },
+      "harness": {
+       "checked": 0,
+       "made": 0,
+       "passed": 0,
+       "refused": 0,
+       "unchecked": 0
+      },
+      "memory": {
+       "checked": 0,
+       "made": 0,
+       "passed": 0,
+       "refused": 0,
+       "unchecked": 0
+      },
+      "tool": {
+       "checked": 0,
+       "made": 0,
+       "passed": 0,
+       "refused": 0,
+       "unchecked": 0
+      },
+      "web": {
+       "checked": 0,
+       "made": 0,
+       "passed": 0,
+       "refused": 0,
+       "unchecked": 0
+      }
+     },
+     "children": [
+      {
+       "label": "c1",
+       "report": {
+        "by_source_kind": {
+         "agent": {
+          "checked": 0,
+          "made": 0,
+          "passed": 0,
+          "refused": 0,
+          "unchecked": 0
+         },
+         "file": {
+          "checked": 0,
+          "made": 0,
+          "passed": 0,
+          "refused": 0,
+          "unchecked": 0
+         },
+         "harness": {
+          "checked": 0,
+          "made": 0,
+          "passed": 0,
+          "refused": 0,
+          "unchecked": 0
+         },
+         "memory": {
+          "checked": 0,
+          "made": 0,
+          "passed": 0,
+          "refused": 0,
+          "unchecked": 0
+         },
+         "tool": {
+          "checked": 0,
+          "made": 0,
+          "passed": 0,
+          "refused": 0,
+          "unchecked": 0
+         },
+         "web": {
+          "checked": 0,
+          "made": 0,
+          "passed": 0,
+          "refused": 0,
+          "unchecked": 0
+         }
+        },
+        "children": [],
+        "conclusions": {
+         "made": 0,
+         "open": 0,
+         "refuted": 0,
+         "supported": 0
+        },
+        "facts": {
+         "checked": 0,
+         "made": 0,
+         "passed": 0,
+         "refused": 0,
+         "unchecked": 0
+        },
+        "flags": [],
+        "python_recheck_ran": false,
+        "statements": {
+         "made": 0,
+         "without_fact": 0
+        }
+       }
+      }
+     ],
+     "conclusions": {
+      "made": 0,
+      "open": 0,
+      "refuted": 0,
+      "supported": 0
+     },
+     "facts": {
+      "checked": 1,
+      "made": 1,
+      "passed": 0,
+      "refused": 1,
+      "unchecked": 0
+     },
+     "flags": [
+      {
+       "check": "unknown_source",
+       "detail": "f1: source_unknown",
+       "ref": "c1:w1"
+      }
+     ],
+     "python_recheck_ran": true,
+     "statements": {
+      "made": 0,
+      "without_fact": 0
+     }
+    },
+    "verdicts": [],
+    "walk_format": 2
+   },
+   "rc": 0,
+   "text": "export: <ROOT>/export (walk format 2)\n\nCalls\n  w1  read  ok  purpose: (no purpose stated)\n\nFacts\n  all      made 1  checked 1  passed 0  refused 1  unchecked 0\n  By source kind\n  file     made 0  checked 0  passed 0  refused 0  unchecked 0\n  tool     made 0  checked 0  passed 0  refused 0  unchecked 0\n  web      made 0  checked 0  passed 0  refused 0  unchecked 0\n  memory   made 0  checked 0  passed 0  refused 0  unchecked 0\n  agent    made 0  checked 0  passed 0  refused 0  unchecked 0\n  harness  made 0  checked 0  passed 0  refused 0  unchecked 0\n  Each fact\n  f1  c1:w1  source kind: none  refused (source_unknown)\n\nConclusions: made 0  supported 0  refuted 0  open 0\nStatements: made 0  without a fact 0\n\npassed means the quote was found in the saved result the fact cites; it is not a\nstatement that the fact is true. Unchecked facts are never counted as passed.\n",
+   "text_err": ""
+  },
+  "replay_prior_ids": {
+   "error": null,
+   "json": {
+    "accepted": false,
+    "applicable": true,
+    "calls": [
+     {
+      "error": null,
+      "id": "w10",
+      "outcome": "ok",
+      "partial": false,
+      "purpose": null,
+      "source_kind": "file",
+      "tool": "read"
+     }
+    ],
+    "export": "<ROOT>/export",
+    "facts": [
+     {
+      "check": "quote_not_in_result",
+      "first_hand": true,
+      "id": "f1",
+      "nearest": {
+       "matched": 2,
+       "offset": 181,
+       "text": "ree setup and the operator's test commands come on top, each"
+      },
+      "reason": "quote_absent",
+      "run": null,
+      "source": "w10",
+      "source_kind": "file",
+      "verdict": "refused"
+     },
+     {
+      "check": null,
+      "first_hand": true,
+      "id": "f2",
+      "nearest": null,
+      "reason": null,
+      "run": "prior",
+      "source": "prior:w10",
+      "source_kind": "file",
+      "verdict": "passed"
+     }
+    ],
+    "not_applicable_reason": null,
+    "open_items": [],
+    "report": {
+     "by_source_kind": {
+      "agent": {
+       "checked": 0,
+       "made": 0,
+       "passed": 0,
+       "refused": 0,
+       "unchecked": 0
+      },
+      "file": {
+       "checked": 2,
+       "made": 2,
+       "passed": 1,
+       "refused": 1,
+       "unchecked": 0
+      },
+      "harness": {
+       "checked": 0,
+       "made": 0,
+       "passed": 0,
+       "refused": 0,
+       "unchecked": 0
+      },
+      "memory": {
+       "checked": 0,
+       "made": 0,
+       "passed": 0,
+       "refused": 0,
+       "unchecked": 0
+      },
+      "tool": {
+       "checked": 0,
+       "made": 0,
+       "passed": 0,
+       "refused": 0,
+       "unchecked": 0
+      },
+      "web": {
+       "checked": 0,
+       "made": 0,
+       "passed": 0,
+       "refused": 0,
+       "unchecked": 0
+      }
+     },
+     "children": [],
+     "conclusions": {
+      "made": 0,
+      "open": 0,
+      "refuted": 0,
+      "supported": 0
+     },
+     "facts": {
+      "checked": 2,
+      "made": 2,
+      "passed": 1,
+      "refused": 1,
+      "unchecked": 0
+     },
+     "flags": [
+      {
+       "check": "ambiguous_run_label",
+       "detail": "f1: ambiguous_reference",
+       "ref": "w10"
+      },
+      {
+       "check": "quote_not_in_result",
+       "detail": "f1: quote_absent",
+       "ref": "w10"
+      }
+     ],
+     "python_recheck_ran": true,
+     "statements": {
+      "made": 0,
+      "without_fact": 0
+     }
+    },
+    "verdicts": [],
+    "walk_format": 2
+   },
+   "rc": 0,
+   "text": "export: <ROOT>/export (walk format 2)\n\nCalls\n  w10  read  ok  purpose: (no purpose stated)\n\nFacts\n  all      made 2  checked 2  passed 1  refused 1  unchecked 0\n  By source kind\n  file     made 2  checked 2  passed 1  refused 1  unchecked 0\n  tool     made 0  checked 0  passed 0  refused 0  unchecked 0\n  web      made 0  checked 0  passed 0  refused 0  unchecked 0\n  memory   made 0  checked 0  passed 0  refused 0  unchecked 0\n  agent    made 0  checked 0  passed 0  refused 0  unchecked 0\n  harness  made 0  checked 0  passed 0  refused 0  unchecked 0\n  Each fact\n  f1  w10  source kind: file  refused (quote_absent)\n  f2  prior:w10  source kind: file  passed\n\nConclusions: made 0  supported 0  refuted 0  open 0\nStatements: made 0  without a fact 0\n\npassed means the quote was found in the saved result the fact cites; it is not a\nstatement that the fact is true. Unchecked facts are never counted as passed.\n",
+   "text_err": ""
+  },
+  "replay_pyproject": {
+   "error": null,
+   "json": {
+    "accepted": false,
+    "applicable": true,
+    "calls": [
+     {
+      "error": null,
+      "id": "w5",
+      "outcome": "ok",
+      "partial": false,
+      "purpose": null,
+      "source_kind": "file",
+      "tool": "read"
+     }
+    ],
+    "export": "<ROOT>/export",
+    "facts": [
+     {
+      "check": "quote_not_in_result",
+      "first_hand": true,
+      "id": "f1",
+      "nearest": {
+       "matched": 1,
+       "offset": 6,
+       "text": "mment\": \"PROVISIONAL: every threshold below is a st"
+      },
+      "reason": "quote_absent",
+      "run": null,
+      "source": "w5",
+      "source_kind": "file",
+      "verdict": "refused"
+     }
+    ],
+    "not_applicable_reason": null,
+    "open_items": [],
+    "report": {
+     "by_source_kind": {
+      "agent": {
+       "checked": 0,
+       "made": 0,
+       "passed": 0,
+       "refused": 0,
+       "unchecked": 0
+      },
+      "file": {
+       "checked": 1,
+       "made": 1,
+       "passed": 0,
+       "refused": 1,
+       "unchecked": 0
+      },
+      "harness": {
+       "checked": 0,
+       "made": 0,
+       "passed": 0,
+       "refused": 0,
+       "unchecked": 0
+      },
+      "memory": {
+       "checked": 0,
+       "made": 0,
+       "passed": 0,
+       "refused": 0,
+       "unchecked": 0
+      },
+      "tool": {
+       "checked": 0,
+       "made": 0,
+       "passed": 0,
+       "refused": 0,
+       "unchecked": 0
+      },
+      "web": {
+       "checked": 0,
+       "made": 0,
+       "passed": 0,
+       "refused": 0,
+       "unchecked": 0
+      }
+     },
+     "children": [],
+     "conclusions": {
+      "made": 0,
+      "open": 0,
+      "refuted": 0,
+      "supported": 0
+     },
+     "facts": {
+      "checked": 1,
+      "made": 1,
+      "passed": 0,
+      "refused": 1,
+      "unchecked": 0
+     },
+     "flags": [
+      {
+       "check": "quote_not_in_result",
+       "detail": "f1: quote_absent",
+       "ref": "w5"
+      }
+     ],
+     "python_recheck_ran": true,
+     "statements": {
+      "made": 0,
+      "without_fact": 0
+     }
+    },
+    "verdicts": [],
+    "walk_format": 2
+   },
+   "rc": 0,
+   "text": "export: <ROOT>/export (walk format 2)\n\nCalls\n  w5  read  ok  purpose: (no purpose stated)\n\nFacts\n  all      made 1  checked 1  passed 0  refused 1  unchecked 0\n  By source kind\n  file     made 1  checked 1  passed 0  refused 1  unchecked 0\n  tool     made 0  checked 0  passed 0  refused 0  unchecked 0\n  web      made 0  checked 0  passed 0  refused 0  unchecked 0\n  memory   made 0  checked 0  passed 0  refused 0  unchecked 0\n  agent    made 0  checked 0  passed 0  refused 0  unchecked 0\n  harness  made 0  checked 0  passed 0  refused 0  unchecked 0\n  Each fact\n  f1  w5  source kind: file  refused (quote_absent)\n\nConclusions: made 0  supported 0  refuted 0  open 0\nStatements: made 0  without a fact 0\n\npassed means the quote was found in the saved result the fact cites; it is not a\nstatement that the fact is true. Unchecked facts are never counted as passed.\n",
+   "text_err": ""
+  },
+  "replay_quote_absent": {
+   "error": null,
+   "json": {
+    "accepted": false,
+    "applicable": true,
+    "calls": [
+     {
+      "error": null,
+      "id": "w3",
+      "outcome": "ok",
+      "partial": false,
+      "purpose": null,
+      "source_kind": "tool",
+      "tool": "ls"
+     },
+     {
+      "error": null,
+      "id": "w7",
+      "outcome": "ok",
+      "partial": false,
+      "purpose": null,
+      "source_kind": "tool",
+      "tool": "grep"
+     },
+     {
+      "error": null,
+      "id": "w22",
+      "outcome": "ok",
+      "partial": false,
+      "purpose": null,
+      "source_kind": "file",
+      "tool": "read"
+     }
+    ],
+    "export": "<ROOT>/export",
+    "facts": [
+     {
+      "check": "quote_not_in_result",
+      "first_hand": true,
+      "id": "f1",
+      "nearest": {
+       "matched": 1,
+       "offset": 10,
+       "text": "e, \"tool\": \"ls\", \"path\": \".\", \"en"
+      },
+      "reason": "quote_absent",
+      "run": null,
+      "source": "w3",
+      "source_kind": "tool",
+      "verdict": "refused"
+     },
+     {
+      "check": "quote_not_in_result",
+      "first_hand": true,
+      "id": "f2",
+      "nearest": {
+       "matched": 2,
+       "offset": 98,
+       "text": "earch_tools.py` / `readpage.py` /"
+      },
+      "reason": "quote_absent",
+      "run": null,
+      "source": "w7",
+      "source_kind": "tool",
+      "verdict": "refused"
+     },
+     {
+      "check": null,
+      "first_hand": true,
+      "id": "f3",
+      "nearest": null,
+      "reason": null,
+      "run": null,
+      "source": "w22",
+      "source_kind": "file",
+      "verdict": "passed"
+     }
+    ],
+    "not_applicable_reason": null,
+    "open_items": [],
+    "report": {
+     "by_source_kind": {
+      "agent": {
+       "checked": 0,
+       "made": 0,
+       "passed": 0,
+       "refused": 0,
+       "unchecked": 0
+      },
+      "file": {
+       "checked": 1,
+       "made": 1,
+       "passed": 1,
+       "refused": 0,
+       "unchecked": 0
+      },
+      "harness": {
+       "checked": 0,
+       "made": 0,
+       "passed": 0,
+       "refused": 0,
+       "unchecked": 0
+      },
+      "memory": {
+       "checked": 0,
+       "made": 0,
+       "passed": 0,
+       "refused": 0,
+       "unchecked": 0
+      },
+      "tool": {
+       "checked": 2,
+       "made": 2,
+       "passed": 0,
+       "refused": 2,
+       "unchecked": 0
+      },
+      "web": {
+       "checked": 0,
+       "made": 0,
+       "passed": 0,
+       "refused": 0,
+       "unchecked": 0
+      }
+     },
+     "children": [],
+     "conclusions": {
+      "made": 0,
+      "open": 0,
+      "refuted": 0,
+      "supported": 0
+     },
+     "facts": {
+      "checked": 3,
+      "made": 3,
+      "passed": 1,
+      "refused": 2,
+      "unchecked": 0
+     },
+     "flags": [
+      {
+       "check": "quote_not_in_result",
+       "detail": "f1: quote_absent",
+       "ref": "w3"
+      },
+      {
+       "check": "quote_not_in_result",
+       "detail": "f2: quote_absent",
+       "ref": "w7"
+      }
+     ],
+     "python_recheck_ran": true,
+     "statements": {
+      "made": 0,
+      "without_fact": 0
+     }
+    },
+    "verdicts": [],
+    "walk_format": 2
+   },
+   "rc": 0,
+   "text": "export: <ROOT>/export (walk format 2)\n\nCalls\n  w3  ls  ok  purpose: (no purpose stated)\n  w7  grep  ok  purpose: (no purpose stated)\n  w22  read  ok  purpose: (no purpose stated)\n\nFacts\n  all      made 3  checked 3  passed 1  refused 2  unchecked 0\n  By source kind\n  file     made 1  checked 1  passed 1  refused 0  unchecked 0\n  tool     made 2  checked 2  passed 0  refused 2  unchecked 0\n  web      made 0  checked 0  passed 0  refused 0  unchecked 0\n  memory   made 0  checked 0  passed 0  refused 0  unchecked 0\n  agent    made 0  checked 0  passed 0  refused 0  unchecked 0\n  harness  made 0  checked 0  passed 0  refused 0  unchecked 0\n  Each fact\n  f1  w3  source kind: tool  refused (quote_absent)\n  f2  w7  source kind: tool  refused (quote_absent)\n  f3  w22  source kind: file  passed\n\nConclusions: made 0  supported 0  refuted 0  open 0\nStatements: made 0  without a fact 0\n\npassed means the quote was found in the saved result the fact cites; it is not a\nstatement that the fact is true. Unchecked facts are never counted as passed.\n",
+   "text_err": ""
+  },
+  "replay_senses": {
+   "error": null,
+   "json": {
+    "accepted": false,
+    "applicable": true,
+    "calls": [
+     {
+      "error": null,
+      "id": "w1",
+      "outcome": "ok",
+      "partial": false,
+      "purpose": null,
+      "source_kind": "memory",
+      "tool": "eidetic_recall"
+     },
+     {
+      "error": null,
+      "id": "w2",
+      "outcome": "ok",
+      "partial": false,
+      "purpose": null,
+      "source_kind": "file",
+      "tool": "read"
+     }
+    ],
+    "export": "<ROOT>/export",
+    "facts": [
+     {
+      "check": "action_without_call",
+      "first_hand": false,
+      "id": "f1",
+      "nearest": null,
+      "reason": "action_wrong_tool",
+      "run": null,
+      "source": "w1",
+      "source_kind": "memory",
+      "verdict": "refused"
+     },
+     {
+      "check": "unknown_source",
+      "first_hand": null,
+      "id": "f2",
+      "nearest": null,
+      "reason": "source_unknown",
+      "run": null,
+      "source": "w3",
+      "source_kind": null,
+      "verdict": "refused"
+     }
+    ],
+    "not_applicable_reason": null,
+    "open_items": [],
+    "report": {
+     "by_source_kind": {
+      "agent": {
+       "checked": 0,
+       "made": 0,
+       "passed": 0,
+       "refused": 0,
+       "unchecked": 0
+      },
+      "file": {
+       "checked": 0,
+       "made": 0,
+       "passed": 0,
+       "refused": 0,
+       "unchecked": 0
+      },
+      "harness": {
+       "checked": 0,
+       "made": 0,
+       "passed": 0,
+       "refused": 0,
+       "unchecked": 0
+      },
+      "memory": {
+       "checked": 1,
+       "made": 1,
+       "passed": 0,
+       "refused": 1,
+       "unchecked": 0
+      },
+      "tool": {
+       "checked": 0,
+       "made": 0,
+       "passed": 0,
+       "refused": 0,
+       "unchecked": 0
+      },
+      "web": {
+       "checked": 0,
+       "made": 0,
+       "passed": 0,
+       "refused": 0,
+       "unchecked": 0
+      }
+     },
+     "children": [],
+     "conclusions": {
+      "made": 0,
+      "open": 0,
+      "refuted": 0,
+      "supported": 0
+     },
+     "facts": {
+      "checked": 2,
+      "made": 2,
+      "passed": 0,
+      "refused": 2,
+      "unchecked": 0
+     },
+     "flags": [
+      {
+       "check": "action_without_call",
+       "detail": "f1: action_wrong_tool",
+       "ref": "w1"
+      },
+      {
+       "check": "unknown_source",
+       "detail": "f2: source_unknown",
+       "ref": "w3"
+      }
+     ],
+     "python_recheck_ran": true,
+     "statements": {
+      "made": 0,
+      "without_fact": 0
+     }
+    },
+    "verdicts": [],
+    "walk_format": 2
+   },
+   "rc": 0,
+   "text": "export: <ROOT>/export (walk format 2)\n\nCalls\n  w1  eidetic_recall  ok  purpose: (no purpose stated)\n  w2  read  ok  purpose: (no purpose stated)\n\nFacts\n  all      made 2  checked 2  passed 0  refused 2  unchecked 0\n  By source kind\n  file     made 0  checked 0  passed 0  refused 0  unchecked 0\n  tool     made 0  checked 0  passed 0  refused 0  unchecked 0\n  web      made 0  checked 0  passed 0  refused 0  unchecked 0\n  memory   made 1  checked 1  passed 0  refused 1  unchecked 0\n  agent    made 0  checked 0  passed 0  refused 0  unchecked 0\n  harness  made 0  checked 0  passed 0  refused 0  unchecked 0\n  Each fact\n  f1  w1  source kind: memory  refused (action_wrong_tool)\n  f2  w3  source kind: none  refused (source_unknown)\n\nConclusions: made 0  supported 0  refuted 0  open 0\nStatements: made 0  without a fact 0\n\npassed means the quote was found in the saved result the fact cites; it is not a\nstatement that the fact is true. Unchecked facts are never counted as passed.\n",
+   "text_err": ""
+  },
+  "walk_linked_outside": {
+   "error": null,
+   "json": {
+    "accepted": null,
+    "applicable": false,
+    "calls": [
+     {
+      "error": null,
+      "id": "w1",
+      "outcome": "ok",
+      "partial": false,
+      "purpose": null,
+      "source_kind": "file",
+      "tool": "read"
+     }
+    ],
+    "export": "<ROOT>/export",
+    "facts": [],
+    "not_applicable_reason": "no facts.json in the export: no hand-back facts were written",
+    "report": null,
+    "walk_format": 2
+   },
+   "rc": 0,
+   "text": "export: <ROOT>/export (walk format 2)\n\nCalls\n  w1  read  ok  purpose: (no purpose stated)\n\nFacts\n  not applicable: no facts.json in the export: no hand-back facts were written\n",
+   "text_err": ""
+  }
+ }
+}

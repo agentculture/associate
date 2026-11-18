@@ -4,6 +4,13 @@ Reads ``walk.jsonl``, the saved results beside it and the facts payload, runs
 the Python re-check and prints the counts per kind and per source kind, each
 call's purpose and outcome, and each fact with its source kind. A passed fact
 means its quote was found in the saved result it cites, nothing more.
+
+The re-check is evidence-cli's (see :mod:`associate.accuracy`), imported when
+the verb runs: without a usable evidence-cli the verb exits 2 naming the
+install command. Two of its results have no counterpart before the move: an
+export whose walk format it does not support (``unsupported``) is not checked
+and its calls are not listed, and a prior or child run in such a format is not
+loaded (``unsupported_runs``).
 """
 
 from __future__ import annotations
@@ -12,8 +19,6 @@ import argparse
 from pathlib import Path
 from typing import Any
 
-from associate.accuracy.check import ExportError, inspect_export
-from associate.accuracy.counts import SOURCE_KINDS
 from associate.cli._errors import EXIT_USER_ERROR, CliError
 from associate.cli._output import emit_result
 from associate.contract import load_accuracy
@@ -26,24 +31,50 @@ def _counts_line(label: str, counts: dict[str, int]) -> str:
     )
 
 
-def render(result: dict[str, Any]) -> str:
-    """The text form of :func:`associate.accuracy.check.inspect_export`."""
-    out = [f"export: {result['export']} (walk format {result['walk_format']})", "", "Calls"]
+def _format_text(value: Any) -> str:
+    """The walk format as found: a number, or the marker's value when it is not one."""
+    if value is None:
+        return "missing"
+    return str(value) if isinstance(value, int) and not isinstance(value, bool) else repr(value)
+
+
+def _calls_lines(result: dict[str, Any]) -> list[str]:
+    if result.get("unsupported") is True:
+        return [f"  not listed: {result['not_applicable_reason']}"]
     if not result["calls"]:
-        out.append("  none")
+        return ["  none"]
+    lines = []
     for call in result["calls"]:
         purpose = call["purpose"] if call["purpose"] is not None else "(no purpose stated)"
         detail = f" - {call['error']}" if call["error"] else ""
-        out.append(f"  {call['id']}  {call['tool']}  {call['outcome']}{detail}  purpose: {purpose}")
-    out += ["", "Facts"]
+        lines.append(
+            f"  {call['id']}  {call['tool']}  {call['outcome']}{detail}  purpose: {purpose}"
+        )
+    return lines
+
+
+def _unsupported_runs_lines(result: dict[str, Any]) -> list[str]:
+    runs = result.get("unsupported_runs") or []
+    if not runs:
+        return []
+    named = ", ".join(
+        f"{run['label']} (walk format {_format_text(run['walk_format'])})" for run in runs
+    )
+    return ["", "Runs", f"  not loaded: {named}; its walk format is not supported"]
+
+
+def render(result: dict[str, Any]) -> str:
+    """The text form of evidence-cli's ``inspect_export`` result."""
+    out = [f"export: {result['export']} (walk format {_format_text(result['walk_format'])})"]
+    out += ["", "Calls", *_calls_lines(result), *_unsupported_runs_lines(result), "", "Facts"]
     if not result["applicable"]:
         out.append(f"  not applicable: {result['not_applicable_reason']}")
         return "\n".join(out)
     report = result["report"]
     out.append(_counts_line("all", report["facts"]))
     out.append("  By source kind")
-    for kind in SOURCE_KINDS:
-        out.append(_counts_line(kind, report["by_source_kind"][kind]))
+    for kind, counts in report["by_source_kind"].items():
+        out.append(_counts_line(kind, counts))
     out.append("  Each fact")
     for fact in result["facts"]:
         reason = f" ({fact['reason']})" if fact["reason"] else ""
@@ -65,6 +96,9 @@ def render(result: dict[str, Any]) -> str:
 
 
 def cmd_check(args: argparse.Namespace) -> int:
+    # Imported here: without a usable evidence-cli this raises the exit-2 CliError.
+    from associate.accuracy import ExportError, inspect_export
+
     json_mode = bool(getattr(args, "json", False))
     try:
         prior = Path(args.continue_from) if getattr(args, "continue_from", None) else None

@@ -6,6 +6,7 @@ Pi's project-local caches and the associate export root.
 
 import json
 import subprocess
+import tomllib
 from pathlib import Path
 
 REPO_ROOT = Path(__file__).resolve().parent.parent
@@ -74,9 +75,13 @@ def test_package_json_pi_key_no_deps_no_scripts():
     assert "scripts" not in data
 
 
-def test_python_package_dependencies_still_empty():
-    pyproject = (REPO_ROOT / "pyproject.toml").read_text(encoding="utf-8")
-    assert "dependencies = []" in pyproject
+def test_python_package_dependencies_are_the_named_first_party_list():
+    """No third-party runtime dependency: only the named first-party packages, with floors."""
+    from tests.test_base_install import FIRST_PARTY_RUNTIME
+
+    pyproject = tomllib.loads((REPO_ROOT / "pyproject.toml").read_text(encoding="utf-8"))
+    expected = sorted(f"{name}>={floor}" for name, floor in FIRST_PARTY_RUNTIME.items())
+    assert sorted(pyproject["project"]["dependencies"]) == expected
 
 
 def test_gitignore_covers_pi_caches_and_export_root():

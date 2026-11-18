@@ -228,9 +228,15 @@ def test_the_pi_adapter_imports_no_pi_package():
         assert forbidden not in source, f"pi.py must not import a pi package ({forbidden!r})"
 
 
-def test_the_package_declares_no_runtime_dependency():
-    text = (REPO_ROOT / "pyproject.toml").read_text(encoding="utf-8")
-    assert "dependencies = []" in text
+def test_the_package_declares_no_third_party_runtime_dependency():
+    """Only the named first-party list (tests/test_base_install.py) may appear."""
+    import tomllib
+
+    from tests.test_base_install import FIRST_PARTY_RUNTIME
+
+    project = tomllib.loads((REPO_ROOT / "pyproject.toml").read_text(encoding="utf-8"))["project"]
+    names = {spec.split(">=")[0].strip() for spec in project["dependencies"]}
+    assert names <= set(FIRST_PARTY_RUNTIME)
 
 
 # ------------------------------------------------------------ unknown harness
