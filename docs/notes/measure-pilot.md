@@ -75,3 +75,69 @@ reported beside it.
   result it cites; it does not say the value is true.
 
 Each item above is one run, not a rate.
+
+## Second pilot, with the `ledger` binary installed
+
+The operator installed workledger-cli 0.8.0 and asked for the pilot to be
+repeated. Same 16 runs and settings, run later on 2026-11-18. No difference
+between the arms is read from it either.
+
+All 16 runs were stored. None failed to launch, none timed out, and no walk
+read the answer key.
+
+| Arm | Runs | Answer marked as matching | Marked as not matching | Mean time |
+|---|---|---|---|---|
+| worker, before PR #27 | 4 | 4 | 0 | 398 s |
+| worker, main | 4 | 4 | 0 | 237 s |
+| cortex, before PR #27 | 4 | 2 | 2 | 68 s |
+| cortex, main | 4 | 4 | 0 | 267 s |
+
+Time per run, in seconds:
+
+| Task | worker before | worker main | cortex before | cortex main |
+|---|---|---|---|---|
+| `read-budget` | 61 | 174 | 34 | 99 |
+| `wl-entry-fields` | 52 | 227 | 54 | 287 |
+| `coh-investiture-formula` | 162 | 240 | 108 | 473 |
+| `coh-url-check-timeout` | 1,318 | 306 | 75 | 207 |
+
+The run time adds up to about 65 minutes, against 40 in the first pilot. One
+run took 1,318 seconds: `worker` before PR #27 on `coh-url-check-timeout`
+answered that no such timeout exists, then tried to add the check to the
+repository; the gate refused the edit.
+
+### The two answers marked as not matching, read by hand
+
+- **`wl-entry-fields`, `cortex` before PR #27.** The answer says "6 top-level
+  fields" and then lists seven names. The count is wrong; the mark is right.
+- **`coh-investiture-formula`, `cortex` before PR #27.** The stored answer is
+  exactly 2,000 characters and starts mid-sentence. What remains names the
+  values used and the two left out, correctly, but the sentence saying the
+  score is a product was cut off. The mark is an effect of the 2,000-character
+  cap, not of the answer. The run's `statements.json` holds that sentence.
+
+The other 14 answers were read by hand and the reader agreed with their marks.
+
+### What the second pilot showed
+
+- **The cap changed a grade.** Three of the 16 stored answers were exactly
+  2,000 characters: the one above, and two from `worker` on `main` that ended
+  without calling `finish`. The cap applies to any run graded on its final
+  reply, on either harness; a run on `main` that calls `finish` is graded on
+  `answer.md`, which has no cap.
+- **Ending without `finish`.** `worker` on `main` did so in 2 of 4 runs. Both
+  answers were still marked as matching, from the final reply.
+- **The ledger tools ran.** Of 14 `ledger_append` calls, 11 wrote an entry,
+  the gate refused two (scores 0.210 and 0.221 against a limit of 0.2), and
+  one was refused for having no `purpose`. All three `ledger_list` calls
+  returned what was there. Entries went to the run's own ledger file. No run
+  lost its answer to a refusal.
+- **A workledger task can be answered from the tool.** On `wl-entry-fields`,
+  `worker` before PR #27 and `cortex` on `main` each appended an entry and
+  read its fields from the tool's output. The installed tool is workledger-cli
+  0.8.0; the task is pinned to an earlier commit. The operator decided to
+  leave the tools available and to report, beside the comparison table, how
+  many runs called a ledger tool on a workledger-cli task.
+- **The two grade readings** gave the same grade on every run that has both.
+
+Each item is one or two runs, not a rate.
