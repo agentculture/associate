@@ -5,7 +5,7 @@
   "schema_version": 5,
   "status": "exported",
   "created": "2026-11-18T15:43:53Z",
-  "updated": "2026-11-18T18:37:11Z",
+  "updated": "2026-11-18T18:37:31Z",
   "targets": [
     {
       "id": "c1",
@@ -705,6 +705,22 @@
       "task_id": "t12",
       "resolved": true,
       "resolution": "Pilot of 2026-11-18: the harness from before PR #27 finished 8 of 8 runs on pi 1.5.2 (worker and cortex, four tasks), each with an answer. The pi version stays recorded per run as requested 1.1.0, effective 1.5.2: the comparison measures both arms on pi 1.5.2."
+    },
+    {
+      "id": "r7",
+      "text": "The older harness's result keeps only the last 2000 characters of the model's final reply; 1 of 8 older-arm pilot answers hit that cap and starts mid-sentence. A long correct answer whose expected values sit at its start would be marked wrong on the older arm only. The current arm reads the full text from answer.md. The hand-graded sample is drawn from the same stored text, so it will not show this; the count of older-arm answers at exactly 2000 characters is reported with the table.",
+      "kind": "unknown_nonblocking",
+      "task_id": "t12",
+      "resolved": false,
+      "resolution": ""
+    },
+    {
+      "id": "r8",
+      "text": "In the pilot 1 of 8 current-harness runs gave no answer: cortex tried ledger_append twice and eidetic_remember once on a read-only question, the safety gate refused all three at scores just over the 0.2 limits (0.207, 0.229, 0.205), and the run ended refused without finish. The ledger binary is also not installed, so ledger_append fails in every run. Runs lost this way count as cannot tell, on the current arm more than the older one only if the newer prompts ask for more record keeping; not established.",
+      "kind": "unknown_nonblocking",
+      "task_id": "t12",
+      "resolved": false,
+      "resolution": ""
     }
   ],
   "obligations": []
