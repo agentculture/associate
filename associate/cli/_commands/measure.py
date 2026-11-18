@@ -71,6 +71,9 @@ MANIFEST_FORMAT = 1
 DEFAULT_TIMEOUT_S = 3600.0
 DEFAULT_SHEET = "hand-grading-sheet.json"
 DEFAULT_SEED = 1
+# The most repeats one comparison may ask for. `run` refuses more, and so does every verb
+# that reads the number back from a manifest, so a number in a file never sets an unbounded loop.
+MAX_REPEATS = 1000
 STUB = "stub"
 # The report module's own values, repeated so that building the parser imports nothing that
 # needs evidence-cli; a test pins them to the report module's.
@@ -83,7 +86,8 @@ PLUMBING_LINE = (
 )
 
 _UTF8 = "utf-8"
-_ARM_REQUIRED = ("name", "harness_commit", "model")
+_K_HARNESS_COMMIT = "harness_commit"
+_ARM_REQUIRED = ("name", _K_HARNESS_COMMIT, "model")
 _ARM_OPTIONAL = ("check_mode", "reasoning")
 _ARM_KEYS = frozenset(_ARM_REQUIRED + _ARM_OPTIONAL)
 _COLUMN_NAMES = {
@@ -100,6 +104,10 @@ _ARMS_HINT = (
 )
 _STATUS_HINT = "start the comparison with `associate measure run` first"
 _POSITIVE_HINT = "give a positive whole number"
+_REPEATS_HINT = f"give a whole number from 1 to {MAX_REPEATS}"
+_K_REPEATS = "repeats"
+_FLAG_REPEATS = "--repeats"
+_K_SHEET = "sheet"
 _K_JSON = "json"
 _K_TASKS = "tasks"
 _K_ARMS = "arms"
@@ -199,6 +207,12 @@ def _arm_value_problems(label: str, item: dict[str, Any]) -> list[str]:
         if not isinstance(item.get(key), str) or not item[key].strip():
             problems.append(f"{label}: {key} must be a non-empty string")
     runner = _runner()
+    commit = item.get(_K_HARNESS_COMMIT)
+    if isinstance(commit, str) and commit.strip() and not runner.is_commit_id(commit):
+        problems.append(
+            f"{label}: {_K_HARNESS_COMMIT} must be a commit id of 7 to 64 hexadecimal "
+            f"characters, not {commit!r} (a branch or tag name is not accepted)"
+        )
     for key, choices in (
         ("check_mode", runner.CHECK_MODES),
         ("reasoning", runner.REASONING_CHOICES),
@@ -237,7 +251,7 @@ def load_arms(path: Path) -> list[Arm]:
     return [
         _runner().Arm(
             name=item["name"],
-            harness_commit=item["harness_commit"],
+            harness_commit=item[_K_HARNESS_COMMIT],
             model=item["model"],
             check_mode=item.get("check_mode"),
             reasoning=item.get("reasoning"),
@@ -395,8 +409,20 @@ def _lock_refusal(results: Path) -> CliError:
     )
 
 
+def _bounded_repeats(count: int, where: str) -> int:
+    """*count* when it is at most MAX_REPEATS; a user error naming *where* it came from."""
+    if count > MAX_REPEATS:
+        raise _user_error(
+            f"{where} asks for {count} repeats; the most one comparison may have is "
+            f"{MAX_REPEATS}",
+            _REPEATS_HINT,
+        )
+    return count
+
+
 def _expected_keys(manifest: dict[str, Any]) -> list[tuple[str, str, int]]:
-    repeats = range(1, int(manifest["repeats"]) + 1)
+    count = _bounded_repeats(int(manifest[_K_REPEATS]), f"the manifest ({MANIFEST_FILE})")
+    repeats = range(1, min(count, MAX_REPEATS) + 1)
     return [(t, a, r) for r, t, a in product(repeats, manifest[_K_TASKS], manifest[_K_ARMS])]
 
 
@@ -412,7 +438,7 @@ def stored_counts(results: Path, manifest: dict[str, Any]) -> dict[str, int]:
 
 def load_manifest(results: Path) -> dict[str, Any]:
     manifest = _read_json(results / MANIFEST_FILE)
-    if not isinstance(manifest, dict) or "repeats" not in manifest:
+    if not isinstance(manifest, dict) or _K_REPEATS not in manifest:
         raise _user_error(
             f"no manifest in {results}: `associate measure run` writes {MANIFEST_FILE} "
             "when it starts",
@@ -428,7 +454,7 @@ def _manifest(
         "format": MANIFEST_FORMAT,
         _K_TASKS: ids,
         _K_ARMS: [arm.name for arm in arms],
-        "repeats": args.repeats,
+        _K_REPEATS: args.repeats,
         _K_EXPECTED: len(ids) * len(arms) * args.repeats,
         "harness": args.harness,
         _K_PLUMBING: args.harness == STUB,
@@ -448,7 +474,7 @@ def _manifest(
 def _start_up_text(manifest: dict[str, Any], results: Path) -> list[str]:
     lines = [
         f"measure run: {len(manifest[_K_TASKS])} tasks x {len(manifest[_K_ARMS])} arms x "
-        f"{manifest['repeats']} repeats = {manifest[_K_EXPECTED]} runs; results in {results}"
+        f"{manifest[_K_REPEATS]} repeats = {manifest[_K_EXPECTED]} runs; results in {results}"
     ]
     if manifest[_K_PLUMBING]:
         lines.append(PLUMBING_LINE)
@@ -494,7 +520,7 @@ def _summary_text(payload: dict[str, Any]) -> str:
 
 def _child_argv(args: argparse.Namespace, results: Path, log: Path) -> list[str]:
     argv = [sys.executable, "-m", "associate", "measure", "run"]
-    argv += ["--arms", str(Path(args.arms).resolve()), "--repeats", str(args.repeats)]
+    argv += ["--arms", str(Path(args.arms).resolve()), _FLAG_REPEATS, str(args.repeats)]
     argv += ["--output-dir", str(results), "--timeout", repr(args.timeout)]
     argv += ["--harness", args.harness, "--log-file", str(log)]
     for flag, value in (
@@ -514,7 +540,7 @@ def _child_argv(args: argparse.Namespace, results: Path, log: Path) -> list[str]
 def _spawn(argv: list[str], log: Path) -> Popen:
     """Start *argv* in its own session, stdin closed, stdout and stderr appended to *log*."""
     try:
-        with open(log, "ab") as handle:  # noqa: SIM115 - the child inherits the descriptor
+        with open(log, "ab") as handle:  # the child inherits the descriptor
             return Popen(  # nosec B603 - fixed argv, no shell
                 argv,
                 stdin=subprocess.DEVNULL,
@@ -580,8 +606,7 @@ def _foreground(args: argparse.Namespace, results: Path, ctx: dict[str, Any]) ->
             results,
             ctx["checkouts"],
             harness_repo=args.harness_repo,
-            timeout_s=args.timeout,
-            harness=args.harness,
+            options=_runner().RunOptions(timeout_s=args.timeout, harness=args.harness),
             progress=emit_diagnostic,
         )
     except _runner().RunnerError as exc:
@@ -595,6 +620,7 @@ def _plan(args: argparse.Namespace) -> tuple[Path, dict[str, Any]]:
     """Check everything that can be checked before anything starts."""
     if not isinstance(args.repeats, int) or args.repeats < 1:
         raise _user_error("--repeats must be a positive whole number", _POSITIVE_HINT)
+    _bounded_repeats(args.repeats, _FLAG_REPEATS)
     _positive_seconds(args.timeout)
     arms = load_arms(Path(args.arms))
     only = args.tasks_filter or []
@@ -740,26 +766,31 @@ def _differences_text(differences: dict[str, int]) -> str:
     return "\n".join(lines)
 
 
-def cmd_report(args: argparse.Namespace) -> int:
-    records, manifest = _stored_records(Path(args.output_dir).resolve())
-    payload = _report_payload(records, manifest, args.reading)
-    if _json_mode(args):
-        emit_result(payload, json_mode=True)
-        return 0
+def _report_text(records: list[dict[str, Any]], payload: dict[str, Any], reading: str) -> str:
     parts = [
-        _report().render_table(records, args.reading).rstrip("\n"),
+        _report().render_table(records, reading).rstrip("\n"),
         _report().render_success_numbers(payload["counts_of_stored_runs"]).rstrip("\n"),
         _differences_text(payload["readings_differences"]),
     ]
     if payload[_K_PLUMBING]:
         parts.append(PLUMBING_LINE)
-    emit_result("\n\n".join(parts), json_mode=False)
+    return "\n\n".join(parts)
+
+
+def cmd_report(args: argparse.Namespace) -> int:
+    records, manifest = _stored_records(Path(args.output_dir).resolve())
+    payload = _report_payload(records, manifest, args.reading)
+    json_mode = _json_mode(args)
+    emit_result(
+        payload if json_mode else _report_text(records, payload, args.reading),
+        json_mode=json_mode,
+    )
     return 0
 
 
 def _sample_payload(sample: Any, sheet: Path, manifest: dict[str, Any] | None) -> dict[str, Any]:
     return {
-        "sheet": str(sheet),
+        _K_SHEET: str(sheet),
         "seed": sample.seed,
         "size": sample.size,
         _K_READING: sample.reading,
@@ -768,6 +799,17 @@ def _sample_payload(sample: Any, sheet: Path, manifest: dict[str, Any] | None) -
         "message": sample.message,
         _K_PLUMBING: bool((manifest or {}).get(_K_PLUMBING)),
     }
+
+
+def _sample_text(payload: dict[str, Any]) -> str:
+    lines = [
+        payload["message"],
+        f"sheet: {payload[_K_SHEET]}",
+        "fill in hand_grade for each entry.",
+    ]
+    if payload[_K_PLUMBING]:
+        lines.insert(1, PLUMBING_LINE)
+    return "\n".join(lines)
 
 
 def cmd_sample(args: argparse.Namespace) -> int:
@@ -788,13 +830,8 @@ def cmd_sample(args: argparse.Namespace) -> int:
         )
     _report().write_blank_sheet(sample, sheet)
     payload = _sample_payload(sample, sheet, manifest)
-    if _json_mode(args):
-        emit_result(payload, json_mode=True)
-        return 0
-    lines = [sample.message, f"sheet: {sheet}", "fill in hand_grade for each entry."]
-    if payload[_K_PLUMBING]:
-        lines.insert(1, PLUMBING_LINE)
-    emit_result("\n".join(lines), json_mode=False)
+    json_mode = _json_mode(args)
+    emit_result(payload if json_mode else _sample_text(payload), json_mode=json_mode)
     return 0
 
 
@@ -802,7 +839,6 @@ def cmd_sample(args: argparse.Namespace) -> int:
 
 AGREEMENT_MIN_HAND_GRADED = 48
 AGREEMENT_MIN_PERCENT = 95
-_K_SHEET = "sheet"
 _K_SEED = "seed"
 _K_AGREED = "agreed"
 _K_HAND_GRADED = "hand_graded"
@@ -918,6 +954,11 @@ def _condition_lines(conditions: dict[str, dict[str, Any]]) -> list[str]:
     return lines
 
 
+def _agreement_text(found: Any, payload: dict[str, Any]) -> str:
+    text = _report().render_agreement(found).rstrip("\n")
+    return "\n".join([text, "", *_condition_lines(payload["conditions"])])
+
+
 def cmd_agreement(args: argparse.Namespace) -> int:
     results = Path(args.output_dir).resolve()
     records, _manifest_unused = _stored_records(results)
@@ -925,11 +966,8 @@ def cmd_agreement(args: argparse.Namespace) -> int:
     sample = _redraw(records, sheet)
     found = _report().compare_hand_grades(sample, sheet)
     payload = _agreement_payload(found, sample, sheet)
-    if _json_mode(args):
-        emit_result(payload, json_mode=True)
-        return 0
-    text = _report().render_agreement(found).rstrip("\n")
-    emit_result("\n".join([text, "", *_condition_lines(payload["conditions"])]), json_mode=False)
+    json_mode = _json_mode(args)
+    emit_result(payload if json_mode else _agreement_text(found, payload), json_mode=json_mode)
     return 0
 
 
@@ -975,7 +1013,7 @@ def _register_run(noun_sub: Any) -> None:
     )
     p.add_argument("--arms", required=True, help="JSON list of arms (see the explain page).")
     p.add_argument("--tasks", help="Task file (default docs/accuracy/tasks.json).")
-    p.add_argument("--repeats", type=int, default=1, help="Repeats per task and arm (default 1).")
+    p.add_argument(_FLAG_REPEATS, type=int, default=1, help="Repeats per task and arm (default 1).")
     p.add_argument("--output-dir", required=True, help="Where results, manifest and log go.")
     p.add_argument("--tasks-filter", action="append", metavar="ID", help="Run only this task id.")
     p.add_argument(

@@ -20,6 +20,10 @@ the harness's lines.
 
 ``facts.json`` is never read: a grade must not depend on it.
 
+The export directory is the one the caller names. A result's own
+``export_dir`` field is never opened here: it is a string from a file, and the
+caller (the runner) is the one that knows which directory the run was given.
+
 Grading is ``evidence.answer.grade``: a run that gave no text is
 ``cannot_tell`` (cause ``empty_answer``) with ``empty_reason`` saying why, not
 a failure.
@@ -139,8 +143,6 @@ def model_answer(
 ) -> ModelAnswer:
     """The text the model gave as its answer, with no line the harness wrote."""
     directory = Path(export_dir) if export_dir is not None else None
-    if directory is None and result and isinstance(result.get("export_dir"), str):
-        directory = Path(result["export_dir"])
     raw, source = _candidate(result, directory)
     text = _without_harness_lines(raw)
     if text:

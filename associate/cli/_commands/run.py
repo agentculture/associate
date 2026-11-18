@@ -223,6 +223,63 @@ def _lock_checkout(checkout: Path, session_id: str) -> int:
         ) from err
 
 
+def _task(
+    args: argparse.Namespace,
+    run_checkout: Path,
+    session_id: str,
+    export_root: Path,
+    test_commands: list[list[str]],
+    isolated: bool,
+) -> dict[str, Any]:
+    """The task handed to the harness adapter."""
+    task = {
+        "id": args.task_id or session_id,
+        "prompt": args.prompt or _default_prompt(),
+        "checkout": str(run_checkout),
+        "session_id": session_id,
+        "export_dir": str(export_root),
+        # d8: told to the safety gate's decider as the state's isolation line.
+        "isolation": "worktree" if isolated else "in-place",
+    }
+    if test_commands:
+        task["test_commands"] = test_commands
+    if args.continue_from:
+        task["continue_from"] = str(Path(args.continue_from).expanduser().resolve())
+    return task
+
+
+def _with_settings(result: dict[str, Any], args: argparse.Namespace) -> dict[str, Any]:
+    """*result* with the check mode and the reasoning the operator asked for, when it lacks them."""
+    if "check_mode" not in result:
+        result = {**result, "check_mode": args.check_mode}
+    if args.reasoning and "reasoning" not in result:
+        # An adapter that does not apply the setting (the stub) still records
+        # what the operator asked for, so the result never omits it.
+        result = {**result, "reasoning": args.reasoning, "reasoning_source": "run"}
+    return result
+
+
+def _kept_note(result: dict[str, Any]) -> str:
+    return "; the run worktree is kept, not merged" if result.get("merge") == "kept" else ""
+
+
+def _exit_code(result: dict[str, Any], args: argparse.Namespace) -> int:
+    """The exit code for *result*, after the stderr line that explains a non-zero one."""
+    if result.get("handback_outcome") == _HANDBACK_REFUSED:
+        emit_diagnostic(
+            "associate: the hand-back was refused by the check on every allowed round; no answer "
+            "was accepted (see check.json in the export directory)" + _kept_note(result)
+        )
+        return EXIT_HANDBACK_REFUSED
+    if result.get("outcome") == _TIMEOUT_OUTCOME:
+        emit_diagnostic(
+            f"associate: pi did not finish within {args.timeout:g}s and was killed; the result "
+            "was built from the export directory" + _kept_note(result)
+        )
+        return EXIT_RUN_TIMEOUT
+    return 0
+
+
 def _run(
     args: argparse.Namespace,
     harness_cls: Any,
@@ -235,20 +292,7 @@ def _run(
     harness = _build(harness_cls, args)
     run_wt = _isolate(checkout, session_id) if _may_mutate(args.model) else None
     run_checkout = run_wt.run_checkout if run_wt is not None else checkout
-
-    task = {
-        "id": args.task_id or session_id,
-        "prompt": args.prompt or _default_prompt(),
-        "checkout": str(run_checkout),
-        "session_id": session_id,
-        "export_dir": str(export_root),
-        # d8: told to the safety gate's decider as the state's isolation line.
-        "isolation": "worktree" if run_wt is not None else "in-place",
-    }
-    if test_commands:
-        task["test_commands"] = test_commands
-    if args.continue_from:
-        task["continue_from"] = str(Path(args.continue_from).expanduser().resolve())
+    task = _task(args, run_checkout, session_id, export_root, test_commands, run_wt is not None)
 
     result = _drive(harness, task, run_checkout, session_id, export_root, run_wt)
 
@@ -262,28 +306,9 @@ def _run(
     elif _may_mutate(args.model):
         result = {**result, "isolation": "in-place"}
 
-    if "check_mode" not in result:
-        result = {**result, "check_mode": args.check_mode}
-    if args.reasoning and "reasoning" not in result:
-        # An adapter that does not apply the setting (the stub) still records
-        # what the operator asked for, so the result never omits it.
-        result = {**result, "reasoning": args.reasoning, "reasoning_source": "run"}
+    result = _with_settings(result, args)
     emit_result(result if json_mode else _render(result), json_mode=json_mode)
-    if result.get("handback_outcome") == _HANDBACK_REFUSED:
-        emit_diagnostic(
-            "associate: the hand-back was refused by the check on every allowed round; no answer "
-            "was accepted (see check.json in the export directory)"
-            + ("; the run worktree is kept, not merged" if result.get("merge") == "kept" else "")
-        )
-        return EXIT_HANDBACK_REFUSED
-    if result.get("outcome") == _TIMEOUT_OUTCOME:
-        emit_diagnostic(
-            f"associate: pi did not finish within {args.timeout:g}s and was killed; the result "
-            "was built from the export directory"
-            + ("; the run worktree is kept, not merged" if result.get("merge") == "kept" else "")
-        )
-        return EXIT_RUN_TIMEOUT
-    return 0
+    return _exit_code(result, args)
 
 
 def _harness_class(name: str) -> Any:

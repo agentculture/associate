@@ -57,7 +57,8 @@ How a run ends
 ``status`` is ``finished`` (graded) or ``launch_failed`` (not graded, ``grade``
 null, ``reason`` saying why: no local checkout, the pinned commit missing, a
 clone that failed, a harness tree that could not be prepared, a process that
-could not start or passed the wall clock, or no result on stdout).
+could not start or passed the wall clock, no result on stdout, or a result
+naming an export directory outside the run's own export root).
 
 A run that printed a result object is ``finished`` whatever its exit code
 (0, 3 for a refused hand-back, 4 for a timeout). A harness that prints no
@@ -106,6 +107,16 @@ record is stored from them without a new launch, so a run that finished is
 never started twice; an attempt with no ``launch.json`` was interrupted and is
 listed in the next record's ``history`` as ``interrupted``. A second runner on
 the same results directory is refused while the first holds the lock.
+
+Values read back from files
+---------------------------
+An arm's ``harness_commit`` must be a commit id written in hexadecimal (7 to
+64 characters, abbreviated or full); a branch, tag or other revision
+expression is refused before git is run. A stored ``plan.json`` is checked
+before it is used again: its harness directory must lie in the harness
+worktrees directory, its export root in its own attempt directory, and its
+session id must be a plain name. The export directory a run reports is read
+only when it lies in the export root the runner gave that run.
 """
 
 from __future__ import annotations
@@ -152,6 +163,8 @@ LOCK_FILE = ".runner.lock"
 PROBE_TIMEOUT_S = 120.0
 
 _SAFE_NAME = re.compile(r"[A-Za-z0-9][A-Za-z0-9._-]{0,63}", re.ASCII)
+_SAFE_SESSION = re.compile(r"[A-Za-z0-9][A-Za-z0-9._-]{0,254}", re.ASCII)
+_COMMIT_ID = re.compile(r"[\da-fA-F]{7,64}", re.ASCII)
 _OPTION = re.compile(r"^\s+(?:-\w+,\s+)?(--[a-z][a-z0-9-]*)", re.ASCII | re.MULTILINE)
 _PI_PIN = re.compile(r'^PINNED_PI_VERSION\s*=\s*"([^"]+)"', re.MULTILINE)
 _REQUIRED_FLAGS = ("--harness", "--model", "--checkout", "--export-root", "--session-id")
@@ -174,6 +187,11 @@ _K_EFFECTIVE = "effective"
 _K_REQUESTED = "requested"
 _K_SOURCE = "source"
 _K_EXPORT_DIR = "export_dir"
+_K_EXPORT_ROOT = "export_root"
+_K_SESSION_ID = "session_id"
+_K_SETTINGS = "settings"
+_END_OF_OPTIONS = "--end-of-options"
+_IN_PLAN = f"in {PLAN_FILE}"
 
 
 class RunnerError(RuntimeError):
@@ -218,6 +236,26 @@ class Completed:
     stderr: str
 
 
+@dataclass(frozen=True)
+class RunOptions:
+    """How every run of a comparison is launched.
+
+    ``python`` must import ``evidence`` for a current harness. ``timeout_s`` is
+    passed as ``--timeout`` and the launcher waits ``grace_s`` longer.
+    ``excluded`` are the paths left out of every clone. ``retry_failed`` runs a
+    stored failed launch again. ``harness`` is passed as ``--harness`` (``stub``
+    for plumbing).
+    """
+
+    python: str = sys.executable
+    timeout_s: float = 1500.0
+    grace_s: float = 600.0
+    excluded: Sequence[str] = DEFAULT_EXCLUDED
+    retry_failed: bool = True
+    untrusted_checkout: bool = True
+    harness: str = "pi"
+
+
 Key = tuple[str, str, int]
 
 
@@ -246,6 +284,7 @@ class _Harness:
 @dataclass
 class _Context:
     results: Path
+    harness_root: Path
     checkouts: dict[str, Path]
     python: str
     timeout_s: float
@@ -330,7 +369,8 @@ def _probe_pi_version() -> str | None:
 
 def _write_atomic(path: Path, value: Any) -> None:
     path.parent.mkdir(parents=True, exist_ok=True)
-    handle = tempfile.NamedTemporaryFile(  # noqa: SIM115 - closed below, then renamed
+    # Not a ``with`` on the call: the file is closed below and then renamed.
+    handle = tempfile.NamedTemporaryFile(
         "w", encoding=_UTF8, dir=path.parent, prefix=f".{path.name}.", suffix=".tmp", delete=False
     )
     try:
@@ -447,10 +487,38 @@ def _main_checkout(repo: Path) -> Path:
     return common.parent if common.name == ".git" else Path(repo).resolve()
 
 
+def is_commit_id(value: Any) -> bool:
+    """Whether *value* is a commit id in hexadecimal, abbreviated (7 or more) or full."""
+    return isinstance(value, str) and _COMMIT_ID.fullmatch(value) is not None
+
+
+def _commit_id(value: Any) -> str:
+    """*value* when it is a hexadecimal commit id; nothing else is ever passed to git."""
+    if not isinstance(value, str) or _COMMIT_ID.fullmatch(value) is None:
+        raise RunnerError(
+            f"not a commit id: {value!r} (give 7 to 64 hexadecimal characters, not a branch, "
+            "a tag or another revision expression)"
+        )
+    return value
+
+
 def _resolve_commit(repo: Path, commit: str) -> str:
-    if commit.startswith("-"):
-        raise RunnerError(f"not a commit: {commit!r}")
-    return _git(repo, _REV_PARSE, "--verify", "--quiet", f"{commit}^{{commit}}").strip()
+    wanted = _commit_id(commit)
+    found = _git(repo, _REV_PARSE, "--verify", "--quiet", _END_OF_OPTIONS, f"{wanted}^{{commit}}")
+    return _commit_id(found.strip())
+
+
+def _inside(path: Path, parent: Path, what: str) -> Path:
+    """*path* resolved, when it lies in *parent*; a :class:`RunnerError` naming it otherwise."""
+    resolved = Path(path).resolve()
+    if not resolved.is_relative_to(Path(parent).resolve()):
+        raise RunnerError(f"{what} is {resolved}, which is outside {parent}; it is not used")
+    return resolved
+
+
+def _harness_root(main: Path) -> Path:
+    """Where the harness worktrees of the repository at *main* live (beside it, never inside)."""
+    return main.parent / f".worktrees.{main.name}"
 
 
 def _tree_changes(worktree: Path) -> list[str]:
@@ -467,8 +535,9 @@ def _contract_paths(paths: list[str]) -> list[str]:
     return [p for p in paths if p == CONTRACT_DIR or p.startswith(CONTRACT_DIR + "/")]
 
 
-def _ensure_worktree(main: Path, commit: str) -> Path:
-    root = main.parent / f".worktrees.{main.name}"
+def _ensure_worktree(main: Path, full_commit: str) -> Path:
+    commit = _commit_id(full_commit)
+    root = _harness_root(main)
     path = root / f"measure-harness-{commit[:12]}"
     if path.exists():
         head = _git(path, _REV_PARSE, "HEAD").strip()
@@ -476,7 +545,7 @@ def _ensure_worktree(main: Path, commit: str) -> Path:
             raise RunnerError(f"{path} is at {head}, not {commit}; it is left as it is")
     else:
         root.mkdir(parents=True, exist_ok=True)
-        _git(main, "worktree", "add", "--detach", str(path), commit)
+        _git(main, "worktree", "add", "--detach", "--", str(path), commit)
     dirty = _tracked_changes(path) + _contract_paths(_tree_changes(path))
     if dirty:
         raise RunnerError(
@@ -527,9 +596,14 @@ def _run_flags(ctx: _Context, worktree: Path) -> frozenset[str]:
     return flags
 
 
+def _show(main: Path, commit: str, path: str) -> str:
+    """The file at *path* in *commit*."""
+    return _git(main, "show", _END_OF_OPTIONS, f"{_commit_id(commit)}:{path}")
+
+
 def _registry_reasoning(main: Path, commit: str) -> dict[str, Any]:
     try:
-        registry = json.loads(_git(main, "show", f"{commit}:{CONTRACT_DIR}/models.json"))
+        registry = json.loads(_show(main, commit, f"{CONTRACT_DIR}/models.json"))
         return {key: entry.get(_K_REASONING) for key, entry in registry["models"].items()}
     except (ValueError, KeyError, AttributeError, TypeError) as exc:
         raise RunnerError(f"models.json at {commit} cannot be read: {exc}") from exc
@@ -537,7 +611,7 @@ def _registry_reasoning(main: Path, commit: str) -> dict[str, Any]:
 
 def _pi_pin(main: Path, commit: str) -> str | None:
     try:
-        source = _git(main, "show", f"{commit}:associate/harness/pi.py")
+        source = _show(main, commit, "associate/harness/pi.py")
     except RunnerError:
         return None
     match = _PI_PIN.search(source)
@@ -730,7 +804,7 @@ def _plan(
     if harness.error is not None or harness.worktree is None:
         raise _LaunchFailed(harness.error or "the harness worktree is missing")
     args, settings, reasoning = _settings(ctx, arm, harness)
-    partial = {"settings": settings, _K_REASONING: reasoning}
+    partial = {_K_SETTINGS: settings, _K_REASONING: reasoning}
     try:
         clone = _make_clone(ctx, task, attempt_dir)
     except _LaunchFailed as failed:
@@ -748,8 +822,8 @@ def _plan(
         "clone": clone,
         "argv": argv,
         "cwd": str(harness.worktree),
-        "export_root": str(export_root),
-        "session_id": session,
+        _K_EXPORT_ROOT: str(export_root),
+        _K_SESSION_ID: session,
         "timeout_s": ctx.timeout_s,
     }
     env = {**_base_env(harness.worktree), **stores}
@@ -803,13 +877,40 @@ def _stderr_message(stderr: str) -> str:
     return lines[-1][:500] if lines else "nothing on stderr"
 
 
-def _export_dir(result: dict[str, Any] | None, plan: dict[str, Any]) -> Path | None:
+def _reported_export(result: dict[str, Any] | None) -> Path | None:
+    """The export directory the run's own result names, unchecked."""
     if result and isinstance(result.get(_K_EXPORT_DIR), str):
         return Path(result[_K_EXPORT_DIR])
     if result and isinstance(result.get("walk_path"), str):
         return Path(result["walk_path"]).parent
-    root = Path(plan["export_root"])
-    nested = root / plan["session_id"] / "export"
+    return None
+
+
+def _plan_export_root(plan: dict[str, Any], attempt_dir: Path) -> Path:
+    """The plan's export root, which must lie in the attempt directory it was written to."""
+    return _inside(Path(str(plan[_K_EXPORT_ROOT])), attempt_dir, f"{_K_EXPORT_ROOT} {_IN_PLAN}")
+
+
+def _plan_session(plan: dict[str, Any]) -> str:
+    session = plan[_K_SESSION_ID]
+    if not isinstance(session, str) or _SAFE_SESSION.fullmatch(session) is None:
+        raise RunnerError(f"{_K_SESSION_ID} {_IN_PLAN} is not a safe name: {session!r}")
+    return session
+
+
+def _export_dir(result: dict[str, Any] | None, root: Path, session: str) -> Path | None:
+    """Where the run's export is: what the result names, else where the runner asked for it.
+
+    *root* is the export root the runner gave the run. A result naming a
+    directory outside it is not read: the run is stored as a failed launch.
+    """
+    reported = _reported_export(result)
+    if reported is not None:
+        try:
+            return _inside(reported, root, "the export directory the run reported")
+        except RunnerError as exc:
+            raise _LaunchFailed(str(exc)) from exc
+    nested = _inside(root / session / "export", root, "the export directory of the session")
     if nested.is_dir():
         return nested
     return root if (root / WALK_FILE).exists() else None
@@ -953,16 +1054,20 @@ def _failed_record(base: dict[str, Any], reason: str, partial: dict[str, Any]) -
         **base,
         _K_STATUS: STATUS_LAUNCH_FAILED,
         _K_REASON: reason,
-        "settings": partial.get("settings"),
+        _K_SETTINGS: partial.get(_K_SETTINGS),
         _K_REASONING: partial.get(_K_REASONING),
         "harness_tree": None,
     }
 
 
 def _finished_fields(
-    plan: dict[str, Any], result: dict[str, Any] | None, task: Mapping[str, Any], excluded: list
+    plan: dict[str, Any],
+    result: dict[str, Any] | None,
+    task: Mapping[str, Any],
+    excluded: list,
+    export_root: Path,
 ) -> dict[str, Any]:
-    export_dir = _export_dir(result, plan)
+    export_dir = _export_dir(result, export_root, _plan_session(plan))
     answer, readings = _grades(result, export_dir, task["expected"])
     reasoning = dict(plan[_K_REASONING])
     if result and result.get(_K_REASONING) is not None:
@@ -987,19 +1092,22 @@ def _finished_fields(
 def _launched_record(
     ctx: _Context, base: dict, plan: dict, task: Mapping[str, Any], attempt_dir: Path
 ) -> dict[str, Any]:
+    cwd = _inside(Path(str(plan["cwd"])), ctx.harness_root, f"the harness directory {_IN_PLAN}")
+    export_root = _plan_export_root(plan, attempt_dir)
+    session = _plan_session(plan)
     launch = _read_json(attempt_dir / LAUNCH_FILE) or {}
     stdout, stderr = str(launch.get("stdout") or ""), str(launch.get("stderr") or "")
     status, result, reason = _outcome(plan, launch, stdout, stderr)
     record = {
         **base,
-        "settings": plan["settings"],
+        _K_SETTINGS: plan[_K_SETTINGS],
         _K_REASONING: plan[_K_REASONING],
         "clone": plan["clone"],
         "clone_head": plan["clone"]["head"],
         "launch": {
             "argv": plan["argv"],
             "cwd": plan["cwd"],
-            "session_id": plan["session_id"],
+            _K_SESSION_ID: session,
             "exit_code": launch.get("exit_code"),
             "started": launch.get("started"),
             "ended": launch.get("ended"),
@@ -1010,8 +1118,11 @@ def _launched_record(
         _K_REASON: reason,
     }
     if status == STATUS_FINISHED:
-        record.update(_finished_fields(plan, result, task, ctx.excluded))
-    changed = _tree_changes(Path(plan["cwd"]))
+        try:
+            record.update(_finished_fields(plan, result, task, ctx.excluded, export_root))
+        except _LaunchFailed as failed:
+            record.update({_K_STATUS: STATUS_LAUNCH_FAILED, _K_REASON: failed.reason})
+    changed = _tree_changes(cwd)
     record["harness_tree"] = {
         "changed": changed,
         "contract_unchanged": not _contract_paths(changed),
@@ -1134,13 +1245,7 @@ def run_comparison(
     checkouts: Mapping[str, str | Path],
     *,
     harness_repo: str | Path | None = None,
-    python: str = sys.executable,
-    timeout_s: float = 1500.0,
-    grace_s: float = 600.0,
-    excluded: Sequence[str] = DEFAULT_EXCLUDED,
-    retry_failed: bool = True,
-    untrusted_checkout: bool = True,
-    harness: str = "pi",
+    options: RunOptions | None = None,
     launcher: Callable[[Launch], Completed] = subprocess_launcher,
     pi_version: Callable[[], str | None] | None = None,
     progress: Callable[[str], None] | None = None,
@@ -1149,11 +1254,13 @@ def run_comparison(
 
     ``checkouts`` maps a task's ``repository.name`` to a local checkout holding
     its pinned commit. ``harness_repo`` is the repository the arms' commits are
-    in (default: this one). ``python`` must import ``evidence`` for a current
-    harness. ``pi_version`` reports the pi on PATH (default: ``pi --version``).
-    ``harness`` is passed as ``--harness`` (``stub`` for plumbing). Returns the
-    keys this invocation stored, recovered and skipped.
+    in (default: this one). ``options`` (default ``RunOptions()``) holds the
+    settings every run is launched with: the interpreter, the time limits, the
+    excluded paths, the retry and trust switches and the harness adapter.
+    ``pi_version`` reports the pi on PATH (default: ``pi --version``). Returns
+    the keys this invocation stored, recovered and skipped.
     """
+    chosen = options if options is not None else RunOptions()
     _validate(arms, tasks, repeats)
     results = Path(results_dir).resolve()
     repo = Path(harness_repo) if harness_repo is not None else Path(__file__).resolve().parents[2]
@@ -1163,14 +1270,15 @@ def run_comparison(
         _remove_stale_temporaries(results)
         ctx = _Context(
             results=results,
+            harness_root=_harness_root(main),
             checkouts={name: Path(path) for name, path in checkouts.items()},
-            python=python,
-            timeout_s=float(timeout_s),
-            grace_s=float(grace_s),
-            excluded=list(excluded),
-            retry_failed=retry_failed,
-            untrusted_checkout=untrusted_checkout,
-            harness=harness,
+            python=chosen.python,
+            timeout_s=float(chosen.timeout_s),
+            grace_s=float(chosen.grace_s),
+            excluded=list(chosen.excluded),
+            retry_failed=chosen.retry_failed,
+            untrusted_checkout=chosen.untrusted_checkout,
+            harness=chosen.harness,
             launcher=launcher,
             pi_on_path=(pi_version or _probe_pi_version)(),
             progress=progress or (lambda _message: None),

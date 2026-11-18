@@ -39,7 +39,7 @@ def write(repo: Path, rel: str, text: str) -> None:
     p.write_text(text, encoding="utf-8")
 
 
-@pytest.fixture()
+@pytest.fixture
 def source(tmp_path: Path) -> Path:
     repo = tmp_path / "source"
     repo.mkdir()
@@ -141,8 +141,9 @@ def test_clone_is_outside_source_and_fresh_each_time(source: Path, tmp_path: Pat
 
 
 def test_destination_inside_source_refused(source: Path):
+    commit = commit_of(source)
     with pytest.raises(CloneError):
-        make_clone(source, commit_of(source), EXCLUDED, source / "inside")
+        make_clone(source, commit, EXCLUDED, source / "inside")
 
 
 def test_unknown_commit_refused(source: Path, tmp_path: Path):
@@ -152,8 +153,9 @@ def test_unknown_commit_refused(source: Path, tmp_path: Path):
 
 @pytest.mark.parametrize("bad", ["/abs", "../up", "", "a/../../b", ".git"])
 def test_bad_excluded_path_refused(source: Path, tmp_path: Path, bad: str):
+    commit = commit_of(source)
     with pytest.raises(CloneError):
-        make_clone(source, commit_of(source), [bad], tmp_path / "out")
+        make_clone(source, commit, [bad], tmp_path / "out")
 
 
 def test_missing_excluded_path_is_reported_not_fatal(source: Path, tmp_path: Path):

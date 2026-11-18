@@ -390,12 +390,16 @@ def render_agreement(agreement: Agreement) -> str:
     lines = ["Agreement of the grader with hand grades", INTERNAL_LINE, ""]
     if agreement.problem:
         lines.append(agreement.problem)
-    lines.append(f"sampled runs: {agreement.sampled}")
-    lines.append(f"hand graded: {agreement.hand_graded}")
-    lines.append(f"agree: {agreement.agreed} of {agreement.hand_graded} hand-graded runs")
-    lines.append(f"disagree: {agreement.disagreed}")
-    lines.append(f"{len(agreement.missing)} missing (no hand grade; not counted as agreement)")
-    lines.append(f"{len(agreement.invalid)} invalid (not matches, does_not_match or cannot_tell)")
+    lines.extend(
+        [
+            f"sampled runs: {agreement.sampled}",
+            f"hand graded: {agreement.hand_graded}",
+            f"agree: {agreement.agreed} of {agreement.hand_graded} hand-graded runs",
+            f"disagree: {agreement.disagreed}",
+            f"{len(agreement.missing)} missing (no hand grade; not counted as agreement)",
+            f"{len(agreement.invalid)} invalid (not matches, does_not_match or cannot_tell)",
+        ]
+    )
     if agreement.extra:
         lines.append(f"{len(agreement.extra)} hand grades for runs not in the sample (ignored)")
     for task, arm, repeat in agreement.disagreements:
