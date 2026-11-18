@@ -3,9 +3,9 @@
   "title": "associate graded measurement groundwork",
   "frame_slug": "associate-graded-measurement-groundwork",
   "schema_version": 5,
-  "status": "drafting",
+  "status": "exported",
   "created": "2026-11-18T15:43:53Z",
-  "updated": "2026-11-18T15:45:20Z",
+  "updated": "2026-11-18T15:53:18Z",
   "targets": [
     {
       "id": "c1",
@@ -391,7 +391,7 @@
       "id": "t1",
       "summary": "Import the re-check from evidence-cli and rewrite the dependency rule",
       "origin": "llm",
-      "status": "proposed",
+      "status": "confirmed",
       "acceptance_criteria": [
         "associate check prints the same output for the saved test exports before and after the change, apart from differences named in evidence-cli's 0.7.0 changelog, each listed in the test",
         "a test fails if pyproject.toml gains a dependency not on the named first-party list, and fails if a listed package declares dependencies of its own",
@@ -418,7 +418,7 @@
       "id": "t2",
       "summary": "A timed-out run returns a result, and reasoning can be set for one run",
       "origin": "llm",
-      "status": "proposed",
+      "status": "confirmed",
       "acceptance_criteria": [
         "a run killed at its time limit prints a result object with a timeout outcome and the export path, and exits with the documented code",
         "the timeout result carries the Python re-check counts when the export holds facts, and says so when it holds none",
@@ -436,7 +436,7 @@
       "id": "t3",
       "summary": "A quoted facts list in finish is handled, and a rejected hand-back is kept",
       "origin": "llm",
-      "status": "proposed",
+      "status": "confirmed",
       "acceptance_criteria": [
         "replaying the fixture payload yields a hand-back with its eight facts, or a refusal whose fix text names the quoted list",
         "after a rejected finish the export holds the rejected payload in a file whose name and label say rejected, and answer.md does not present it as checked",
@@ -456,7 +456,7 @@
       "id": "t4",
       "summary": "Build the filtered clone a measured run examines",
       "origin": "llm",
-      "status": "proposed",
+      "status": "confirmed",
       "acceptance_criteria": [
         "a test fails if any tracked file or any reachable git revision in the clone contains the answer key text or an excluded path",
         "two clones of the same source and commit have the same HEAD tree, and that commit id is returned for the stored result",
@@ -476,7 +476,7 @@
       "id": "t5",
       "summary": "Give each measured run its own empty memory and ledger, and detect contaminated runs",
       "origin": "llm",
-      "status": "proposed",
+      "status": "confirmed",
       "acceptance_criteria": [
         "two runs of the same task in sequence get different, empty memory and ledger locations, and a record written in the first is not returned by a recall in the second (shown with a fake eidetic binary)",
         "a walk holding a web_page call to the repository's hosting is reported contaminated with the reason and the walk id",
@@ -496,7 +496,7 @@
       "id": "t6",
       "summary": "Define the task file format with structured expected values and a checker for it",
       "origin": "llm",
-      "status": "proposed",
+      "status": "confirmed",
       "acceptance_criteria": [
         "every task in the file validates, and a task with an unknown key, no pinned commit or a bare small number is refused with the reason",
         "for each of the six converted tasks the recorded answer is graded as matching and a hand-written wrong answer as not matching, using evidence.answer.grade",
@@ -516,7 +516,7 @@
       "id": "t7",
       "summary": "Extract the model's own answer text, the same way for every harness version",
       "origin": "llm",
-      "status": "proposed",
+      "status": "confirmed",
       "acceptance_criteria": [
         "the grade of a run is unchanged when its facts.json is deleted",
         "the wrong answer from the evidence-cli live test (5 and 7 where 2 and 3 are expected, harness lines present in answer.md) is reported as not matching",
@@ -538,7 +538,7 @@
       "id": "t8",
       "summary": "Write the 24 tasks: 8 each in associate and two sibling repositories",
       "origin": "llm",
-      "status": "proposed",
+      "status": "confirmed",
       "acceptance_criteria": [
         "the file holds 24 tasks, 8 per repository, and every one validates and passes the repository check at its pinned commit",
         "each task has two recorded checks, and the second names what it was given and that it did not see the first",
@@ -558,7 +558,7 @@
       "id": "t9",
       "summary": "Build the runner: arms by tasks by repeats, resumable, with an older-harness arm",
       "origin": "llm",
-      "status": "proposed",
+      "status": "confirmed",
       "acceptance_criteria": [
         "starting the runner with a list of arms produces exactly one stored result per task, arm and repeat, each naming task, arm, repeat, model, reasoning setting, harness commit and grade",
         "killing the runner mid-comparison and starting it again yields exactly one stored result per task, arm and repeat, and no finished run is started twice",
@@ -587,7 +587,7 @@
       "id": "t10",
       "summary": "Build the comparison table and the hand-grading sample",
       "origin": "llm",
-      "status": "proposed",
+      "status": "confirmed",
       "acceptance_criteria": [
         "running the report twice on the same stored results prints byte-identical output, and an arm's matching count equals a hand count written in the test",
         "a contaminated run is absent from the matching count and present in the contaminated count",
@@ -612,7 +612,7 @@
       "id": "t11",
       "summary": "Add the associate measure command",
       "origin": "llm",
-      "status": "proposed",
+      "status": "confirmed",
       "acceptance_criteria": [
         "associate measure run on the stub harness stores one graded result per task, arm and repeat against clones that a test shows hold no answer key",
         "associate measure run refuses to start without the committed difference note and says where it must be",
@@ -634,7 +634,7 @@
       "id": "t12",
       "summary": "Run the comparison and record it",
       "origin": "llm",
-      "status": "proposed",
+      "status": "confirmed",
       "acceptance_criteria": [
         "the difference note's commit is earlier than the first stored run's timestamp",
         "the committed results hold a graded result for at least 95% of the 288 runs, or the note states the share reached and why it fell short",
@@ -663,8 +663,8 @@
       "text": "evidence-cli 0.7.0 must be installable from PyPI before the import task merges; until then it can be developed against a local path",
       "kind": "unknown_nonblocking",
       "task_id": null,
-      "resolved": false,
-      "resolution": ""
+      "resolved": true,
+      "resolution": "evidence-cli 0.7.0 is on PyPI (read from the index on 2026-11-18)"
     },
     {
       "id": "r2",
@@ -679,8 +679,8 @@
       "text": "the two sibling repositories for tasks (workledger-cli, coherence-cli) are an assumption of the spec, not an operator decision",
       "kind": "unknown_nonblocking",
       "task_id": null,
-      "resolved": false,
-      "resolution": ""
+      "resolved": true,
+      "resolution": "operator, 2026-11-18: the two sibling repositories for tasks are workledger-cli and coherence-cli"
     }
   ],
   "obligations": []
