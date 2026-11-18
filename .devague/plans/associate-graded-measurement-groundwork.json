@@ -5,7 +5,7 @@
   "schema_version": 5,
   "status": "exported",
   "created": "2026-11-18T15:43:53Z",
-  "updated": "2026-11-18T17:26:22Z",
+  "updated": "2026-11-18T17:28:20Z",
   "targets": [
     {
       "id": "c1",
@@ -695,8 +695,8 @@
       "text": "The comparison was planned with reasoning off in both arms. The commit before PR #27 (a9182d7) has no per-run reasoning setting, and its models.json sets worker and cortex to on, as main's does. So reasoning off can only be applied to the current-harness arm. Either both arms run at the registry value (on), or the older arm's contract is changed, which the plan forbids. Operator decision needed before the pilot.",
       "kind": "unknown_blocking",
       "task_id": "t12",
-      "resolved": false,
-      "resolution": ""
+      "resolved": true,
+      "resolution": "Operator, 2026-11-18: reasoning on (the registry value) in both arms. The per-run timeout is raised, and the runner runs as a background process."
     },
     {
       "id": "r6",

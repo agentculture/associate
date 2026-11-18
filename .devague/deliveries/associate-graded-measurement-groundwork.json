@@ -2,7 +2,7 @@
   "plan_slug": "associate-graded-measurement-groundwork",
   "schema_version": 2,
   "created": "2026-11-18T17:08:42Z",
-  "updated": "2026-11-18T17:08:42Z",
+  "updated": "2026-11-18T17:28:31Z",
   "deviations": [
     {
       "id": "d1",
@@ -40,6 +40,17 @@
       "status": "proposed",
       "classification": null,
       "seq": 3
+    },
+    {
+      "id": "d4",
+      "what": "t11: the associate measure verb can start the comparison as a detached background process that survives the terminal, with a status sub-verb that reads the stored records and a log file; the per-run timeout is a flag with a default of 3600 seconds (the plan's runs used 1500). No unlimited timeout: a hung run would stall every run behind it.",
+      "task_ref": "t11",
+      "reason": "Operator, 2026-11-18: increase the timeout or drop it, and run in a background process, which associate should support. Half of six live runs timed out at 1500 seconds, and reasoning is now on in both arms.",
+      "affects": [],
+      "origin": "llm",
+      "status": "proposed",
+      "classification": null,
+      "seq": 4
     }
   ],
   "evidence": [],
