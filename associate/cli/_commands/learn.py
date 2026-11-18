@@ -53,6 +53,8 @@ Commands
   associate measure status <dir>  Runs stored, failed and not yet stored; the lock; the log.
   associate measure report <dir>  The table of the stored results (--reading, --json).
   associate measure sample <dir>  The blank hand-grading sheet for a fixed-seed draw.
+  associate measure agreement <dir> --sheet PATH  A filled sheet against the grader; the 48
+                               hand-graded runs and 95% agreement conditions (read-only).
   associate measure overview   Describe the measure verbs.
   associate cli overview       Describe the CLI surface itself.
 
@@ -159,6 +161,13 @@ def _as_json_payload() -> dict[str, object]:
             {
                 "path": ["measure", "sample"],
                 "summary": "Write the blank hand-grading sheet for a fixed-seed draw of runs.",
+            },
+            {
+                "path": ["measure", "agreement"],
+                "summary": (
+                    "Read a filled hand-grading sheet back and compare it with the grader: "
+                    "agreement and the 48-run and 95% conditions, met or not met (read-only)."
+                ),
             },
             {"path": ["measure", "overview"], "summary": "Describe the measure verbs."},
             {"path": ["cli", "overview"], "summary": "Describe the CLI surface."},

@@ -454,6 +454,243 @@ def test_sample_reading_option_is_passed_on(stored, tmp_path, capsys):
     assert json.loads(sheet.read_text(encoding="utf-8"))["reading"] == reading
 
 
+# --- agreement ------------------------------------------------------------------------------
+
+OTHER_VERDICT = {"matches": "does_not_match", "does_not_match": "matches", "cannot_tell": "matches"}
+
+
+def synthetic_records(count: int) -> list[dict]:
+    """Finished, graded stored runs t000.., one arm, repeats 0-2, alternating verdicts."""
+    return [
+        {
+            "task": {"id": f"t{i:03d}"},
+            "arm": {"name": "a"},
+            "repeat": i % 3,
+            "status": "finished",
+            "graded": True,
+            "grade": {"verdict": "matches" if i % 2 else "does_not_match"},
+            "answer": {"text": f"answer {i}"},
+        }
+        for i in range(count)
+    ]
+
+
+def draw_filled_sheet(
+    tmp_path: Path, records: list[dict], flips: int = 0, blanks: int = 0, size: int = 48
+) -> tuple[Path, list[report_module.SampledRun]]:
+    """Write a sheet for ``records`` with every hand grade equal to the grader's, then change
+    the first ``flips`` of them and clear the next ``blanks``."""
+    sample = report_module.draw_sample(records, 7, size)
+    sheet = tmp_path / "filled.json"
+    report_module.write_blank_sheet(sample, sheet)
+    doc = json.loads(sheet.read_text(encoding="utf-8"))
+    for index, (entry, run) in enumerate(zip(doc["entries"], sample.runs, strict=True)):
+        if index < flips:
+            entry["hand_grade"] = OTHER_VERDICT[run.grade]
+        elif index < flips + blanks:
+            entry["hand_grade"] = None
+        else:
+            entry["hand_grade"] = run.grade
+    sheet.write_text(json.dumps(doc), encoding="utf-8")
+    return sheet, sample.runs
+
+
+@pytest.fixture()
+def synthetic(monkeypatch):
+    """Serve synthetic stored records to the measure verbs (the directory is not read)."""
+
+    def serve(records: list[dict]) -> None:
+        monkeypatch.setattr(measure_mod, "_stored_records", lambda results: (records, None))
+
+    return serve
+
+
+def agreement(capsys, tmp_path: Path, sheet: Path) -> dict:
+    return run_json(
+        capsys, ["measure", "agreement", str(tmp_path), "--sheet", str(sheet), "--json"]
+    )
+
+
+def test_agreement_equals_a_hand_count_of_a_filled_sheet(synthetic, tmp_path, capsys):
+    records = synthetic_records(60)
+    synthetic(records)
+    sheet, runs = draw_filled_sheet(tmp_path, records, flips=3, size=20)
+    # hand count: 20 sampled, the first 3 changed by hand, so 17 agree and 3 disagree
+    payload = agreement(capsys, tmp_path, sheet)
+    assert payload["sampled"] == 20
+    assert payload["hand_graded"] == 20
+    assert payload["agreed"] == 17
+    assert payload["disagreed"] == 3
+    assert payload["disagreements"] == [list(run.key) for run in runs[:3]]
+    assert payload["share"] == pytest.approx(17 / 20)
+    assert payload["missing"] == []
+    assert payload["invalid"] == []
+    assert payload["extra"] == []
+
+
+def test_agreement_json_has_the_documented_keys(synthetic, tmp_path, capsys):
+    records = synthetic_records(60)
+    synthetic(records)
+    sheet, _ = draw_filled_sheet(tmp_path, records, size=10)
+    payload = agreement(capsys, tmp_path, sheet)
+    assert set(payload) == {
+        "sheet",
+        "seed",
+        "reading",
+        "sampled",
+        "hand_graded",
+        "agreed",
+        "disagreed",
+        "missing",
+        "invalid",
+        "extra",
+        "disagreements",
+        "share",
+        "conditions",
+        "note",
+    }
+    assert set(payload["conditions"]) == {"enough_hand_graded", "enough_agreement"}
+    assert payload["seed"] == 7
+
+
+def test_agreement_counts_a_missing_hand_grade_as_neither_agreed_nor_graded(
+    synthetic, tmp_path, capsys
+):
+    records = synthetic_records(60)
+    synthetic(records)
+    sheet, runs = draw_filled_sheet(tmp_path, records, blanks=2, size=10)
+    payload = agreement(capsys, tmp_path, sheet)
+    assert payload["hand_graded"] == 8
+    assert payload["agreed"] == 8
+    assert payload["missing"] == [list(run.key) for run in runs[:2]]
+    assert payload["share"] == 1.0
+
+
+def test_agreement_share_is_null_when_nothing_is_hand_graded(synthetic, tmp_path, capsys):
+    records = synthetic_records(60)
+    synthetic(records)
+    sheet, _ = draw_filled_sheet(tmp_path, records, blanks=5, size=5)
+    payload = agreement(capsys, tmp_path, sheet)
+    assert payload["hand_graded"] == 0
+    assert payload["share"] is None
+    assert payload["conditions"]["enough_agreement"]["met"] is False
+
+
+def test_agreement_refuses_when_the_stored_results_changed_since_the_draw(
+    synthetic, tmp_path, capsys
+):
+    records = synthetic_records(48)
+    synthetic(records)
+    sheet, _ = draw_filled_sheet(tmp_path, records, size=48)
+    before = sheet.read_text(encoding="utf-8")
+    changed = synthetic_records(48)
+    changed[-1]["task"]["id"] = "t999"
+    synthetic(changed)
+    rc, err = error_of(
+        capsys, ["measure", "agreement", str(tmp_path), "--sheet", str(sheet), "--json"]
+    )
+    assert rc == 1
+    assert "changed" in err
+    assert "remediation" in err
+    assert sheet.read_text(encoding="utf-8") == before
+
+
+def test_agreement_refuses_a_missing_sheet(synthetic, tmp_path, capsys):
+    synthetic(synthetic_records(5))
+    rc, err = error_of(
+        capsys, ["measure", "agreement", str(tmp_path), "--sheet", str(tmp_path / "none.json")]
+    )
+    assert rc == 1
+    assert "none.json" in err
+    assert "hint:" in err
+
+
+@pytest.mark.parametrize(
+    "text",
+    ["not json", "[1, 2]", '{"seed": 1, "reading": "answer_text"}', '{"entries": []}'],
+)
+def test_agreement_refuses_a_sheet_that_is_not_a_sheet(synthetic, tmp_path, capsys, text):
+    synthetic(synthetic_records(5))
+    sheet = write(tmp_path, "bad.json", text)
+    rc, err = error_of(capsys, ["measure", "agreement", str(tmp_path), "--sheet", str(sheet)])
+    assert rc == 1
+    assert "bad.json" in err
+
+
+def conditions_for(synthetic, tmp_path, capsys, count: int, flips: int) -> dict:
+    records = synthetic_records(count)
+    synthetic(records)
+    sheet, _ = draw_filled_sheet(tmp_path, records, flips=flips, size=count)
+    return agreement(capsys, tmp_path, sheet)["conditions"]
+
+
+def test_both_conditions_are_met_at_48_runs_and_95_percent(synthetic, tmp_path, capsys):
+    # 60 graded, 48 sampled; 2 disagree: 46 of 48 is 95.83 percent
+    found = conditions_for(synthetic, tmp_path, capsys, 48, flips=2)
+    assert found["enough_hand_graded"] == {"required": 48, "actual": 48, "met": True}
+    assert found["enough_agreement"]["met"] is True
+    assert found["enough_agreement"]["agreed"] == 46
+    assert found["enough_agreement"]["hand_graded"] == 48
+    assert found["enough_agreement"]["required_percent"] == 95
+
+
+def test_a_share_just_under_95_percent_is_not_met(synthetic, tmp_path, capsys):
+    # 94 of 100 agree is 94 percent; 95 of 100 is the line itself
+    under = conditions_for(synthetic, tmp_path, capsys, 100, flips=6)
+    assert under["enough_hand_graded"]["met"] is True
+    assert under["enough_agreement"]["met"] is False
+    assert under["enough_agreement"]["agreed"] == 94
+
+
+def test_exactly_95_percent_is_met(synthetic, tmp_path, capsys):
+    found = conditions_for(synthetic, tmp_path, capsys, 100, flips=5)
+    assert found["enough_agreement"]["met"] is True
+
+
+def test_fewer_than_48_hand_graded_runs_is_not_met_however_high_the_share(
+    synthetic, tmp_path, capsys
+):
+    found = conditions_for(synthetic, tmp_path, capsys, 47, flips=0)
+    assert found["enough_hand_graded"] == {"required": 48, "actual": 47, "met": False}
+    assert found["enough_agreement"]["met"] is True
+
+
+def test_agreement_text_states_each_condition_and_never_rounds_up(synthetic, tmp_path, capsys):
+    records = synthetic_records(1000)
+    synthetic(records)
+    # 1000 runs sampled, 51 changed: 949 of 1000 agree, 94.9 percent
+    sheet, _ = draw_filled_sheet(tmp_path, records, flips=51, size=1000)
+    capsys.readouterr()
+    rc = main(["measure", "agreement", str(tmp_path), "--sheet", str(sheet)])
+    out = capsys.readouterr().out
+    assert rc == 0
+    assert "agree: 949 of 1000 hand-graded runs" in out
+    assert "at least 48 hand-graded runs: met (1000)" in out
+    assert "agreement on at least 95%: not met (949 of 1000, 94.9%)" in out
+    assert "95.0%" not in out
+    assert "accuracy" not in out.lower()
+
+
+def test_agreement_reads_only(synthetic, tmp_path, capsys):
+    records = synthetic_records(60)
+    synthetic(records)
+    sheet, _ = draw_filled_sheet(tmp_path, records, flips=1, size=10)
+    before = tree_state(tmp_path)
+    agreement(capsys, tmp_path, sheet)
+    assert tree_state(tmp_path) == before
+
+
+def test_agreement_on_real_stored_results_with_a_sheet_from_sample(stored, tmp_path, capsys):
+    sheet = tmp_path / "real.json"
+    assert main(["measure", "sample", str(stored.out), "--sheet", str(sheet)]) == 0
+    payload = run_json(
+        capsys, ["measure", "agreement", str(stored.out), "--sheet", str(sheet), "--json"]
+    )
+    assert payload["sampled"] == 8
+    assert len(payload["missing"]) == 8
+    assert payload["hand_graded"] == 0
+
+
 # --- the arms file and the task filter ---------------------------------------------------------
 
 
@@ -864,6 +1101,7 @@ def test_measure_with_no_verb_prints_the_overview(capsys):
     out = capsys.readouterr().out
     assert "measure run" in out
     assert "measure status" in out
+    assert "measure agreement" in out
 
 
 def test_measure_overview_json(capsys):
@@ -878,6 +1116,7 @@ def test_explain_describes_the_verb_and_each_sub_verb(capsys):
         ["measure", "status"],
         ["measure", "report"],
         ["measure", "sample"],
+        ["measure", "agreement"],
     ):
         capsys.readouterr()
         assert main(["explain", *path]) == 0, path
@@ -898,7 +1137,8 @@ def test_learn_lists_the_measure_verbs_in_text_and_json(capsys):
     assert "associate measure run" in text
     payload = run_json(capsys, ["learn", "--json"])
     paths = [tuple(c["path"]) for c in payload["commands"]]
-    for verb in ("run", "status", "report", "sample", "overview"):
+    assert "associate measure agreement" in text
+    for verb in ("run", "status", "report", "sample", "agreement", "overview"):
         assert ("measure", verb) in paths
 
 
