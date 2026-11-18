@@ -68,12 +68,15 @@ def test_task_is_complete(task_id):
     if task["kind"] == "not_found":
         assert task["absent"], "a not_found task lists what was searched and not found"
         for item in task["absent"]:
-            assert item["file"] and item["patterns"]
+            assert item["file"]
+            assert item["patterns"]
     else:
         assert task["evidence"], "a read or find task lists file, line and exact text"
         for item in task["evidence"]:
-            assert item["file"] and item["text"]
-            assert isinstance(item["line"], int) and item["line"] >= 1
+            assert item["file"]
+            assert item["text"]
+            assert isinstance(item["line"], int)
+            assert item["line"] >= 1
             assert isinstance(item["stable"], bool)
 
 

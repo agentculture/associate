@@ -124,7 +124,8 @@ def test_the_stub_writes_a_format_2_walk_with_purposes_and_saved_results(tmp_pat
     assert [e["id"] for e in entries] == [f"w{i}" for i in range(1, len(entries) + 1)]
     for entry in entries:
         assert validate.validate(entry, contract.walk_entry_schema()) == [], entry
-        assert isinstance(entry["purpose"], str) and entry["purpose"]
+        assert isinstance(entry["purpose"], str)
+        assert entry["purpose"]
     saved = [e for e in entries if "saved_result" in e]
     assert saved, "the stub saves at least one result text"
     for entry in saved:
@@ -172,7 +173,8 @@ def test_a_refused_stub_handback_in_enforce_mode_ends_the_run_with_no_answer(tmp
     assert result["answer"] is None
     assert not (export / "answer.md").exists()
     check = json.loads((export / "check.json").read_text())
-    assert check["outcome"] == "refused" and check["run_ended"] is True
+    assert check["outcome"] == "refused"
+    assert check["run_ended"] is True
     assert result["accuracy"]["python_recheck_verdict"] == "refused"
     assert result["accuracy"]["report"]["facts"]["refused"] >= 1
 
@@ -194,7 +196,8 @@ def test_run_json_carries_answer_counts_recheck_and_outcome(
 ):
     assert _cli(checkout, tmp_path, "stub") == 0
     out = _json(capsys)
-    assert out["answer"] and out["answer_path"].endswith("answer.md")
+    assert out["answer"]
+    assert out["answer_path"].endswith("answer.md")
     assert out["handback_outcome"] == "accepted"
     assert out["accuracy"]["python_recheck_ran"] is True
     assert out["accuracy"]["python_recheck_verdict"] == "accepted"
@@ -227,7 +230,8 @@ def test_a_refused_handback_exits_3_and_still_prints_the_result(
     assert out["outcome"] == "refused"
     assert out["handback_outcome"] == "refused_after_rounds"
     assert out["answer"] is None
-    assert "refused" in captured.err and "check.json" in captured.err
+    assert "refused" in captured.err
+    assert "check.json" in captured.err
 
 
 def test_a_refused_handback_in_text_mode_exits_3_and_prints_the_result(
@@ -428,7 +432,8 @@ def test_the_pi_result_reports_the_python_counts_and_copies_unchecked_text(tmp_p
     assert result["answer"] == "ANSWER TEXT\n"
     assert result["handback_outcome"] == "accepted"
     acc = result["accuracy"]
-    assert acc["python_recheck_ran"] is True and acc["python_recheck_verdict"] == "accepted"
+    assert acc["python_recheck_ran"] is True
+    assert acc["python_recheck_verdict"] == "accepted"
     assert acc["report"]["facts"] == {
         "made": 1,
         "checked": 1,

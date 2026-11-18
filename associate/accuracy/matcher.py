@@ -29,7 +29,8 @@ finds it in O(n log m) even for a 2,000,000 character text.
 import re
 from typing import Any, Optional
 
-_STAMP = re.compile(r"^[0-9]+\t")
+# re.ASCII: \d is 0-9 only, as in the TypeScript matcher (lib/matcher.ts).
+_STAMP = re.compile(r"^\d+\t", re.ASCII)
 _SPACE = re.compile(r"[ \t\n\r\f\v]+")
 
 

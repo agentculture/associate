@@ -5,7 +5,7 @@ from pathlib import Path
 
 import pytest
 
-from associate.accuracy.matcher import check_quote
+from associate.accuracy.matcher import check_quote, normalise
 
 VECTORS = json.loads(
     (Path(__file__).resolve().parent.parent / "associate/contract/matcher_vectors.json").read_text(
@@ -38,3 +38,14 @@ def test_large_text_is_cheap():
     got = check_quote("a" * 50 + "b", None, text, 8)
     assert got["nearest"]["matched"] == 50
     assert got["nearest"]["offset"] == 0
+
+
+@pytest.mark.parametrize("digit", ["\uff11", "\u0661"])
+def test_a_line_stamp_is_ascii_digits_only_as_in_typescript(digit):
+    assert normalise("12\tsome text") == "some text"
+    # A non-ASCII digit is not a read line stamp: it stays in the text.
+    assert normalise(f"{digit}\tsome text") == f"{digit} some text"
+    assert normalise(f"1{digit}\tsome text") == f"1{digit} some text"
+    got = check_quote(f"{digit}\tsome text", None, "some text", 4)
+    assert got["verdict"] == "refused"
+    assert got["reason"] == "quote_absent"

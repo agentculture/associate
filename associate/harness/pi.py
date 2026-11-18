@@ -984,6 +984,18 @@ class PiHarness(Harness):
         # exactly "approve" (including its absence) as untrusted.
         env["ASSOCIATE_PI_TRUST"] = "untrusted" if self._untrusted_checkout else "approve"
 
+        self._apply_task_environment(env, task)
+
+        # Marks of who started a process, each true of one process only: the
+        # delegated `associate run` itself (never the pi it starts, or the
+        # timeout kill would spare that pi's children), and a child pi started
+        # by spawn_subagent (a run started here is nobody's spawned child).
+        env.pop(DELEGATED_RUN_ENV, None)
+        env.pop(SPAWNED_BY_ENV, None)
+        return env
+
+    def _apply_task_environment(self, env: dict[str, str], task: dict[str, Any]) -> None:
+        """Set or clear each per-run variable; an inherited value never passes through."""
         # d8: the gate tells the decider where writes land. Only the task —
         # which ``associate run`` builds from the run it actually started —
         # may claim isolation; an inherited value is never passed through.
@@ -1023,14 +1035,6 @@ class PiHarness(Harness):
             env["ASSOCIATE_CONTINUE_FROM"] = str(continue_from)
         else:
             env.pop("ASSOCIATE_CONTINUE_FROM", None)
-
-        # Marks of who started a process, each true of one process only: the
-        # delegated `associate run` itself (never the pi it starts, or the
-        # timeout kill would spare that pi's children), and a child pi started
-        # by spawn_subagent (a run started here is nobody's spawned child).
-        env.pop(DELEGATED_RUN_ENV, None)
-        env.pop(SPAWNED_BY_ENV, None)
-        return env
 
     # -- checks ------------------------------------------------------------
 

@@ -77,14 +77,15 @@ def test_a_broken_min_quote_length_fails_closed_as_in_typescript(case):
     else:
         del contract["min_quote_length"]
     got = check_handback(VECTORS["contract_input"], contract)
-    assert {
+    summary = {
         "accepted": got["accepted"],
         "facts": [{k: f[k] for k in ("id", "verdict", "reason", "check")} for f in got["facts"]],
         "verdicts": [
             {k: v[k] for k in ("id", "outcome", "reason", "check")} for v in got["verdicts"]
         ],
         "flags": got["report"]["flags"],
-    } == case["expect"]
+    }
+    assert summary == case["expect"]
 
 
 def test_a_child_label_with_a_trailing_newline_is_skipped():
@@ -201,7 +202,8 @@ def run_check(capsys, *argv):
 def test_counts_match_a_hand_count_and_unchecked_is_never_passed(tmp_path, capsys):
     export = fixture(tmp_path)
     rc, out, err = run_check(capsys, str(export), "--json")
-    assert rc == 0 and err == ""
+    assert rc == 0
+    assert err == ""
     result = json.loads(out)
     report = result["report"]
     # Hand count: 5 facts; f1 and f4 passed, f2 and f5 refused, f3 unchecked.
@@ -224,17 +226,22 @@ def test_counts_match_a_hand_count_and_unchecked_is_never_passed(tmp_path, capsy
         assert report["by_source_kind"][kind]["made"] == 0
     assert report["python_recheck_ran"] is True
     by_id = {f["id"]: f for f in result["facts"]}
-    assert by_id["f3"]["verdict"] == "unchecked" and by_id["f3"]["source_kind"] == "tool"
+    assert by_id["f3"]["verdict"] == "unchecked"
+    assert by_id["f3"]["source_kind"] == "tool"
     assert by_id["f5"]["source_kind"] is None
 
 
 def test_calls_report_purpose_and_outcome(tmp_path, capsys):
     result = json.loads(run_check(capsys, str(fixture(tmp_path)), "--json")[1])
     calls = {c["id"]: c for c in result["calls"]}
-    assert calls["w1"]["purpose"] == "read the config" and calls["w1"]["outcome"] == "ok"
-    assert calls["w4"]["purpose"] is None and calls["w4"]["outcome"] == "error"
+    assert calls["w1"]["purpose"] == "read the config"
+    assert calls["w1"]["outcome"] == "ok"
+    assert calls["w4"]["purpose"] is None
+    assert calls["w4"]["outcome"] == "error"
     text = run_check(capsys, str(fixture(tmp_path / "again")))[1]
-    assert "read the config" in text and "source kind: file" in text and "unchecked" in text
+    assert "read the config" in text
+    assert "source kind: file" in text
+    assert "unchecked" in text
 
 
 def test_count_fact_never_adds_unchecked_to_passed():
@@ -249,7 +256,8 @@ def test_a_partial_entry_is_unchecked_not_passed(tmp_path, capsys):
     facts = {"facts": [{"id": "f1", "value": "lazy", "source": "w1", "quote": "over the lazy dog"}]}
     export = write_export(tmp_path, entries, {1: "over the lazy dog and more"}, facts)
     report = json.loads(run_check(capsys, str(export), "--json")[1])["report"]
-    assert report["facts"]["passed"] == 0 and report["facts"]["unchecked"] == 1
+    assert report["facts"]["passed"] == 0
+    assert report["facts"]["unchecked"] == 1
 
 
 # --- exports written before this change ---------------------------------------------
@@ -258,9 +266,12 @@ def test_a_partial_entry_is_unchecked_not_passed(tmp_path, capsys):
 def test_an_old_export_is_read_and_its_facts_are_not_applicable(tmp_path, capsys):
     old = write_export(tmp_path, [entry(1, "read", "file", saved=False)], {}, marker=False)
     rc, out, err = run_check(capsys, str(old), "--json")
-    assert rc == 0 and err == ""
+    assert rc == 0
+    assert err == ""
     result = json.loads(out)
-    assert result["applicable"] is False and result["facts"] == [] and result["report"] is None
+    assert result["applicable"] is False
+    assert result["facts"] == []
+    assert result["report"] is None
     assert "pre-change" in result["not_applicable_reason"]
     assert [c["id"] for c in result["calls"]] == ["w1"]
     text = run_check(capsys, str(old))[1]
@@ -270,7 +281,8 @@ def test_an_old_export_is_read_and_its_facts_are_not_applicable(tmp_path, capsys
 def test_a_new_walk_without_a_facts_file_is_not_applicable(tmp_path, capsys):
     export = write_export(tmp_path, [entry(1, "read", "file", saved=False)], {})
     result = json.loads(run_check(capsys, str(export), "--json")[1])
-    assert result["applicable"] is False and "facts.json" in result["not_applicable_reason"]
+    assert result["applicable"] is False
+    assert "facts.json" in result["not_applicable_reason"]
 
 
 def test_a_saved_result_path_outside_results_is_never_read(tmp_path):
@@ -283,12 +295,14 @@ def test_a_saved_result_path_outside_results_is_never_read(tmp_path):
 
 def test_bad_inputs_raise_a_cli_error_not_a_traceback(tmp_path, capsys):
     rc, out, err = run_check(capsys, str(tmp_path / "missing"), "--json")
-    assert rc == 1 and out == ""
+    assert rc == 1
+    assert out == ""
     assert set(json.loads(err)) == {"code", "message", "remediation"}
     export = write_export(tmp_path, [], {}, name="bad")
     (export / "facts.json").write_text("{not json", encoding="utf-8")
     rc, _, err = run_check(capsys, str(export), "--json")
-    assert rc == 1 and "facts.json" in json.loads(err)["message"]
+    assert rc == 1
+    assert "facts.json" in json.loads(err)["message"]
 
 
 # --- walkstats ------------------------------------------------------------------------
@@ -303,7 +317,8 @@ def test_walkstats_does_not_count_the_format_marker_as_a_call(tmp_path):
     ]  # killed: no run record
     walk.write_text("\n".join(json.dumps(x) for x in lines) + "\n", encoding="utf-8")
     record = walkstats.load_run_record(walk)
-    assert record["complete"] is False and record["tool_calls"] == 2
+    assert record["complete"] is False
+    assert record["tool_calls"] == 2
     old = tmp_path / "old" / "walk.jsonl"
     old.parent.mkdir()
     old.write_text("\n".join(json.dumps(x) for x in lines[1:]) + "\n", encoding="utf-8")
@@ -348,3 +363,46 @@ def test_a_source_reference_with_a_trailing_newline_is_malformed_as_in_typescrip
     for ref in ("w1\n", "prior:w3\n"):
         parsed = check.parse_source_ref(ref)
         assert parsed.get("ok") is not True, ref
+
+
+# --- digits are ASCII only, as in the TypeScript checker ----------------------------
+
+FULLWIDTH_ONE = "\uff11"
+ARABIC_INDIC_ONE = "\u0661"
+
+
+@pytest.mark.parametrize("digit", [FULLWIDTH_ONE, ARABIC_INDIC_ONE])
+def test_a_source_reference_with_a_non_ascii_digit_is_malformed(digit):
+    assert check_mod.parse_source_ref("w1")["ok"] is True
+    assert check_mod.parse_source_ref(f"w1{digit}") == {"ok": False, "reason": "source_malformed"}
+    assert check_mod.parse_source_ref(f"prior:w1{digit}")["ok"] is False
+
+
+@pytest.mark.parametrize("digit", [FULLWIDTH_ONE, ARABIC_INDIC_ONE])
+def test_a_walk_id_with_a_non_ascii_digit_is_not_an_entry(digit):
+    assert check_mod._is_entry({"id": "w11", "tool": "read"}) is True
+    assert check_mod._is_entry({"id": f"w1{digit}", "tool": "read"}) is False
+
+
+@pytest.mark.parametrize("digit", [FULLWIDTH_ONE, ARABIC_INDIC_ONE])
+def test_a_saved_result_name_with_a_non_ascii_digit_is_not_read(tmp_path, digit):
+    assert check_mod._SAVED.match("results/w11.txt") is not None
+    name = f"results/w1{digit}.txt"
+    walk_entry = {"id": "w1", "tool": "read", "saved_result": name}
+    (tmp_path / "results").mkdir()
+    (tmp_path / name).write_text("saved text", encoding="utf-8")
+    (tmp_path / "walk.jsonl").write_text(json.dumps(walk_entry) + "\n", encoding="utf-8")
+    loaded = check_mod.load_export(tmp_path)
+    assert [e["id"] for e in loaded["entries"]] == ["w1"]
+    assert loaded["results"] == {}
+
+
+@pytest.mark.parametrize("digit", [FULLWIDTH_ONE, ARABIC_INDIC_ONE])
+def test_a_child_id_with_a_non_ascii_digit_is_not_linked(tmp_path, digit):
+    walk = tmp_path / "walk.jsonl"
+    lines = [
+        {"child": {"id": f"c1{digit}", "child_walk": "/x/a/walk.jsonl"}},
+        {"child": {"id": "c11", "child_walk": "/x/b/walk.jsonl"}},
+    ]
+    walk.write_text("".join(json.dumps(line) + "\n" for line in lines), encoding="utf-8")
+    assert check_mod._child_links(walk) == [("c11", "/x/b/walk.jsonl")]

@@ -532,6 +532,27 @@ def _walk_gate_rules(tier: str, fields: frozenset[str]) -> list[tuple[bool, str]
     ]
 
 
+def _coverage_errors(field: str, noun: str, named: set[str], known: set[str]) -> list[str]:
+    """*field* must name exactly the *known* names: the unknown ones, then the missing ones."""
+    errors = [f"{field} names unknown {noun} {name!r}" for name in sorted(named - known)]
+    errors.extend(f"{field} is missing {noun} {name!r}" for name in sorted(known - named))
+    return errors
+
+
+def _check_id_errors(doc: dict[str, Any], errors: list[str]) -> set[str]:
+    """Append each duplicate id and missing ``motivating_failure``; return the ids seen."""
+    seen: set[str] = set()
+    for check in doc.get("checks", []):
+        cid = check.get("id")
+        if cid in seen:
+            errors.append(f"checks has duplicate id {cid!r}")
+        seen.add(cid)
+        failure = check.get("motivating_failure")
+        if not isinstance(failure, str) or not failure.strip():
+            errors.append(f"check {cid!r} has no motivating_failure")
+    return seen
+
+
 def validate_accuracy(doc: dict[str, Any], models: dict[str, Any] | None = None) -> list[str]:
     """Cross-field rules for ``accuracy.json`` (the schema covers shape).
 
@@ -547,28 +568,13 @@ def validate_accuracy(doc: dict[str, Any], models: dict[str, Any] | None = None)
     errors: list[str] = []
     registry = set(models.get("models", {}))
     tool_names = set(models.get("tool_names", []))
-    modes = set(doc.get("mode", {}))
-    for name in sorted(modes - registry):
-        errors.append(f"mode names unknown model {name!r}")
-    for name in sorted(registry - modes):
-        errors.append(f"mode is missing model {name!r}")
+    errors.extend(_coverage_errors("mode", "model", set(doc.get("mode", {})), registry))
     kinds = set(doc.get("source_kinds", {}))
-    for name in sorted(kinds - tool_names):
-        errors.append(f"source_kinds names unknown tool {name!r}")
-    for name in sorted(tool_names - kinds):
-        errors.append(f"source_kinds is missing tool {name!r}")
+    errors.extend(_coverage_errors("source_kinds", "tool", kinds, tool_names))
     for name in doc.get("purpose_exempt_tools", []):
         if name not in tool_names:
             errors.append(f"purpose_exempt_tools names unknown tool {name!r}")
-    seen: set[str] = set()
-    for check in doc.get("checks", []):
-        cid = check.get("id")
-        if cid in seen:
-            errors.append(f"checks has duplicate id {cid!r}")
-        seen.add(cid)
-        failure = check.get("motivating_failure")
-        if not isinstance(failure, str) or not failure.strip():
-            errors.append(f"check {cid!r} has no motivating_failure")
+    seen = _check_id_errors(doc, errors)
     for reason, cid in sorted(doc.get("refusal_checks", {}).items()):
         if cid not in seen:
             errors.append(f"refusal_checks maps {reason!r} to unknown check {cid!r}")
