@@ -171,6 +171,15 @@ No other run was repeated on the combined tree. The bridge's own surfaces
 (`associate runs`, the HTTP API, the web UI) were not exercised with a run
 under the accuracy method.
 
+## A flaw in the setup, found afterwards
+
+`docs/accuracy/tasks.json` holds the hand-checked answers and was readable in the
+checkout the models examined. On the `decider-retry-count` task both models read
+it and cited the recorded answer as evidence (worker facts f1 and f2, cortex fact
+f11). The passed-fact counts for that task therefore include quotes of the
+answer key. No fact in the other five tasks cites the file. This is issue #30;
+the counts above are left as recorded.
+
 ## senses
 
 **Not measured.** `acc20-senses-forbidden-decisions` ended at once with a lane
