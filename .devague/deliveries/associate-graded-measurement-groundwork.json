@@ -2,7 +2,7 @@
   "plan_slug": "associate-graded-measurement-groundwork",
   "schema_version": 2,
   "created": "2026-11-18T17:08:42Z",
-  "updated": "2026-11-18T21:34:53Z",
+  "updated": "2026-11-18T21:47:27Z",
   "deviations": [
     {
       "id": "d1",
@@ -62,6 +62,28 @@
       "status": "approved",
       "classification": "needs-follow-up",
       "seq": 5
+    },
+    {
+      "id": "d6",
+      "what": "The measurement of whether a mechanism changes answers moves to the decider-score spec as a few big asks (one broad explanation task per pinned repository, graded on checked facts stated and false statements). The 24 short tasks are kept as the checklist.",
+      "task_ref": "t12",
+      "reason": "Operator, 2026-11-18: the short questions leave no room to show a change; confirmed measuring on a few big asks, folded into the decider-score plan.",
+      "affects": [],
+      "origin": "user",
+      "status": "approved",
+      "classification": "needs-follow-up",
+      "seq": 6
+    },
+    {
+      "id": "d7",
+      "what": "The before/after comparison of the accuracy method (issue 32) is not run at all, on either model: deviation d5's 144 worker runs are dropped. This stream delivers the measurement tooling, the 24 checked tasks and two 16-run pilots only.",
+      "task_ref": "t12",
+      "reason": "My reading of the operator's messages of 2026-11-18 ('if we skip this test and move to the decider first', then 'Confirmed' on the big-ask design); not stated outright.",
+      "affects": [],
+      "origin": "llm",
+      "status": "proposed",
+      "classification": "needs-follow-up",
+      "seq": 7
     }
   ],
   "evidence": [],
