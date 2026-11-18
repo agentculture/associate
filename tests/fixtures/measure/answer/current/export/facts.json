@@ -1,0 +1,152 @@
+{
+  "summary": "Read-only inspection of evidence/accuracy/check.py and evidence/data/accuracy_defaults.json. All quoted lines verified word-for-word with check_quote (all passed); tests/test_check.py corroborates the loader's return and the walk-format constant. No files were changed and no tests were run.",
+  "facts": [
+    {
+      "id": "f1",
+      "value": "2",
+      "source": "w5",
+      "quote": "\"retry_rounds\": 2,",
+      "action": false
+    },
+    {
+      "id": "f2",
+      "value": "3",
+      "source": "w5",
+      "quote": "\"refusal_cap\": 3,",
+      "action": false
+    },
+    {
+      "id": "f3",
+      "value": "8",
+      "source": "w5",
+      "quote": "\"min_quote_length\": 8,",
+      "action": false
+    },
+    {
+      "id": "f4",
+      "value": "evidence/data/accuracy_defaults.json",
+      "source": "w3",
+      "quote": "DEFAULT_SETTINGS_RESOURCE = \"data/accuracy_defaults.json\"",
+      "action": false
+    },
+    {
+      "id": "f5",
+      "value": "load_default_settings",
+      "source": "w3",
+      "quote": "def load_default_settings() -> tuple[dict[str, Any], int]:",
+      "action": false
+    },
+    {
+      "id": "f6",
+      "value": "the parsed settings dict and its int version (settings[\"version\"] == 1)",
+      "source": "w3",
+      "quote": "return settings, settings[\"version\"]",
+      "action": false
+    },
+    {
+      "id": "f7",
+      "value": "SUPPORTED_WALK_FORMATS = (1, 2)",
+      "source": "w3",
+      "quote": "SUPPORTED_WALK_FORMATS: tuple[int, ...] = (1, 2)",
+      "action": false
+    }
+  ],
+  "alternatives": [
+    {
+      "id": "a1",
+      "text": "load_default_settings returns only the settings dict",
+      "predicts": "the return statement would name just the dict",
+      "refuted_by": "w3 line 73: return settings, settings[\"version\"]"
+    },
+    {
+      "id": "a2",
+      "text": "SUPPORTED_WALK_FORMATS is a list or covers more than versions 1 and 2",
+      "predicts": "the constant would have other entries",
+      "refuted_by": "w3 line 59: SUPPORTED_WALK_FORMATS: tuple[int, ...] = (1, 2)"
+    },
+    {
+      "id": "a3",
+      "text": "the three values differ from 2/3/8",
+      "predicts": "accuracy_defaults.json lines 10-12 would show other numbers",
+      "refuted_by": "w5 lines 10-12: 2, 3, 8"
+    }
+  ],
+  "verdicts": [
+    {
+      "id": "v1",
+      "text": "retry_rounds is 2",
+      "verdict": "supported",
+      "basis": [
+        "f1"
+      ]
+    },
+    {
+      "id": "v2",
+      "text": "refusal_cap is 3",
+      "verdict": "supported",
+      "basis": [
+        "f2"
+      ]
+    },
+    {
+      "id": "v3",
+      "text": "min_quote_length is 8",
+      "verdict": "supported",
+      "basis": [
+        "f3"
+      ]
+    },
+    {
+      "id": "v4",
+      "text": "the loader is load_default_settings and returns (settings, settings[\"version\"])",
+      "verdict": "supported",
+      "basis": [
+        "f5",
+        "f6"
+      ]
+    },
+    {
+      "id": "v5",
+      "text": "the walk-format constant is SUPPORTED_WALK_FORMATS = (1, 2)",
+      "verdict": "supported",
+      "basis": [
+        "f7"
+      ]
+    },
+    {
+      "id": "v6",
+      "text": "the bundled file is evidence/data/accuracy_defaults.json",
+      "verdict": "supported",
+      "basis": [
+        "f4"
+      ]
+    }
+  ],
+  "open_items": [
+    {
+      "id": "o1",
+      "text": "byte-identity of evidence/data/accuracy_defaults.json with associate's contract/accuracy.json at commit 266dad3",
+      "check": "compare sha256 of evidence/data/accuracy_defaults.json to b44bd3678b2cf08df1e63b3036e4452599b7803699609e377f6532eb2488c374 or against associate/contract/accuracy.json",
+      "basis": [
+        "f4",
+        "f6"
+      ]
+    },
+    {
+      "id": "o2",
+      "text": "other settings keys (mode, source_kinds, checks, refusal_checks, purpose_exempt_tools) were not inspected",
+      "check": "read evidence/data/accuracy_defaults.json in full",
+      "basis": [
+        "f1",
+        "f2",
+        "f3"
+      ]
+    },
+    {
+      "id": "o3",
+      "text": "the checker test suite was not executed (read-only task)",
+      "check": "run the configured test commands for tests/test_check.py",
+      "basis": []
+    }
+  ]
+}

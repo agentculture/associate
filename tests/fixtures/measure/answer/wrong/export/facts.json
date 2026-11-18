@@ -1,0 +1,7 @@
+{
+ "summary": "evidence/accuracy/check.py loads evidence/data/accuracy_defaults.json. retry_rounds is 5, refusal_cap is 7 and min_quote_length is 8. The loader is load_default_settings; the constant SUPPORTED_WALK_FORMATS = (1, 2). Nothing was changed.",
+ "facts": [],
+ "alternatives": [],
+ "verdicts": [],
+ "open_items": []
+}
