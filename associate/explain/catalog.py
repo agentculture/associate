@@ -626,6 +626,74 @@ Roles: `viewer` reads (`GET /runs`), `editor` is above it, `admin` starts runs (
 """
 
 
+_MEASURE = """\
+# associate measure
+
+Runs a comparison of arms over tasks, follows it, and reports what it stored. An
+arm is a harness commit, a model, and optionally a check mode and a reasoning
+setting. Every task runs for every arm and repeat, each against a fresh filtered
+clone of the task's repository without the answer key (`docs/accuracy`), and one
+graded result is stored per task, arm and repeat. A count here is a count of stored
+runs; it is never a score.
+
+## Usage
+
+    associate measure run --arms arms.json --repeats 3 --output-dir RESULTS
+    associate measure run --arms arms.json --output-dir RESULTS --detach
+    associate measure status RESULTS
+    associate measure report RESULTS [--reading answer_text|answer_text_plus_handback_values]
+    associate measure sample RESULTS [--sheet PATH] [--seed N] [--size N] [--reading R]
+    associate measure overview
+
+Every sub-verb takes `--json`.
+
+## run
+
+- `--arms FILE`: a JSON list of arms, each `{"name", "harness_commit", "model"}` and
+  optionally `"check_mode"` (`report` or `enforce`) and `"reasoning"` (`model-default`,
+  `on` or `off`). An unknown key or a duplicate name is refused with the reason.
+- `--tasks FILE` (default `docs/accuracy/tasks.json`), `--tasks-filter ID` (repeatable,
+  runs only those tasks), `--repeats N` (default 1), `--output-dir DIR`.
+- `--timeout SECONDS`: the limit for one run, default 3600. There is no unlimited
+  value: zero or less is refused.
+- `--checkout-of NAME=PATH` (repeatable): the local checkout of a task repository.
+  A repository not named defaults to a directory of that name beside this
+  repository's main checkout when it exists, and `associate` is this repository.
+  A repository with no checkout is not a refusal: its runs are stored as failed
+  launches with the reason, and the start-up text says so.
+- `--detach`: start the comparison as a background process in its own session
+  (stdin closed, stdout and stderr appended to `measure-run.log` in the output
+  directory), print the results path, the log path and the process id, and return
+  at once. One runner per output directory: a second one is refused.
+- The run writes `manifest.json` into the output directory; `status` reads it.
+
+It refuses to start unless a note stating the difference that will be called a
+change is committed: `docs/accuracy/difference-threshold.md`, tracked by git and
+unmodified in the working tree (`--difference-note PATH` names another file). The
+refusal names the path. A stub comparison (`--harness stub`) is plumbing only: it
+needs no note and its output is labelled plumbing only.
+
+## status
+
+Reads only. Prints how many of the expected runs (tasks by arms by repeats, from the
+manifest) are stored as finished, stored as failed launches and not yet stored;
+whether a runner holds the lock and whether that process is alive; and the log path.
+
+## report and sample
+
+`report` prints the table of the stored results; `--reading` picks which of the two
+readings of the grade is counted. `sample` writes the blank hand-grading sheet for a
+fixed-seed draw (it refuses to replace a sheet without `--overwrite`).
+
+## Exit codes
+
+- `0` done
+- `1` a user-input error: a bad arms or task file, a missing difference note, a bad
+  flag, a second runner on the same directory, nothing stored to report
+- `2` the background process could not be started
+"""
+
+
 ENTRIES: dict[tuple[str, ...], str] = {
     (): _ROOT,
     ("associate",): _ROOT,
@@ -649,6 +717,12 @@ ENTRIES: dict[tuple[str, ...], str] = {
     ("tokens", "revoke"): _TOKENS,
     ("tokens", "overview"): _TOKENS,
     ("check",): _CHECK,
+    ("measure",): _MEASURE,
+    ("measure", "overview"): _MEASURE,
+    ("measure", "run"): _MEASURE,
+    ("measure", "status"): _MEASURE,
+    ("measure", "report"): _MEASURE,
+    ("measure", "sample"): _MEASURE,
     ("cli",): _CLI,
     ("cli", "overview"): _CLI,
 }
