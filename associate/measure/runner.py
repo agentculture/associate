@@ -113,10 +113,12 @@ Values read back from files
 An arm's ``harness_commit`` must be a commit id written in hexadecimal (7 to
 64 characters, abbreviated or full); a branch, tag or other revision
 expression is refused before git is run. A stored ``plan.json`` is checked
-before it is used again: its harness directory must lie in the harness
-worktrees directory, its export root in its own attempt directory, and its
-session id must be a plain name. The export directory a run reports is read
-only when it lies in the export root the runner gave that run.
+before it is used again: its harness directory must be a directory of the
+harness worktrees directory, its export root must be the one the runner builds
+for that attempt, and its session id must be a plain name. The export
+directory a run reports is read only when it is one of the places the runner
+gave that run. Such a value is compared as text; the path then used is the
+runner's own.
 """
 
 from __future__ import annotations
@@ -188,6 +190,7 @@ _K_REQUESTED = "requested"
 _K_SOURCE = "source"
 _K_EXPORT_DIR = "export_dir"
 _K_EXPORT_ROOT = "export_root"
+EXPORT_ROOT_DIR = "export-root"
 _K_SESSION_ID = "session_id"
 _K_SETTINGS = "settings"
 _END_OF_OPTIONS = "--end-of-options"
@@ -508,19 +511,17 @@ def _resolve_commit(repo: Path, commit: str) -> str:
     return _commit_id(found.strip())
 
 
-def _inside(path: Path, parent: Path, what: str) -> Path:
-    """*path* normalised, when it lies in *parent*; a :class:`RunnerError` naming it otherwise.
+def _is_own(written: Any, own: Path) -> bool:
+    """Whether *written*, a path read from a file, names the runner's own path *own*.
 
-    The check is on the written path (``..`` folded, made absolute): *path* may
-    come from a file, so the file system is not asked about it before it is
-    known to lie in *parent*. *parent* is the runner's own directory and is
-    accepted both as written and with its links resolved.
+    The two are compared as text (``..`` folded), with *own* taken both as
+    written and with its links resolved. A value read from a file is only ever
+    compared; the path that is then used is always the runner's own.
     """
-    candidate = Path(os.path.normpath(os.path.abspath(path)))
-    parents = (Path(os.path.abspath(parent)), Path(parent).resolve())
-    if not any(candidate.is_relative_to(known) for known in parents):
-        raise RunnerError(f"{what} is {candidate}, which is outside {parent}; it is not used")
-    return candidate
+    if not isinstance(written, str) or not written:
+        return False
+    given = os.path.normpath(written)
+    return given in {os.path.normpath(str(own)), os.path.normpath(str(own.resolve()))}
 
 
 def _harness_root(main: Path) -> Path:
@@ -817,7 +818,7 @@ def _plan(
     except _LaunchFailed as failed:
         raise _LaunchFailed(failed.reason, partial) from failed
     stores = isolate_run(attempt_dir)
-    export_root = attempt_dir / "export-root"
+    export_root = attempt_dir / EXPORT_ROOT_DIR
     session = _session_id(key, attempt)
     argv = [ctx.python, "-m", "associate", "run", "--harness", ctx.harness, "--model", arm.model]
     argv += ["--checkout", clone["path"], "--export-root", str(export_root)]
@@ -884,18 +885,35 @@ def _stderr_message(stderr: str) -> str:
     return lines[-1][:500] if lines else "nothing on stderr"
 
 
-def _reported_export(result: dict[str, Any] | None) -> Path | None:
-    """The export directory the run's own result names, unchecked."""
+def _reported_export(result: dict[str, Any] | None) -> str | None:
+    """The export directory the run's own result names, as text, unchecked."""
     if result and isinstance(result.get(_K_EXPORT_DIR), str):
-        return Path(result[_K_EXPORT_DIR])
+        return result[_K_EXPORT_DIR]
     if result and isinstance(result.get("walk_path"), str):
-        return Path(result["walk_path"]).parent
+        return os.path.dirname(result["walk_path"])
     return None
 
 
 def _plan_export_root(plan: dict[str, Any], attempt_dir: Path) -> Path:
-    """The plan's export root, which must lie in the attempt directory it was written to."""
-    return _inside(Path(str(plan[_K_EXPORT_ROOT])), attempt_dir, f"{_K_EXPORT_ROOT} {_IN_PLAN}")
+    """The export root of the attempt, which the plan must name as the runner built it."""
+    own = attempt_dir / EXPORT_ROOT_DIR
+    if not _is_own(plan.get(_K_EXPORT_ROOT), own):
+        written = plan.get(_K_EXPORT_ROOT)
+        raise RunnerError(f"{_K_EXPORT_ROOT} {_IN_PLAN} is {written!r}, not {own}; it is not used")
+    return own
+
+
+def _plan_cwd(plan: dict[str, Any], harness_root: Path) -> Path:
+    """The harness worktree the plan names, which must be a directory of *harness_root*."""
+    written = plan.get("cwd")
+    name = os.path.basename(os.path.normpath(written)) if isinstance(written, str) else ""
+    own = harness_root / name
+    if _SAFE_SESSION.fullmatch(name) is None or not _is_own(written, own):
+        raise RunnerError(
+            f"the harness directory {_IN_PLAN} is {written!r}, which is not a directory of "
+            f"{harness_root}; it is not used"
+        )
+    return own
 
 
 def _plan_session(plan: dict[str, Any]) -> str:
@@ -906,18 +924,21 @@ def _plan_session(plan: dict[str, Any]) -> str:
 
 
 def _export_dir(result: dict[str, Any] | None, root: Path, session: str) -> Path | None:
-    """Where the run's export is: what the result names, else where the runner asked for it.
+    """Where the run's export is, as one of the places the runner asked for it.
 
-    *root* is the export root the runner gave the run. A result naming a
-    directory outside it is not read: the run is stored as a failed launch.
+    *root* is the export root the runner gave the run. A result naming any
+    other directory is not read: the run is stored as a failed launch.
     """
+    nested = root / session / "export"
     reported = _reported_export(result)
     if reported is not None:
-        try:
-            return _inside(reported, root, "the export directory the run reported")
-        except RunnerError as exc:
-            raise _LaunchFailed(str(exc)) from exc
-    nested = _inside(root / session / "export", root, "the export directory of the session")
+        for own in (nested, root / session, root):
+            if _is_own(reported, own):
+                return own
+        raise _LaunchFailed(
+            f"the export directory the run reported is {reported!r}, which is outside the "
+            f"places the runner gave it in {root}; it is not used"
+        )
     if nested.is_dir():
         return nested
     return root if (root / WALK_FILE).exists() else None
@@ -1099,7 +1120,7 @@ def _finished_fields(
 def _launched_record(
     ctx: _Context, base: dict, plan: dict, task: Mapping[str, Any], attempt_dir: Path
 ) -> dict[str, Any]:
-    cwd = _inside(Path(str(plan["cwd"])), ctx.harness_root, f"the harness directory {_IN_PLAN}")
+    cwd = _plan_cwd(plan, ctx.harness_root)
     export_root = _plan_export_root(plan, attempt_dir)
     session = _plan_session(plan)
     launch = _read_json(attempt_dir / LAUNCH_FILE) or {}
