@@ -17,18 +17,18 @@ Edit the Owner/Model columns before approving gate 2 — the default Model is a 
 
 | Task | Owner | Model |
 | --- | --- | --- |
-| `t1` |  | sonnet |
-| `t2` |  | sonnet |
-| `t4` |  | sonnet |
-| `t5` |  | sonnet |
-| `t3` |  | sonnet |
-| `t6` |  | sonnet |
-| `t7` |  | sonnet |
-| `t8` |  | sonnet |
-| `t9` |  | sonnet |
-| `t10` |  | sonnet |
-| `t11` |  | sonnet |
-| `t12` |  | sonnet |
+| `t1` | subagent | opus |
+| `t2` | subagent | sonnet |
+| `t4` | subagent | sonnet |
+| `t5` | subagent | sonnet |
+| `t3` | subagent | opus |
+| `t6` | subagent | sonnet |
+| `t7` | subagent | sonnet |
+| `t8` | subagent | opus |
+| `t9` | subagent | opus |
+| `t10` | subagent | sonnet |
+| `t11` | subagent | sonnet |
+| `t12` | main agent | fable |
 
 ## Wave 1
 
