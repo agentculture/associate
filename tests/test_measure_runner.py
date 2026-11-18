@@ -833,8 +833,9 @@ def _killed_while_storing(results, demo, current_harness, monkeypatch):
 
     monkeypatch.setattr(runner_mod, "_store_record", killed_while_storing)
     arms, tasks = [Arm("a", harness_head, "worker")], [task("t", demo_head)]
+    recorder = Recorder()
     with pytest.raises(KeyboardInterrupt):
-        run(arms, tasks, 1, results, demo_repo, harness_repo, Recorder())
+        run(arms, tasks, 1, results, demo_repo, harness_repo, recorder)
     monkeypatch.setattr(runner_mod, "_store_record", real_store)
 
     def rerun(arm, the_task, launcher):

@@ -230,11 +230,13 @@ def render_table(records: Sequence[Mapping[str, Any]], reading: str = READING_AN
     counts = count_runs(records, reading)
     tasks = sorted({task for cells in counts.values() for task in cells})
     lines = ["Comparison of stored runs", f"Reading shown: {reading}", INTERNAL_LINE, ""]
-    lines.append(
-        "Contaminated runs are left out of the matching, not matching and cannot tell counts."
+    lines.extend(
+        [
+            "Contaminated runs are left out of the matching, not matching and cannot tell counts.",
+            "Not graded: a failed launch or a timeout. A contaminated run is counted",
+            "as contaminated whether or not it was graded.",
+        ]
     )
-    lines.append("Not graded: a failed launch or a timeout. A contaminated run is counted")
-    lines.append("as contaminated whether or not it was graded.")
     for task in tasks:
         per_arm = {arm: cells[task] for arm, cells in counts.items() if task in cells}
         lines += ["", *_section(f"Task: {task}", per_arm)]
