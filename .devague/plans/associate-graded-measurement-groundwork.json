@@ -5,7 +5,7 @@
   "schema_version": 5,
   "status": "exported",
   "created": "2026-11-18T15:43:53Z",
-  "updated": "2026-11-18T17:28:20Z",
+  "updated": "2026-11-18T18:37:11Z",
   "targets": [
     {
       "id": "c1",
@@ -703,8 +703,8 @@
       "text": "The commit before PR #27 pins pi 1.1.0; pi 1.5.2 is installed. The older harness only warns about the mismatch. Whether its extension runs correctly on pi 1.5.2 has not been measured; if it does not, the older arm needs pi 1.1.0 installed beside 1.5.2, or the comparison measures a pi change together with the accuracy method. The pilot will show whether the older arm runs at all.",
       "kind": "unknown_blocking",
       "task_id": "t12",
-      "resolved": false,
-      "resolution": ""
+      "resolved": true,
+      "resolution": "Pilot of 2026-11-18: the harness from before PR #27 finished 8 of 8 runs on pi 1.5.2 (worker and cortex, four tasks), each with an answer. The pi version stays recorded per run as requested 1.1.0, effective 1.5.2: the comparison measures both arms on pi 1.5.2."
     }
   ],
   "obligations": []
