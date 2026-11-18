@@ -1,0 +1,48 @@
+{
+  "plan_slug": "associate-graded-measurement-groundwork",
+  "schema_version": 2,
+  "created": "2026-11-18T17:08:42Z",
+  "updated": "2026-11-18T17:08:42Z",
+  "deviations": [
+    {
+      "id": "d1",
+      "what": "t9: the runner stores two labelled readings of the grade for a current-harness run (the answer text alone; the answer text plus the values and conclusions the model wrote in its hand-back). The plan asked for one grade.",
+      "task_ref": "t9",
+      "reason": "t7 found a recorded worker run whose expected values appear only in its conclusions and facts, so the answer text alone would mark it wrong (risk r4). The operator chooses one reading after the pilot.",
+      "affects": [
+        "c32"
+      ],
+      "origin": "llm",
+      "status": "proposed",
+      "classification": null,
+      "seq": 1
+    },
+    {
+      "id": "d2",
+      "what": "t8: the second, independent check of each task's answer is done by a separate agent started by the main agent after t8, not inside t8; t8 also revises the expected values of the six converted tasks against the saved real answers of 2026-11-17.",
+      "task_ref": "t8",
+      "reason": "A second check started by the first checker is not independent of it. t6 wrote small values as fixed phrases (for example 'max_lines 1000') that a correct answer in another form would fail.",
+      "affects": [
+        "c23"
+      ],
+      "origin": "llm",
+      "status": "proposed",
+      "classification": null,
+      "seq": 2
+    },
+    {
+      "id": "d3",
+      "what": "t1: associate/accuracy/check.py is kept as a re-export module and tests/test_run.py (not in t1's owned files) was edited; t6 edited tests/test_accuracy_tasks.py (not owned).",
+      "task_ref": "t1",
+      "reason": "The harness adapters still import from associate.accuracy.check, and both tests enforced what the tasks changed (the empty dependency list; the old task file header).",
+      "affects": [],
+      "origin": "llm",
+      "status": "proposed",
+      "classification": null,
+      "seq": 3
+    }
+  ],
+  "evidence": [],
+  "deltas": [],
+  "supersessions": []
+}
