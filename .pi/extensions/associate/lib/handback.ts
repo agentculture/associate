@@ -154,6 +154,150 @@ export const REPORT_FILENAME = "report.json";
 /** The harness-rendered answer (`lib/render.ts`). */
 export const ANSWER_FILENAME = "answer.md";
 
+// ------------------------------------------------- a quoted list (plan t3, c38)
+//
+// Measured 2026-11-18 (worker run t9-worker-review): the model called finish
+// twice with `facts` given as a STRING holding a JSON list. pi 1.5.2 coerces a
+// lone value into a one-item array before it validates, so both calls failed
+// with "facts.0: expected object, got string", the tool never ran, and the
+// hand-back survived only inside the walk's error text. pi calls a tool's
+// `prepareArguments` before validation (agent-loop.js prepareToolCall), so
+// finish unquotes such a list there; a string that holds no JSON list is
+// refused there with a fix that names the field. A throw from the shim
+// becomes the call's error result, which the model sees.
+
+/** finish's fields that are lists, in schema order. */
+export const FINISH_LIST_FIELDS = [
+  "facts",
+  "alternatives",
+  "verdicts",
+  "open_items",
+  "statements",
+  "citations",
+] as const;
+
+/** The first words of every quoted-list refusal; the rejected-file writer keys its stage on it. */
+export const QUOTED_LIST_REFUSAL = "finish refused before the check:";
+
+/** Where a JSON.parse error says it stopped, as a character offset, when it says so. */
+function parsePosition(error: unknown): number | undefined {
+  const match = /position (\d+)/.exec(error instanceof Error ? error.message : String(error));
+  return match ? Number(match[1]) : undefined;
+}
+
+function quotedListProblem(value: string): string | undefined {
+  let parsed: unknown;
+  try {
+    parsed = JSON.parse(value);
+  } catch (error) {
+    const at = parsePosition(error);
+    const where =
+      at === undefined
+        ? ""
+        : ` (the parse stopped at character ${at}, near ${JSON.stringify(value.slice(Math.max(0, at - 30), at + 30))})`;
+    return `it is not valid JSON${where}`;
+  }
+  return Array.isArray(parsed) ? undefined : `it holds JSON that is not a list (${parsed === null ? "null" : typeof parsed})`;
+}
+
+/**
+ * finish's `prepareArguments`: every list field given as a string holding a
+ * JSON list is replaced by that list. Arguments with no such string are
+ * returned as the very same object, which tells pi nothing changed. A list
+ * field given as any other string throws, naming the field, why, and the fix.
+ */
+export function prepareFinishArguments(args: unknown): unknown {
+  if (!args || typeof args !== "object" || Array.isArray(args)) return args;
+  const input = args as Record<string, unknown>;
+  let out: Record<string, unknown> | undefined;
+  for (const field of FINISH_LIST_FIELDS) {
+    const value = input[field];
+    if (typeof value !== "string") continue;
+    const problem = quotedListProblem(value);
+    if (problem !== undefined) {
+      throw new Error(
+        `${QUOTED_LIST_REFUSAL} \`${field}\` is a string holding a quoted list, and ${problem}. ` +
+          `Nothing was handed back. Fix: pass \`${field}\` as a list (a JSON array of objects, ` +
+          `e.g. "${field}": [{"id": ...}, ...]), not as a string holding one, and call finish again with the whole hand-back.`,
+      );
+    }
+    out ??= { ...input };
+    out[field] = JSON.parse(value) as unknown;
+  }
+  return out ?? args;
+}
+
+/** The list fields of `raw` that arrived as strings holding a JSON list (and were unquoted). */
+export function quotedListFields(raw: unknown): string[] {
+  if (!raw || typeof raw !== "object" || Array.isArray(raw)) return [];
+  const input = raw as Record<string, unknown>;
+  return FINISH_LIST_FIELDS.filter((field) => typeof input[field] === "string" && quotedListProblem(input[field] as string) === undefined);
+}
+
+// ------------------------------------------- the rejected hand-back (plan t3, h27)
+//
+// Every finish payload that is rejected — by pi's argument validation, by the
+// quoted-list refusal above, or by the check in enforce mode — is written to
+// the export under this name, the latest one replacing any earlier one. It is
+// labelled rejected and never rendered into answer.md; the Python harness
+// carries it in a timed-out run's result under the same label.
+
+/** The export file holding the latest rejected finish payload. */
+export const REJECTED_HANDBACK_FILENAME = "rejected_handback.json";
+/** The `label` of that file, and of the result field the Python harness builds from it. */
+export const REJECTED_LABEL = "rejected";
+
+/** How a finish payload came to be rejected. */
+export type RejectionStage = "schema" | "quoted_list" | "check" | "tool_error";
+
+/** The stage of a finish call pi ended with an error result, from the error text. */
+export function rejectionStage(errorText: string): RejectionStage {
+  if (errorText.startsWith(QUOTED_LIST_REFUSAL)) return "quoted_list";
+  if (/^(Validation failed|Invalid arguments) for tool /.test(errorText)) return "schema";
+  return "tool_error";
+}
+
+const RECEIVED_ARGUMENTS = "\n\nReceived arguments:\n";
+
+/** The arguments pi quoted in a validation error, when the text carries parseable ones. */
+export function argumentsFromErrorText(errorText: string): Record<string, unknown> | undefined {
+  const at = errorText.indexOf(RECEIVED_ARGUMENTS);
+  if (at < 0) return undefined;
+  try {
+    const parsed = JSON.parse(errorText.slice(at + RECEIVED_ARGUMENTS.length)) as unknown;
+    return parsed && typeof parsed === "object" && !Array.isArray(parsed) ? (parsed as Record<string, unknown>) : undefined;
+  } catch {
+    return undefined;
+  }
+}
+
+/** The rejected-hand-back record, payload redacted. */
+export function rejectedHandbackRecord(options: {
+  stage: RejectionStage;
+  error: string;
+  toolCallId: string | undefined;
+  rejections: number;
+  payload: unknown;
+  payloadSource: "tool_execution_start" | "error_text" | "tool_arguments" | "none";
+  refusals?: readonly HandbackRefusal[];
+  filter?: RedactionFilter;
+}): Record<string, unknown> {
+  const { filter } = options;
+  const record: Record<string, unknown> = {
+    label: REJECTED_LABEL,
+    checked: false,
+    note: "A finish payload that was rejected: not a hand-back, not checked as an answer, and never rendered into answer.md.",
+    stage: options.stage,
+    error: filter ? filter.apply(options.error) : options.error,
+    tool_call_id: options.toolCallId ?? null,
+    rejections: options.rejections,
+    payload_source: options.payloadSource,
+    payload: filter ? redactValue(options.payload ?? {}, filter) : (options.payload ?? {}),
+  };
+  if (options.refusals) record.refusals = options.refusals;
+  return record;
+}
+
 /** The per-run override of accuracy.json `mode`: `report` or `enforce`. */
 export const CHECK_MODE_ENV = "ASSOCIATE_CHECK_MODE";
 

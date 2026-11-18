@@ -1446,6 +1446,92 @@ def test_a_preflight_that_times_out_is_still_a_refusal_not_a_timeout_result(
     assert "did not finish" in captured.err
 
 
+# ------------------------------------------- a rejected hand-back (plan task t3, c38/h27)
+
+_REPLAY = REPO_ROOT / "tests" / "fixtures" / "accuracy" / "worker_review_quoted_facts.json"
+
+
+def _rejected_record() -> dict:
+    """What the extension writes after the recorded quoted-list finish was refused."""
+    payload = json.loads(_REPLAY.read_text(encoding="utf-8"))["finish_arguments"]
+    return {
+        "label": "rejected",
+        "checked": False,
+        "stage": "quoted_list",
+        "error": "finish refused before the check: `facts` is a string holding a JSON list ...",
+        "tool_call_id": "call_9",
+        "rejections": 2,
+        "payload_source": "tool_execution_start",
+        "payload": payload,
+    }
+
+
+def test_a_run_that_times_out_after_a_rejected_finish_carries_the_payload_as_rejected(
+    fake_pi, checkout: Path, tmp_path: Path, capsys: pytest.CaptureFixture[str]
+):
+    from associate.harness.pi import REJECTED_HANDBACK_FILENAME
+
+    export = tmp_path / "runs" / "to-rejected" / "export"
+    export.mkdir(parents=True)
+    record = _rejected_record()
+    (export / REJECTED_HANDBACK_FILENAME).write_text(json.dumps(record), encoding="utf-8")
+
+    code, result = _timeout_result(fake_pi, checkout, tmp_path, capsys, session="to-rejected")
+    assert code == 4
+    assert result["outcome"] == "timeout"
+    rejected = result["rejected_handback"]
+    assert rejected["label"] == "rejected"
+    assert rejected["path"] == str(export / REJECTED_HANDBACK_FILENAME)
+    assert rejected["payload"] == record["payload"]
+    assert rejected["stage"] == "quoted_list"
+    # The rejected payload is never counted: no facts.json, so the re-check did not run.
+    assert result["accuracy"]["python_recheck_ran"] is False
+
+
+def test_a_timeout_with_no_rejected_finish_has_no_rejected_field(
+    fake_pi, checkout: Path, tmp_path: Path, capsys: pytest.CaptureFixture[str]
+):
+    _, result = _timeout_result(fake_pi, checkout, tmp_path, capsys, session="to-clean")
+    assert "rejected_handback" not in result
+
+
+def test_an_unreadable_rejected_file_is_reported_as_such_under_the_label(
+    fake_pi, checkout: Path, tmp_path: Path, capsys: pytest.CaptureFixture[str]
+):
+    from associate.harness.pi import REJECTED_HANDBACK_FILENAME
+
+    export = tmp_path / "runs" / "to-badrej" / "export"
+    export.mkdir(parents=True)
+    (export / REJECTED_HANDBACK_FILENAME).write_text("{not json", encoding="utf-8")
+    _, result = _timeout_result(fake_pi, checkout, tmp_path, capsys, session="to-badrej")
+    rejected = result["rejected_handback"]
+    assert rejected["label"] == "rejected"
+    assert "payload" not in rejected
+    assert rejected["unreadable"]
+
+
+def test_the_rejected_file_name_and_label_match_the_extension():
+    from associate.harness.pi import REJECTED_HANDBACK_FILENAME, REJECTED_LABEL
+
+    source = (REPO_ROOT / ".pi" / "extensions" / "associate" / "lib" / "handback.ts").read_text(
+        encoding="utf-8"
+    )
+    assert f'REJECTED_HANDBACK_FILENAME = "{REJECTED_HANDBACK_FILENAME}"' in source
+    assert f'REJECTED_LABEL = "{REJECTED_LABEL}"' in source
+    assert "rejected" in REJECTED_HANDBACK_FILENAME
+    assert REJECTED_LABEL == "rejected"
+
+
+def test_gate_json_is_unchanged_at_version_9():
+    raw = (REPO_ROOT / "associate" / "contract" / "gate.json").read_bytes()
+    assert json.loads(raw)["version"] == 9
+    # The bytes on main (266dad3) when plan task t3 began.
+    assert (
+        hashlib.sha256(raw).hexdigest()
+        == "597ee0c3c44213ad2c62d436e74866425131a174e75ca56ea62bdbab0023e333"
+    )
+
+
 def _models_bytes() -> bytes:
     return (REPO_ROOT / "associate" / "contract" / "models.json").read_bytes()
 

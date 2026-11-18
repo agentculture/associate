@@ -1,0 +1,181 @@
+{
+  "_origin": "RECORDED. The worker review run t9-worker-review of 2026-11-18 (pi 1.5.2, evidence-cli live test). The model called finish twice (walk entries w22 and w23) with `facts` given as a string holding a JSON list of eight facts; pi's argument validation rejected both calls ('facts.0: expected object, got string') before the tool ran, so the run left no facts.json. The quoted list is not valid JSON as it stands: the value of fact f4 holds unescaped double quotes (`(\"see src/lib/facts.ts\", ...`), so a JSON parser stops there. `finish_arguments` is the payload exactly as pi's error text quoted it after 'Received arguments:' (both calls carried the same payload); `rejections` keeps the head of each error. `entries` are the three reads the facts cite (w4, w8, w10), with the saved result text of each copied from the run's results/ directory. Nothing else from the run is kept; no machine path appears in what is kept.",
+  "kind": "recorded",
+  "run": "t9-worker-review",
+  "model": "worker",
+  "rejections": [
+    {
+      "id": "w22",
+      "ts": "2026-11-18T14:20:43.731Z",
+      "tool": "finish",
+      "error_head": "Validation failed for tool \"finish\":\n  - facts.0: expected object, got string"
+    },
+    {
+      "id": "w23",
+      "ts": "2026-11-18T14:21:22.132Z",
+      "tool": "finish",
+      "error_head": "Validation failed for tool \"finish\":\n  - facts.0: expected object, got string"
+    }
+  ],
+  "finish_arguments": {
+    "summary": "Read-only review of evidence/answer/grade.py and evidence/answer/schema.py (no files changed). (1) NO — a required number item 9 is NOT reported as found in 'there are 19 tests'; decided by `_NUMBER_BEFORE` (grade.py:10), whose `(?<![A-Za-z0-9_])` lookbehind rejects a digit preceded by a word char (the '1' in '19'), i.e. whole-token matching (docstring: '9 is not in 19'). (2) NO — a required identifier 'lib/facts.ts' is NOT reported as found in 'see ./lib/facts.ts'; decided by `_IDENT_BEFORE` (grade.py:15), whose `(?<![A-Za-z0-9_./-])` lookbehind rejects 'lib' preceded by '/', the same whole-token rule that keeps 'lib/facts.ts' out of 'src/lib/facts.ts'. (3) NO — grade() returns cannot_tell only for cause 'no_expected_items' (grade.py:61) or 'empty_answer' (grade.py:63); the docstring confirms 'cannot_tell happens only for an empty (blank) answer or expected values naming no item'. Defect: none found — the Q1/Q2 'not found' outcomes are the documented whole-token semantics, not bugs. Not checked: dynamic test run, files outside the two targets, git history (ledger CLI unavailable in this environment).",
+    "facts": "[{\"id\": \"f1\", \"value\": \"Q1 = NO; deciding pattern is `_NUMBER_BEFORE` (grade.py:10), whose `(?<![A-Za-z0-9_])` lookbehind rejects a digit preceded by a word char (the '1' in '19').\", \"source\": \"w4\", \"quote\": \"_NUMBER_BEFORE = rf\\\"(?<![{_WORD}])(?<![0-9][.,])\\\"\", \"action\": false}, {\"id\": \"f2\", \"value\": \"Docstring confirms whole-token number rule: '9 is not in 19'.\", \"source\": \"w8\", \"quote\": \"``9`` is not in ``19``\", \"action\": false}, {\"id\": \"f3\", \"value\": \"Q2 = NO; deciding pattern is `_IDENT_BEFORE` (grade.py:15), whose `(?<![A-Za-z0-9_./-])` lookbehind rejects 'lib' preceded by '/' in './lib/facts.ts'.\", \"source\": \"w4\", \"quote\": \"_IDENT_BEFORE = rf\\\"(?<![{_WORD}./-])\\\"\", \"action\": false}, {\"id\": \"f4\", \"value\": \"Corroborating test vector: `(\"see src/lib/facts.ts\", \"lib/facts.ts\", False)` — same '/'-preceded-path situation as './lib/facts.ts'.\", \"source\": \"w10\", \"quote\": \"(\\\"see src/lib/facts.ts\\\", \\\"lib/facts.ts\\\", False),\", \"action\": false}, {\"id\": \"f5\", \"value\": \"Q3 = NO; one cannot_tell cause is 'no_expected_items' (grade.py:61).\", \"source\": \"w4\", \"quote\": \"return _result(\\\"cannot_tell\\\", [], [], [], \\\"no_expected_items\\\")\", \"action\": false}, {\"id\": \"f6\", \"value\": \"Q3 = NO; the other cannot_tell cause is 'empty_answer' (grade.py:63).\", \"source\": \"w4\", \"quote\": \"return _result(\\\"cannot_tell\\\", [], [], [], \\\"empty_answer\\\")\", \"action\": false}, {\"id\": \"f7\", \"value\": \"Docstring: cannot_tell happens only for an empty (blank) answer or expected values naming no item; cause is None, or for cannot_tell 'empty_answer' or 'no_expected_items'.\", \"source\": \"w8\", \"quote\": \"``cannot_tell`` happens only for an empty (blank) answer or expected values naming no item\", \"action\": false}, {\"id\": \"f8\", \"value\": \"No defect found; the Q1/Q2 'not found' outcomes are the documented whole-token semantics (code matches docstring and tests), not bugs.\", \"source\": \"w4\", \"quote\": \"def grade(answer_text: str, expected: Any) -> dict[str, Any]:\", \"action\": false}]",
+    "alternatives": [
+      {
+        "id": "a1",
+        "text": "Q1 = YES (9 found in '19 tests').",
+        "predicts": "If `_NUMBER_BEFORE` did not reject a digit preceded by a word char, '9' would match inside '19'.",
+        "refuted_by": "f1, f2 — `_NUMBER_BEFORE` line 10 contains `(?<![A-Za-z0-9_])` and the docstring states '9 is not in 19'."
+      },
+      {
+        "id": "a2",
+        "text": "Q2 = YES ('lib/facts.ts' found in './lib/facts.ts').",
+        "predicts": "If '/' were not an identifier boundary char, 'lib/facts.ts' would match inside './lib/facts.ts'.",
+        "refuted_by": "f3, f4 — `_IDENT_BEFORE` line 15 excludes '/', and the test vector has 'src/lib/facts.ts' → False for item 'lib/facts.ts'."
+      },
+      {
+        "id": "a3",
+        "text": "Q3 = YES (grade returns cannot_tell for a cause other than empty answer or no expected items).",
+        "predicts": "grade() would have a third `return _result(\"cannot_tell\", ...)` with a different cause.",
+        "refuted_by": "f5, f6, f7 — grade() has exactly two cannot_tell returns (lines 61, 63), causes 'no_expected_items' and 'empty_answer'."
+      }
+    ],
+    "verdicts": [
+      {
+        "id": "v1",
+        "text": "Q1: NO — number item 9 is not found in 'there are 19 tests'.",
+        "verdict": "supported",
+        "basis": [
+          "f1",
+          "f2"
+        ],
+        "alternative": "a1",
+        "closing": false
+      },
+      {
+        "id": "v2",
+        "text": "Q2: NO — identifier item 'lib/facts.ts' is not found in 'see ./lib/facts.ts'.",
+        "verdict": "supported",
+        "basis": [
+          "f3",
+          "f4"
+        ],
+        "alternative": "a2",
+        "closing": false
+      },
+      {
+        "id": "v3",
+        "text": "Q3: NO — cannot_tell arises only for 'empty_answer' or 'no_expected_items'.",
+        "verdict": "supported",
+        "basis": [
+          "f5",
+          "f6",
+          "f7"
+        ],
+        "alternative": "a3",
+        "closing": false
+      },
+      {
+        "id": "v4",
+        "text": "Defect: none found in the two files.",
+        "verdict": "supported",
+        "basis": [
+          "f8"
+        ],
+        "alternative": null,
+        "closing": true
+      }
+    ],
+    "open_items": [
+      {
+        "id": "o1",
+        "text": "Did not execute the test suite dynamically.",
+        "check": "Run pytest tests/test_answer.py to confirm the grade/matcher behavior passes.",
+        "basis": []
+      },
+      {
+        "id": "o2",
+        "text": "Did not read files outside the two targets (e.g., evidence/answer/__main__.py, cli/, data/, accuracy/ beyond matcher.py).",
+        "check": "Read those files if a broader review is required.",
+        "basis": []
+      },
+      {
+        "id": "o3",
+        "text": "Did not check git history for drift between the code and the documented spec.",
+        "check": "git log/blame on evidence/answer/grade.py and evidence/answer/schema.py.",
+        "basis": []
+      }
+    ],
+    "citations": [
+      {
+        "path": "evidence/answer/grade.py",
+        "line": 10
+      },
+      {
+        "path": "evidence/answer/grade.py",
+        "line": 15
+      },
+      {
+        "path": "evidence/answer/grade.py",
+        "line": 61
+      },
+      {
+        "path": "evidence/answer/grade.py",
+        "line": 63
+      },
+      {
+        "path": "evidence/answer/__init__.py",
+        "line": 24
+      },
+      {
+        "path": "evidence/answer/__init__.py",
+        "line": 44
+      },
+      {
+        "path": "tests/test_answer.py",
+        "line": 104
+      }
+    ],
+    "statements": []
+  },
+  "entries": [
+    {
+      "id": "w4",
+      "tool": "read",
+      "args": {
+        "path": "evidence/answer/grade.py",
+        "purpose": "Read the grading module to answer the three questions"
+      },
+      "source_kind": "file",
+      "result": {
+        "content": "1\t\"\"\"Grade an answer text against validated expected values.\"\"\"\n2\t\n3\timport re\n4\tfrom typing import Any\n5\t\n6\tfrom evidence.accuracy.matcher import normalise\n7\tfrom evidence.answer.schema import SCHEMA_VERSION, load_expected\n8\t\n9\t_WORD = \"A-Za-z0-9_\"\n10\t_NUMBER_BEFORE = rf\"(?<![{_WORD}])(?<![0-9][.,])\"\n11\t_NUMBER_AFTER = rf\"(?![{_WORD}])(?![.,][0-9])\"\n12\t# A minus sign glued to the token makes it a different (negative) number,\n13\t# unless the sign is a range dash after a word character (\"3-5\").\n14\t_NOT_NEGATED = rf\"(?:(?<!-)|(?<=[{_WORD}]-))\"\n15\t_IDENT_BEFORE = rf\"(?<![{_WORD}./-])\"\n16\t_IDENT_AFTER = rf\"(?![{_WORD}/-])(?!\\.[{_WORD}])\"\n17\t\n18\t\n19\tdef _token_pattern(item: dict[str, Any]) -> str:\n20\t    text = re.escape(item[\"text\"])\n21\t    if item[\"kind\"] == \"number\":\n22\t        sign = \"\" if item[\"text\"].startswith(\"-\") else _NOT_NEGATED\n23\t        return f\"{_NUMBER_BEFORE}{sign}{text}{_NUMBER_AFTER}\"\n24\t    return f\"{_IDENT_BEFORE}{text}{_IDENT_AFTER}\"\n25\t\n26\t\n27\tdef _present(item: dict[str, Any], answer: str) -> bool:\n28\t    if item[\"kind\"] == \"text\":\n29\t        needle = normalise(item[\"text\"])\n30\t        if item.get(\"fold_case\", False):\n31\t            return needle.casefold() in answer.casefold()\n32\t        return needle in answer\n33\t    return re.search(_token_pattern(item), answer, re.ASCII) is not None\n34\t\n35\t\n36\tdef _result(verdict: str, found, missing, forbidden, cause=None) -> dict[str, Any]:\n37\t    return {\n38\t        \"verdict\": verdict,\n39\t        \"schema_version\": SCHEMA_VERSION,\n40\t        \"found\": found,\n41\t        \"missing\": missing,\n42\t        \"forbidden_present\": forbidden,\n43\t        \"cause\": cause,\n44\t    }\n45\t\n46\t\n47\tdef _check_groups(groups, answer: str, found: list, missing: list) -> None:\n48\t    for group in groups:\n49\t        hit = next((item for item in group if _present(item, answer)), None)\n50\t        if hit is None:\n51\t            missing.append({\"one_of\": group})\n52\t        else:\n53\t            found.append(hit)\n54\t\n55\t\n56\tdef grade(answer_text: str, expected: Any) -> dict[str, Any]:\n57\t    \"\"\"Grade ``answer_text`` against ``expected``; see the package docstring.\"\"\"\n58\t    exp = load_expected(expected)\n59\t    answer = normalise(answer_text)\n60\t    if not any((exp[\"must_appear\"], exp[\"must_not_appear\"], exp[\"one_of\"])):\n61\t        return _result(\"cannot_tell\", [], [], [], \"no_expected_items\")\n62\t    if not answer:\n63\t        return _result(\"cannot_tell\", [], [], [], \"empty_answer\")\n64\t    found = [i for i in exp[\"must_appear\"] if _present(i, answer)]\n65\t    missing = [i for i in exp[\"must_appear\"] if i not in found]\n66\t    _check_groups(exp[\"one_of\"], answer, found, missing)\n67\t    forbidden = [i for i in exp[\"must_not_appear\"] if _present(i, answer)]\n68\t    verdict = \"does_not_match\" if missing or forbidden else \"matches\"\n69\t    return _result(verdict, found, missing, forbidden)"
+      }
+    },
+    {
+      "id": "w8",
+      "tool": "read",
+      "args": {
+        "path": "evidence/answer/__init__.py",
+        "purpose": "Read the answer package docstring referenced by grade()"
+      },
+      "source_kind": "file",
+      "result": {
+        "content": "1\t\"\"\"Answer check library: grade an answer text against a task's expected values.\n2\t\n3\tNothing here reads an export or calls a model; it is a pure function of two\n4\tinputs and uses only the standard library and ``evidence``.\n5\t\n6\tExpected values (JSON object, ``schema_version`` 1; the schema ships as\n7\t``evidence/data/expected_values.schema.json``)::\n8\t\n9\t    {\n10\t      \"schema_version\": 1,              # required, must equal SCHEMA_VERSION\n11\t      \"must_appear\":     [item, ...],   # every one must be in the answer\n12\t      \"must_not_appear\": [item, ...],   # none may be in the answer\n13\t      \"one_of\": [[item, ...], ...]      # per group, at least one must appear\n14\t    }                                   # the three lists are optional\n15\t\n16\t    item = {\"text\": str,                # non-empty\n17\t            \"kind\": \"number\" | \"identifier\" | \"text\",\n18\t            \"fold_case\": bool}          # optional, \"text\" items only\n19\t\n20\tAny other key, at any level, is refused. Matching, after\n21\t``evidence.accuracy.matcher.normalise`` has collapsed whitespace in the answer:\n22\t\n23\t* ``text``: substring; ``fold_case`` compares case-insensitively.\n24\t* ``number`` (``-?digits`` with optional ``.``/``,`` groups): a whole token, so\n25\t  ``9`` is not in ``19``, ``0.5`` not in ``10.5``, ``1.2`` and ``2.3`` not in\n26\t  ``1.2.3``. Currency signs, ``%``, brackets, commas and a sentence-ending\n27\t  full stop may touch it. ``5`` does not match inside ``-5``. ASCII digits only.\n28\t* ``identifier`` (no whitespace; dots, underscores, dashes, slashes allowed): a\n29\t  whole token, so ``check_quote`` is not in ``check_quote_all`` and\n30\t  ``lib/facts.ts`` is not in ``src/lib/facts.ts`` or ``lib/facts.ts.bak``.\n31\t\n32\t``grade(answer_text, expected)`` returns a JSON-serialisable dict:\n33\t\n34\t* ``verdict``: ``\"matches\"``, ``\"does_not_match\"`` or ``\"cannot_tell\"``\n35\t* ``schema_version``: the schema version graded under\n36\t* ``found``: items (as given) that were required and present, plus, for each\n37\t  satisfied group, the alternative that was found\n38\t* ``missing``: required items absent, and for an unsatisfied group\n39\t  ``{\"one_of\": [items]}``\n40\t* ``forbidden_present``: ``must_not_appear`` items that are in the answer\n41\t* ``cause``: ``None``, or for ``cannot_tell`` ``\"empty_answer\"`` or\n42\t  ``\"no_expected_items\"``\n43\t\n44\t``cannot_tell`` happens only for an empty (blank) answer or expected values\n45\tnaming no item; its three lists are empty. Invalid expected values raise\n46\t``ExpectedValuesError`` (a ``ValueError``) whose message is the reason.\n47\t``load_expected(data)`` validates without grading.\n48\t\"\"\"\n49\t\n50\tfrom evidence.answer.grade import grade\n51\tfrom evidence.answer.schema import SCHEMA_VERSION, ExpectedValuesError, load_expected\n52\t\n53\t__all__ = [\"SCHEMA_VERSION\", \"ExpectedValuesError\", \"grade\", \"load_expected\"]"
+      }
+    },
+    {
+      "id": "w10",
+      "tool": "read",
+      "args": {
+        "path": "tests/test_answer.py",
+        "start_line": 90,
+        "end_line": 130,
+        "purpose": "Read number and identifier whole-token test vectors to confirm Q1/Q2 behavior"
+      },
+      "source_kind": "file",
+      "result": {
+        "content": "90\t        (\"x9\", \"9\", False),\n91\t        (\"٩\", \"9\", False),\n92\t        (\"٩9\", \"9\", True),\n93\t    ],\n94\t)\n95\tdef test_number_whole_token(answer, item, want):\n96\t    assert (verdict(answer, must_appear=[num(item)]) == \"matches\") is want\n97\t\n98\t\n99\t@pytest.mark.parametrize(\n100\t    \"answer,item,want\",\n101\t    [\n102\t        (\"see lib/facts.ts.\", \"lib/facts.ts\", True),\n103\t        (\"see `lib/facts.ts`\", \"lib/facts.ts\", True),\n104\t        (\"see src/lib/facts.ts\", \"lib/facts.ts\", False),\n105\t        (\"see lib/facts.ts.bak\", \"lib/facts.ts\", False),\n106\t        (\"see lib/facts.tsx\", \"lib/facts.ts\", False),\n107\t        (\"call check_quote now\", \"check_quote\", True),\n108\t        (\"call check_quote_all now\", \"check_quote\", False),\n109\t        (\"call my_check_quote now\", \"check_quote\", False),\n110\t        (\"call my-check_quote now\", \"check_quote\", False),\n111\t        (\"call check_quote-v2 now\", \"check_quote\", False),\n112\t        (\"(check_quote)\", \"check_quote\", True),\n113\t        (\"check_quote, then\", \"check_quote\", True),\n114\t        (\"a.b\", \"b\", False),\n115\t    ],\n116\t)\n117\tdef test_identifier_whole_token(answer, item, want):\n118\t    assert (verdict(answer, must_appear=[ident(item)]) == \"matches\") is want\n119\t\n120\t\n121\tdef test_text_substring_after_whitespace_collapse():\n122\t    assert verdict(\"the   quick\\n brown fox\", must_appear=[txt(\"quick brown\")]) == \"matches\"\n123\t\n124\t\n125\tdef test_text_case_folding():\n126\t    assert verdict(\"Hello World\", must_appear=[txt(\"hello world\")]) == \"does_not_match\"\n127\t    assert verdict(\"Hello World\", must_appear=[txt(\"hello world\", fold=True)]) == \"matches\"\n128\t    assert verdict(\"hello\", must_appear=[txt(\"HELLO\", fold=True)]) == \"matches\"\n129\t\n130\t"
+      }
+    }
+  ]
+}

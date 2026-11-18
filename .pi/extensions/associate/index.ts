@@ -40,13 +40,19 @@ import {
   ANSWER_FILENAME,
   CHECK_FILENAME,
   FACTS_FILENAME,
+  REJECTED_HANDBACK_FILENAME,
   REPORT_FILENAME,
+  argumentsFromErrorText,
   buildHandbackInput,
   checkModeOverride,
   factsPayload,
   formatRefusals,
   normalizeHandback,
+  prepareFinishArguments,
+  quotedListFields,
   refusalsOf,
+  rejectedHandbackRecord,
+  rejectionStage,
   resolveCheckMode,
   unreferencedCount,
   withUncheckedCounts,
@@ -59,7 +65,7 @@ import { createAssociateContext, loadToolModules } from "./lib/runtime.ts";
 import { assistantMessageText, installStatementsRecorder, messageHasToolCalls } from "./lib/statements.ts";
 import { installContinueFrom, resolveContinueFrom } from "./lib/torch.ts";
 import { activeToolSet, resolveActiveModel, toolsOutsideContract } from "./lib/toolset.ts";
-import { compileRedaction, installWalkRecorder, stampContent, stampText } from "./lib/walk.ts";
+import { compileRedaction, contentToText, installWalkRecorder, stampContent, stampText } from "./lib/walk.ts";
 
 /** Registered by this file rather than by a module under `tools/`. */
 export const CORE_TOOL_NAMES = ["associate_ready", "finish"] as const;
@@ -227,6 +233,75 @@ export default async function (pi: ExtensionAPI) {
   const writeReport = (report: HandbackReport, counts: UncheckedCounts): void =>
     writeJson(REPORT_FILENAME, withUncheckedCounts(report, counts));
 
+  // ------------------------------------------- the rejected hand-back (t3)
+  // Every rejected finish payload — pi's argument validation, the quoted-list
+  // refusal of prepareFinishArguments, or the check in enforce mode — is kept
+  // in REJECTED_HANDBACK_FILENAME, labelled rejected, the latest replacing any
+  // earlier one. The raw arguments come from tool_execution_start (pi emits it
+  // with the arguments as the model sent them, before prepareArguments and
+  // validation); without one, from the arguments pi quoted in its error text.
+  const finishStartArgs = new Map<string, unknown>();
+  let rejectedFinishes = 0;
+  const rawFinishArgs = (
+    toolCallId: string | undefined,
+    fallback: { args?: unknown; errorText?: string },
+  ): { payload: unknown; source: Parameters<typeof rejectedHandbackRecord>[0]["payloadSource"] } => {
+    if (toolCallId !== undefined && finishStartArgs.has(toolCallId)) {
+      return { payload: finishStartArgs.get(toolCallId), source: "tool_execution_start" };
+    }
+    const quoted = fallback.errorText !== undefined ? argumentsFromErrorText(fallback.errorText) : undefined;
+    if (quoted) return { payload: quoted, source: "error_text" };
+    if (fallback.args !== undefined) return { payload: fallback.args, source: "tool_arguments" };
+    return { payload: {}, source: "none" };
+  };
+  const writeRejected = (options: {
+    stage: ReturnType<typeof rejectionStage>;
+    error: string;
+    toolCallId: string | undefined;
+    args?: unknown;
+    refusals?: Parameters<typeof rejectedHandbackRecord>[0]["refusals"];
+  }): void => {
+    rejectedFinishes += 1;
+    const raw = rawFinishArgs(options.toolCallId, { args: options.args, errorText: options.error });
+    writeJson(
+      REJECTED_HANDBACK_FILENAME,
+      rejectedHandbackRecord({
+        stage: options.stage,
+        error: options.error,
+        toolCallId: options.toolCallId,
+        rejections: rejectedFinishes,
+        payload: raw.payload,
+        payloadSource: raw.source,
+        refusals: options.refusals,
+        filter: redaction,
+      }),
+    );
+  };
+  pi.on("tool_execution_start", (event) => {
+    const e = event as { toolCallId?: unknown; toolName?: unknown; args?: unknown };
+    if (e.toolName !== "finish" || typeof e.toolCallId !== "string") return;
+    try {
+      finishStartArgs.set(e.toolCallId, structuredClone(e.args ?? {}));
+    } catch {
+      // Arguments that cannot be cloned are not kept; the error text is the fallback.
+    }
+  });
+  pi.on("tool_execution_end", (event) => {
+    const e = event as { toolCallId?: unknown; toolName?: unknown; isError?: unknown; result?: unknown };
+    if (e.toolName !== "finish") return;
+    const toolCallId = typeof e.toolCallId === "string" ? e.toolCallId : undefined;
+    if (e.isError === true) {
+      // A finish that ended in an error result never reached the hand-back:
+      // pi rejected its arguments, the quoted-list shim refused them, or the
+      // tool threw. The enforce-mode refusal is not an error result and is
+      // written by execute itself.
+      const result = e.result as { content?: unknown } | undefined;
+      const error = contentToText(result && typeof result === "object" ? result.content : undefined);
+      writeRejected({ stage: rejectionStage(error), error, toolCallId });
+    }
+    if (toolCallId !== undefined) finishStartArgs.delete(toolCallId);
+  });
+
   // ---------------------------------------------------------------- sentinel
   // One report, two readers (deviation d8): the `associate_ready` tool returns
   // it when a model asks, and the `session_start` hook below writes the very
@@ -305,6 +380,9 @@ export default async function (pi: ExtensionAPI) {
       "Give each fact the walk id shown on the tool result it came from and a quote copied word for word from that result.",
       "Give each statement passed to finish the walk entry ids that evidence it; a statement with none is reported as unreferenced.",
     ],
+    // Plan t3 (c38): a list field sent as a string holding a JSON list is
+    // unquoted before pi validates; any other string there is refused with a fix.
+    prepareArguments: prepareFinishArguments,
     parameters: Type.Object({
       summary: Type.Optional(
         text("Free text. Delivered under an unchecked label, never as the checked answer."),
@@ -396,8 +474,10 @@ export default async function (pi: ExtensionAPI) {
         ),
       ),
     }),
-    async execute(_toolCallId, params) {
+    async execute(toolCallId, params) {
       const raw = (params ?? {}) as Record<string, unknown>;
+      // The list fields the model sent quoted, which prepareFinishArguments unquoted.
+      const quoted = finishStartArgs.has(toolCallId) ? quotedListFields(finishStartArgs.get(toolCallId)) : [];
       // The walk's own ids are the only evidence that exists: a claim citing
       // anything else is not referenced, however well-shaped the id looks.
       const handback = normalizeHandback(raw, false, walk.entryIds());
@@ -420,6 +500,7 @@ export default async function (pi: ExtensionAPI) {
         verdicts: check.verdicts,
         open_items: check.open_items,
         unchecked_text: { ...counts, final_message: "none" },
+        ...(quoted.length > 0 ? { quoted_lists: quoted } : {}),
       };
       const where = { export_dir: session.exportDir, session_id: session.sessionId };
 
@@ -451,6 +532,13 @@ export default async function (pi: ExtensionAPI) {
         writeReport(check.report, counts);
         rmSync(join(session.exportDir, ANSWER_FILENAME), { force: true });
         accepted = undefined;
+        writeRejected({
+          stage: "check",
+          error: `the hand-back failed the check (enforce mode), round ${handbackRefusals}`,
+          toolCallId,
+          args: raw,
+          refusals,
+        });
         if (last) {
           walk.markOutcome("refused");
           handbackEnded = true;
@@ -507,6 +595,12 @@ export default async function (pi: ExtensionAPI) {
           `check mode ${checkMode.mode}). Now reply to the requester with exactly the answer below as your final ` +
           "message, then stop — a hand-back alone does not reach a mesh requester, and no further tool call is allowed.",
       ];
+      for (const field of quoted) {
+        lines.push(
+          `\`${field}\` arrived as a string holding a JSON list; it was parsed and checked as that list. ` +
+            `Next time pass \`${field}\` as a list, not as a string.`,
+        );
+      }
       if (wouldRefuse.length > 0) {
         lines.push(
           `In enforce mode these ${wouldRefuse.length} item${wouldRefuse.length === 1 ? "" : "s"} would have been refused ` +
