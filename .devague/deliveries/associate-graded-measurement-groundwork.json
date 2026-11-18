@@ -2,7 +2,7 @@
   "plan_slug": "associate-graded-measurement-groundwork",
   "schema_version": 2,
   "created": "2026-11-18T17:08:42Z",
-  "updated": "2026-11-18T17:36:08Z",
+  "updated": "2026-11-18T21:34:53Z",
   "deviations": [
     {
       "id": "d1",
@@ -51,6 +51,17 @@
       "status": "approved",
       "classification": null,
       "seq": 4
+    },
+    {
+      "id": "d5",
+      "what": "The comparison runs on worker only: 2 arms (worker before PR 27, worker on main) by 24 tasks by 3 repeats, 144 runs, not 288. Cortex is not compared; its only runs are the 16 pilot runs, from which no difference is read. The difference rule (12 of 72 per model) is unchanged and applies to worker.",
+      "task_ref": "t12",
+      "reason": "Operator, 2026-11-18: worker is faster; run the comparison after the code-review fixes on worker only.",
+      "affects": [],
+      "origin": "user",
+      "status": "approved",
+      "classification": "needs-follow-up",
+      "seq": 5
     }
   ],
   "evidence": [],
