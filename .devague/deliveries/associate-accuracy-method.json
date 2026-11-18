@@ -2,7 +2,7 @@
   "plan_slug": "associate-accuracy-method",
   "schema_version": 2,
   "created": "2026-11-17T21:34:16Z",
-  "updated": "2026-11-18T04:46:52Z",
+  "updated": "2026-11-18T07:35:40Z",
   "deviations": [
     {
       "id": "d1",
@@ -66,7 +66,688 @@
       "seq": 5
     }
   ],
-  "evidence": [],
-  "deltas": [],
+  "evidence": [
+    {
+      "id": "e1",
+      "obligation_ref": "o1",
+      "test_ref": ".pi/extensions/associate/tests/toolcall.test.ts :: t7 criterion 1: '${name}' with a missing or empty purpose is refused in the hook before it runs",
+      "behavior_text": "[1] Real seam (the tool_call hook of the loaded extension). The title is a template: one test per models.json tool_names entry except the exempt tools. Each fires the hook with no purpose and with purpose \"\", asserts the decision blocks, the reason matches /'purpose'/ and /e\\.g\\. .*\"purpose\": \"/, the decider was never asked, no gate line was written, and both refusals are in the walk. | [2] Real seam (hook). Asserts the hook returns undefined (no block) for each tool in accuracy.json purpose_exempt_tools (finish, associate_ready) called with no purpose. | [3] Helper unit (decideToolCall in lib/guard.ts, not the hook). For read with a missing, empty, blank, numeric purpose or a non-object input, asserts kind missing_purpose, a non-empty fix contained in the reason, the reason naming 'purpose' and carrying an e.g. example; a stated purpose is allowed.",
+      "contract_text": "given a call to any tool except finish and associate_ready with a missing or empty purpose, the hook blocks it before it runs and the refusal text names the purpose argument and gives an example",
+      "evidence_type": "automated",
+      "strength": "execution",
+      "strength_basis": "3 tests (21 cases) assert the behaviour and passed at the named commit (pytest 1037 passed; extension suite 915 passed, 0 failed, 3 skipped). Not shown to fail when the behaviour is broken, so not sensitivity. Other tests: .pi/extensions/associate/tests/toolcall.test.ts :: t7 criterion 1: the contract's exempt tools pass the hook without a purpose; .pi/extensions/associate/tests/guard.test.ts :: t7 criterion 1: a missing, empty, blank or non-string purpose is refused; the reason names the argument and shows an example",
+      "outcome": "pass",
+      "run": {
+        "timestamp": "2026-11-18T07:27:55Z",
+        "commit": "3bb876dd05c73f0f868e37dec66a9111e9929737"
+      },
+      "origin": "llm",
+      "status": "approved",
+      "superseded": false,
+      "seq": 6
+    },
+    {
+      "id": "e2",
+      "obligation_ref": "o2",
+      "test_ref": ".pi/extensions/associate/tests/walk.test.ts :: t6 c3: the stored purpose equals the purpose on the call after redaction",
+      "behavior_text": "[1] WalkRecorder unit (lib/walk.ts, not through index.ts). A purpose containing an api_key secret is recorded; asserts entry.purpose equals the contract redaction applied to the purpose, the secret is absent, and entry.purpose equals entry.args.purpose. | [2] Real seam (the loaded extension's tool_call and tool_result hooks). Fires a read with a purpose through the installed hooks and asserts the first walk.jsonl entry's purpose equals the purpose passed (no secret in it, so redaction is not exercised here), plus source_kind 'file' and the saved result text. | [3] WalkRecorder unit. The input object is mutated (path changed, purpose deleted) after noteToolCall; asserts the entry's args and purpose are the ones seen at tool_call. | [4] WalkRecorder unit. Asserts no entry line exists after noteToolCall, one exists after recordToolResult, and only one entry carries the call's purpose after a duplicate result event.",
+      "contract_text": "given an allowed call, the entry written with its result carries the purpose exactly as the hook received it, after redaction",
+      "evidence_type": "automated",
+      "strength": "execution",
+      "strength_basis": "4 tests (4 cases) assert the behaviour and passed at the named commit (pytest 1037 passed; extension suite 915 passed, 0 failed, 3 skipped). Not shown to fail when the behaviour is broken, so not sensitivity. Other tests: .pi/extensions/associate/tests/walk.test.ts :: the extension installs the recorder and the sentinel names the walk path; .pi/extensions/associate/tests/walk.test.ts :: t6 c1: args as asked are captured at tool_call, before a hook can mutate the input; .pi/extensions/associate/tests/walk.test.ts :: t6 c3: the entry is written once, when the result arrives, and nothing before",
+      "outcome": "pass",
+      "run": {
+        "timestamp": "2026-11-18T07:27:55Z",
+        "commit": "3bb876dd05c73f0f868e37dec66a9111e9929737"
+      },
+      "origin": "llm",
+      "status": "approved",
+      "superseded": false,
+      "seq": 7
+    },
+    {
+      "id": "e3",
+      "obligation_ref": "o3",
+      "test_ref": ".pi/extensions/associate/tests/tool-args.test.ts :: t8 criterion 2: read with limit and offset (run scope20-cortex-t2): the walk entry shows asked and used differ",
+      "behavior_text": "[1] The real read tool's execute plus a WalkRecorder fed its result (not through index.ts). Asserts details args_used is {path, start_line 1, end_line 5} and dropped_args is [limit, offset]; the walk entry's args equal what was asked, args_used and dropped_args match, and args notDeepEqual args_used. | [2] WalkRecorder unit with hand-made result details. Asserts entry.args is the asked arguments, entry.args_used and dropped_args are the details values, they differ, and the entry validates against the walk schema. | [3] The real bash tool's execute with a fake spawn (tool result details only, no walk entry). Asserts args_used is {argv, cwd}, dropped_args is [timeout], truncated is true and not_shown_chars > 0. | [4] WalkRecorder unit. Asserts an entry whose tool reported nothing has no args_used and no dropped_args key and not_shown_chars 0.",
+      "contract_text": "given a call where the tool ignored or defaulted an argument, the entry shows the arguments as asked and as used, and they differ",
+      "evidence_type": "automated",
+      "strength": "execution",
+      "strength_basis": "4 tests (4 cases) assert the behaviour and passed at the named commit (pytest 1037 passed; extension suite 915 passed, 0 failed, 3 skipped). Not shown to fail when the behaviour is broken, so not sensitivity. Other tests: .pi/extensions/associate/tests/walk.test.ts :: t6 c1: an entry carries purpose, args as asked and as used, source kind, saved result, not-shown count, partial; .pi/extensions/associate/tests/tool-args.test.ts :: t8 criterion 2: bash reports argv and cwd as used, drops unknown arguments, and counts what a cut hid; .pi/extensions/associate/tests/walk.test.ts :: t6 c1: a tool that reports no arguments as used gets no as-used value",
+      "outcome": "pass",
+      "run": {
+        "timestamp": "2026-11-18T07:27:55Z",
+        "commit": "3bb876dd05c73f0f868e37dec66a9111e9929737"
+      },
+      "origin": "llm",
+      "status": "approved",
+      "superseded": false,
+      "seq": 8
+    },
+    {
+      "id": "e4",
+      "obligation_ref": "o4",
+      "test_ref": ".pi/extensions/associate/tests/walk.test.ts :: t6 c2: every result is saved in full under the session export, one file per walk id",
+      "behavior_text": "[1] WalkRecorder unit. Three results (string, content-block array, error) are recorded; asserts each entry's saved_result is results/wN.txt, the results directory holds exactly w1..w3.txt, each file equals the text the recorder received, and partial is false. | [2] WalkRecorder unit with the policy cap set to 10. Asserts a 10-char result is saved whole with partial false, and a 16-char result is saved as its first 10 chars with partial true. | [3] WalkRecorder unit. Asserts entry.saved_result equals savedResultName('w1'), the file's content equals the result text, and entry.not_shown_chars equals the 1234 the tool's details reported. | [4] The real read tool's execute plus a WalkRecorder. For a file large enough to be cut, asserts details.truncated, not_shown_chars > 0, and that the walk entry's not_shown_chars equals the tool's count.",
+      "contract_text": "given any call with a text result, a file holds the whole result up to caps.max_raw_chars and the entry names it with the count of characters the model was not shown",
+      "evidence_type": "automated",
+      "strength": "coverage",
+      "strength_basis": "PARTIAL: 4 tests (4 cases) passed at the named commit but assert only part of the obligation. Not asserted by any test: The saved file results/wN.txt is asserted to equal the text the recorder received from the tool (after redaction, cut at caps.max_raw_chars), i.e. the text the model was sent. No test asserts that a file named by the entry holds the characters a tool itself cut before returning (the ones counted in not_shown_chars). For grep/find/ls a separate spill file is asserted to hold the full result (tool-args 't8 criterion 3: grep and find return the true total beside the capped list and save the full result'), but that file is named in the tool result's spill_path, not in the walk entry's saved_result; for read and bash nothing asserts the unshown part is saved anywhere. Also no test drives this through index.ts beyond a short uncut read. Other tests: .pi/extensions/associate/tests/walk.test.ts :: t6 c2: above caps.max_raw_chars the saved file is cut at the cap and the entry is partial; .pi/extensions/associate/tests/walk.test.ts :: t6 c1: an entry carries purpose, args as asked and as used, source kind, saved result, not-shown count, partial; .pi/extensions/associate/tests/tool-args.test.ts :: t8 criterion 2: read reports a window it was asked for, the cursor path, and what a cut hid",
+      "outcome": "pass",
+      "run": {
+        "timestamp": "2026-11-18T07:27:55Z",
+        "commit": "3bb876dd05c73f0f868e37dec66a9111e9929737"
+      },
+      "origin": "llm",
+      "status": "approved",
+      "superseded": false,
+      "seq": 9
+    },
+    {
+      "id": "e5",
+      "obligation_ref": "o5",
+      "test_ref": ".pi/extensions/associate/tests/refusal-reasons.test.ts :: t8 criterion 4: no call to a refusal constructor can leave out the reason or the fix",
+      "behavior_text": "[1] Static source scan (an enumeration of paths, not a run). Reads lib/guard.ts, lib/gate.ts, lib/contain.ts and every tools/*.ts, finds every call of the eight listed refusal constructors (more than 100 calls), and asserts none has a missing or blank reason argument, and none has a blank fix or a missing fix where the constructor has no default. | [2] Static source scan over the same files. Asserts no line builds an `ok: false` or `block: true` object outside makeStructuredError, toolError and guard's block(). | [3] decideToolCall / evaluateToolCall / confineWriteToCheckout units. For twelve refusal paths (no model, tool set, purpose, senses mutation, outside checkout, no gate, tests running, change in flight, gate refusal with no reason, guard exception, scratch and checkout confinement) asserts a non-empty reason, a non-empty fix, and that the reason text contains the fix. | [4] Unit of the tool refusal constructor. Collects every error code passed to makeStructuredError/toolError in lib/ and tools/ source and asserts toolError returns a non-empty fix for each, at the top level and inside error, and that an explicit fix reaches the tool result text.",
+      "contract_text": "given any refusal from the guard, the gate, containment or a tool, the model receives a reason and a fix; no path produces a refusal without both",
+      "evidence_type": "automated",
+      "strength": "coverage",
+      "strength_basis": "PARTIAL: 4 tests (4 cases) passed at the named commit but assert only part of the obligation. Not asserted by any test: The enumeration is a static scan of guard.ts, gate.ts, contain.ts and tools/ only. Not covered: (1) refusals built in index.ts itself are outside the scanned files \u2014 the hook's 'already handed back' and 'run was ended' blocks (index.ts lines ~640-652) and the refused-finish result; their text does carry a fix, and the per-item finish refusals are checked by facts.test 'every refusal carries a reason, a check id from the contract and a fix', but no test enumerates index.ts; (2) for the gate's own `refuse` the scan checks the reason only \u2014 the fix is added by guard's block(), asserted at runtime for one gate refusal; (3) the scan passes any argument that is a variable or expression it cannot read as text, so it does not prove non-emptiness at runtime; (4) lib files other than the three named are not scanned; (5) a call pi rejects before the hook (unknown tool, invalid arguments) is pi's own text and is not asserted to carry a fix. No runtime test drives every refusal path and inspects the text the model receives. Other tests: .pi/extensions/associate/tests/refusal-reasons.test.ts :: t8 criterion 4: a refusal is not built by hand outside the listed constructors; .pi/extensions/associate/tests/guard.test.ts :: t7 criterion 3: every guard refusal carries a fix, and a gate refusal without a reason still gets one; .pi/extensions/associate/tests/refusal-fix.test.ts :: t7 criterion 3: toolError carries a fix for every code the source uses, in the error and at the top level",
+      "outcome": "pass",
+      "run": {
+        "timestamp": "2026-11-18T07:27:55Z",
+        "commit": "3bb876dd05c73f0f868e37dec66a9111e9929737"
+      },
+      "origin": "llm",
+      "status": "approved",
+      "superseded": false,
+      "seq": 10
+    },
+    {
+      "id": "e6",
+      "obligation_ref": "o6",
+      "test_ref": ".pi/extensions/associate/tests/finish-check.test.ts :: AC4: a session started without associate run leaves facts.json, check.json and report.json",
+      "behavior_text": "[1] Real seam (the finish tool of the loaded extension, report mode). A hand-back with one good fact and one whose quote is not in w1's saved result; asserts check.json facts are [f1 passed, f2 refused] and report.json counts made 2, passed 1, refused 1. Does not assert the nearest span. | [2] Real seam (finish, enforce mode). Asserts the refusal text names quote_not_in_result, f2, w1 and carries 'fix:'; the head outcome is refused. Does not assert the nearest span in the text. | [3] checkHandback library unit (lib/facts.ts, what finish calls). On the shared vector 'one refused fact leaves the others untouched', asserts f2 is refused with a nearest span present, and that checking the hand-back without f2 gives exactly the same verdict objects for every other fact. | [4] checkHandback library unit; the title is a template, one test per handback_cases entry of matcher_vectors.json. For the case 'one refused fact leaves the others untouched' it deep-equals the whole projected result, including f2 refused quote_absent with its nearest span and f1/f4 passed.",
+      "contract_text": "given a fact whose quote is not in the saved result of the entry it cites, that fact is refused with the nearest matching span while the other facts in the same hand-back are kept",
+      "evidence_type": "automated",
+      "strength": "execution",
+      "strength_basis": "4 tests (15 cases) assert the behaviour and passed at the named commit (pytest 1037 passed; extension suite 915 passed, 0 failed, 3 skipped). Not shown to fail when the behaviour is broken, so not sensitivity. Other tests: .pi/extensions/associate/tests/finish-check.test.ts :: AC2: enforce refuses a failing hand-back with the fix, tools stay callable, finished stays false; .pi/extensions/associate/tests/facts.test.ts :: removing the refused fact leaves every other fact's verdict unchanged; .pi/extensions/associate/tests/facts.test.ts :: handback vector: ${c.name}",
+      "outcome": "pass",
+      "run": {
+        "timestamp": "2026-11-18T07:27:55Z",
+        "commit": "3bb876dd05c73f0f868e37dec66a9111e9929737"
+      },
+      "origin": "llm",
+      "status": "approved",
+      "superseded": false,
+      "seq": 11
+    },
+    {
+      "id": "e7",
+      "obligation_ref": "o7",
+      "test_ref": ".pi/extensions/associate/tests/facts.test.ts :: unchecked facts are never counted as passed",
+      "behavior_text": "[1] checkHandback library unit (not through the finish tool). For every shared hand-back vector asserts made == passed + refused + unchecked and checked == passed + refused. | [2] checkHandback library unit; template title. The case 'one refused fact leaves the others untouched' deep-equals a result where f3 (cites w8, no saved text) is unchecked/no_saved_text and f6 (partial result) is unchecked/partial_result, with the report's passed count excluding them. | [3] The Python re-check through `associate check --json` on a hand-built export. Asserts f3 (cites an entry with no saved result) has verdict unchecked and the counts are made 5, checked 4, passed 2, refused 2, unchecked 1. | [4] `associate check --json`. A fact whose quote is present in a saved file of an entry marked partial; asserts passed 0 and unchecked 1.",
+      "contract_text": "given a fact citing an entry with no saved text, the fact is recorded as unchecked and is never counted as passed",
+      "evidence_type": "automated",
+      "strength": "execution",
+      "strength_basis": "4 tests (15 cases) assert the behaviour and passed at the named commit (pytest 1037 passed; extension suite 915 passed, 0 failed, 3 skipped). Not shown to fail when the behaviour is broken, so not sensitivity. Other tests: .pi/extensions/associate/tests/facts.test.ts :: handback vector: ${c.name}; tests/test_accuracy_check.py::test_counts_match_a_hand_count_and_unchecked_is_never_passed; tests/test_accuracy_check.py::test_a_partial_entry_is_unchecked_not_passed",
+      "outcome": "pass",
+      "run": {
+        "timestamp": "2026-11-18T07:27:55Z",
+        "commit": "3bb876dd05c73f0f868e37dec66a9111e9929737"
+      },
+      "origin": "llm",
+      "status": "approved",
+      "superseded": false,
+      "seq": 12
+    },
+    {
+      "id": "e8",
+      "obligation_ref": "o8",
+      "test_ref": ".pi/extensions/associate/tests/statements.test.ts :: a final message citing a walk id the walk never issued is unreferenced",
+      "behavior_text": "[1] Real seam (StatementsRecorder.recordAssistantMessage in lib/statements.ts, called directly). With a walk of w1..w3, a message citing [w999] is recorded; asserts one statement with status 'unreferenced' and empty evidence. | [2] Same seam, with the fixture from the recorded run. Asserts every statement that mentions the invented id has status 'unreferenced' and does not list the id as evidence.",
+      "contract_text": "given a final message citing a walk id the walk never issued, the statement is recorded as unreferenced",
+      "evidence_type": "automated",
+      "strength": "execution",
+      "strength_basis": "2 tests (2 cases) assert the behaviour and passed at the named commit (pytest 1037 passed; extension suite 915 passed, 0 failed, 3 skipped). Not shown to fail when the behaviour is broken, so not sensitivity. Other tests: .pi/extensions/associate/tests/replays.test.ts :: replay 1: the recorded final message citing [w999] is recorded as unreferenced (scope20-worker-t5)",
+      "outcome": "pass",
+      "run": {
+        "timestamp": "2026-11-18T07:27:55Z",
+        "commit": "3bb876dd05c73f0f868e37dec66a9111e9929737"
+      },
+      "origin": "llm",
+      "status": "approved",
+      "superseded": false,
+      "seq": 13
+    },
+    {
+      "id": "e9",
+      "obligation_ref": "o9",
+      "test_ref": ".pi/extensions/associate/tests/check.test.ts :: the tool and the matcher call return the same verdict for the same inputs",
+      "behavior_text": "[1] The real check_quote tool's execute against direct calls. For seven (source, quote, literal) cases asserts the tool's verdict, reason and nearest equal checkQuote(quote, literal, loadSavedResult(export, source), min_quote_length) and that checkSource returns the same object. | [2] The check_quote tool. Asserts verdict unchecked / reason no_saved_text for an id with no saved file (the same verdict the hand-back vector gives a fact citing such an entry, though the two are not compared in one test). | [3] Static check. Asserts lib/facts.ts imports ./matcher.ts (so the hand-back check uses the same matcher module) and reads no file itself.",
+      "contract_text": "given a quote and a walk id during a run, the tool returns the same verdict the hand-back check returns for the same inputs",
+      "evidence_type": "automated",
+      "strength": "coverage",
+      "strength_basis": "PARTIAL: 3 tests (3 cases) passed at the named commit but assert only part of the obligation. Not asserted by any test: No test runs the same quote and walk id through both the check_quote tool and the hand-back check (checkHandback or the finish tool) and compares the two verdicts. The equality asserted is tool versus a direct matcher call made the way the test says the hand-back does it; that the hand-back check takes that path is shown only by the static import check. Other tests: .pi/extensions/associate/tests/check.test.ts :: a walk id with no saved result is unchecked; .pi/extensions/associate/tests/facts.test.ts :: facts.ts opens no file and imports nothing from pi",
+      "outcome": "pass",
+      "run": {
+        "timestamp": "2026-11-18T07:27:55Z",
+        "commit": "3bb876dd05c73f0f868e37dec66a9111e9929737"
+      },
+      "origin": "llm",
+      "status": "approved",
+      "superseded": false,
+      "seq": 14
+    },
+    {
+      "id": "e10",
+      "obligation_ref": "o10",
+      "test_ref": ".pi/extensions/associate/tests/matcher.test.ts :: vector: ${c.name}",
+      "behavior_text": "[1] TypeScript matcher (lib/matcher.ts checkQuote); template title, one test per `cases` entry (23) of associate/contract/matcher_vectors.json. Each deep-equals the result (verdict, reason, nearest) to the vector's `expect`. | [2] Python matcher (associate/accuracy/matcher.py check_quote), parametrized over the same 23 `cases`. Each asserts the result equals the same `expect`. The two languages are compared through the shared expected value, not against each other in one process. | [3] Asserts the vector cases between them expect every verdict and every reason the vector file lists. | [4] Python hand-back checker, parametrized over the 12 shared handback_cases; asserts the projected result equals the same `expect` the TypeScript 'handback vector' tests compare to.",
+      "contract_text": "given every shared vector, the TypeScript matcher and the Python matcher return the same verdict",
+      "evidence_type": "automated",
+      "strength": "execution",
+      "strength_basis": "4 tests (59 cases) assert the behaviour and passed at the named commit (pytest 1037 passed; extension suite 915 passed, 0 failed, 3 skipped). Not shown to fail when the behaviour is broken, so not sensitivity. Other tests: tests/test_accuracy_matcher.py::test_vector; .pi/extensions/associate/tests/matcher.test.ts :: vectors cover every verdict and reason; tests/test_accuracy_check.py::test_python_checker_reproduces_every_handback_vector",
+      "outcome": "pass",
+      "run": {
+        "timestamp": "2026-11-18T07:27:55Z",
+        "commit": "3bb876dd05c73f0f868e37dec66a9111e9929737"
+      },
+      "origin": "llm",
+      "status": "approved",
+      "superseded": false,
+      "seq": 15
+    },
+    {
+      "id": "e11",
+      "obligation_ref": "o11",
+      "test_ref": ".pi/extensions/associate/tests/walk.test.ts :: t6 c1: the source kind comes from the contract's table, and a tool outside it gets none",
+      "behavior_text": "[1] WalkRecorder unit. Records results for read, grep, web_page, eidetic_recall, spawn_subagent, finish and one unknown tool; asserts each entry's source_kind equals accuracy.json source_kinds[tool], the unknown tool has no source_kind, and walk.ts contains no literal copy of four tool names. | [2] Contract check, not a walk entry. Asserts the keys of accuracy.json source_kinds equal models.json tool_names exactly, so the table has a kind for every tool name. | [3] Real seam (loaded extension hooks). Asserts the walk entry written for a read fired through the hooks has source_kind 'file'. | [4] Python contract check. Asserts source_kinds keys equal tool_names and every value is one of file, tool, web, memory, agent, harness.",
+      "contract_text": "given a result from any tool, the entry carries a source kind taken from the contract table for that tool name",
+      "evidence_type": "automated",
+      "strength": "coverage",
+      "strength_basis": "PARTIAL: 4 tests (4 cases) passed at the named commit but assert only part of the obligation. Not asserted by any test: No test iterates the contract's tool list at the walk entry: the entry's source_kind is asserted for 6 of the 21 tool names (recorder unit) and for read only through index.ts. Coverage of the other 15 names rests on combining the sample with the separate assertion that the table has a key for every tool name. Other tests: .pi/extensions/associate/tests/contract.test.ts :: loadContract exposes accuracy.json from disk; .pi/extensions/associate/tests/walk.test.ts :: the extension installs the recorder and the sentinel names the walk path; tests/test_accuracy_contract.py::test_settings_shape",
+      "outcome": "pass",
+      "run": {
+        "timestamp": "2026-11-18T07:27:55Z",
+        "commit": "3bb876dd05c73f0f868e37dec66a9111e9929737"
+      },
+      "origin": "llm",
+      "status": "approved",
+      "superseded": false,
+      "seq": 16
+    },
+    {
+      "id": "e12",
+      "obligation_ref": "o12",
+      "test_ref": ".pi/extensions/associate/tests/facts.test.ts :: handback vector: ${c.name}",
+      "behavior_text": "[1] checkHandback library unit (not through the finish tool); template title. The case 'a closing conclusion resting only on memory and agent entries is refused' deep-equals a result where closing verdict v2 (basis: a memory fact and two agent facts) is refused with reason closing_second_hand while v1 is accepted; the case 'a delegate_status final_reply alone does not close; the last verdict closes when none is marked' covers an unmarked last verdict. | [2] checkHandback library unit. Over every shared hand-back vector, asserts each refused fact, verdict and open item (so including the closing_second_hand refusals) has a reason, a check id listed in accuracy.json, and a non-empty fix. | [3] Python re-check on the same vectors; asserts the same refused closing verdict (fix texts are not compared on the Python side).",
+      "contract_text": "given a closing conclusion whose only support is an agent conclusion or a memory record, the conclusion is refused with the fix",
+      "evidence_type": "automated",
+      "strength": "execution",
+      "strength_basis": "3 tests (25 cases) assert the behaviour and passed at the named commit (pytest 1037 passed; extension suite 915 passed, 0 failed, 3 skipped). Not shown to fail when the behaviour is broken, so not sensitivity. Other tests: .pi/extensions/associate/tests/facts.test.ts :: every refusal carries a reason, a check id from the contract and a fix; tests/test_accuracy_check.py::test_python_checker_reproduces_every_handback_vector",
+      "outcome": "pass",
+      "run": {
+        "timestamp": "2026-11-18T07:27:55Z",
+        "commit": "3bb876dd05c73f0f868e37dec66a9111e9929737"
+      },
+      "origin": "llm",
+      "status": "approved",
+      "superseded": false,
+      "seq": 17
+    },
+    {
+      "id": "e13",
+      "obligation_ref": "o13",
+      "test_ref": ".pi/extensions/associate/tests/finish-check.test.ts :: AC2: enforce refuses a failing hand-back with the fix, tools stay callable, finished stays false",
+      "behavior_text": "[1] Real seam (finish tool and tool_call hook, enforce mode). After a refused finish asserts no terminate, the text says '2 rounds left', a following read is not blocked, and a second finish with a good payload is accepted (check.json outcome accepted, answer.md written). | [2] Real seam. Three failing finishes: asserts '2 rounds left', then '1 round left' without terminate, then terminate true on the third (retry_rounds is 2), and a later call is blocked. | [3] Real seam with a contract copy where retry_rounds is 0; asserts the first refused finish terminates and the walk outcome is 'refused'. | [4] Real seam. After two refused finishes and a new before_agent_start, asserts the next refusal does not terminate and says '2 rounds left'.",
+      "contract_text": "given a refused hand-back, the session can call tools again and answer again, up to the round limit in the contract",
+      "evidence_type": "automated",
+      "strength": "execution",
+      "strength_basis": "4 tests (4 cases) assert the behaviour and passed at the named commit (pytest 1037 passed; extension suite 915 passed, 0 failed, 3 skipped). Not shown to fail when the behaviour is broken, so not sensitivity. Other tests: .pi/extensions/associate/tests/finish-check.test.ts :: AC2: after the contract's last round the run ends refused and nothing marks the hand-back accepted; .pi/extensions/associate/tests/finish-check.test.ts :: AC2: the round limit comes from accuracy.json retry_rounds; .pi/extensions/associate/tests/finish-check.test.ts :: AC2: a new prompt starts with fresh rounds",
+      "outcome": "pass",
+      "run": {
+        "timestamp": "2026-11-18T07:27:55Z",
+        "commit": "3bb876dd05c73f0f868e37dec66a9111e9929737"
+      },
+      "origin": "llm",
+      "status": "approved",
+      "superseded": false,
+      "seq": 18
+    },
+    {
+      "id": "e14",
+      "obligation_ref": "o14",
+      "test_ref": "tests/test_run_accuracy.py::test_the_pi_result_names_a_handback_refused_after_the_rounds",
+      "behavior_text": "[1] PiHarness.collect() with a scripted fake pi that leaves a refused export (the adapter result that `associate run --json` prints, not the CLI). Asserts outcome 'refused', handback_outcome 'refused_after_rounds', answer None, accuracy.python_recheck_verdict 'refused' and one refused fact. | [2] Real seam (`associate run --json` through cli.main) with a stub harness, not pi. Asserts the JSON on stdout has outcome 'refused', handback_outcome 'refused_after_rounds' and answer null. | [3] StubHarness.collect(). Asserts outcome refused, handback_outcome refused_after_rounds, answer None, no answer.md, check.json outcome refused with run_ended true, python_recheck_verdict refused. | [4] Extension side (finish tool), not the run result. Asserts the final refused result's head has outcome refused and accepted not true, details carry no handback, check.json has accepted false / outcome refused / run_ended true, no answer.md, no recorded statements, walk outcome refused.",
+      "contract_text": "given a hand-back still failing after the last round, the result names the failure and no field reports the hand-back as accepted",
+      "evidence_type": "automated",
+      "strength": "coverage",
+      "strength_basis": "PARTIAL: 4 tests (4 cases) passed at the named commit but assert only part of the obligation. Not asserted by any test: The named fields are asserted (outcome, handback_outcome, answer, accuracy.python_recheck_verdict), but no test scans the whole result object to show that no field reports acceptance; accuracy.extension_accepted, which the result also carries, is asserted nowhere. The `--json` CLI assertion uses the stub harness; the pi path is asserted at PiHarness.collect() with a fake pi. Other tests: tests/test_run_accuracy.py::test_a_refused_handback_exits_3_and_still_prints_the_result; tests/test_run_accuracy.py::test_a_refused_stub_handback_in_enforce_mode_ends_the_run_with_no_answer; .pi/extensions/associate/tests/finish-check.test.ts :: AC2: after the contract's last round the run ends refused and nothing marks the hand-back accepted",
+      "outcome": "pass",
+      "run": {
+        "timestamp": "2026-11-18T07:27:55Z",
+        "commit": "3bb876dd05c73f0f868e37dec66a9111e9929737"
+      },
+      "origin": "llm",
+      "status": "approved",
+      "superseded": false,
+      "seq": 19
+    },
+    {
+      "id": "e15",
+      "obligation_ref": "o15",
+      "test_ref": ".pi/extensions/associate/tests/facts.test.ts :: handback vector: ${c.name}",
+      "behavior_text": "[1] checkHandback library unit (the rule lives in the checker, not in the finish JSON schema); template title. The case 'verdict rules: unread items, open without a check, cannot tell with a check' deep-equals a result where v1 (supported, unread: [one path]) is refused verdict_with_unread and v3 (cannot_tell with a check) is accepted; the case 'cannot tell with a named check is accepted' has accepted true. | [2] Real seam (finish tool, enforce mode). A payload that includes a cannot_tell verdict naming its check; asserts no terminate and check.json accepted true / outcome accepted. | [3] Python re-check on the same two vector cases; asserts the same refused v1 and accepted cannot_tell verdicts.",
+      "contract_text": "given a supported or refuted verdict with a non-empty list of unread items, the hand-back is refused; given an answer of cannot tell that names its deciding check, it is accepted",
+      "evidence_type": "automated",
+      "strength": "coverage",
+      "strength_basis": "PARTIAL: 3 tests (25 cases) passed at the named commit but assert only part of the obligation. Not asserted by any test: Only a `supported` verdict with unread items is asserted refused; no test or vector has a `refuted` verdict with a non-empty unread list. The refusal is asserted in the checker library only: no test sends a verdict with unread items through the finish tool. The finish payload schema itself does not refuse it (the Python schema test accepts a payload with `unread`). Other tests: .pi/extensions/associate/tests/finish-check.test.ts :: AC1: a hand-back with facts, alternatives, verdicts and open items is accepted when it checks; tests/test_accuracy_check.py::test_python_checker_reproduces_every_handback_vector",
+      "outcome": "pass",
+      "run": {
+        "timestamp": "2026-11-18T07:27:55Z",
+        "commit": "3bb876dd05c73f0f868e37dec66a9111e9929737"
+      },
+      "origin": "llm",
+      "status": "approved",
+      "superseded": false,
+      "seq": 20
+    },
+    {
+      "id": "e16",
+      "obligation_ref": "o16",
+      "test_ref": ".pi/extensions/associate/tests/finish-check.test.ts :: AC4: a session started without associate run leaves facts.json, check.json and report.json",
+      "behavior_text": "[1] Real seam (report.json written by the extension's finish tool). Asserts report.json exists, has every key report.schema.json requires (facts, conclusions, statements, by_source_kind, flags, python_recheck_ran) and no key the schema lacks, and facts made 2 / passed 1 / refused 1. The by_source_kind values are not asserted here. | [2] Real seam. Asserts statements.md and statements.json are byte-identical across finish's execute (which writes report.json) and across the final-message handler that rewrites report.json, while report.json itself changed. | [3] Real seam. Asserts report.json flags include quote_not_in_result and conclusion_without_fact for the failing hand-back. | [4] The Python re-check's report (printed by `associate check --json`, not the report.json file). Asserts facts counts and by_source_kind counts for file and tool equal a hand count, and the other four kinds are zero. The extension's by_source_kind and flags values are asserted in the 'handback vector' tests, which deep-equal the whole report object.",
+      "contract_text": "given a finished run, a harness-written file holds the counts per kind and per source kind and the reviewer flags, and the hand-back file is unchanged by it",
+      "evidence_type": "automated",
+      "strength": "execution",
+      "strength_basis": "4 tests (4 cases) assert the behaviour and passed at the named commit (pytest 1037 passed; extension suite 915 passed, 0 failed, 3 skipped). Not shown to fail when the behaviour is broken, so not sensitivity. Other tests: .pi/extensions/associate/tests/finish-check.test.ts :: AC4: the statements files are byte-identical before and after the report is written; .pi/extensions/associate/tests/finish-check.test.ts :: AC3: report mode accepts the failing hand-back and the report lists each refusal it would have made; tests/test_accuracy_check.py::test_counts_match_a_hand_count_and_unchecked_is_never_passed",
+      "outcome": "pass",
+      "run": {
+        "timestamp": "2026-11-18T07:27:55Z",
+        "commit": "3bb876dd05c73f0f868e37dec66a9111e9929737"
+      },
+      "origin": "llm",
+      "status": "approved",
+      "superseded": false,
+      "seq": 21
+    },
+    {
+      "id": "e17",
+      "obligation_ref": "o17",
+      "test_ref": "tests/test_run_accuracy.py::test_the_pi_result_reports_the_python_counts_and_copies_unchecked_text",
+      "behavior_text": "[1] PiHarness.collect() with a fake pi whose report.json carries deliberately wrong counts (99s). Asserts result accuracy.report.facts is {made 1, checked 1, passed 1, refused 0, unchecked 0} \u2014 the recount from the saved walk, facts.json and results/w1.txt \u2014 python_recheck_ran true, and the report validates against report.schema.json. | [2] Real seam (`associate run --json` via cli.main, stub harness). Asserts stdout JSON carries accuracy.report with facts.made >= 1, python_recheck_ran true, python_recheck_verdict accepted, answer and handback_outcome accepted. Does not compare to an independent recount. | [3] StubHarness.collect(). Asserts accuracy.report validates against the schema, python_recheck_ran is true in both places and facts.made >= 1.",
+      "contract_text": "given a finished run, the result carries the counts, and they equal what a recount from the saved files gives",
+      "evidence_type": "automated",
+      "strength": "execution",
+      "strength_basis": "3 tests (3 cases) assert the behaviour and passed at the named commit (pytest 1037 passed; extension suite 915 passed, 0 failed, 3 skipped). Not shown to fail when the behaviour is broken, so not sensitivity. Other tests: tests/test_run_accuracy.py::test_run_json_carries_answer_counts_recheck_and_outcome; tests/test_run_accuracy.py::test_the_stub_result_carries_the_accuracy_fields",
+      "outcome": "pass",
+      "run": {
+        "timestamp": "2026-11-18T07:27:55Z",
+        "commit": "3bb876dd05c73f0f868e37dec66a9111e9929737"
+      },
+      "origin": "llm",
+      "status": "approved",
+      "superseded": false,
+      "seq": 22
+    },
+    {
+      "id": "e18",
+      "obligation_ref": "o18",
+      "test_ref": ".pi/extensions/associate/tests/ledger.test.ts :: t14: a walk-id-shaped ref the walk never issued is refused with the fix, nothing spawned",
+      "behavior_text": "[1] Real seam (the ledger_append tool's execute, with a recorder double that has issued w1 and w2). refs ['w9']: asserts ok false, error code unknown_walk_id, detail.refs ['w9'], a fix string that names w1, and that no ledger process was spawned. | [2] Same seam. Asserts a call with w3 (issued) and eight non-walk-id refs succeeds and the refs reach the ledger argv unchanged.",
+      "contract_text": "given refs naming a walk id that the walk never issued, the call is refused with the fix",
+      "evidence_type": "automated",
+      "strength": "execution",
+      "strength_basis": "2 tests (2 cases) assert the behaviour and passed at the named commit (pytest 1037 passed; extension suite 915 passed, 0 failed, 3 skipped). Not shown to fail when the behaviour is broken, so not sensitivity. Other tests: .pi/extensions/associate/tests/ledger.test.ts :: t14: a ref that exists passes, and refs that are not walk ids are untouched",
+      "outcome": "pass",
+      "run": {
+        "timestamp": "2026-11-18T07:27:55Z",
+        "commit": "3bb876dd05c73f0f868e37dec66a9111e9929737"
+      },
+      "origin": "llm",
+      "status": "approved",
+      "superseded": false,
+      "seq": 23
+    },
+    {
+      "id": "e19",
+      "obligation_ref": "o19",
+      "test_ref": ".pi/extensions/associate/tests/stamp.test.ts :: t9 criterion 1/2: a ${tool} result reaches the model stamped with its own walk id",
+      "behavior_text": "[1] Real seam (the loaded extension's chained tool_result handlers); template title, one test per models.json tool_names entry (all 21). After two earlier calls, asserts the text sent to the model has first line 'walk id: w3', equals stamp + the original body, details are unchanged, and the walk's last entry is that tool with id w3. | [2] Real seam (tool_call hook). Asserts a refused call's reason starts with 'walk id: w2', the walk entry w2 holds the reason without the stamp, and the next result is stamped w3. | [3] Real seam. For an image-only result asserts the first content block is the text 'walk id: w1', the image block follows, and structuredContent is passed through. | [4] Real seam. Asserts the finish result's first line is 'walk id: w1' and a later blocked call's reason starts with 'walk id: w2'.",
+      "contract_text": "given any tool result, its first line names the walk id the harness gave that call",
+      "evidence_type": "automated",
+      "strength": "execution",
+      "strength_basis": "4 tests (24 cases) assert the behaviour and passed at the named commit (pytest 1037 passed; extension suite 915 passed, 0 failed, 3 skipped). Not shown to fail when the behaviour is broken, so not sensitivity. Other tests: .pi/extensions/associate/tests/stamp.test.ts :: t9 criterion 2: a refused call's reason carries the id of the entry written for it, and the next result does not reuse it; .pi/extensions/associate/tests/stamp.test.ts :: t9 criterion 3: a stamped result keeps image blocks and structured content; .pi/extensions/associate/tests/stamp.test.ts :: t9 criterion 2: a call refused after finish carries its entry id too",
+      "outcome": "pass",
+      "run": {
+        "timestamp": "2026-11-18T07:27:55Z",
+        "commit": "3bb876dd05c73f0f868e37dec66a9111e9929737"
+      },
+      "origin": "llm",
+      "status": "approved",
+      "superseded": false,
+      "seq": 24
+    },
+    {
+      "id": "e20",
+      "obligation_ref": "o20",
+      "test_ref": ".pi/extensions/associate/tests/facts.test.ts :: a labelled reference never resolves to a current-run entry",
+      "behavior_text": "[1] checkHandback library unit. A fact cites prior:w1 with a quote present only in the current run's w1; asserts run 'prior', verdict refused, reason quote_absent. | [2] The check_quote tool with ASSOCIATE_CONTINUE_FROM set and both runs holding a w3 with different text. Asserts prior:w3 passes for the prior run's text and is refused for the current run's text. | [3] Python re-check (inspect_export) over two export directories linked by a child line. A fact citing c1:w1 with text only the child's w1 holds; asserts verdict passed, run 'c1', and the child's counts listed separately. | [4] Python re-check. A fact citing prior:w1 with the prior run's text: asserts refused source_unknown without continue_from (the current w1 does not answer for it) and passed with run 'prior' when continue_from is given.",
+      "contract_text": "given a reference to a prior-run or child-run entry, it resolves to that run and can never resolve to an entry of the current run",
+      "evidence_type": "automated",
+      "strength": "execution",
+      "strength_basis": "4 tests (4 cases) assert the behaviour and passed at the named commit (pytest 1037 passed; extension suite 915 passed, 0 failed, 3 skipped). Not shown to fail when the behaviour is broken, so not sensitivity. Other tests: .pi/extensions/associate/tests/check.test.ts :: a prior: reference is checked against the --continue-from run's saved result, never this run's; tests/test_accuracy_runs.py::test_a_child_fact_resolves_under_its_cn_label_and_is_listed_with_its_own_counts; tests/test_accuracy_runs.py::test_a_prior_fact_is_unknown_without_continue_from_and_passes_with_it",
+      "outcome": "pass",
+      "run": {
+        "timestamp": "2026-11-18T07:27:55Z",
+        "commit": "3bb876dd05c73f0f868e37dec66a9111e9929737"
+      },
+      "origin": "llm",
+      "status": "approved",
+      "superseded": false,
+      "seq": 25
+    },
+    {
+      "id": "e21",
+      "obligation_ref": "o21",
+      "test_ref": "tests/test_run.py::test_the_pinned_version_does_not_warn",
+      "behavior_text": "[1] Real seam (`associate run` through cli.main with a fake pi reporting 1.5.2). Asserts exit 0 and that stderr does not contain 'tested against'. | [2] Same seam, parametrized over fake pi versions 0.84.2, 1.1.0, 1.5.0, 1.5.3, 2.0.0. Asserts exit 0, stderr contains 'pi <installed> is installed' and 'tested against 1.5.2', and the run still printed its walk path. | [3] Asserts the constant PINNED_PI_VERSION equals '1.5.2'.",
+      "contract_text": "given pi 1.5.2 installed, the launcher runs without the version warning, and with another version it warns naming 1.5.2",
+      "evidence_type": "automated",
+      "strength": "execution",
+      "strength_basis": "3 tests (7 cases) assert the behaviour and passed at the named commit (pytest 1037 passed; extension suite 915 passed, 0 failed, 3 skipped). Not shown to fail when the behaviour is broken, so not sensitivity. Other tests: tests/test_run.py::test_a_version_mismatch_warns_but_still_serves; tests/test_run.py::test_the_tested_pin_is_pi_1_5_2",
+      "outcome": "pass",
+      "run": {
+        "timestamp": "2026-11-18T07:27:55Z",
+        "commit": "3bb876dd05c73f0f868e37dec66a9111e9929737"
+      },
+      "origin": "llm",
+      "status": "approved",
+      "superseded": false,
+      "seq": 26
+    },
+    {
+      "id": "e22",
+      "obligation_ref": "o22",
+      "test_ref": ".pi/extensions/associate/tests/finish-check.test.ts :: AC5: the cortex pyproject sentence in a summary appears only under the unchecked label",
+      "behavior_text": "[1] Real seam for answer.md (finish tool and message_end handler). Asserts the summary sentence tied to no accepted item is absent from the part of answer.md before the unchecked heading and PRESENT after it; check.json/report.json unchecked_text counts summary_sentences 2 and, after a final message, final_message_sentences 2; report.statements.without_fact stays 0. | [2] renderAnswer unit (lib/render.ts). Asserts refused verdicts, refused facts and an open item with no check are absent from the checked part, the answer says how many items were refused, and the summary's pyproject sentence is in the unchecked part. | [3] checkHandback + renderAnswer units on the recorded fixture. Asserts the sentence is not before the unchecked heading and is after it. | [4] StubHarness.collect(). Asserts the run result's `answer` equals the whole answer.md text (so it includes the unchecked section), and unchecked_text is copied from the extension.",
+      "contract_text": "given a hand-back whose summary or final message contains a sentence tied to no accepted item, the answer field omits it and the report counts it as uncovered",
+      "evidence_type": "automated",
+      "strength": "coverage",
+      "strength_basis": "PARTIAL: 4 tests (4 cases) passed at the named commit but assert only part of the obligation. Not asserted by any test: The shipped behaviour the tests assert is not omission: the sentence is kept in the answer under an unchecked label and counted in unchecked_text (summary_sentences / final_message_sentences). No test asserts that the answer field omits it, and none asserts it is counted as 'uncovered' \u2014 statements.without_fact is asserted to stay 0. No test checks the pyproject-style sentence through the `associate run --json` answer field specifically; the run-result test only asserts answer == answer.md. Other tests: .pi/extensions/associate/tests/finish-check.test.ts :: AC5: renderAnswer uses accepted facts and conclusions only; .pi/extensions/associate/tests/replays.test.ts :: replay 5: the cortex pyproject sentence in a finish summary sits only under the unchecked label (scope20-cortex-t1); tests/test_run_accuracy.py::test_the_stub_result_carries_the_accuracy_fields",
+      "outcome": "pass",
+      "run": {
+        "timestamp": "2026-11-18T07:27:55Z",
+        "commit": "3bb876dd05c73f0f868e37dec66a9111e9929737"
+      },
+      "origin": "llm",
+      "status": "approved",
+      "superseded": false,
+      "seq": 27
+    },
+    {
+      "id": "e23",
+      "obligation_ref": "o23",
+      "test_ref": ".pi/extensions/associate/tests/facts.test.ts :: t20 A2: 'Eidetic remember: Success' citing a recall entry is refused with a fix",
+      "behavior_text": "[1] checkHandback library unit (not through the finish tool) on the shared vector. Asserts the action fact citing an eidetic_recall entry is refused with reason action_wrong_tool and a fix naming eidetic_remember, while the action fact citing a real eidetic_remember call passes. | [2] checkHandback library unit. Two run_tests action facts with the same quote: asserts the one citing an entry with an `error` is refused action_failed and the one citing a clean entry passes. (The shared vector 'an action fact needs a successful call of that tool' additionally expects action_failed for an entry whose error is 'refused: the safety gate refused this call'.) | [3] checkHandback on a fixture rebuilt from a note. Asserts refused action_wrong_tool for the fact citing a recall entry and refused source_unknown for the one citing an id not in the walk. | [4] Python re-check on the same fixture; asserts the same refusals.",
+      "contract_text": "given a fact that an action happened which cites an entry of another tool or an entry that ended in an error or refusal, the fact is refused",
+      "evidence_type": "automated",
+      "strength": "execution",
+      "strength_basis": "4 tests (4 cases) assert the behaviour and passed at the named commit (pytest 1037 passed; extension suite 915 passed, 0 failed, 3 skipped). Not shown to fail when the behaviour is broken, so not sensitivity. Other tests: .pi/extensions/associate/tests/facts.test.ts :: an action fact citing a call that ended in an error or refusal is refused; .pi/extensions/associate/tests/replays.test.ts :: replay 6: 'Eidetic remember: Success' with no eidetic_remember call is refused (t20 run A2, rebuilt from the note); tests/test_accuracy_replays.py::test_replay_senses_remember_success_without_the_call",
+      "outcome": "pass",
+      "run": {
+        "timestamp": "2026-11-18T07:27:55Z",
+        "commit": "3bb876dd05c73f0f868e37dec66a9111e9929737"
+      },
+      "origin": "llm",
+      "status": "approved",
+      "superseded": false,
+      "seq": 28
+    },
+    {
+      "id": "e24",
+      "obligation_ref": "o24",
+      "test_ref": ".pi/extensions/associate/tests/matcher.test.ts :: vector: ${c.name}",
+      "behavior_text": "[1] Matcher unit (checkQuote); template title. The cases 'quote shorter than the minimum', 'length is measured after normalisation', 'quote exactly at the minimum passes', 'minimum comes from the argument', 'literal missing from its quote' and 'literal comparison is case sensitive' each deep-equal the expected verdict and reason (refused quote_short / literal_not_in_quote). | [2] checkHandback library unit. A 3-char quote: asserts the fact's reason is quote_short under the shipped accuracy.json and that it passes when min_quote_length is 3. | [3] checkHandback library unit; template title. The cases 'one refused fact leaves the others untouched' (f5) and 'a number or boolean fact value is a literal and must occur inside its quote' (f2, f4, f6) deep-equal results where those facts are refused literal_not_in_quote. | [4] Python matcher on the same vector cases; asserts the same refused verdicts.",
+      "contract_text": "given a quote shorter than the contract minimum, or a literal value that does not occur in its quote, the fact is refused",
+      "evidence_type": "automated",
+      "strength": "execution",
+      "strength_basis": "4 tests (59 cases) assert the behaviour and passed at the named commit (pytest 1037 passed; extension suite 915 passed, 0 failed, 3 skipped). Not shown to fail when the behaviour is broken, so not sensitivity. Other tests: .pi/extensions/associate/tests/facts.test.ts :: the minimum quote length comes from the contract; .pi/extensions/associate/tests/facts.test.ts :: handback vector: ${c.name}; tests/test_accuracy_matcher.py::test_vector",
+      "outcome": "pass",
+      "run": {
+        "timestamp": "2026-11-18T07:27:55Z",
+        "commit": "3bb876dd05c73f0f868e37dec66a9111e9929737"
+      },
+      "origin": "llm",
+      "status": "approved",
+      "superseded": false,
+      "seq": 29
+    },
+    {
+      "id": "e25",
+      "obligation_ref": "o25",
+      "test_ref": ".pi/extensions/associate/tests/finish-check.test.ts :: AC3: report mode accepts the failing hand-back and the report lists each refusal it would have made",
+      "behavior_text": "[1] Real seam (finish tool, mode from the shipped accuracy.json = report). Asserts head outcome accepted / mode report, later calls are blocked as handed back, report.json flags include quote_not_in_result and conclusion_without_fact, check.json has accepted false but outcome accepted and would_refuse exactly [f2:quote_not_in_result, v1:conclusion_without_fact], and the result text says 'would have been refused'. | [2] Real seam with a contract copy whose mode.worker is enforce and no env override. Asserts the same failing hand-back gets head outcome refused / mode enforce. | [3] Real seam. Asserts ASSOCIATE_CHECK_MODE=report over an enforce contract gives outcome accepted with mode_source 'env', and an unknown value prints one stderr line and leaves the contract's enforce in force. | [4] StubHarness.collect() (no model, no extension). Asserts report mode gives outcome ok / handback_outcome accepted / an answer and a non-empty would_refuse in check.json; its sibling test asserts enforce mode gives refused_after_rounds.",
+      "contract_text": "given report mode, a hand-back that would be refused is accepted and the report lists each refusal it would have made; given enforce mode, it is refused",
+      "evidence_type": "automated",
+      "strength": "execution",
+      "strength_basis": "4 tests (4 cases) assert the behaviour and passed at the named commit (pytest 1037 passed; extension suite 915 passed, 0 failed, 3 skipped). Not shown to fail when the behaviour is broken, so not sensitivity. Other tests: .pi/extensions/associate/tests/finish-check.test.ts :: AC3: the mode comes from accuracy.json for the active model; .pi/extensions/associate/tests/finish-check.test.ts :: AC3: ASSOCIATE_CHECK_MODE overrides the contract per run; another value is ignored with one stderr line; tests/test_run_accuracy.py::test_the_same_stub_handback_in_report_mode_is_accepted_with_would_refuse",
+      "outcome": "pass",
+      "run": {
+        "timestamp": "2026-11-18T07:27:55Z",
+        "commit": "3bb876dd05c73f0f868e37dec66a9111e9929737"
+      },
+      "origin": "llm",
+      "status": "approved",
+      "superseded": false,
+      "seq": 30
+    },
+    {
+      "id": "e26",
+      "obligation_ref": "o26",
+      "test_ref": ".pi/extensions/associate/tests/toolcall.test.ts :: t7 criterion 4: the same refusal repeated to the contract's refusal_cap ends the run with outcome 'refused'",
+      "behavior_text": "[1] Real seam (tool_call hook). Repeats a purpose-less read refusal_cap times: asserts no terminate before the cap, terminate true at the cap with a reason matching /refusal_cap/ and /'refused'/, and after agent_end and shutdown the walk's run record has outcome 'refused'. | [2] Real seam with a contract copy where refusal_cap is 2; asserts the first refusal does not terminate and the second does. | [3] Real seam with turn_start events. Asserts refusals within one turn count once, the refusal in the cap-th turn terminates with /refusal_cap/, and the walk outcome is 'refused'. | [4] Real seam (finish tool, enforce, contract copy with retry_rounds 5 and refusal_cap 2). Asserts the first refused finish does not terminate, the second has terminate true and its text matches /refusal_cap/. It does not assert the outcome name.",
+      "contract_text": "given the same refusal repeated up to the contract cap, the run ends with a named outcome",
+      "evidence_type": "automated",
+      "strength": "coverage",
+      "strength_basis": "PARTIAL: 4 tests (4 cases) passed at the named commit but assert only part of the obligation. Not asserted by any test: For the tool_call hook the named outcome ('refused' in the walk's run record) is asserted. For the finish tool, the test of the cap path asserts only that the run is terminated and the text mentions refusal_cap; the named outcome on that path (head outcome, check.json, walk run record) is asserted only for the retry_rounds path ('AC2: after the contract's last round\u2026'), not for a finish ended by refusal_cap. Other tests: .pi/extensions/associate/tests/toolcall.test.ts :: t7 criterion 4: the cap is the contract's value, not a literal; .pi/extensions/associate/tests/toolcall.test.ts :: fix-refusal-cap AC2: the same refusal in refusal_cap separate turns ends the run with outcome 'refused'; .pi/extensions/associate/tests/finish-check.test.ts :: AC2: repeated failed hand-backs are also capped by accuracy.json refusal_cap",
+      "outcome": "pass",
+      "run": {
+        "timestamp": "2026-11-18T07:27:55Z",
+        "commit": "3bb876dd05c73f0f868e37dec66a9111e9929737"
+      },
+      "origin": "llm",
+      "status": "approved",
+      "superseded": false,
+      "seq": 31
+    },
+    {
+      "id": "e27",
+      "obligation_ref": "o27",
+      "test_ref": ".pi/extensions/associate/tests/finish-check.test.ts :: AC4: a session started without associate run leaves facts.json, check.json and report.json",
+      "behavior_text": "[1] Real seam (the extension loaded directly, with no ASSOCIATE_INJECT_PROMPT, model or Python harness, then finish). Asserts facts.json, check.json, report.json and answer.md exist in the export; facts.json holds the payload after redaction; report.json has the schema's required keys, python_recheck_ran false and the fact counts; check.json lists the per-fact verdicts. | [2] checkHandback library unit. Asserts the report object (and a child's) has every required key and python_recheck_ran false.",
+      "contract_text": "given a session with no Python harness, the facts, check results and counts files exist and the report says the Python re-check did not run",
+      "evidence_type": "automated",
+      "strength": "execution",
+      "strength_basis": "2 tests (2 cases) assert the behaviour and passed at the named commit (pytest 1037 passed; extension suite 915 passed, 0 failed, 3 skipped). Not shown to fail when the behaviour is broken, so not sensitivity. Other tests: .pi/extensions/associate/tests/facts.test.ts :: the report validates against report.schema.json's required keys, per run",
+      "outcome": "pass",
+      "run": {
+        "timestamp": "2026-11-18T07:27:55Z",
+        "commit": "3bb876dd05c73f0f868e37dec66a9111e9929737"
+      },
+      "origin": "llm",
+      "status": "approved",
+      "superseded": false,
+      "seq": 32
+    },
+    {
+      "id": "e28",
+      "obligation_ref": "o28",
+      "test_ref": "tests/test_run_accuracy.py::test_a_refused_handback_exits_3_and_still_prints_the_result",
+      "behavior_text": "[1] Real seam (cli.main(['run', \u2026, '--json', '--check-mode', 'enforce'])) with a stub harness whose hand-back has an unsupported fact, not pi. Asserts EXIT_HANDBACK_REFUSED == 3, the return code is 3, stdout parses as the JSON result (outcome refused, handback_outcome refused_after_rounds, answer null), and stderr mentions 'refused' and check.json. | [2] Same seam without --json. Asserts return code 3 and that stdout contains 'handback_outcome=refused_after_rounds'. | [3] Same seam with a writing stub on a git repo. Asserts return code 3, the printed result has merge 'kept' and handback_outcome refused_after_rounds, and main is unchanged.",
+      "contract_text": "given a hand-back still failing after the last round, the process exits 3 and prints the result object on stdout",
+      "evidence_type": "automated",
+      "strength": "execution",
+      "strength_basis": "3 tests (3 cases) assert the behaviour and passed at the named commit (pytest 1037 passed; extension suite 915 passed, 0 failed, 3 skipped). Not shown to fail when the behaviour is broken, so not sensitivity. Other tests: tests/test_run_accuracy.py::test_a_refused_handback_in_text_mode_exits_3_and_prints_the_result; tests/test_run_accuracy.py::test_a_writing_run_with_a_refused_handback_is_kept_and_not_merged",
+      "outcome": "pass",
+      "run": {
+        "timestamp": "2026-11-18T07:27:55Z",
+        "commit": "3bb876dd05c73f0f868e37dec66a9111e9929737"
+      },
+      "origin": "llm",
+      "status": "approved",
+      "superseded": false,
+      "seq": 33
+    },
+    {
+      "id": "e29",
+      "obligation_ref": "o29",
+      "test_ref": "tests/test_accuracy_check.py::test_an_old_export_is_read_and_its_facts_are_not_applicable",
+      "behavior_text": "[1] Checker (`associate check`, --json and text) on an export with no format marker, no saved results and no facts.json. Asserts exit 0, empty stderr, applicable false, facts [], report null, a not_applicable_reason containing 'pre-change', the calls still listed, and 'not applicable' in the text output. | [2] walkstats.load_run_record on a new-format walk and on the same walk without the marker (old shape). Asserts both load and report tool_calls 2. Nothing about facts. | [3] --continue-from loader (lib/torch.ts loadPriorWalk / renderPriorContext). Asserts a 22-entry old-shape walk loads with 22 entries and renders with prior:w22 and its content. Nothing about facts. | [4] accuracy_result() (what `associate run` reports) on an export holding only a run line. Asserts handback_outcome 'none', python_recheck_ran false, a not_applicable_reason and report None.",
+      "contract_text": "given an export written before this change, each reads it without an error and reports its facts as not applicable",
+      "evidence_type": "automated",
+      "strength": "coverage",
+      "strength_basis": "PARTIAL: 4 tests (4 cases) passed at the named commit but assert only part of the obligation. Not asserted by any test: Only the checker is asserted to report an old export's facts as not applicable. walkstats and --continue-from are asserted to read an old-shape walk without error, but neither is asserted to report facts as not applicable: walkstats has no facts output at all (no such field in associate/bench/walkstats.py), and torch.ts renders prior entries with no facts statement. No test asserts what a `prior:wN` fact gets when the --continue-from export is an old one with no saved results. Other tests: tests/test_accuracy_check.py::test_walkstats_does_not_count_the_format_marker_as_a_call; .pi/extensions/associate/tests/torch.test.ts :: t13: an export written before this change (no format line, no saved_result) loads and renders; tests/test_run_accuracy.py::test_an_export_with_no_facts_is_not_applicable_not_an_error",
+      "outcome": "pass",
+      "run": {
+        "timestamp": "2026-11-18T07:27:55Z",
+        "commit": "3bb876dd05c73f0f868e37dec66a9111e9929737"
+      },
+      "origin": "llm",
+      "status": "approved",
+      "superseded": false,
+      "seq": 34
+    },
+    {
+      "id": "e30",
+      "obligation_ref": "o30",
+      "test_ref": ".pi/extensions/associate/tests/facts.test.ts :: a reference containing a path is refused before any saved result is looked up",
+      "behavior_text": "[1] checkHandback library unit with Proxy-watched result maps. Facts citing '../../etc/passwd' and 'prior/w1': asserts both are refused source_path and that no saved-result key was read for them. | [2] Real seam (the parser, lib/facts.ts parseSourceRef). Asserts w12 / run-3:w12 / a_b:w7 parse; five references with a slash or backslash return source_path; eight others outside the id pattern (w0, 'run:', 'x', 'w1.txt', '', 'W1', 12, null) return source_malformed. | [3] The check_quote tool. For an absolute path, a ../ path, 'results/w3.txt' and a file:// URL asserts ok false with code invalid_source even though the target file holds the quote, and that tools/check.ts contains no file-reading call. | [4] lib/results.ts unit. Asserts loadSavedResult throws /walk id/ for '../walk', 'w1/../../x', '/etc/passwd', 'w0', 'run-1:w1' and ''.",
+      "contract_text": "given a reference containing a path separator or anything outside the id pattern, it is refused before any file is opened",
+      "evidence_type": "automated",
+      "strength": "execution",
+      "strength_basis": "4 tests (4 cases) assert the behaviour and passed at the named commit (pytest 1037 passed; extension suite 915 passed, 0 failed, 3 skipped). Not shown to fail when the behaviour is broken, so not sensitivity. Other tests: .pi/extensions/associate/tests/facts.test.ts :: parseSourceRef reads an optional run label and a walk id; .pi/extensions/associate/tests/check.test.ts :: the tool never opens a path from its arguments: a path-shaped source reads nothing; .pi/extensions/associate/tests/walk.test.ts :: t6 c2: loadSavedResult refuses anything that is not a walk id, before opening a file",
+      "outcome": "pass",
+      "run": {
+        "timestamp": "2026-11-18T07:27:55Z",
+        "commit": "3bb876dd05c73f0f868e37dec66a9111e9929737"
+      },
+      "origin": "llm",
+      "status": "approved",
+      "superseded": false,
+      "seq": 35
+    },
+    {
+      "id": "e31",
+      "obligation_ref": "o17",
+      "test_ref": "docs/notes/accuracy-live-acceptance.md",
+      "behavior_text": "In 12 live runs (6 worker, 6 cortex, report mode) the counts in the run result, the extension's report.json and a hand count from facts.json and check.json were equal",
+      "contract_text": "given a finished run, the result carries the counts, and they equal what a recount from the saved files gives",
+      "evidence_type": "observation",
+      "strength": "execution",
+      "strength_basis": "Live observation, one run per task, recorded in the note; commit 0ccca36 is the pre-squash commit on the local history branch accuracy/issue-20, not on main. Reasoning off. On one task both models had read the answer key (issue #30); that does not affect whether counts agree.",
+      "outcome": "pass",
+      "run": {
+        "timestamp": "2026-11-17T23:00:00Z",
+        "commit": "0ccca36"
+      },
+      "origin": "llm",
+      "status": "approved",
+      "superseded": false,
+      "seq": 36
+    },
+    {
+      "id": "e32",
+      "obligation_ref": "o13",
+      "test_ref": "docs/notes/accuracy-live-acceptance.md",
+      "behavior_text": "One live enforce-mode worker run had finish refused twice, called tools again, and was accepted on its third finish; a second enforce run ended with no finish at all",
+      "contract_text": "given a refused hand-back, the session can call tools again and answer again, up to the round limit in the contract",
+      "evidence_type": "observation",
+      "strength": "execution",
+      "strength_basis": "Live observation of two runs, recorded in the note; one shows the retry path working, the other shows a run that never handed back. Not a rate.",
+      "outcome": "pass",
+      "run": {
+        "timestamp": "2026-11-17T23:00:00Z",
+        "commit": "0ccca36"
+      },
+      "origin": "llm",
+      "status": "approved",
+      "superseded": false,
+      "seq": 37
+    },
+    {
+      "id": "e33",
+      "obligation_ref": "o20",
+      "test_ref": "docs/notes/accuracy-live-acceptance.md",
+      "behavior_text": "One live continued cortex run cited an entry of the earlier run as prior:w24 and the checker resolved it to the prior run",
+      "contract_text": "given a reference to a prior-run or child-run entry, it resolves to that run and can never resolve to an entry of the current run",
+      "evidence_type": "observation",
+      "strength": "execution",
+      "strength_basis": "Live observation of one continued run, recorded in the note. Child-run references were not observed live.",
+      "outcome": "pass",
+      "run": {
+        "timestamp": "2026-11-17T23:00:00Z",
+        "commit": "0ccca36"
+      },
+      "origin": "llm",
+      "status": "approved",
+      "superseded": false,
+      "seq": 38
+    }
+  ],
+  "deltas": [
+    {
+      "id": "b1",
+      "kind": "amended",
+      "behavior_text": "A summary or final-message sentence tied to no accepted item is not omitted from the answer: it is left out of the checked part of answer.md, kept under an unchecked heading, and counted in unchecked_text (statements.without_fact does not count it)",
+      "caused_by": [
+        "c47"
+      ],
+      "evidence_refs": [
+        "e22"
+      ],
+      "origin": "llm",
+      "status": "approved",
+      "superseded": false
+    },
+    {
+      "id": "b2",
+      "kind": "added",
+      "behavior_text": "A call pi rejects before the tool_call hook (invalid arguments or an unknown tool) is recorded as a walk entry from tool_execution_end, with pi's error as the reason",
+      "caused_by": [
+        "d1"
+      ],
+      "evidence_refs": [],
+      "origin": "llm",
+      "status": "approved",
+      "superseded": false
+    },
+    {
+      "id": "b3",
+      "kind": "amended",
+      "behavior_text": "run_tests, spawn_subagent, delegate_run and delegate_status refuse an unknown argument instead of recording it as dropped",
+      "caused_by": [
+        "d3"
+      ],
+      "evidence_refs": [
+        "e3"
+      ],
+      "origin": "llm",
+      "status": "approved",
+      "superseded": false
+    },
+    {
+      "id": "b4",
+      "kind": "amended",
+      "behavior_text": "grep, find and ls scan past the 200-result cap to report a true total, and save the full list in the session scratch directory",
+      "caused_by": [
+        "d4"
+      ],
+      "evidence_refs": [],
+      "origin": "llm",
+      "status": "approved",
+      "superseded": false
+    }
+  ],
   "supersessions": []
 }
