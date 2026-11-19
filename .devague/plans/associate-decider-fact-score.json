@@ -3,9 +3,9 @@
   "title": "associate decider fact score",
   "frame_slug": "associate-decider-fact-score",
   "schema_version": 5,
-  "status": "drafting",
+  "status": "exported",
   "created": "2026-11-19T04:36:30Z",
-  "updated": "2026-11-19T04:37:46Z",
+  "updated": "2026-11-19T04:44:26Z",
   "targets": [
     {
       "id": "c1",
@@ -356,7 +356,7 @@
       "id": "t1",
       "summary": "Contract settings for the support score",
       "origin": "llm",
-      "status": "proposed",
+      "status": "confirmed",
       "acceptance_criteria": [
         "accuracy.json holds the question wording, the cut-off, the per-fact timeout, the cap on scored facts, the total scoring time and a per-model on/off switch, each declared in accuracy.schema.json and read through lib/contract.ts and the Python contract validator",
         "report.schema.json declares the new count of scored facts under its own name",
@@ -376,7 +376,7 @@
       "id": "t2",
       "summary": "The support-score client",
       "origin": "llm",
-      "status": "proposed",
+      "status": "confirmed",
       "acceptance_criteria": [
         "a new module asks the decider one yes/no question for one value and quote and returns a score or a not-scored result with a reason; it never calls createGate().evaluate, writes no gate line and has no Super tier or read-only fallback",
         "a missing key, a timeout, a non-2xx answer and a malformed answer each return not scored, never a pass",
@@ -404,7 +404,7 @@
       "id": "t3",
       "summary": "Score at finish, stored beside the quote check",
       "origin": "llm",
-      "status": "proposed",
+      "status": "confirmed",
       "acceptance_criteria": [
         "after checkHandback, finish scores each fact that passed the quote check and writes the score or a not-scored mark per fact in check.json in a field of its own, and a count in report.json",
         "accepted, the refusal list and the passed, refused and unchecked counts are byte-identical to the same hand-back with the score switched off",
@@ -434,7 +434,7 @@
       "id": "t4",
       "summary": "check_quote returns the support score",
       "origin": "llm",
-      "status": "proposed",
+      "status": "confirmed",
       "acceptance_criteria": [
         "check_quote returns the same verdict and nearest text as before for the same inputs, plus one added key holding the score or a not-scored reason",
         "the added key is present only when a value is given and the model's switch is on; with the decider unreachable it reports not scored",
@@ -453,7 +453,7 @@
       "id": "t5",
       "summary": "The rendered answer shows both signals",
       "origin": "llm",
-      "status": "proposed",
+      "status": "confirmed",
       "acceptance_criteria": [
         "answer.md shows, for a scored fact, the quote-found marker and the support marker with its score as separate text, and not scored with its reason otherwise",
         "the text never contains the word accuracy and reads without knowledge of the decider",
@@ -474,7 +474,7 @@
       "id": "t6",
       "summary": "Python side copies the score from the export",
       "origin": "llm",
-      "status": "proposed",
+      "status": "confirmed",
       "acceptance_criteria": [
         "associate run --json and associate check show each fact's score copied from the export's check.json with a label naming the extension as its source",
         "the Python side makes no network call for it, shown by a test",
@@ -493,7 +493,7 @@
       "id": "t7",
       "summary": "A per-run switch for the score, usable as a measurement arm",
       "origin": "llm",
-      "status": "proposed",
+      "status": "confirmed",
       "acceptance_criteria": [
         "associate run --support-score on|off overrides the model's contract switch for one run through one environment variable set by the launcher and never inherited; any other value is refused",
         "an arm in a measure arms file can set it, and the stored record of each run names the setting used",
@@ -511,7 +511,7 @@
       "id": "t8",
       "summary": "Prompts name check_quote as the way to learn the score",
       "origin": "llm",
-      "status": "proposed",
+      "status": "confirmed",
       "acceptance_criteria": [
         "each model prompt that offers check_quote says it returns whether the quote supports the value, and that the model should use it before handing back",
         "no prompt text promises the model a second chance after finish in report mode; a test reads the prompt files for both"
@@ -529,7 +529,7 @@
       "id": "t9",
       "summary": "Labelled set, cut-off and calibration note",
       "origin": "llm",
-      "status": "proposed",
+      "status": "confirmed",
       "acceptance_criteria": [
         "at least 300 real value-and-quote pairs from stored exports are committed with two independent labels each; who the raters were is stated",
         "the set includes a separately reported group of quotes carrying text addressed to the scorer, and planted wrong values are reported apart from real ones",
@@ -557,7 +557,7 @@
       "id": "t10",
       "summary": "Six broad tasks with twice-checked fact checklists",
       "origin": "llm",
-      "status": "proposed",
+      "status": "confirmed",
       "acceptance_criteria": [
         "one broad explanation task per repository for culture, culture-rules, colleague, associate, coherence-cli and workledger-cli, each pinned to a commit and stored in a committed file",
         "each repository has a checklist of at least 8 facts a good explanation should state, each with the file and line that shows it, and each checked independently by a second checker who did not see the first one's answer",
@@ -574,7 +574,7 @@
       "id": "t11",
       "summary": "Grading tools for the broad tasks",
       "origin": "llm",
-      "status": "proposed",
+      "status": "confirmed",
       "acceptance_criteria": [
         "associate measure accepts a broad task and stores each run's answer; a report lists, per run, how many checklist facts the answer states correctly, never pooled into one percentage",
         "a grading sheet command writes the runs' statements in shuffled order under ids that hide the arm; the key that maps ids to arms is written to a separate file",
@@ -595,7 +595,7 @@
       "id": "t12",
       "summary": "Live runs and the measurement",
       "origin": "llm",
-      "status": "proposed",
+      "status": "confirmed",
       "acceptance_criteria": [
         "one live run in report mode on worker and one on cortex with the score on each leave a check.json in which every quote-found fact is scored or marked not scored",
         "one trial run per repository fixes the time limit before the difference rule is committed",
@@ -620,7 +620,7 @@
       "id": "t13",
       "summary": "Docs, wording check, lobes-cli issues and release",
       "origin": "llm",
-      "status": "proposed",
+      "status": "confirmed",
       "acceptance_criteria": [
         "a test fails if a user-facing string or document added by this work calls the score or its count accuracy",
         "no commit touches lobes-cli; each need found (calibration for this use, several states per request, priority between callers, naming the served model) is an issue on that repository",
@@ -652,8 +652,8 @@
       "text": "the two raters of the labelled set are model subagents unless the operator labels; the note must say so",
       "kind": "unknown_nonblocking",
       "task_id": "t9",
-      "resolved": false,
-      "resolution": ""
+      "resolved": true,
+      "resolution": "operator, 2026-11-19: two model subagents label independently; the note says so"
     },
     {
       "id": "r3",
