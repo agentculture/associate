@@ -11,6 +11,7 @@ import json
 import os
 import re
 import subprocess
+import time
 from pathlib import Path
 
 import pytest
@@ -137,9 +138,28 @@ def test_rules_are_dropped_and_a_closed_heading_loses_its_marks():
 
 def test_splitting_is_deterministic_and_an_empty_answer_has_no_statement():
     text = answer_for("x", 1)
-    assert sheet_mod.split_statements(text) == sheet_mod.split_statements(text)
+    first = sheet_mod.split_statements(text)
+    again = sheet_mod.split_statements(text)
+    assert first == again
     assert sheet_mod.split_statements("") == []
     assert sheet_mod.split_statements(" \n\n ") == []
+
+
+@pytest.mark.parametrize(
+    "line, expected",
+    [
+        ("-" + " " * 50_000 + "x", ["x"]),
+        ("-" + " " * 50_000, []),
+        ("-" + "\t " * 25_000 + "One. Two.", ["One.", "Two."]),
+        (" " * 50_000 + "1." + " " * 50_000 + "x", ["x"]),
+        (" " * 50_000 + "-", ["-"]),
+        ("-" * 50_000 + " x", ["-" * 50_000 + " x"]),
+    ],
+)
+def test_a_very_long_list_line_is_split_quickly(line, expected):
+    started = time.perf_counter()
+    assert sheet_mod.split_statements(line) == expected
+    assert time.perf_counter() - started < 2.0
 
 
 # --- the sheet hides the arm; the key is separate ------------------------------------------
@@ -159,7 +179,8 @@ def test_the_sheet_has_every_run_under_an_opaque_id_and_no_arm():
         assert set(run) == {"id", "task", "repository", "commit", "statements"}
         for statement in run["statements"]:
             assert set(statement) == {"n", "text", "verdict", "file", "line", "note"}
-            assert statement["verdict"] is None and statement["file"] is None
+            assert statement["verdict"] is None
+            assert statement["file"] is None
 
 
 def test_the_statements_of_a_run_keep_their_order():
@@ -196,7 +217,8 @@ def test_the_order_is_shuffled_and_reproducible_from_the_seed():
     records = some_records(tasks=("broad-one", "broad-two", "broad-three"))
     first, first_key = sheet_mod.build(records, seed=7)
     again, again_key = sheet_mod.build(list(reversed(records)), seed=7)
-    assert first == again and first_key == again_key
+    assert first == again
+    assert first_key == again_key
     other, _ = sheet_mod.build(records, seed=8)
     order = [(first_key["runs"][run["id"]]["arm"], run["task"]) for run in first["runs"]]
     assert order != sorted(order), "the runs came out grouped by arm and task"
@@ -257,8 +279,10 @@ def test_a_false_statement_needs_a_file_and_a_positive_line(extra):
     target.update({"verdict": "false", **extra})
     problems = sheet_mod.check_sheet(filled)
     assert len(problems) == 1
-    assert filled["runs"][0]["id"] in problems[0] and "statement 2" in problems[0]
-    assert "file" in problems[0] and "line" in problems[0]
+    assert filled["runs"][0]["id"] in problems[0]
+    assert "statement 2" in problems[0]
+    assert "file" in problems[0]
+    assert "line" in problems[0]
 
 
 def test_a_false_statement_with_a_file_and_a_line_is_acceptable():
@@ -274,7 +298,8 @@ def test_a_verdict_must_be_one_of_the_three_words(verdict):
     filled = fill(sheet)
     filled["runs"][0]["statements"][0]["verdict"] = verdict
     problems = sheet_mod.check_sheet(filled)
-    assert len(problems) == 1 and "true, false or not_checkable" in problems[0]
+    assert len(problems) == 1
+    assert "true, false or not_checkable" in problems[0]
 
 
 def test_a_sheet_that_is_not_a_sheet_is_a_problem_not_a_crash():
@@ -331,13 +356,15 @@ def test_with_a_clone_root_a_missing_file_or_line_is_a_problem(clone_root, file,
     filled, root = one_false(clone_root, file, line)
     problems = sheet_mod.check_sheet(filled, clone_root=root)
     assert len(problems) == 1
-    assert word in problems[0] and "statement 1" in problems[0]
+    assert word in problems[0]
+    assert "statement 1" in problems[0]
 
 
 def test_with_a_clone_root_a_repository_without_a_checkout_is_a_problem(clone_root):
     filled, root = one_false(clone_root, "README.md", 1, name="elsewhere")
     problems = sheet_mod.check_sheet(filled, clone_root=root)
-    assert len(problems) == 1 and "elsewhere" in problems[0]
+    assert len(problems) == 1
+    assert "elsewhere" in problems[0]
 
 
 def test_without_a_clone_root_the_file_is_not_looked_up(clone_root):
@@ -453,10 +480,13 @@ def test_rows_list_every_run_grouped_by_repository_and_arm_with_both_counts():
         (r["task"]["id"], r["arm"]["name"], r["repeat"]) for r in records
     )
     first = rows[0]
-    assert first["facts_stated"] == 2 and first["facts_total"] == 3
-    assert first["statements_false"] == 1 and first["statements_not_checkable"] == 1
+    assert first["facts_stated"] == 2
+    assert first["facts_total"] == 3
+    assert first["statements_false"] == 1
+    assert first["statements_not_checkable"] == 1
     assert first["statements"] == 4
-    assert first["answer_source"] == "final_reply" and first["at_cap"] is True
+    assert first["answer_source"] == "final_reply"
+    assert first["at_cap"] is True
     assert first["repository"] == "example/one"
     assert first["support_score"] == "off"
 
@@ -473,8 +503,11 @@ def test_the_text_prints_both_counts_per_run_and_no_pooled_number():
     text = sheet_mod.render_rows(sheet_mod.run_rows(records, sheet_mod.join(filled, key, records)))
     assert "first marking" in text
     assert text.count("1 of 3") == len(records)
-    assert "broad-one" in text and "example/one" in text and "score-off" in text
-    assert "statements counted false 1" in text and "not checkable 1" in text
+    assert "broad-one" in text
+    assert "example/one" in text
+    assert "score-off" in text
+    assert "statements counted false 1" in text
+    assert "not checkable 1" in text
     assert "answer from answer.md" in text
     lowered = text.lower()
     for word in ("%", "percent", "accuracy", "score ", "total", "average", "mean"):

@@ -38,10 +38,14 @@ def _schema_errors(doc):
 
 def test_the_shipped_file_holds_every_support_score_setting():
     section = contract.load_accuracy()[SECTION]
-    assert isinstance(section["question"], str) and section["question"].strip()
-    assert isinstance(section["cutoff"], (int, float)) and 0 <= section["cutoff"] <= 1
+    assert isinstance(section["question"], str)
+    assert section["question"].strip()
+    assert isinstance(section["cutoff"], (int, float))
+    assert section["cutoff"] >= 0
+    assert section["cutoff"] <= 1
     for key in ("timeout_ms", "max_facts", "total_timeout_ms"):
-        assert isinstance(section[key], int) and section[key] > 0, key
+        assert isinstance(section[key], int), key
+        assert section[key] > 0, key
     assert section["total_timeout_ms"] >= section["timeout_ms"]
     assert isinstance(section["enabled"], dict)
     assert "tentative" in section["$comment"].lower()

@@ -136,7 +136,9 @@ def test_a_stub_broad_run_stores_the_answer_and_the_first_marking(
     capsys.readouterr()
     assert main(["measure", "report", str(tmp_path / "results")]) == 0
     text = capsys.readouterr().out
-    assert "first marking" in text and "of 2" in text and "Plumbing only" in text
+    assert "first marking" in text
+    assert "of 2" in text
+    assert "Plumbing only" in text
 
 
 def test_the_default_broad_task_file_is_the_committed_one(
@@ -173,7 +175,9 @@ def test_a_bad_broad_file_is_a_user_error(tmp_path, demo, current_harness, capsy
     args = run_args(tmp_path, demo, current_harness)
     write(tmp_path, "broad.json", json.dumps({"version": 1, "tasks": []}))
     rc, err = error_of(capsys, args)
-    assert rc == 1 and "broad" in err and "hint:" in err
+    assert rc == 1
+    assert "broad" in err
+    assert "hint:" in err
 
 
 # --- acceptance 5: no real run while the rule file is missing, modified or a draft ----------
@@ -194,7 +198,9 @@ def test_a_real_broad_run_is_refused_without_the_rule_file(
 ):
     missing = note_repo(tmp_path, CONFIRMED).with_name("no-such-note.md")
     rc, err = error_of(capsys, pi_args(tmp_path, demo, current_harness, missing))
-    assert rc == 1 and "no-such-note.md" in err and "hint:" in err
+    assert rc == 1
+    assert "no-such-note.md" in err
+    assert "hint:" in err
     assert fake.calls == []
 
 
@@ -204,7 +210,8 @@ def test_a_real_broad_run_is_refused_when_the_rule_file_is_modified(
     note = note_repo(tmp_path, CONFIRMED)
     note.write_text(CONFIRMED.replace('"repositories_required": 5', '"repositories_required": 1'))
     rc, err = error_of(capsys, pi_args(tmp_path, demo, current_harness, note))
-    assert rc == 1 and "committed" in err
+    assert rc == 1
+    assert "committed" in err
     assert fake.calls == []
 
 
@@ -222,7 +229,8 @@ def test_a_real_broad_run_is_refused_while_the_rule_file_is_a_draft(
     note = note_repo(tmp_path, text)
     rc, err = error_of(capsys, pi_args(tmp_path, demo, current_harness, note))
     assert rc == 1
-    assert "broad-difference-threshold.md" in err and "hint:" in err
+    assert "broad-difference-threshold.md" in err
+    assert "hint:" in err
     assert fake.calls == []
 
 
@@ -230,7 +238,8 @@ def test_the_committed_rule_file_refuses_a_real_broad_run_today(
     tmp_path, demo, current_harness, fake, capsys  # noqa: F811
 ):
     rc, err = error_of(capsys, pi_args(tmp_path, demo, current_harness, None))
-    assert rc == 1 and "broad-difference-threshold.md" in err
+    assert rc == 1
+    assert "broad-difference-threshold.md" in err
     assert fake.calls == []
 
 
@@ -313,24 +322,30 @@ def test_sheet_writes_a_sheet_without_arms_and_a_separate_key(results, capsys):
     assert sheet_path == results / measure_broad.DEFAULT_SHEET
     assert key_path == results / measure_broad.DEFAULT_KEY
     assert sheet_path != key_path
-    assert payload["runs"] == 36 and payload["statements"] == 36 * 4
+    assert payload["runs"] == 36
+    assert payload["statements"] == 36 * 4
     sheet, key = read(sheet_path), read(key_path)
-    assert key["seed"] == 11 and "seed" not in sheet and "seed" not in payload
+    assert key["seed"] == 11
+    assert "seed" not in sheet
+    assert "seed" not in payload
     assert len(sheet["runs"]) == 36
     shown = json.dumps(sheet) + json.dumps(payload)
     for run in sheet["runs"]:
         entry = key["runs"][run["id"]]
         shown = shown.replace(f"Marker {entry['arm']} {entry['repeat']}.", "")
-    assert OFF not in shown and ON not in shown
+    assert OFF not in shown
+    assert ON not in shown
 
 
 def test_sheet_text_names_both_files_and_tells_the_grader_to_leave_the_key(results, capsys):
     capsys.readouterr()
     assert main(["measure", "sheet", str(results)]) == 0
     out = capsys.readouterr().out
-    assert measure_broad.DEFAULT_SHEET in out and measure_broad.DEFAULT_KEY in out
+    assert measure_broad.DEFAULT_SHEET in out
+    assert measure_broad.DEFAULT_KEY in out
     assert "must not open" in out
-    assert OFF not in out and ON not in out
+    assert OFF not in out
+    assert ON not in out
     assert isinstance(read(results / measure_broad.DEFAULT_KEY)["seed"], int)
 
 
@@ -349,7 +364,9 @@ def test_sheet_refuses_to_replace_a_sheet_or_a_key(results, capsys):
     assert main(["measure", "sheet", str(results)]) == 0
     before = (results / measure_broad.DEFAULT_SHEET).read_text()
     rc, err = error_of(capsys, ["measure", "sheet", str(results)])
-    assert rc == 1 and "already exists" in err and "--overwrite" in err
+    assert rc == 1
+    assert "already exists" in err
+    assert "--overwrite" in err
     assert (results / measure_broad.DEFAULT_SHEET).read_text() == before
     assert main(["measure", "sheet", str(results), "--overwrite"]) == 0
 
@@ -357,7 +374,8 @@ def test_sheet_refuses_to_replace_a_sheet_or_a_key(results, capsys):
 def test_sheet_refuses_the_same_file_for_sheet_and_key(results, tmp_path, capsys):
     same = str(tmp_path / "one.json")
     rc, err = error_of(capsys, ["measure", "sheet", str(results), "--sheet", same, "--key", same])
-    assert rc == 1 and "separate" in err
+    assert rc == 1
+    assert "separate" in err
 
 
 def test_sheet_refuses_results_that_are_not_broad_runs(tmp_path, capsys):
@@ -365,7 +383,9 @@ def test_sheet_refuses_results_that_are_not_broad_runs(tmp_path, capsys):
     del short["broad"]
     out = store(tmp_path / "short", [short], broad=False)
     rc, err = error_of(capsys, ["measure", "sheet", str(out)])
-    assert rc == 1 and "broad" in err and "hint:" in err
+    assert rc == 1
+    assert "broad" in err
+    assert "hint:" in err
 
 
 # --- acceptance 3: the check ---------------------------------------------------------------
@@ -379,14 +399,16 @@ def test_sheet_check_fails_on_a_blank_sheet_and_lists_what_is_missing(results, c
     assert rc == 1
     assert payload["acceptable"] is False
     assert len(payload["problems"]) == 36 * 4
-    assert payload["statements"] == 36 * 4 and payload["with_verdict"] == 0
+    assert payload["statements"] == 36 * 4
+    assert payload["with_verdict"] == 0
 
 
 def test_sheet_check_passes_a_filled_sheet(results, capsys):
     assert main(["measure", "sheet", str(results)]) == 0
     fill_sheet(results)
     payload = run_json(capsys, ["measure", "sheet-check", str(results), "--json"])
-    assert payload["acceptable"] is True and payload["problems"] == []
+    assert payload["acceptable"] is True
+    assert payload["problems"] == []
     assert payload["with_verdict"] == 36 * 4
 
 
@@ -403,7 +425,8 @@ def test_sheet_check_fails_a_false_without_file_and_line(results, capsys):
     assert rc == 1
     assert f"{sheet['runs'][4]['id']} statement 2" in out
     assert "not acceptable" in out
-    assert OFF not in out and ON not in out
+    assert OFF not in out
+    assert ON not in out
 
 
 def test_sheet_check_with_a_clone_root_looks_the_file_up(tmp_path, capsys):
@@ -432,7 +455,8 @@ def test_sheet_check_with_a_clone_root_looks_the_file_up(tmp_path, capsys):
 
 def test_sheet_check_without_a_sheet_is_a_user_error(results, capsys):
     rc, err = error_of(capsys, ["measure", "sheet-check", str(results)])
-    assert rc == 1 and "measure sheet" in err
+    assert rc == 1
+    assert "measure sheet" in err
 
 
 # --- acceptance 1 and 4: the report --------------------------------------------------------
@@ -453,7 +477,8 @@ def test_report_json_lists_every_run_and_no_pooled_number(results, capsys):
     assert payload["joined"] is False
     assert len(payload["runs"]) == 36
     first = payload["runs"][0]
-    assert first["facts_stated"] == 1 and first["facts_total"] == 3
+    assert first["facts_stated"] == 1
+    assert first["facts_total"] == 3
     assert first["statements_false"] is None
     assert first["marking"] == "first marking"
     assert set(payload) == {
@@ -470,8 +495,11 @@ def test_report_json_lists_every_run_and_no_pooled_number(results, capsys):
 def test_report_refuses_to_join_while_a_run_is_not_fully_graded(results, capsys):
     assert main(["measure", "sheet", str(results)]) == 0
     rc, err = error_of(capsys, ["measure", "report", str(results)])
-    assert rc == 1 and "not fully graded" in err and "sheet-check" in err
-    assert OFF not in err and ON not in err
+    assert rc == 1
+    assert "not fully graded" in err
+    assert "sheet-check" in err
+    assert OFF not in err
+    assert ON not in err
     fill_sheet(results)
     path = results / measure_broad.DEFAULT_SHEET
     sheet = read(path)
@@ -492,7 +520,9 @@ def test_report_refuses_a_false_without_file_and_line(results, capsys):
     sheet["runs"][0]["statements"][1].update(verdict="false", file="", line=None)
     path.write_text(json.dumps(sheet))
     rc, err = error_of(capsys, ["measure", "report", str(results)])
-    assert rc == 1 and "file" in err and "line" in err
+    assert rc == 1
+    assert "file" in err
+    assert "line" in err
 
 
 def test_report_refuses_a_sheet_without_its_key(results, capsys):
@@ -500,7 +530,8 @@ def test_report_refuses_a_sheet_without_its_key(results, capsys):
     fill_sheet(results)
     (results / measure_broad.DEFAULT_KEY).unlink()
     rc, err = error_of(capsys, ["measure", "report", str(results)])
-    assert rc == 1 and "key" in err
+    assert rc == 1
+    assert "key" in err
 
 
 def test_report_prints_both_counts_per_run_once_every_run_is_graded(results, capsys):
@@ -518,8 +549,10 @@ def test_report_prints_both_counts_per_run_once_every_run_is_graded(results, cap
     payload = run_json(capsys, ["measure", "report", str(results), "--json"])
     assert payload["joined"] is True
     row = next(r for r in payload["runs"] if r["arm"] == OFF)
-    assert row["statements_false"] == 1 and row["statements_not_checkable"] == 1
-    assert row["statements"] == 4 and row["answer_source"] == "answer.md"
+    assert row["statements_false"] == 1
+    assert row["statements_not_checkable"] == 1
+    assert row["statements"] == 4
+    assert row["answer_source"] == "answer.md"
     assert row["at_cap"] is False
 
 
@@ -616,4 +649,5 @@ def test_run_help_names_the_broad_switch_and_its_rule_file(capsys):
     with pytest.raises(SystemExit):
         main(["measure", "run", "--help"])
     out = "".join(capsys.readouterr().out.split())
-    assert "--broad" in out and "broad-difference-threshold.md" in out
+    assert "--broad" in out
+    assert "broad-difference-threshold.md" in out
