@@ -279,7 +279,8 @@ run live):
   and `measure report` for blind hand grading
   (`associate/cli/_commands/measure_broad.py`, `associate/measure/broad.py`).
   Built and tested on fixtures and the stub harness only; a real broad run is
-  refused while `docs/accuracy/broad-difference-threshold.md` is a draft.
+  refused while `docs/accuracy/broad-difference-threshold.md` is a draft,
+  missing or modified (the operator confirmed it on 2026-11-19).
 
 ### Measured vs. not measured
 
@@ -333,8 +334,8 @@ is one run.
   live contact was one probe of four pairs with the earlier yes/no question,
   no associate run has asked the five-option choice question, and `finish`,
   `check_quote` and the per-run switch are tested against a fake decider only;
-- the broad tasks: no real broad run has been made (one is refused while the
-  rule file is a draft); the sheet verbs are tested on fixtures and the stub
+- the broad tasks: six trial runs per round were made by hand, no measured
+  comparison has been stored; the sheet verbs are tested on fixtures and the stub
   harness only;
 - the finish reminder in any run of associate: it is tested against a fake pi
   only, and whether a reminded model then calls `finish` has not been seen.

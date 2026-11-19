@@ -268,10 +268,10 @@ The rule in words.
 """
 
 
-def test_the_committed_rule_file_exists_and_is_still_a_draft():
+def test_the_committed_rule_file_exists_and_is_confirmed():
     text = broad.BROAD_NOTE.read_text(encoding="utf-8")
     assert broad.BROAD_NOTE.as_posix().endswith("docs/accuracy/broad-difference-threshold.md")
-    assert broad.draft_problem(text) is not None
+    assert broad.draft_problem(text) is None
     rule = broad.read_rule(text)
     assert (rule.repositories, rule.repositories_required, rule.runs_per_arm) == (6, 5, 3)
     assert "at least 5 of 6 repositories" in text

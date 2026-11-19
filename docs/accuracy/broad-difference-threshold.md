@@ -1,18 +1,16 @@
 # The difference that will be called a change, broad tasks
 
-**DRAFT. Not confirmed by the operator.** `associate measure run --broad`
-refuses a real run while this file is a draft. To confirm it: replace the
-wording below as needed, set `status` to `confirmed` in the parameters, remove
-every occurrence of the word DRAFT from this file, and commit it. Changing
-this file after the first stored run of a comparison makes that comparison's
-reading invalid.
+Confirmed by the operator on 2026-11-19, before the first measured run.
+`associate measure run --broad` refuses a real run unless this file is
+committed, unmodified and confirmed. Changing this file after the first stored
+run of a comparison makes that comparison's reading invalid.
 
 ## Parameters
 
 The report reads these four values and nothing else from this file.
 
 ```json
-{"status": "draft", "repositories": 6, "repositories_required": 5, "runs_per_arm": 3}
+{"status": "confirmed", "repositories": 6, "repositories_required": 5, "runs_per_arm": 3}
 ```
 
 ## What is counted
@@ -27,7 +25,7 @@ The report reads these four values and nothing else from this file.
 - Counts are never added up over runs or repositories and never turned into a
   percentage.
 
-## The rule (DRAFT wording)
+## The rule
 
 - Per repository, the two arms' three runs are compared on each count.
 - **A change:** in at least 5 of 6 repositories, every run of one arm is at
@@ -37,6 +35,18 @@ The report reads these four values and nothing else from this file.
   as "no difference".
 - More checklist facts marked as stated is better. Fewer statements counted
   false is better. The rule is applied to each count separately.
+- Beside the verdict the report prints, per repository and count, the middle
+  value of each arm's runs. No verdict is drawn from the middle values; they
+  are there so that a shift too small for the rule can still be seen.
+
+## Why the rule is this strict
+
+Two rounds of trial runs with the support check off (2026-11-19, one run per
+repository per round) differed by at most one checklist fact per repository.
+With that much movement between runs of the same setup, an arm has to be ahead
+by about two facts in a repository for all of its runs to be at least as good
+as all of the other arm's. The operator chose this so that "a change" is hard
+to reach by chance.
 
 ## When the rule is not applied
 

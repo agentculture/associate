@@ -340,6 +340,7 @@ def _report_text(payload: dict[str, Any]) -> str:
         )
         parts.append(f"Stored runs that did not finish and have no answer: {shown}")
     parts.append("\n".join(_rule_lines(payload["rule"])))
+    parts.append(_sheet().render_middles(payload[_K_RUNS]))
     if payload[_K_PLUMBING]:
         parts.append(base.PLUMBING_LINE)
     return "\n\n".join(parts)
@@ -376,6 +377,9 @@ def cmd_report(
         _K_PLUMBING: bool((manifest or {}).get(_K_PLUMBING)),
         _K_RUNS: rows,
         "without_finish": sheet.finish_counts(rows),
+        "middle_values": {
+            count: sheet.middle_values(rows, count) for count, _label in sheet.MIDDLE_COUNTS
+        },
         "rule": _rule(note, rows, joined is not None),
         _K_NOT_FINISHED: [list(key) for key in not_finished],
     }

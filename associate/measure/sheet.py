@@ -64,6 +64,7 @@ import hashlib
 import json
 import random
 import re
+import statistics
 import subprocess
 from pathlib import Path
 from typing import Any, Mapping, Sequence
@@ -695,6 +696,37 @@ def rule_counts(rows: Sequence[Mapping[str, Any]], count: str) -> dict[str, dict
         if row[count] is not None and left_out(row, count) is None:
             counts.setdefault(row["task"], {}).setdefault(row["arm"], []).append(row[count])
     return counts
+
+
+MIDDLE_COUNTS = (
+    (_K_FACTS_STATED, "facts marked as stated"),
+    (_K_FALSE, "statements counted false"),
+)
+
+
+def middle_values(rows: Sequence[Mapping[str, Any]], count: str) -> dict[str, dict[str, float]]:
+    """Task, then arm, then the middle value of *count* over the runs the rule counts.
+
+    The middle of an even number of runs is the mean of the two in the middle.
+    It is printed beside the rule and carries no verdict.
+    """
+    return {
+        task: {arm: statistics.median(values) for arm, values in sorted(by_arm.items())}
+        for task, by_arm in sorted(rule_counts(rows, count).items())
+    }
+
+
+def render_middles(rows: Sequence[Mapping[str, Any]]) -> str:
+    """The middle values as text: one line per repository and count."""
+    lines = [
+        "Middle value of each arm's runs, per repository (for reading beside the rule; "
+        "no verdict is drawn from it):"
+    ]
+    for count, label in MIDDLE_COUNTS:
+        for task, by_arm in middle_values(rows, count).items():
+            shown = ", ".join(f"{arm} {value:g}" for arm, value in by_arm.items())
+            lines.append(f"  {task}: {label}: {shown}")
+    return "\n".join(lines)
 
 
 def _run_line(row: Mapping[str, Any]) -> str:

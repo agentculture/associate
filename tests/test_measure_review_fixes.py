@@ -184,3 +184,34 @@ def test_the_cap_the_note_and_the_commit_pattern_are_each_defined_once():
 
 def test_a_record_helper_run_is_a_finished_broad_run():
     assert sheet_mod.broad_runs([record("broad-one", "score-off", 1, "It builds.")])
+
+
+# --- the middle value of each arm's runs, printed beside the rule without a verdict ----------
+
+
+def stated(records, values):
+    for found, value in zip(records, values):
+        found["broad"]["facts_stated"] = value
+    return records
+
+
+def test_the_middle_value_is_per_repository_and_arm_over_the_runs_the_rule_counts():
+    records = stated(some_records(tasks=("broad-one",)), [3, 1, 2, 2, 2, 3])
+    records[1]["broad"].update(answer_source="final_reply_capped", at_cap=True)
+    rows = sheet_mod.run_rows(records, None)
+    middles = sheet_mod.middle_values(rows, "facts_stated")
+    assert middles == {"broad-one": {"score-off": 2.5, "score-on": 2}}
+
+
+def test_the_middle_values_are_printed_with_no_verdict_and_no_sum():
+    records = stated(some_records(), [3, 1, 2, 2, 2, 3] * 2)
+    text = sheet_mod.render_middles(sheet_mod.run_rows(records, None))
+    assert "Middle value of each arm's runs" in text
+    assert "broad-one: facts marked as stated: score-off 2, score-on 2" in text
+    assert "no verdict" in text
+    assert "statements counted false" not in text
+
+
+def test_the_middle_of_false_statements_is_printed_once_the_sheet_is_joined():
+    text = sheet_mod.render_middles(joined_rows(some_records(tasks=("broad-one",))))
+    assert "broad-one: statements counted false: score-off 0, score-on 0" in text
