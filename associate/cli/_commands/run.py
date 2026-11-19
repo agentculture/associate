@@ -84,6 +84,10 @@ from associate.harness import available_harnesses, get_harness
 from associate.harness.base import HarnessError
 from associate.harness.testcmds import TEST_TIMEOUT_SECONDS
 
+#: The result keys of the finish reminder (deviation d3): the run's switch, and what was sent.
+_K_REMINDER_SWITCH = "finish_reminder_switch"
+_K_REMINDER = "finish_reminder"
+
 #: Keys printed, in this order, when a key is present in the adapter's result.
 _RESULT_KEYS = (
     "walk_path",
@@ -106,6 +110,8 @@ _RESULT_KEYS = (
     "reasoning_applies_to",
     "check_mode",
     "support_score",
+    _K_REMINDER_SWITCH,
+    _K_REMINDER,
     "handback_outcome",
     "answer_path",
     "accuracy",
@@ -132,6 +138,9 @@ _REASONING_CHOICES = ("model-default", "on", "off")
 #: ``--support-score`` values; absent leaves accuracy.json's per-model switch in charge.
 _SUPPORT_SCORE_CHOICES = ("on", "off")
 
+#: ``--finish-reminder`` values; absent means ``on`` when accuracy.json has the section.
+_FINISH_REMINDER_CHOICES = ("on", "off")
+
 
 def _build(harness_cls: type, args: argparse.Namespace) -> Any:
     """Instantiate the adapter, passing only what its constructor accepts.
@@ -148,6 +157,7 @@ def _build(harness_cls: type, args: argparse.Namespace) -> Any:
         "untrusted_checkout": args.untrusted_checkout,
         "check_mode": args.check_mode,
         "support_score": args.support_score,
+        _K_REMINDER: args.finish_reminder,
         "reasoning": args.reasoning,
     }
     try:
@@ -186,6 +196,12 @@ def cmd_run(args: argparse.Namespace) -> int:
     harness_cls = _harness_class(args.harness)
 
     args.model = _resolve_model(args.model)
+    if args.finish_reminder is None:
+        # d3: a run that names no setting gets the contract's default, so the
+        # result records what the run actually had.
+        from associate.harness.pi import default_finish_reminder
+
+        args.finish_reminder = default_finish_reminder()
     test_commands = _parse_test_commands(args.test_commands)
     if args.test_timeout <= 0:
         raise CliError(
@@ -268,6 +284,8 @@ def _with_settings(result: dict[str, Any], args: argparse.Namespace) -> dict[str
         result = {**result, "check_mode": args.check_mode}
     if "support_score" not in result:
         result = {**result, "support_score": args.support_score}
+    if _K_REMINDER_SWITCH not in result:
+        result = {**result, _K_REMINDER_SWITCH: args.finish_reminder}
     if args.reasoning and "reasoning" not in result:
         # An adapter that does not apply the setting (the stub) still records
         # what the operator asked for, so the result never omits it.
@@ -510,6 +528,10 @@ def _render(result: dict[str, Any]) -> str:
         shown["accuracy"] = _render_accuracy(result["accuracy"])
     if "support_facts" in result:
         shown["support_scored"] = _render_support(result)
+    if isinstance(result.get(_K_REMINDER), dict):
+        from associate.accuracy.reminder import describe
+
+        shown[_K_REMINDER] = describe(result[_K_REMINDER])
     text = "\n".join(f"{key}={shown[key]}" for key in ordered if shown[key] is not None)
     if isinstance(result.get("answer"), str) and result["answer"].strip():
         text += "\nanswer:\n" + result["answer"].rstrip("\n")
@@ -633,6 +655,17 @@ def register(sub: argparse._SubParsersAction) -> None:
         "ambient value is not inherited). Without the flag the contract's switch applies. "
         "Recorded in the result as support_score: what was asked for, not that anything "
         "was scored.",
+    )
+    p.add_argument(
+        "--finish-reminder",
+        choices=_FINISH_REMINDER_CHOICES,
+        default=None,
+        help="Per-run switch for the finish reminder (deviation d3): when the model is about "
+        "to stop without calling finish, the extension sends it accuracy.json's "
+        "finish_reminder text, up to its max times (sets ASSOCIATE_FINISH_REMINDER for the "
+        "run; an ambient value is not inherited). Without the flag: on when accuracy.json "
+        "has the section, else off. Recorded in the result as finish_reminder_switch, and "
+        "what was sent as finish_reminder: {sent, finish_followed}.",
     )
     p.add_argument(
         "--test-command",

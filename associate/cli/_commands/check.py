@@ -16,6 +16,12 @@ When the export holds a support score (the extension's ``facts[i].support`` in
 ``check.json``), each fact's result is copied on as ``support`` and the output
 says ``support_source: extension``. It is copied, not recomputed, and the verb
 makes no network call for it (see :mod:`associate.accuracy.support`).
+
+When the export holds ``reminder.json`` (the run was sent the finish reminder,
+deviation d3), the result gains ``finish_reminder`` (``{"sent",
+"finish_followed"}``) and the text form ends with one ``Finish reminder:`` line.
+An export without it prints exactly what it printed before (see
+:mod:`associate.accuracy.reminder`).
 """
 
 from __future__ import annotations
@@ -82,15 +88,21 @@ def _fact_lines(fact: dict[str, Any]) -> list[str]:
     return lines
 
 
-def render(result: dict[str, Any]) -> str:
-    """The text form of evidence-cli's ``inspect_export`` result, with any copied support."""
+def _closing_lines(result: dict[str, Any]) -> list[str]:
+    """The support-score lines, then the finish-reminder line; each only when the export has it."""
+    from associate.accuracy.reminder import RESULT_KEY, check_lines
     from associate.accuracy.support import summary_lines
 
+    return [*summary_lines(result), *check_lines(result.get(RESULT_KEY))]
+
+
+def render(result: dict[str, Any]) -> str:
+    """The text form of evidence-cli's ``inspect_export`` result, with any copied support."""
     out = [f"export: {result['export']} (walk format {_format_text(result['walk_format'])})"]
     out += ["", "Calls", *_calls_lines(result), *_unsupported_runs_lines(result), "", "Facts"]
     if not result["applicable"]:
         out.append(f"  not applicable: {result['not_applicable_reason']}")
-        return "\n".join([*out, *summary_lines(result)])
+        return "\n".join([*out, *_closing_lines(result)])
     report = result["report"]
     out.append(_counts_line("all", report["facts"]))
     out.append("  By source kind")
@@ -109,12 +121,13 @@ def render(result: dict[str, Any]) -> str:
         "passed means the quote was found in the saved result the fact cites; it is not a",
         "statement that the fact is true. Unchecked facts are never counted as passed.",
     ]
-    return "\n".join([*out, *summary_lines(result)])
+    return "\n".join([*out, *_closing_lines(result)])
 
 
 def cmd_check(args: argparse.Namespace) -> int:
     # Imported here: without a usable evidence-cli this raises the exit-2 CliError.
     from associate.accuracy import ExportError, inspect_export
+    from associate.accuracy.reminder import RESULT_KEY, read_reminder
     from associate.accuracy.support import with_support
 
     json_mode = bool(getattr(args, "json", False))
@@ -129,6 +142,9 @@ def cmd_check(args: argparse.Namespace) -> int:
         ) from err
     # The support score is the extension's: copied from the export, never recomputed.
     result = with_support(inspected, Path(args.export_dir))
+    held = read_reminder(Path(args.export_dir))
+    if held is not None:
+        result = {**result, RESULT_KEY: held}
     emit_result(result if json_mode else render(result), json_mode=json_mode)
     return 0
 

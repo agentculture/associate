@@ -15,6 +15,7 @@ from associate import contract
 from associate.contract import validate
 
 SECTION = "finish_reminder"
+PROPERTIES = "properties"
 TEXT = "text"
 MAX = "max"
 
@@ -47,10 +48,10 @@ def test_the_accuracy_file_stays_version_1():
 
 
 def test_every_setting_is_declared_in_the_schema():
-    declared = contract.load_schema("accuracy")["properties"][SECTION]
+    declared = contract.load_schema("accuracy")[PROPERTIES][SECTION]
     assert declared["additionalProperties"] is False
     assert {MAX, TEXT} <= set(declared["required"])
-    assert set(contract.load_accuracy()[SECTION]) <= set(declared["properties"])
+    assert set(contract.load_accuracy()[SECTION]) <= set(declared[PROPERTIES])
 
 
 def test_the_section_is_optional(doc):
@@ -131,7 +132,7 @@ def test_a_reminder_walk_line_needs_each_field(key):
     assert validate.validate(line, contract.walk_reminder_schema())
 
 
-@pytest.mark.parametrize(("key", "value"), [("id", "w1"), ("id", "r0"), ("max", "1")])
+@pytest.mark.parametrize("key,value", [("id", "w1"), ("id", "r0"), ("max", "1")])
 def test_a_reminder_walk_line_refuses_a_wrong_value(key, value):
     line = {**REMINDER_LINE, key: value}
     assert validate.validate(line, contract.walk_reminder_schema())
@@ -139,5 +140,5 @@ def test_a_reminder_walk_line_refuses_a_wrong_value(key, value):
 
 def test_the_walk_document_lists_reminder_lines():
     walk = contract.load_schema("walk")
-    assert walk["properties"]["reminders"]["items"] == {"$ref": "#/$defs/reminder"}
+    assert walk[PROPERTIES]["reminders"]["items"] == {"$ref": "#/$defs/reminder"}
     assert "reminder" in walk["description"]
