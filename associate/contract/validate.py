@@ -553,13 +553,49 @@ def _check_id_errors(doc: dict[str, Any], errors: list[str]) -> set[str]:
     return seen
 
 
+SUPPORT_SCORE_KEY = "support_score"
+
+
+def _is_number(value: Any) -> bool:
+    return isinstance(value, (int, float)) and not isinstance(value, bool)
+
+
+def _support_score_errors(section: Any, registry: set[str]) -> list[str]:
+    """Rules for the optional ``support_score`` section; absent means the score is off."""
+    if section is None:
+        return []
+    field = SUPPORT_SCORE_KEY
+    if not isinstance(section, dict):
+        return [f"{field} must be an object"]
+    errors: list[str] = []
+    question = section.get("question")
+    if not isinstance(question, str) or not question.strip():
+        errors.append(f"{field}.question must be a non-blank string")
+    cutoff = section.get("cutoff")
+    if not _is_number(cutoff) or not 0 <= cutoff <= 1:
+        errors.append(f"{field}.cutoff must be a number from 0 to 1")
+    for key in ("timeout_ms", "max_facts", "total_timeout_ms"):
+        value = section.get(key)
+        if not _is_number(value) or value <= 0:
+            errors.append(f"{field}.{key} must be greater than 0")
+    per_fact, total = section.get("timeout_ms"), section.get("total_timeout_ms")
+    if _is_number(per_fact) and _is_number(total) and total < per_fact:
+        errors.append(f"{field}.total_timeout_ms must be at least {field}.timeout_ms")
+    enabled = section.get("enabled")
+    named = set(enabled) if isinstance(enabled, dict) else set()
+    errors.extend(_coverage_errors(f"{field}.enabled", "model", named, registry))
+    return errors
+
+
 def validate_accuracy(doc: dict[str, Any], models: dict[str, Any] | None = None) -> list[str]:
     """Cross-field rules for ``accuracy.json`` (the schema covers shape).
 
     Modes cover exactly the registry's models, the source-kind table covers
     exactly ``models.json`` ``tool_names``, exempt tools are registered tools,
-    check ids are unique with a non-blank ``motivating_failure``, and every
-    ``refusal_checks`` value names a listed check.
+    check ids are unique with a non-blank ``motivating_failure``, every
+    ``refusal_checks`` value names a listed check, and the optional
+    ``support_score`` section has values in range and a switch for exactly the
+    registry's models.
     """
     if models is None:
         from associate import contract  # noqa: PLC0415 - avoid an import cycle
@@ -578,4 +614,5 @@ def validate_accuracy(doc: dict[str, Any], models: dict[str, Any] | None = None)
     for reason, cid in sorted(doc.get("refusal_checks", {}).items()):
         if cid not in seen:
             errors.append(f"refusal_checks maps {reason!r} to unknown check {cid!r}")
+    errors.extend(_support_score_errors(doc.get(SUPPORT_SCORE_KEY), registry))
     return errors

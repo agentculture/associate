@@ -93,6 +93,27 @@ export interface AccuracyCheck {
   readonly motivating_failure: string;
 }
 
+/**
+ * The support-score settings of `accuracy.json`: the decider is asked, for a
+ * fact whose quote was found, whether the quote on its own states or directly
+ * shows the value. Report-only. Field names are the contract's; no value is
+ * restated here.
+ */
+export interface SupportScoreSettings {
+  /** The yes/no question, sent as written. */
+  readonly question: string;
+  /** Score at or above which the quote is reported as supporting the value. */
+  readonly cutoff: number;
+  /** Time allowed for one fact's request. */
+  readonly timeout_ms: number;
+  /** Most facts scored for one hand-back. */
+  readonly max_facts: number;
+  /** Time allowed for all scoring of one hand-back. */
+  readonly total_timeout_ms: number;
+  /** Registry model key -> switch. */
+  readonly enabled: Readonly<Record<string, boolean>>;
+}
+
 /** The parsed `accuracy.json`. Values are the contract's; none is restated here. */
 export interface ContractAccuracy {
   readonly version: number;
@@ -101,6 +122,8 @@ export interface ContractAccuracy {
   readonly retry_rounds: number;
   readonly refusal_cap: number;
   readonly min_quote_length: number;
+  /** Absent in a file written before the support score: the score is then off. */
+  readonly support_score?: SupportScoreSettings;
   /** Tool name -> source kind. */
   readonly source_kinds: Readonly<Record<string, SourceKind>>;
   readonly purpose_exempt_tools: readonly string[];
@@ -237,6 +260,22 @@ export function policySection(policy: ContractPolicy, name: string): Record<stri
   return section && typeof section === "object" && !Array.isArray(section)
     ? (section as Record<string, unknown>)
     : {};
+}
+
+/**
+ * The support-score settings for one registry model, or `undefined` when the
+ * score is off for it: the section is absent, the model has no switch, or its
+ * switch is anything but exactly `true`.
+ */
+export function supportScoreSettings(
+  accuracy: { readonly support_score?: SupportScoreSettings },
+  model: string,
+): SupportScoreSettings | undefined {
+  const settings = accuracy.support_score;
+  const enabled: unknown = settings?.enabled;
+  if (!settings || !enabled || typeof enabled !== "object") return undefined;
+  if (!Object.hasOwn(enabled, model)) return undefined;
+  return (enabled as Record<string, unknown>)[model] === true ? settings : undefined;
 }
 
 /**

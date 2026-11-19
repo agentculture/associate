@@ -13,7 +13,8 @@ same whichever harness runs the lane:
 * ``gate.json``   — the pre-mutation safety-gate question set, thresholds and
   fallback rules;
 * ``accuracy.json`` — the accuracy method's settings (mode per model, retry
-  rounds, refusal cap, minimum quote length, source-kind table, checks);
+  rounds, refusal cap, minimum quote length, source-kind table, checks, and
+  the support score's question, cut-off, bounds and per-model switch);
 * ``schemas/``    — JSON Schema documents for the task input, the walk, and the
   statements/hand-back.
 

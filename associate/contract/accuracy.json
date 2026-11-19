@@ -10,6 +10,20 @@
   "retry_rounds": 2,
   "refusal_cap": 3,
   "min_quote_length": 8,
+  "support_score": {
+    "$comment": "The support score (docs/specs/2026-11-18-associate-decider-fact-score.md): a report-only signal, asked of the decider for a fact whose quote was found. It refuses nothing and is counted under its own name, never with the quote check. `question` is the one yes/no question, sent as written with no placeholders; the fact's value and quote travel in the state beside it. `cutoff` is the score at or above which the quote is reported as supporting the value: 0.5 is a TENTATIVE first value, set before any labelled set exists, and is to be replaced by the value the labelled set fixes. `timeout_ms` bounds one fact's request, `max_facts` the facts scored per hand-back, `total_timeout_ms` all scoring for one hand-back; a fact past any bound is recorded as not scored. The decider's input limit is gate.json decider.max_input_tokens and is not repeated here. `enabled` is the switch per registry model: false for every model until the labelled set fixes the cut-off. Only the value true switches the score on.",
+    "question": "Does the quote, on its own, state or directly show the value?",
+    "cutoff": 0.5,
+    "timeout_ms": 10000,
+    "max_facts": 40,
+    "total_timeout_ms": 60000,
+    "enabled": {
+      "worker": false,
+      "senses": false,
+      "cortex": false,
+      "super-vl": false
+    }
+  },
   "source_kinds": {
     "read": "file",
     "find": "tool",
