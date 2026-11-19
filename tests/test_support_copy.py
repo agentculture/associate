@@ -26,13 +26,29 @@ from tests.test_accuracy_check_outputs import entry, write_export
 
 REPO = Path(__file__).resolve().parent.parent
 RESULT = "alpha is one\nbeta is two\ngamma is three\n"
-SCORED_HIGH = {"status": "scored", "score": 0.97, "at_or_above_cutoff": True}
-SCORED_LOW = {"status": "scored", "score": 0.03, "at_or_above_cutoff": False}
+SCORED_HIGH = {"status": "scored", "answer": "all", "supports": True, "confidence": 0.97}
+SCORED_LOW = {"status": "scored", "answer": "none", "supports": False, "confidence": 0.03}
+#: The shipped contract's options, in order (plan deviation d4).
+OPTION_KEYS = list(contract.load_accuracy()["support_score"]["options"])
+ANSWERS_KEY = "support_answers"
+
+
+def answer_counts(**counts: int) -> dict[str, int]:
+    """One count per contract option, in contract order, zeros included."""
+    return {key: counts.get(key, 0) for key in OPTION_KEYS}
+
+
 NOT_SCORED = {"status": "not_scored", "reason": "timeout", "detail": "after 10000 ms"}
 NOT_FOUND_QUOTE = "delta is four"
 #: Words the support score must never be described with.
 FORBIDDEN = ("accuracy", "accurate", "pass", "fail")
-COPY_KEYS = ("support_source", "support_scored", "support_scored_reported", "support_unmatched")
+COPY_KEYS = (
+    "support_source",
+    "support_scored",
+    "support_scored_reported",
+    "support_unmatched",
+    ANSWERS_KEY,
+)
 
 
 # --- building exports ------------------------------------------------------------------------
@@ -120,6 +136,62 @@ def test_check_json_copies_each_facts_support_and_names_the_extension(tmp_path, 
     assert result["support_scored"] == 2
     assert result["support_scored_reported"] == 2
     assert "support_unmatched" not in result
+    assert result[ANSWERS_KEY] == answer_counts(all=1, none=1)
+    assert list(result[ANSWERS_KEY]) == OPTION_KEYS
+
+
+def test_check_text_prints_the_answer_counts_on_one_line(tmp_path, capsys):
+    text = check_text(capsys, scored_export(tmp_path))
+    counts = ", ".join(f"{key} {answer_counts(all=1, none=1)[key]}" for key in OPTION_KEYS)
+    assert [line for line in text.splitlines() if line.strip().startswith("answers:")] == [
+        f"  answers: {counts}"
+    ]
+
+
+#: The words ``associate check`` shows for each shipped option, as lib/render.ts shows them.
+WORDS = {
+    "all": "quote supports the value",
+    "mostly": "quote supports the main claim; a detail of the value is not in the quote",
+    "part": "quote shows only part of the value",
+    "little": "quote shows little of the value",
+    "none": "quote does not show the value",
+}
+
+
+@pytest.mark.parametrize("answer", sorted(WORDS))
+def test_check_text_shows_each_answer_in_words_and_no_number(answer, tmp_path, capsys):
+    result = {"status": "scored", "answer": answer, "supports": False, "confidence": 0.42}
+    text = check_text(capsys, export_with(tmp_path, {"f1": result}, reported=1))
+    line = next(line for line in text.splitlines() if WORDS[answer] in line)
+    assert line.strip() == f"support: {WORDS[answer]}"
+    assert "0.42" not in text
+
+
+def test_the_python_words_are_the_words_render_ts_writes():
+    from associate.accuracy.support import ANSWER_WORDS
+
+    source = (REPO / ".pi/extensions/associate/lib/render.ts").read_text(encoding="utf-8")
+    table = source.split("const ANSWER_WORDS", 1)[1].split("};", 1)[0]
+    assert ANSWER_WORDS == WORDS
+    for key, words in WORDS.items():
+        assert f'{key}: "{words}",' in table
+
+
+def test_an_answer_with_no_words_is_shown_by_its_key(tmp_path, capsys):
+    from associate.accuracy.support import describe
+
+    shown = describe({"status": "scored", "answer": "partly", "supports": False, "confidence": 1})
+    assert shown == "support answer: partly"
+
+
+def test_an_answer_that_is_not_a_contract_option_is_not_available(tmp_path, capsys):
+    odd = {"status": "scored", "answer": "partly", "supports": True, "confidence": 0.5}
+    result = check_json(capsys, export_with(tmp_path, {"f1": odd, "f2": SCORED_HIGH}, reported=2))
+    assert by_id(result)["f1"]["support"] == {
+        "status": "not_available",
+        "reason": "answer_not_an_option",
+    }
+    assert result[ANSWERS_KEY] == answer_counts(all=1)
 
 
 def test_check_json_leaves_the_re_check_counts_alone(tmp_path, capsys):
@@ -132,8 +204,9 @@ def test_check_json_leaves_the_re_check_counts_alone(tmp_path, capsys):
 
 def test_check_text_says_each_facts_support_in_plain_words(tmp_path, capsys):
     text = check_text(capsys, scored_export(tmp_path))
-    assert "quote supports the value (support 0.97)" in text
-    assert "quote may not support the value (support 0.03)" in text
+    assert "support: quote supports the value\n" in text
+    assert "support: quote does not show the value\n" in text
+    assert "0.97" not in text
     assert "support not scored (timeout: after 10000 ms)" in text
     assert "copied from the extension's check.json" in text
     assert "not recomputed" in text
@@ -167,13 +240,42 @@ def test_a_run_with_the_score_on_and_nothing_scored_says_so(tmp_path, capsys):
 
 MALFORMED = {
     "not_an_object": "0.9",
-    "unknown_status": {"status": "passed", "score": 0.9},
-    "score_not_a_number": {"status": "scored", "score": "0.9", "at_or_above_cutoff": True},
-    "score_is_a_boolean": {"status": "scored", "score": True, "at_or_above_cutoff": True},
-    "score_above_one": {"status": "scored", "score": 1.5, "at_or_above_cutoff": True},
-    "score_below_zero": {"status": "scored", "score": -0.1, "at_or_above_cutoff": False},
-    "score_missing": {"status": "scored", "at_or_above_cutoff": True},
-    "cutoff_flag": {"status": "scored", "score": 0.9, "at_or_above_cutoff": "yes"},
+    "unknown_status": {"status": "passed", "answer": "all"},
+    "old_yes_no_score": {"status": "scored", "score": 0.9, "at_or_above_cutoff": True},
+    "answer_missing": {"status": "scored", "supports": True, "confidence": 0.9},
+    "answer_not_text": {"status": "scored", "answer": 3, "supports": True, "confidence": 0.9},
+    "answer_prose": {
+        "status": "scored",
+        "answer": "all\nof it",
+        "supports": True,
+        "confidence": 0.9,
+    },
+    "supports_not_boolean": {
+        "status": "scored",
+        "answer": "all",
+        "supports": "yes",
+        "confidence": 1,
+    },
+    "confidence_text": {"status": "scored", "answer": "all", "supports": True, "confidence": "0.9"},
+    "confidence_boolean": {
+        "status": "scored",
+        "answer": "all",
+        "supports": True,
+        "confidence": True,
+    },
+    "confidence_above_one": {
+        "status": "scored",
+        "answer": "all",
+        "supports": True,
+        "confidence": 1.5,
+    },
+    "confidence_below_zero": {
+        "status": "scored",
+        "answer": "none",
+        "supports": False,
+        "confidence": -0.1,
+    },
+    "confidence_missing": {"status": "scored", "answer": "all", "supports": True},
     "reason_missing": {"status": "not_scored"},
     "reason_long": {"status": "not_scored", "reason": "x" * 200},
     "reason_prose": {"status": "not_scored", "reason": "it failed, accuracy unknown"},
@@ -192,6 +294,7 @@ def test_a_malformed_entry_is_not_available_and_never_a_score(name, tmp_path, ca
     assert set(shown) == {"status", "reason"}
     assert result["support_scored"] == 1  # f2 only; the extension's own number is kept apart
     assert result["support_scored_reported"] == 2
+    assert result[ANSWERS_KEY] == answer_counts(all=1)
     text = check_text(capsys, export)
     assert f"support not available ({shown['reason']})" in text
     for line in support_lines(text):
@@ -199,7 +302,7 @@ def test_a_malformed_entry_is_not_available_and_never_a_score(name, tmp_path, ca
             assert word not in line.lower(), line
 
 
-def test_a_nan_score_is_not_a_score(tmp_path, capsys):
+def test_a_nan_confidence_is_not_a_score(tmp_path, capsys):
     export = export_with(tmp_path, {"f1": SCORED_HIGH})
     path = export / "check.json"
     path.write_text(path.read_text("utf-8").replace("0.97", "NaN"), encoding="utf-8")
@@ -305,7 +408,7 @@ class SupportStub(StubHarness):
             first = {**value["facts"][0], "support": self.support}
             value = {**value, "facts": [first, *value["facts"][1:]]}
         if name == "report.json":
-            value = {**value, "support_scored": 1}
+            value = {**value, "support_scored": 1, ANSWERS_KEY: answer_counts(all=1)}
         super()._write_json(name, value)
 
 
@@ -335,6 +438,7 @@ def test_run_json_copies_each_facts_support_and_names_the_extension(tmp_path, st
     assert out["support_scored"] == 1
     assert out["support_scored_reported"] == 1
     assert out["support_facts"][0]["support"] == SCORED_HIGH
+    assert out[ANSWERS_KEY] == answer_counts(all=1)
     assert out["support_facts"][0]["id"].startswith("f")
     assert all(set(item) == {"id", "support"} for item in out["support_facts"])
     # The copy is beside the re-check's result, not in it.
@@ -346,6 +450,7 @@ def test_run_json_shows_a_fact_that_was_not_scored(tmp_path, stubs, capsys):
     assert run_cli(tmp_path, "stubnotscored", "--json") == 0
     out = json.loads(capsys.readouterr().out)
     assert out["support_scored"] == 0
+    assert out[ANSWERS_KEY] == answer_counts()
     assert out["support_facts"][0]["support"] == NOT_SCORED
 
 
@@ -358,9 +463,13 @@ def test_run_json_of_a_run_without_the_score_has_no_support_copy(tmp_path, capsy
 def test_run_text_says_the_count_and_where_it_came_from(tmp_path, stubs, capsys):
     assert run_cli(tmp_path, "stubsupport") == 0
     lines = [line for line in capsys.readouterr().out.splitlines() if line.startswith("support_")]
-    copied = [line for line in lines if not line.startswith("support_score=")]
+    copied = [line for line in lines if not line.startswith(("support_score=", "support_answers="))]
     assert len(copied) == 1
     assert copied[0].startswith("support_scored=1 of 1")
+    counts = ", ".join(f"{key} {answer_counts(all=1)[key]}" for key in OPTION_KEYS)
+    assert [line for line in lines if line.startswith("support_answers=")] == [
+        f"support_answers={counts}"
+    ]
     assert "copied from the extension's check.json" in copied[0]
     for word in FORBIDDEN:
         assert word not in copied[0].lower()
@@ -521,6 +630,7 @@ def test_explain_run_describes_the_copied_support_keys(capsys):
         "support_scored",
         "support_scored_reported",
         "support_unmatched",
+        "support_answers",
         "not_available",
         "never recomputed",
     ):
@@ -529,7 +639,17 @@ def test_explain_run_describes_the_copied_support_keys(capsys):
 
 def test_explain_check_describes_the_copied_support(capsys):
     out = explained(capsys, "check")
-    for needle in ("support_source", "`support`", "not_scored", "not_available", "no network"):
+    for needle in (
+        "support_source",
+        "`support`",
+        "not_scored",
+        "not_available",
+        "no network",
+        "support_answers",
+        "`answer`",
+        "`supports`",
+        "`confidence`",
+    ):
         assert needle in out, needle
 
 

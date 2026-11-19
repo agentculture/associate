@@ -50,7 +50,9 @@ Commands
   associate check <export-dir> Re-check an export's hand-back facts; print counts.
                                check and run --json show each fact's
                                support score copied from the export (support_source:
-                               extension) when the export holds one; never recomputed.
+                               extension) when the export holds one: its answer (all,
+                               mostly, part, little or none), and the counts per
+                               answer as support_answers; never recomputed.
   associate measure run        Run a comparison of arms over tasks (--arms, --repeats,
                                --output-dir, --detach); needs the committed difference note
                                unless --harness stub (plumbing only). An arm may set
@@ -119,7 +121,8 @@ def _as_json_payload() -> dict[str, object]:
                     "model that stops without finish, default on when the contract has "
                     "the section); "
                     "the result carries the support score the export holds as "
-                    "support_facts, labelled support_source: extension; "
+                    "support_facts (each fact's answer, supports and confidence) and "
+                    "support_answers (counts per answer), labelled support_source: extension; "
                     "exits 2 without serving when the adapter cannot prove its "
                     "extension loaded."
                 ),
@@ -162,7 +165,8 @@ def _as_json_payload() -> dict[str, object]:
                     "Re-check an export directory's hand-back facts against its walk and "
                     "saved results; print counts per kind and per source kind. A support "
                     "score the export holds is copied onto each fact (support_source: "
-                    "extension), never recomputed."
+                    "extension), never recomputed; the text form shows each answer in words "
+                    "and the counts per answer on one line."
                 ),
             },
             {

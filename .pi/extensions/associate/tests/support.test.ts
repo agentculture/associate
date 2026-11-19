@@ -58,14 +58,30 @@ function jsonResponse(status: number, body: unknown): Response {
   });
 }
 
-const answer = (score: unknown) =>
-  jsonResponse(200, { model: "clef", answers: { [SUPPORT_QUESTION_KEY]: { type: "noul", noul: score } } });
+const OPTION_KEYS = Object.keys(SHIPPED.options);
 
-const answering = (score: number) => fakeDecider(() => answer(score));
+/** The decider's probabilities for a pick: `confidence` on the picked option, the rest shared out. */
+function probabilities(choice: string, confidence: number): Record<string, number> {
+  const rest = (1 - confidence) / (OPTION_KEYS.length - 1);
+  return Object.fromEntries(OPTION_KEYS.map((key) => [key, key === choice ? confidence : rest]));
+}
+
+/** A choice answer as the decider writes it (lobes-cli docs/decider.md, "Worked example"). */
+const choiceAnswer = (choice: string, confidence = 0.9) => ({
+  type: "choice",
+  choice,
+  confidence,
+  probabilities: probabilities(choice, confidence),
+});
+
+const answer = (choice: string, confidence = 0.9) =>
+  jsonResponse(200, { model: "clef", answers: { [SUPPORT_QUESTION_KEY]: choiceAnswer(choice, confidence) } });
+
+const answering = (choice: string, confidence = 0.9) => fakeDecider(() => answer(choice, confidence));
 
 /** A decider that answers only after `ms`, and ignores the abort signal. */
-const slowDecider = (ms: number, score = 1) =>
-  fakeDecider(() => new Promise<Response>((resolve) => setTimeout(() => resolve(answer(score)), ms)));
+const slowDecider = (ms: number, choice = "all") =>
+  fakeDecider(() => new Promise<Response>((resolve) => setTimeout(() => resolve(answer(choice)), ms)));
 
 function options(doFetch: typeof fetch, overrides: Partial<SupportOptions> = {}): SupportOptions {
   return { settings: SHIPPED, config: CONFIG, env: ENV, redaction: REDACTION, fetch: doFetch, ...overrides };
@@ -74,8 +90,9 @@ function options(doFetch: typeof fetch, overrides: Partial<SupportOptions> = {})
 function notScored(result: SupportResult, reason: string): void {
   assert.equal(result.status, "not_scored");
   assert.equal((result as { reason: string }).reason, reason);
-  assert.equal("score" in result, false, "a not-scored result carries no score");
-  assert.equal("at_or_above_cutoff" in result, false);
+  for (const key of ["answer", "supports", "confidence", "score", "at_or_above_cutoff"]) {
+    assert.equal(key in result, false, `a not-scored result carries no ${key}`);
+  }
 }
 
 const PAIR = { value: "version 9", quote: '"version": 9,' };
@@ -83,10 +100,10 @@ const PAIR = { value: "version 9", quote: '"version": 9,' };
 // ------------------------------------------------------------ one question
 
 test("one pair is one request: the contract's question, the value and quote in the state", async () => {
-  const decider = answering(SHIPPED.cutoff);
+  const decider = answering("all", 0.94);
   const result = await scoreSupport(PAIR, options(decider.fn));
 
-  assert.deepEqual(result, { status: "scored", score: SHIPPED.cutoff, at_or_above_cutoff: true });
+  assert.deepEqual(result, { status: "scored", answer: "all", supports: true, confidence: 0.94 });
   assert.equal(decider.calls.length, 1);
   const call = decider.calls[0]!;
   assert.equal(call.url, deciderUrl(CONFIG, ENV));
@@ -94,10 +111,11 @@ test("one pair is one request: the contract's question, the value and quote in t
   const headers = call.init.headers as Record<string, string>;
   assert.equal(headers.Authorization, `Bearer ${ENV.ASSOCIATE_API_KEY}`);
   assert.equal(headers[CONFIG.deciderHeader], `decider:${CONFIG.deciderDomain}`);
-  // Exactly one question, yes/no, worded by accuracy.json — none of the gate's.
+  // Exactly one choice question, worded by accuracy.json — none of the gate's.
   assert.deepEqual(call.body.questions, {
-    [SUPPORT_QUESTION_KEY]: { type: "noul", instructions: SHIPPED.question },
+    [SUPPORT_QUESTION_KEY]: { type: "choice", instructions: SHIPPED.question, criteria: SHIPPED.options },
   });
+  assert.deepEqual(Object.keys(call.body.questions[SUPPORT_QUESTION_KEY].criteria), OPTION_KEYS, "in contract order");
   for (const gateQuestion of Object.keys(CONFIG.questions)) {
     assert.equal(gateQuestion in call.body.questions, false);
   }
@@ -107,13 +125,41 @@ test("one pair is one request: the contract's question, the value and quote in t
   assert.ok(call.body.state.includes("version 9"));
 });
 
-test("a score below the cut-off is still a score, marked as below", async () => {
-  const cutoff = 0.75;
-  const settings = { ...SHIPPED, cutoff };
-  const below = await scoreSupport(PAIR, options(answering(0.7).fn, { settings }));
-  assert.deepEqual(below, { status: "scored", score: 0.7, at_or_above_cutoff: false });
-  const at = await scoreSupport(PAIR, options(answering(cutoff).fn, { settings }));
-  assert.deepEqual(at, { status: "scored", score: cutoff, at_or_above_cutoff: true });
+test("every option is an answer; supports is whether the contract's passes name it", async () => {
+  for (const choice of OPTION_KEYS) {
+    const result = await scoreSupport(PAIR, options(answering(choice, 0.6).fn));
+    assert.deepEqual(result, {
+      status: "scored",
+      answer: choice,
+      supports: SHIPPED.passes.includes(choice),
+      confidence: 0.6,
+    });
+  }
+  // The pass rule is the contract's, not a list in code.
+  const settings = { ...SHIPPED, passes: ["none"] };
+  const flipped = await scoreSupport(PAIR, options(answering("none").fn, { settings }));
+  assert.equal(flipped.status === "scored" && flipped.supports, true);
+  const all = await scoreSupport(PAIR, options(answering("all").fn, { settings }));
+  assert.equal(all.status === "scored" && all.supports, false);
+});
+
+test("the confidence is the decider's probability for the picked option", async () => {
+  const body = {
+    answers: {
+      [SUPPORT_QUESTION_KEY]: {
+        type: "choice",
+        choice: "part",
+        confidence: 0.5,
+        probabilities: { all: 0.1, mostly: 0.2, part: 0.45, little: 0.2, none: 0.05 },
+      },
+    },
+  };
+  const result = await scoreSupport(PAIR, options(fakeDecider(() => jsonResponse(200, body)).fn));
+  assert.deepEqual(result, { status: "scored", answer: "part", supports: false, confidence: 0.45 });
+  // With no probabilities, the decider's own confidence for its pick.
+  const bare = { answers: { [SUPPORT_QUESTION_KEY]: { type: "choice", choice: "little", confidence: 0.7 } } };
+  const fromConfidence = await scoreSupport(PAIR, options(fakeDecider(() => jsonResponse(200, bare)).fn));
+  assert.deepEqual(fromConfidence, { status: "scored", answer: "little", supports: false, confidence: 0.7 });
 });
 
 test("the state keeps value and quote on one line each, so a quote cannot start a labelled line", () => {
@@ -138,7 +184,7 @@ test("buildSupportRequest reuses the decider address and carries no gate questio
 // ------------------------------------------------- failures are not scored
 
 test("a missing key is not scored and sends nothing", async () => {
-  const decider = answering(1);
+  const decider = answering("all");
   for (const env of [{}, { ASSOCIATE_API_KEY: "  " }]) {
     notScored(await scoreSupport(PAIR, options(decider.fn, { env })), "no_key");
   }
@@ -156,7 +202,7 @@ test("a timeout is not scored, even when the decider ignores the abort signal", 
 test("a non-2xx answer is not scored, whatever its body says", async () => {
   for (const status of [401, 429, 500, 503]) {
     const decider = fakeDecider(() =>
-      jsonResponse(status, { answers: { [SUPPORT_QUESTION_KEY]: { type: "noul", noul: 1 } } }),
+      jsonResponse(status, { answers: { [SUPPORT_QUESTION_KEY]: choiceAnswer("all") } }),
     );
     const result = await scoreSupport(PAIR, options(decider.fn));
     notScored(result, "http_error");
@@ -170,13 +216,20 @@ test("a malformed answer is not scored", async () => {
     {},
     { answers: null },
     { answers: {} },
-    { answers: { other: { type: "noul", noul: 1 } } },
-    { answers: { [SUPPORT_QUESTION_KEY]: { type: "choice", choice: "yes", probabilities: { yes: 1 } } } },
-    { answers: { [SUPPORT_QUESTION_KEY]: { type: "noul" } } },
-    { answers: { [SUPPORT_QUESTION_KEY]: { type: "noul", noul: "0.9" } } },
-    { answers: { [SUPPORT_QUESTION_KEY]: { type: "noul", noul: 1.2 } } },
-    { answers: { [SUPPORT_QUESTION_KEY]: { type: "noul", noul: -0.1 } } },
-    { answers: { [SUPPORT_QUESTION_KEY]: { type: "noul", noul: null } } },
+    { answers: { other: choiceAnswer("all") } },
+    // The old yes/no answer is not a choice.
+    { answers: { [SUPPORT_QUESTION_KEY]: { type: "noul", noul: 1 } } },
+    // A choice that is missing, or not one of the contract's options.
+    { answers: { [SUPPORT_QUESTION_KEY]: { type: "choice", confidence: 0.9, probabilities: { all: 0.9 } } } },
+    { answers: { [SUPPORT_QUESTION_KEY]: { type: "choice", choice: "yes", confidence: 1, probabilities: { yes: 1 } } } },
+    { answers: { [SUPPORT_QUESTION_KEY]: { type: "choice", choice: "toString", confidence: 1 } } },
+    { answers: { [SUPPORT_QUESTION_KEY]: { type: "choice", choice: 3, confidence: 1 } } },
+    { answers: { [SUPPORT_QUESTION_KEY]: { ...choiceAnswer("all"), type: "noul" } } },
+    // No probability in [0, 1] for the pick.
+    { answers: { [SUPPORT_QUESTION_KEY]: { type: "choice", choice: "all" } } },
+    { answers: { [SUPPORT_QUESTION_KEY]: { type: "choice", choice: "all", confidence: "0.9" } } },
+    { answers: { [SUPPORT_QUESTION_KEY]: { type: "choice", choice: "all", confidence: 1.2 } } },
+    { answers: { [SUPPORT_QUESTION_KEY]: { type: "choice", choice: "all", probabilities: { all: -0.1 } } } },
     { answers: { [SUPPORT_QUESTION_KEY]: 1 } },
     [1],
   ];
@@ -209,7 +262,7 @@ test("value and quote pass through the policy redaction before sending", async (
   const secret = "sk-abcdefghijklmnop1234";
   const bearer = "Bearer abcdefghijklmnop.qrstuv";
   assert.notEqual(REDACTION.apply(secret), secret, "fixture assumption: the policy redacts this string");
-  const decider = answering(1);
+  const decider = answering("all");
   await scoreSupport(
     { value: `the key is ${secret}`, quote: `Authorization: ${bearer}\nkey=${secret}` },
     options(decider.fn),
@@ -227,7 +280,7 @@ test("value and quote pass through the policy redaction before sending", async (
 // --------------------------------------------------------- empty, too long
 
 test("an empty value or quote is not scored and nothing is sent", async () => {
-  const decider = answering(1);
+  const decider = answering("all");
   for (const value of ["", "   ", "\n\t"]) {
     notScored(await scoreSupport({ value, quote: PAIR.quote }, options(decider.fn)), "empty_value");
   }
@@ -238,7 +291,7 @@ test("an empty value or quote is not scored and nothing is sent", async () => {
 
 test("a value and quote over the decider's input limit are not scored and never sent cut short", async () => {
   const limit = CONFIG.maxInputTokens;
-  const decider = answering(1);
+  const decider = answering("all");
   const longQuote = await scoreSupport({ value: "nine", quote: "q".repeat(limit) }, options(decider.fn));
   notScored(longQuote, "too_long");
   const longValue = await scoreSupport({ value: "v".repeat(limit), quote: "a quote" }, options(decider.fn));
@@ -273,18 +326,18 @@ test("a batch returns one result per pair, in order, asking one at a time", asyn
     await new Promise((resolve) => setTimeout(resolve, 2));
     inFlight -= 1;
     const index = Number(/value (\d+)/.exec(call.body.state)![1]);
-    return answer(index / 10);
+    return answer(OPTION_KEYS[index]!);
   });
-  const results = await scoreSupportBatch(pairs(5), options(decider.fn, { settings: { ...SHIPPED, cutoff: 0.2 } }));
+  const results = await scoreSupportBatch(pairs(5), options(decider.fn));
   assert.deepEqual(
     results,
-    [0, 0.1, 0.2, 0.3, 0.4].map((score) => ({ status: "scored", score, at_or_above_cutoff: score >= 0.2 })),
+    OPTION_KEYS.map((choice) => ({ status: "scored", answer: choice, supports: SHIPPED.passes.includes(choice), confidence: 0.9 })),
   );
   assert.equal(most, 1, "the decider serves one request at a time");
 });
 
 test("a batch honours the cap on scored facts; the rest are not scored", async () => {
-  const decider = answering(1);
+  const decider = answering("all");
   const settings = { ...SHIPPED, max_facts: 3 };
   const input = [{ value: "", quote: "skipped locally, takes no place under the cap" }, ...pairs(5)];
   const results = await scoreSupportBatch(input, options(decider.fn, { settings }));
@@ -296,7 +349,7 @@ test("a batch honours the cap on scored facts; the rest are not scored", async (
 });
 
 test("the cap is the same on a second pass: cached facts keep their places", async () => {
-  const decider = answering(1);
+  const decider = answering("all");
   const cache = createSupportCache();
   const opts = options(decider.fn, { settings: { ...SHIPPED, max_facts: 2 }, cache });
   const first = await scoreSupportBatch(pairs(4), opts);
@@ -322,20 +375,20 @@ test("a batch returns within the total time when the decider is slow", async () 
 });
 
 test("a batch with no key sends nothing and marks every fact", async () => {
-  const decider = answering(1);
+  const decider = answering("all");
   const results = await scoreSupportBatch(pairs(3), options(decider.fn, { env: {} }));
   for (const result of results) notScored(result, "no_key");
   assert.equal(decider.calls.length, 0);
 });
 
 test("an empty batch is an empty list", async () => {
-  assert.deepEqual(await scoreSupportBatch([], options(answering(1).fn)), []);
+  assert.deepEqual(await scoreSupportBatch([], options(answering("all").fn)), []);
 });
 
 // -------------------------------------------------------------------- cache
 
 test("the same value and quote asked twice in one session produce one request", async () => {
-  const decider = answering(0.9);
+  const decider = answering("all");
   const cache = createSupportCache();
   const opts = options(decider.fn, { cache });
   const first = await scoreSupport(PAIR, opts);
@@ -361,7 +414,7 @@ test("the same value and quote asked twice in one session produce one request", 
 });
 
 test("two asks for the same pair at the same time share one request", async () => {
-  const decider = slowDecider(20, 0.8);
+  const decider = slowDecider(20, "mostly");
   const opts = options(decider.fn, { cache: createSupportCache() });
   const [a, b] = await Promise.all([scoreSupport(PAIR, opts), scoreSupport(PAIR, opts)]);
   assert.deepEqual(a, b);
@@ -370,7 +423,7 @@ test("two asks for the same pair at the same time share one request", async () =
 
 test("only a score is kept: a failed answer is asked for again on a later ask (review finding 2)", async () => {
   let fail = true;
-  const decider = fakeDecider(() => (fail ? jsonResponse(503, "busy") : answer(0.7)));
+  const decider = fakeDecider(() => (fail ? jsonResponse(503, "busy") : answer("part")));
   const cache = createSupportCache();
   const opts = options(decider.fn, { cache });
   notScored(await scoreSupport(PAIR, opts), "http_error");
@@ -398,7 +451,7 @@ for (const [label, reason, respond] of [
 ] as const) {
   test(`a ${label} answer is not kept for the session (review finding 2)`, async () => {
     let failing = true;
-    const decider = fakeDecider(() => (failing ? (respond as () => Response | Promise<Response>)() : answer(0.6)));
+    const decider = fakeDecider(() => (failing ? (respond as () => Response | Promise<Response>)() : answer("mostly")));
     const cache = createSupportCache();
     const opts = options(decider.fn, { cache, settings: { ...SHIPPED, timeout_ms: 20 } });
     notScored(await scoreSupport(PAIR, opts), reason);
@@ -411,7 +464,7 @@ for (const [label, reason, respond] of [
 test("out_of_time belongs to one batch's budget: the next batch asks again (review finding 2)", async () => {
   let slow = true;
   const decider = fakeDecider(() =>
-    slow ? new Promise<Response>((resolve) => setTimeout(() => resolve(answer(1)), 80)) : answer(0.5),
+    slow ? new Promise<Response>((resolve) => setTimeout(() => resolve(answer("all")), 80)) : answer("little"),
   );
   const cache = createSupportCache();
   const tight = options(decider.fn, { cache, settings: { ...SHIPPED, timeout_ms: 500, total_timeout_ms: 20 } });
@@ -450,7 +503,7 @@ for (const [label, reason, respond] of [
 
 test("a skipped batch still answers its scored pairs from the cache", async () => {
   let fail = false;
-  const decider = fakeDecider(() => (fail ? jsonResponse(503, "busy") : answer(0.9)));
+  const decider = fakeDecider(() => (fail ? jsonResponse(503, "busy") : answer("all")));
   const cache = createSupportCache();
   const opts = options(decider.fn, { cache });
   const [held] = pairs(1);
@@ -464,7 +517,7 @@ test("a skipped batch still answers its scored pairs from the cache", async () =
 });
 
 test("a malformed answer does not stop the batch", async () => {
-  const decider = fakeDecider((_call, index) => (index === 0 ? jsonResponse(200, "not json") : answer(0.4)));
+  const decider = fakeDecider((_call, index) => (index === 0 ? jsonResponse(200, "not json") : answer("none")));
   const results = await scoreSupportBatch(pairs(3), options(decider.fn, { cache: createSupportCache() }));
   notScored(results[0]!, "malformed");
   assert.deepEqual(results.slice(1).map((r) => r.status), ["scored", "scored"]);
@@ -472,7 +525,7 @@ test("a malformed answer does not stop the batch", async () => {
 });
 
 test("a result reached without a request is not kept: a later key is used", async () => {
-  const decider = answering(1);
+  const decider = answering("all");
   const cache = createSupportCache();
   notScored(await scoreSupport(PAIR, options(decider.fn, { cache, env: {} })), "no_key");
   assert.equal(cache.size, 0);
@@ -481,7 +534,7 @@ test("a result reached without a request is not kept: a later key is used", asyn
 });
 
 test("without a cache every ask is a request; two sessions do not share", async () => {
-  const decider = answering(1);
+  const decider = answering("all");
   await scoreSupport(PAIR, options(decider.fn));
   await scoreSupport(PAIR, options(decider.fn));
   await scoreSupport(PAIR, options(decider.fn, { cache: createSupportCache() }));
@@ -513,14 +566,15 @@ test("the module has no gate path: no evaluate, no Super tier, no fallback, no f
   // Only type and pure imports from the walk; nothing that records a line.
   assert.equal(/import\s*\{[^}]*\b(WalkRecorder|createWalk|appendWalk)\b/.test(code), false);
   assert.equal(/\baccuracy\b/i.test(code.replace(/accuracy\.json/g, "")), false, "nothing here is named accuracy");
-  assert.equal(/\bpass(ed|es)?\b/i.test(code), false, "a score is never called a pass");
+  // The contract's `passes` list is read by its name; nothing else says pass.
+  assert.equal(/\bpass(ed|es)?\b/i.test(code.replace(/\.passes\b/g, "")), false, "a score is never called a pass");
 });
 
 test("no result of any kind says pass or allow", async () => {
   const results: SupportResult[] = [
-    await scoreSupport(PAIR, options(answering(1).fn)),
-    await scoreSupport(PAIR, options(answering(0).fn)),
-    await scoreSupport(PAIR, options(answering(1).fn, { env: {} })),
+    await scoreSupport(PAIR, options(answering("all").fn)),
+    await scoreSupport(PAIR, options(answering("none").fn)),
+    await scoreSupport(PAIR, options(answering("all").fn, { env: {} })),
     await scoreSupport(PAIR, options(fakeDecider(() => jsonResponse(500, "")).fn)),
   ];
   for (const result of results) {
@@ -539,14 +593,14 @@ test("the contract's background comes before the pair, and a section without one
     assert.equal(buildSupportState(REDACTION, PAIR, none), buildSupportState(REDACTION, PAIR));
   }
   const { background: _dropped, ...bare } = SHIPPED;
-  const fake = answering(0.9);
+  const fake = answering("all");
   await scoreSupport(PAIR, options(fake.fn, { settings: bare }));
   assert.equal(fake.calls[0].body.state, buildSupportState(REDACTION, PAIR));
 });
 
 test("the background counts toward the decider's input limit", async () => {
   const settings = { ...SHIPPED, background: "b".repeat(CONFIG.maxInputTokens) };
-  const fake = answering(0.9);
+  const fake = answering("all");
   const result = await scoreSupport(PAIR, options(fake.fn, { settings }));
   assert.equal(result.status, "not_scored");
   assert.equal(result.status === "not_scored" && result.reason, "too_long");

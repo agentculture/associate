@@ -5,7 +5,7 @@
 // (an operator's ambient value is never inherited). This module is the only
 // reader of that variable. Every setting stays in the contract: the functions
 // here hand back the contract's own settings object or nothing.
-import { supportScoreListing, supportScoreSettings, type SupportScoreSettings } from "./contract.ts";
+import { supportChoiceProblem, supportScoreListing, supportScoreSettings, type SupportScoreSettings } from "./contract.ts";
 
 /** The per-run override of accuracy.json's per-model switch: `on` or `off`. */
 export const SUPPORT_SCORE_ENV = "ASSOCIATE_SUPPORT_SCORE";
@@ -64,6 +64,15 @@ export function resolveSupportScore(
 ): SupportScoreResolution {
   const override = supportScoreOverride(env);
   if (override.value === "off") return { settings: undefined, source: "env" };
+  const section = accuracy?.support_score;
+  const unaskable = section === undefined || section === null ? undefined : supportChoiceProblem(section);
+  if (unaskable) {
+    return {
+      settings: undefined,
+      source: override.value === "on" ? "env" : "contract",
+      problem: `associate: accuracy.json ${unaskable}; the support score stays off`,
+    };
+  }
   if (override.value === "on") {
     const settings = supportScoreListing(accuracy, modelKey);
     if (settings) return { settings, source: "env" };

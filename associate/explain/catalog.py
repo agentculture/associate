@@ -268,9 +268,12 @@ value is refused (exit `1`). Without the flag the variable is cleared and the
 contract's switch for the model applies. The result's `support_score` is the flag's
 value, or null when none was given: it says what was asked for, not that anything
 was scored. The support score is a report-only signal that refuses nothing (for a
-fact whose quote was found, the decider is asked whether the quote supports the
-value). The switch and its reader in the extension are built and unit-tested;
-nothing has been measured live with it, and it is not a measure of accuracy.
+fact whose quote was found, the decider is asked one choice question: how much of
+the value the quote, on its own, shows, answered `all`, `mostly`, `part`, `little`
+or `none`, the options in accuracy.json `support_score.options`). The switch, the
+question and their readers in the extension are built and unit-tested against a
+fake decider; the option wording was measured offline on a labelled set; no
+associate run has used it, and it is not a measure of accuracy.
 
 When the export holds a support score, the result carries it beside `accuracy`,
 copied from the extension's `check.json` and never recomputed (the Python side
@@ -278,19 +281,24 @@ makes no network call for it):
 
 - `support_source`: `extension`, naming who computed it;
 - `support_facts`: one `{"id", "support"}` per fact the extension gave a result,
-  where `support` is `{"status": "scored", "score", "at_or_above_cutoff"}`, or
+  where `support` is `{"status": "scored", "answer", "supports", "confidence"}`
+  (`answer` an option key, `supports` whether accuracy.json `support_score.passes`
+  names it, `confidence` the decider's probability for it), or
   `{"status": "not_scored", "reason", "detail"}` (`detail` optional), or
-  `{"status": "not_available", "reason"}` when the entry is malformed or sits on a
-  fact whose quote the Python re-check did not find. A malformed entry is never
-  shown as a score;
+  `{"status": "not_available", "reason"}` when the entry is malformed, its answer
+  is not one of the contract's options, or it sits on a fact whose quote the
+  Python re-check did not find. A malformed entry is never shown as a score;
 - `support_scored`: how many of those are `scored`, counted from what is shown;
+- `support_answers`: how many shown results got each answer, one count per
+  contract option in contract order, zeros included;
 - `support_scored_reported`: the extension's own count from `report.json`, when it
   wrote one;
 - `support_unmatched`: fact ids `check.json` gave a result for that the re-check
   does not know, when there are any.
 
 An export with no support score (the switch off, or written before it existed)
-has none of these keys. The text form prints one `support_scored=` line. The
+has none of these keys. The text form prints one `support_scored=` line and one
+`support_answers=` line (for example `all 1, mostly 0, part 0, little 0, none 1`). The
 score is a separate signal from the quote check: it is not in `accuracy.report`,
 changes no count there, and refuses nothing.
 
@@ -448,16 +456,21 @@ When the run had the support score on, the extension wrote a result for each fac
 whose quote was found into the export's `check.json`. `associate check` copies it;
 it does not recompute it and makes no network call for it. In `--json` each such
 fact gains a `support` object and the result gains `support_source` (`extension`),
-`support_scored` (how many shown results are scored), `support_scored_reported`
-(the extension's own count from `report.json`, when present) and, when there are
-any, `support_unmatched` (ids `check.json` scored that the re-check does not know).
-`support` is `{"status": "scored", "score", "at_or_above_cutoff"}`, or
-`{"status": "not_scored", "reason", "detail"}`, or `{"status": "not_available",
-"reason"}` for an entry that is malformed or sits on a fact whose quote this
-re-check did not find; such an entry is never shown as a score. The text form says
-it under each fact, for example `quote supports the value (support 0.97)`,
-`quote may not support the value (support 0.03)` or `support not scored (timeout)`,
-and closes with where the score came from.
+`support_scored` (how many shown results are scored), `support_answers` (how many
+got each answer, one count per contract option in order, zeros included),
+`support_scored_reported` (the extension's own count from `report.json`, when
+present) and, when there are any, `support_unmatched` (ids `check.json` scored that
+the re-check does not know). `support` is `{"status": "scored", "answer",
+"supports", "confidence"}` (`answer` one of the contract's `support_score.options`,
+`supports` whether `support_score.passes` names it, `confidence` the decider's
+probability for it), or `{"status": "not_scored", "reason", "detail"}`, or
+`{"status": "not_available", "reason"}` for an entry that is malformed, whose
+answer is not one of the contract's options, or that sits on a fact whose quote
+this re-check did not find; such an entry is never shown as a score. The text form
+says the answer in words under each fact, never a number: for example
+`support: quote supports the value`, `support: quote shows only part of the value`
+or `support not scored (timeout)`, prints the per-answer counts on one `answers:`
+line, and closes with where the score came from.
 
 The support score is a separate signal from the quote check. It changes no count
 above, and an export without it (the switch off, or written before it existed)

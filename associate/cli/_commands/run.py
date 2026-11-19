@@ -528,6 +528,10 @@ def _render(result: dict[str, Any]) -> str:
         shown["accuracy"] = _render_accuracy(result["accuracy"])
     if "support_facts" in result:
         shown["support_scored"] = _render_support(result)
+    if isinstance(result.get("support_answers"), dict):
+        from associate.accuracy.support import answers_line
+
+        shown["support_answers"] = answers_line(result["support_answers"])
     if isinstance(result.get(_K_REMINDER), dict):
         from associate.accuracy.reminder import describe
 

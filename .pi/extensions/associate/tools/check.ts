@@ -80,12 +80,18 @@ export const CHECK_QUOTE_SCHEMA = {
 
 // ------------------------------------------------------------ the support key
 
-/** What the `support` key says when the quote is judged to show the value. */
-const MEANING_SHOWN = "the quote, on its own, states or directly shows this value";
-/** What it says when it is not, with what to do about it. */
-const MEANING_NOT_SHOWN =
-  "the quote does not, on its own, show this value: check the value against the quote, " +
-  "quote the line that states it, or say you cannot tell";
+/**
+ * What the `support` key says for each answer, with what to do about it,
+ * keyed by the shipped contract's option keys (deviation d4). Never a number.
+ */
+const QUOTE_MORE = "quote more of the source or claim less";
+const ANSWER_MEANINGS: Readonly<Record<string, string>> = {
+  all: "the quote shows the value",
+  mostly: "the quote shows the main claim; a detail of the value is not in it; quote that detail too or leave it out",
+  part: `the quote shows only part of the value; ${QUOTE_MORE}`,
+  little: `the quote shows little of the value; ${QUOTE_MORE}`,
+  none: "the quote does not show the value; cite the text that does, or drop the fact",
+};
 
 /**
  * Why there is no score, for a reader who does not know what answers the
@@ -110,12 +116,16 @@ const NOT_SCORED_WORDS: Record<SupportNotScoredReason, string> = {
 
 /** A support result as `check_quote` returns it: the result's own fields and what they mean. */
 export type QuoteSupport =
-  | { status: "scored"; score: number; at_or_above_cutoff: boolean; meaning: string }
+  | { status: "scored"; answer: string; supports: boolean; confidence: number; meaning: string }
   | { status: "not_scored"; reason: SupportNotScoredReason; meaning: string };
 
 /** The plain words for one support result. Never a judgement that the value is true. */
 export function supportMeaning(result: SupportResult): string {
-  if (result.status === "scored") return result.at_or_above_cutoff ? MEANING_SHOWN : MEANING_NOT_SHOWN;
+  if (result.status === "scored") {
+    return Object.hasOwn(ANSWER_MEANINGS, result.answer)
+      ? ANSWER_MEANINGS[result.answer]!
+      : `the answer was ${JSON.stringify(result.answer)}; check the value against the quote, or say you cannot tell`;
+  }
   const why = Object.hasOwn(NOT_SCORED_WORDS, result.reason) ? NOT_SCORED_WORDS[result.reason] : "no score could be had";
   return `not scored (${why}); this is not a judgement on the claim`;
 }
@@ -124,7 +134,7 @@ export function supportMeaning(result: SupportResult): string {
 function describeSupport(result: SupportResult): QuoteSupport {
   const meaning = supportMeaning(result);
   return result.status === "scored"
-    ? { status: result.status, score: result.score, at_or_above_cutoff: result.at_or_above_cutoff, meaning }
+    ? { status: result.status, answer: result.answer, supports: result.supports, confidence: result.confidence, meaning }
     : { status: result.status, reason: result.reason, meaning };
 }
 
@@ -187,8 +197,9 @@ export function register(
       "Give the walk id (for example w12) and the quote; you get the matcher's verdict (passed, refused or " +
       "unchecked) and, for a quote that is absent, the nearest text that is in the result. " +
       "Optionally give value, the claim the quote is meant to support: when the quote is found, the result " +
-      "may add a support key saying whether the quote, on its own, shows that value, or that it was not " +
-      "scored and why. The support key is a second opinion about the quote; it does not say the value is true. " +
+      "may add a support key saying how much of that value the quote, on its own, shows (its answer and " +
+      "what it means you should do), or that it was not scored and why. The support key is a second opinion " +
+      "about the quote; it does not say the value is true. " +
       "Read-only.",
     promptSnippet: "Check a quote against the saved result of a walk entry",
     promptGuidelines: ["Use the walk id, never a path. Run it before you hand a fact back."],

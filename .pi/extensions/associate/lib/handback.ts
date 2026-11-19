@@ -602,7 +602,24 @@ export function withSupport(facts: readonly FactCheck[], support: FactSupport | 
   });
 }
 
-/** How many facts the decider gave a score (status `scored`), whatever the score: report.json `support_scored`. */
+/** How many facts the decider gave an answer (status `scored`), whatever the answer: report.json `support_scored`. */
 export function supportScoredCount(support: FactSupport): number {
   return support.filter((result) => result?.status === "scored").length;
+}
+
+/**
+ * How many facts got each answer: report.json `support_answers` (deviation
+ * d4). One count per key of the contract's options, in contract order, zeros
+ * included; an answer that is not one of them (none is ever stored) is left
+ * out rather than given a key the contract does not have.
+ */
+export function supportAnswerCounts(
+  support: FactSupport,
+  options: Readonly<Record<string, string>>,
+): Record<string, number> {
+  const counts: Record<string, number> = Object.fromEntries(Object.keys(options).map((key) => [key, 0]));
+  for (const result of support) {
+    if (result?.status === "scored" && Object.hasOwn(counts, result.answer)) counts[result.answer] += 1;
+  }
+  return counts;
 }

@@ -55,6 +55,7 @@ import {
   rejectionStage,
   resolveCheckMode,
   scoreCheckedFacts,
+  supportAnswerCounts,
   supportScoredCount,
   unreferencedCount,
   withSupport,
@@ -213,7 +214,8 @@ export default async function (pi: ExtensionAPI) {
   // ------------------------------------------------ support score (decider t3)
   // Spec c1/c2: after the quote check, finish asks the decider whether each
   // passed fact's quote supports its value and stores the answer beside the
-  // check (check.json `facts[i].support`, report.json `support_scored`). It is
+  // check (check.json `facts[i].support`, report.json `support_scored` and
+  // `support_answers`, one count per contract option). It is
   // a report-only signal: it is asked after `accepted`, the refusals and the
   // counts are fixed, and nothing reads it back into them. Off (the default
   // for every model in accuracy.json) nothing is sent and no field is written.
@@ -328,7 +330,12 @@ export default async function (pi: ExtensionAPI) {
   const writeReport = (report: HandbackReport, counts: UncheckedCounts, support?: FactSupport): void =>
     writeJson(REPORT_FILENAME, {
       ...withUncheckedCounts(report, counts),
-      ...(support !== undefined ? { support_scored: supportScoredCount(support) } : {}),
+      ...(support !== undefined && supportSettings
+        ? {
+            support_scored: supportScoredCount(support),
+            support_answers: supportAnswerCounts(support, supportSettings.options),
+          }
+        : {}),
     });
 
   // ------------------------------------------- the rejected hand-back (t3)

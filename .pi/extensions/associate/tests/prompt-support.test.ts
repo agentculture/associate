@@ -77,7 +77,9 @@ const REQUIRED: Array<[string, RegExp]> = [
  * prompt, which follows it in every session, carries the rest.
  */
 const REQUIRED_IN_MODEL_PROMPTS: Array<[string, RegExp]> = [
-  ["it returns whether the quote supports the value", /whether\s+the\s+quote,\s+on\s+its\s+own,\s+shows\s+that\s+value/],
+  ["it returns how much of the value the quote shows", /how\s+much\s+of\s+that\s+value\s+the\s+quote,\s+on\s+its\s+own,\s+shows/],
+  ["the answers are named in words (deviation d4)", /\(all,\s+mostly,\s+part,\s+little\s+or\s+none\)/],
+  ["any answer but all is acted on before finish", /Unless\s+its\s+`answer`\s+is\s+`all`,\s+do\s+what\s+the\s+meaning\s+says\s+before\s+`finish`/],
   ["read the meaning of support", /`support`,\s+read\s+its\s+`meaning`/],
   ["the ways to fix the fact", /re-read\s+the\s+source,\s+correct\s+the\s+value,\s+quote\s+the\s+line\s+that\s+states\s+it,\s+or\s+say\s+you\s+cannot\s+tell/],
   ["not handed back unchanged", /not\s+hand\s+it\s+back\s+unchanged/],
@@ -170,6 +172,7 @@ const BANNED: Array<[string, RegExp]> = [
   ["decider", /decider/i],
   ["CLEF", /clef/i],
   ["a score threshold or cut-off", /threshold|cut-?\s?off/i],
+  ["a number for the support answer", /support[^.]*\b\d\.\d|\bscore\b/i],
   ["a claim that the check proves the value", /\b(proves?|confirms?|guarantees?|means)\b[^.]*\b(true|correct|right)\b/i],
 ];
 
