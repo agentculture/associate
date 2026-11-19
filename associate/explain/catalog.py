@@ -664,6 +664,10 @@ here is a count of stored runs; it is never a score.
     associate measure report RESULTS [--reading answer_text|answer_text_plus_handback_values]
     associate measure sample RESULTS [--sheet PATH] [--seed N] [--size N] [--reading R]
     associate measure agreement RESULTS --sheet PATH
+    associate measure run --broad --arms arms.json --repeats 3 --output-dir RESULTS
+    associate measure sheet RESULTS [--sheet PATH] [--key PATH] [--seed N] [--overwrite]
+    associate measure sheet-check RESULTS [--sheet PATH] [--clone-root DIR]
+    associate measure report RESULTS [--sheet PATH] [--key PATH] [--clone-root DIR]
     associate measure overview
 
 Every sub-verb takes `--json`.
@@ -733,11 +737,65 @@ least 48 hand-graded runs, and agreement on at least 95% of them. A share is nev
 rounded up to reach 95%. `--json` carries the same numbers and the share, null when no
 run is hand graded.
 
+## Broad tasks: run --broad, sheet, sheet-check, report
+
+A broad task asks one open question about a repository and is read against a
+checklist of facts (`docs/accuracy/broad-tasks.json`: one prompt, and per task a
+repository, a pinned commit and the facts).
+
+- `run --broad` runs the broad tasks (`--tasks FILE` names another broad file). Each
+  stored run holds the whole answer, where it came from (`answer.md`, or the final
+  reply of a run that ended without `finish`) and whether a final reply is at the
+  2,000-character cap, and per checklist fact whether it was marked as stated. A fact
+  is marked when every group of its `match` is found in the answer text by one of the
+  group's alternatives, case-insensitively. That is a first marking: the words were
+  found. Every marking is read by hand. No grade of the whole task is stored.
+- The clone a broad run examines never holds `docs/accuracy/broad-tasks.json`, and a
+  call whose arguments name `broad-tasks.json` is a read of the answer key.
+- A real broad run is refused unless `docs/accuracy/broad-difference-threshold.md`
+  (`--difference-note PATH` names another file) is tracked by git, unmodified and
+  confirmed: `status` in its parameters is `confirmed` and the word DRAFT is nowhere
+  in it. A stub run needs no rule file.
+- `sheet` splits every finished run's answer into statements (sentences, list items,
+  headings, table rows, code blocks; the answer's order is kept) and writes two files.
+  The sheet (`broad-grading-sheet.json`) lists the runs in shuffled order under ids
+  (`s01`, ...) with the task, repository and pinned commit, and no arm. The key
+  (`broad-grading-key.json`) maps each id to its run and arm and holds the seed of
+  the shuffle. The grader must not open the key until every run is graded. `--seed N`
+  fixes the shuffle; without it a new random seed is used. An existing sheet or key
+  is replaced only with `--overwrite`.
+- The grader gives every statement a `verdict`: the string `true`, `false` or
+  `not_checkable`. A `false` needs `file` and `line` (a positive whole number): the
+  place in the repository that contradicts the statement. `note` is optional.
+- `sheet-check` reads the sheet (never the key) and lists every problem: a statement
+  without a verdict, a verdict that is not one of the three, a false without a file
+  and a positive line. With `--clone-root DIR` (one checkout per repository, named as
+  the repository) it also checks that the file exists at the task's pinned commit and
+  has that line. It exits 1 while there is a problem and 0 when the sheet is
+  acceptable.
+- `report` on a broad comparison prints one line per run, grouped by repository and
+  arm: checklist facts marked as stated (n of that repository's facts), and the answer
+  source and cap flag. With no sheet written it says the hand count is not joined. Once
+  a sheet exists it joins sheet and key only when the sheet passes the check, every
+  run of the key is fully graded with its statements unchanged, and the key covers the
+  stored finished runs; then each line also has statements counted false, statements
+  not checkable and the number of statements. Otherwise it refuses (exit 1) and prints
+  nothing. Counts are per run; they are never added up over runs and never printed as
+  a percentage.
+- The report applies the rule file to each count on its own when that file is
+  committed, unmodified and confirmed: per repository an arm is better when every one
+  of its runs is at least as good as every run of the other arm and one is strictly
+  better; "a change" needs that in the stated number of repositories, anything else is
+  "no difference shown". When the stored runs are not the ones the rule was written
+  for it says "not applicable" with the reason; a run that read the answer key is left
+  out. While the rule file is a draft the report says the verdict is not computed.
+
 ## Exit codes
 
 - `0` done
-- `1` a user-input error: a bad arms or task file, a missing difference note, a bad
-  flag, a second runner on the same directory, nothing stored to report
+- `1` a user-input error: a bad arms or task file, a missing difference note or rule
+  file, a bad flag, a second runner on the same directory, nothing stored to report, a
+  grading sheet that is not acceptable or not fully graded
 - `2` the background process could not be started
 """
 
@@ -772,6 +830,8 @@ ENTRIES: dict[tuple[str, ...], str] = {
     ("measure", "report"): _MEASURE,
     ("measure", "sample"): _MEASURE,
     ("measure", "agreement"): _MEASURE,
+    ("measure", "sheet"): _MEASURE,
+    ("measure", "sheet-check"): _MEASURE,
     ("cli",): _CLI,
     ("cli", "overview"): _CLI,
 }

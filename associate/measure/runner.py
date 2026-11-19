@@ -104,6 +104,18 @@ not list ``--support-score`` is refused too, once the harness commits are
 prepared and before any run: such a run would silently be something other than
 the arm says.
 
+Broad tasks
+-----------
+A task that carries ``facts`` and no ``expected`` is a broad task
+(:mod:`associate.measure.broad`). Its run is launched like any other. Its
+record holds no grade of the whole task (``grade`` null, ``grades`` empty,
+``graded`` false); it holds the whole answer text and, under ``broad``, the
+first marking of each checklist fact, the count of facts marked, where the
+answer came from and whether it is a final reply at the 2,000-character cap.
+The clone of a broad run always leaves out ``docs/accuracy/broad-tasks.json``,
+whatever the excluded paths are, and a walk argument naming
+``broad-tasks.json`` is a read of the answer key.
+
 Results directory
 -----------------
 ::
@@ -172,6 +184,7 @@ from typing import Any, Callable, Iterator, Mapping, Sequence
 from evidence.answer import grade as evidence_grade
 
 from associate.measure import answer as answer_mod
+from associate.measure import broad as broad_mod
 from associate.measure.clone import CloneError, make_clone
 from associate.measure.contamination import check_walk, load_walk
 from associate.measure.isolation import isolate_run
@@ -237,6 +250,7 @@ _K_SESSION_ID = "session_id"
 _K_SETTINGS = "settings"
 _K_IDENTITY = "identity"
 _K_TASKS = "tasks"
+_K_FACTS = "facts"
 _END_OF_OPTIONS = "--end-of-options"
 _IN_PLAN = f"in {PLAN_FILE}"
 
@@ -818,13 +832,33 @@ def _digest(value: Any) -> str:
     return hashlib.sha256(json.dumps(value, sort_keys=True).encode(_UTF8)).hexdigest()
 
 
+def _is_broad(task: Mapping[str, Any]) -> bool:
+    """Whether *task* is a broad task: it carries checklist facts and no expected values."""
+    return _K_FACTS in task and "expected" not in task
+
+
+def _excluded_for(excluded: Sequence[str], task: Mapping[str, Any]) -> list[str]:
+    """The paths left out of *task*'s clone: a broad task's always cover the broad answer key."""
+    paths = list(excluded)
+    key = broad_mod.BROAD_KEY_PATH
+    covered = any(key == path or key.startswith(path.rstrip("/") + "/") for path in paths)
+    return paths if covered or not _is_broad(task) else [*paths, key]
+
+
+def _key_paths(excluded: Sequence[str], task: Mapping[str, Any]) -> list[str]:
+    """What a walk argument must not name: the excluded paths, and for a broad task the
+    broad answer key's file name wherever it is read from."""
+    paths = list(excluded)
+    return [*paths, broad_mod.BROAD_KEY_NAME] if _is_broad(task) else paths
+
+
 def _task_identity(task: Mapping[str, Any]) -> dict[str, Any]:
     return {
         "id": task["id"],
         "repository": dict(task["repository"]),
         "commit": task["commit"],
         "prompt_sha256": _digest(task["prompt"]),
-        "expected_sha256": _digest(task["expected"]),
+        "expected_sha256": _digest(task[_K_FACTS] if _is_broad(task) else task["expected"]),
     }
 
 
@@ -885,7 +919,8 @@ def _make_clone(ctx: _Context, task: Mapping[str, Any], attempt_dir: Path) -> di
     if not Path(source).is_dir():
         raise _LaunchFailed(f"the local checkout {source} for {slug} is not a directory")
     try:
-        made = make_clone(source, task["commit"], ctx.excluded, attempt_dir / "clones")
+        excluded = _excluded_for(ctx.excluded, task)
+        made = make_clone(source, task["commit"], excluded, attempt_dir / "clones")
     except CloneError as exc:
         raise _LaunchFailed(f"clone failed for {slug} at {task['commit']}: {exc}") from exc
     return {
@@ -1048,7 +1083,7 @@ def _contamination(
     try:
         verdict = check_walk(
             load_walk(walk),
-            answer_key_paths=list(excluded),
+            answer_key_paths=_key_paths(excluded, task),
             host=repo["host"],
             owner=repo["owner"],
             name=repo["name"],
@@ -1109,6 +1144,30 @@ def _grades(
         "empty_reason": answer.empty_reason,
     }
     return answer_info, readings
+
+
+def _broad_fields(
+    result: dict[str, Any] | None, export_dir: Path | None, task: Mapping[str, Any]
+) -> dict[str, Any]:
+    """What a broad run stores in place of a grade: the whole answer and the first marking.
+
+    There is no grade of the whole task. ``broad`` holds, per checklist fact,
+    whether the first marking found it in the answer text, the count of those,
+    where the answer came from and whether it is a final reply at the cap.
+    """
+    answer = answer_mod.model_answer(result, export_dir)
+    marking = broad_mod.first_marking(task[_K_FACTS], answer.text)
+    return {
+        "graded": False,
+        "grade": None,
+        "grades": [],
+        "answer": {
+            "text": answer.text,
+            _K_SOURCE: answer.source,
+            "empty_reason": answer.empty_reason,
+        },
+        "broad": {**marking, **broad_mod.answer_origin(result, answer.source)},
+    }
 
 
 def _counts(result: dict[str, Any] | None, export_dir: Path | None) -> dict[str, Any] | None:
@@ -1191,17 +1250,23 @@ def _finished_fields(
     export_root: Path,
 ) -> dict[str, Any]:
     export_dir = _export_dir(result, export_root, _plan_session(plan))
-    answer, readings = _grades(result, export_dir, task["expected"])
     reasoning = dict(plan[_K_REASONING])
     if result and result.get(_K_REASONING) is not None:
         reasoning[_K_EFFECTIVE] = result[_K_REASONING]
         reasoning[_K_SOURCE] = result.get("reasoning_source") or reasoning[_K_SOURCE]
+    if _is_broad(task):
+        graded = _broad_fields(result, export_dir, task)
+    else:
+        answer, readings = _grades(result, export_dir, task["expected"])
+        graded = {
+            "graded": True,
+            "grade": readings[0]["grade"],
+            "grades": readings,
+            "answer": answer,
+        }
     return {
         _K_STATUS: STATUS_FINISHED,
-        "graded": True,
-        "grade": readings[0]["grade"],
-        "grades": readings,
-        "answer": answer,
+        **graded,
         "outcome": (result or {}).get("outcome", "timeout" if result is None else None),
         "result_source": "stdout" if result is not None else "none",
         "run_result": result,
@@ -1417,7 +1482,8 @@ def _flag_problems(arms: Sequence[Arm], commits: Mapping[str, str], prepared: Ma
 
 
 def _task_problems(task: Mapping[str, Any]) -> list[str]:
-    missing = [k for k in ("repository", "commit", "prompt", "expected") if k not in task]
+    graded_by = _K_FACTS if _K_FACTS in task else "expected"
+    missing = [k for k in ("repository", "commit", "prompt", graded_by) if k not in task]
     return [f"task {task.get('id')!r} has no {', '.join(missing)}"] if missing else []
 
 
