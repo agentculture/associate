@@ -5,7 +5,7 @@
   "schema_version": 5,
   "status": "exported",
   "created": "2026-11-19T04:36:30Z",
-  "updated": "2026-11-19T04:44:26Z",
+  "updated": "2026-11-19T05:10:03Z",
   "targets": [
     {
       "id": "c1",
@@ -686,6 +686,14 @@
       "task_id": "t6",
       "resolved": false,
       "resolution": ""
+    },
+    {
+      "id": "r7",
+      "text": "the support question is sent as type noul with the wording as instructions and the score read from answers.support.noul, copied from the gate's pattern; not yet checked against the live decider (t9 does)",
+      "kind": "unknown_nonblocking",
+      "task_id": "t2",
+      "resolved": true,
+      "resolution": "probed live on 2026-11-19: four pairs in the client's exact request shape returned type noul scores (0.979 and 0.976 for matching pairs, 0.009 and 0.012 for a changed value), in about half a second each"
     }
   ],
   "obligations": []

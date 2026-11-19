@@ -23,6 +23,7 @@ from pathlib import Path
 import pytest
 from evidence.answer import grade, load_expected
 
+from associate.measure import answer as answer_module
 from associate.measure.answer import grade_run, load_result, model_answer
 
 FIXTURES = Path(__file__).parent / "fixtures" / "measure" / "answer"
@@ -80,6 +81,16 @@ def test_render_ts_still_writes_the_fixed_lines():
     for line in FIXED_LINES:
         literal = line.replace('"', '\\"')
         assert literal in source
+
+
+def test_the_support_legend_is_a_harness_line_and_matches_render_ts():
+    source = RENDER_TS.read_text(encoding="utf-8")
+    pieces = re.findall(
+        r"'([^']*)'", source.split("export const SUPPORT_LEGEND =", 1)[1].split(";", 1)[0]
+    )
+    legend = "".join(pieces)
+    assert legend.startswith("The support mark is a second, separate check")
+    assert answer_module.is_harness_line(legend)
 
 
 # Acceptance 1: the grade of a run is unchanged when its facts.json is deleted.

@@ -58,6 +58,9 @@ _FIXED_LINES = frozenset(
         "## Unchecked: the model's own words, not checked by the harness",
         'A fact marked "quote found" means its quote is in the saved result it cites; '
         "it does not mean the value is true.",
+        "The support mark is a second, separate check: whether the quote, read on its own, "
+        'shows the value, with a score from 0 (no) to 1 (yes), or "support not scored" when '
+        "that check did not run. Neither mark means the value is true.",
         "- none",
     }
 )
