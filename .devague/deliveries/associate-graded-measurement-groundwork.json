@@ -2,7 +2,7 @@
   "plan_slug": "associate-graded-measurement-groundwork",
   "schema_version": 2,
   "created": "2026-11-18T17:08:42Z",
-  "updated": "2026-11-19T04:35:31Z",
+  "updated": "2026-11-19T04:59:19Z",
   "deviations": [
     {
       "id": "d1",
@@ -86,7 +86,287 @@
       "seq": 7
     }
   ],
-  "evidence": [],
-  "deltas": [],
+  "evidence": [
+    {
+      "id": "e1",
+      "obligation_ref": "o1",
+      "test_ref": "tests/test_measure_clone.py",
+      "behavior_text": "the filtered clone holds one commit and no file under docs/accuracy; incomplete clones are refused",
+      "contract_text": "obligation o1 as filed",
+      "evidence_type": "automated",
+      "strength": "execution",
+      "strength_basis": "whole pytest suite ran green on merged main (1566 passed)",
+      "outcome": "pass",
+      "run": {
+        "timestamp": "2026-11-19T04:59:03Z",
+        "commit": "208935e"
+      },
+      "origin": "llm",
+      "status": "proposed",
+      "superseded": false,
+      "seq": 8
+    },
+    {
+      "id": "e2",
+      "obligation_ref": "o2",
+      "test_ref": "tests/test_run.py::test_a_run_killed_at_its_time_limit_prints_a_timeout_result",
+      "behavior_text": "a run killed at its limit prints a result naming the timeout; --reasoning is passed per run",
+      "contract_text": "obligation o2 as filed",
+      "evidence_type": "automated",
+      "strength": "execution",
+      "strength_basis": "whole pytest suite ran green on merged main (1566 passed); no live timeout was provoked",
+      "outcome": "pass",
+      "run": {
+        "timestamp": "2026-11-19T04:59:03Z",
+        "commit": "208935e"
+      },
+      "origin": "llm",
+      "status": "proposed",
+      "superseded": false,
+      "seq": 9
+    },
+    {
+      "id": "e3",
+      "obligation_ref": "o3",
+      "test_ref": "tests/test_accuracy_check_outputs.py",
+      "behavior_text": "associate check output through evidence-cli matches the pinned outputs on fixture exports",
+      "contract_text": "obligation o3 as filed",
+      "evidence_type": "automated",
+      "strength": "execution",
+      "strength_basis": "whole pytest suite ran green on merged main (1566 passed); fixture exports only, not every saved live export",
+      "outcome": "pass",
+      "run": {
+        "timestamp": "2026-11-19T04:59:03Z",
+        "commit": "208935e"
+      },
+      "origin": "llm",
+      "status": "proposed",
+      "superseded": false,
+      "seq": 10
+    },
+    {
+      "id": "e4",
+      "obligation_ref": "o4",
+      "test_ref": "tests/test_pi_config.py::test_python_package_dependencies_are_the_named_first_party_list",
+      "behavior_text": "a dependency outside the named first-party list fails the test",
+      "contract_text": "obligation o4 as filed",
+      "evidence_type": "automated",
+      "strength": "execution",
+      "strength_basis": "whole pytest suite ran green on merged main (1566 passed)",
+      "outcome": "pass",
+      "run": {
+        "timestamp": "2026-11-19T04:59:03Z",
+        "commit": "208935e"
+      },
+      "origin": "llm",
+      "status": "proposed",
+      "superseded": false,
+      "seq": 11
+    },
+    {
+      "id": "e5",
+      "obligation_ref": "o5",
+      "test_ref": "tests/test_accuracy_evidence.py::test_without_a_usable_evidence_cli_the_verb_exits_2_naming_the_install",
+      "behavior_text": "run and check exit 2 naming the package and install command when evidence-cli cannot be imported",
+      "contract_text": "obligation o5 as filed",
+      "evidence_type": "automated",
+      "strength": "execution",
+      "strength_basis": "whole pytest suite ran green on merged main (1566 passed)",
+      "outcome": "pass",
+      "run": {
+        "timestamp": "2026-11-19T04:59:03Z",
+        "commit": "208935e"
+      },
+      "origin": "llm",
+      "status": "proposed",
+      "superseded": false,
+      "seq": 12
+    },
+    {
+      "id": "e6",
+      "obligation_ref": "o6",
+      "test_ref": "tests/test_measure_isolation.py",
+      "behavior_text": "each measured run gets its own empty memory store and ledger file outside the clone",
+      "contract_text": "obligation o6 as filed",
+      "evidence_type": "automated",
+      "strength": "execution",
+      "strength_basis": "whole pytest suite ran green on merged main (1566 passed); also seen in 32 pilot runs (entries went to the run's own ledger file)",
+      "outcome": "pass",
+      "run": {
+        "timestamp": "2026-11-19T04:59:03Z",
+        "commit": "208935e"
+      },
+      "origin": "llm",
+      "status": "proposed",
+      "superseded": false,
+      "seq": 13
+    },
+    {
+      "id": "e7",
+      "obligation_ref": "o7",
+      "test_ref": "tests/test_measure_contamination.py",
+      "behavior_text": "a walk showing the answer key path, a repository-hosting web call or a recalled record marks the run contaminated",
+      "contract_text": "obligation o7 as filed",
+      "evidence_type": "automated",
+      "strength": "execution",
+      "strength_basis": "whole pytest suite ran green on merged main (1566 passed); no pilot run was contaminated, so the live path was never exercised",
+      "outcome": "pass",
+      "run": {
+        "timestamp": "2026-11-19T04:59:03Z",
+        "commit": "208935e"
+      },
+      "origin": "llm",
+      "status": "proposed",
+      "superseded": false,
+      "seq": 14
+    },
+    {
+      "id": "e8",
+      "obligation_ref": "o8",
+      "test_ref": ".pi/extensions/associate/tests/handback-rejected.test.ts",
+      "behavior_text": "a finish whose facts field is a JSON string is accepted or refused with a named cause; a timed-out run keeps the rejected hand-back",
+      "contract_text": "obligation o8 as filed",
+      "evidence_type": "automated",
+      "strength": "execution",
+      "strength_basis": "node suite on merged main: 932 tests, 930 pass, 2 skipped",
+      "outcome": "pass",
+      "run": {
+        "timestamp": "2026-11-19T04:59:03Z",
+        "commit": "208935e"
+      },
+      "origin": "llm",
+      "status": "proposed",
+      "superseded": false,
+      "seq": 15
+    },
+    {
+      "id": "e9",
+      "obligation_ref": "o9",
+      "test_ref": "tests/test_measure_tasks.py",
+      "behavior_text": "every task carries expected values in evidence-cli's schema and the answer check returns one of three verdicts",
+      "contract_text": "obligation o9 as filed",
+      "evidence_type": "automated",
+      "strength": "execution",
+      "strength_basis": "whole pytest suite ran green on merged main (1566 passed)",
+      "outcome": "pass",
+      "run": {
+        "timestamp": "2026-11-19T04:59:03Z",
+        "commit": "208935e"
+      },
+      "origin": "llm",
+      "status": "proposed",
+      "superseded": false,
+      "seq": 16
+    },
+    {
+      "id": "e10",
+      "obligation_ref": "o10",
+      "test_ref": "tests/test_measure_answer.py",
+      "behavior_text": "the text handed to the answer check is the model's own answer with harness-written lines removed",
+      "contract_text": "obligation o10 as filed",
+      "evidence_type": "automated",
+      "strength": "execution",
+      "strength_basis": "whole pytest suite ran green on merged main (1566 passed)",
+      "outcome": "pass",
+      "run": {
+        "timestamp": "2026-11-19T04:59:03Z",
+        "commit": "208935e"
+      },
+      "origin": "llm",
+      "status": "proposed",
+      "superseded": false,
+      "seq": 17
+    },
+    {
+      "id": "e11",
+      "obligation_ref": "o11",
+      "test_ref": "tests/test_measure_task_set.py",
+      "behavior_text": "24 tasks, 8 per repository, each with a pinned commit, expected values and two recorded checks",
+      "contract_text": "obligation o11 as filed",
+      "evidence_type": "automated",
+      "strength": "execution",
+      "strength_basis": "whole pytest suite ran green on merged main (1566 passed)",
+      "outcome": "pass",
+      "run": {
+        "timestamp": "2026-11-19T04:59:03Z",
+        "commit": "208935e"
+      },
+      "origin": "llm",
+      "status": "proposed",
+      "superseded": false,
+      "seq": 18
+    },
+    {
+      "id": "e12",
+      "obligation_ref": "o12",
+      "test_ref": "tests/test_measure_runner.py",
+      "behavior_text": "one command starts every arm and stores a graded result per run; a restart skips stored runs",
+      "contract_text": "obligation o12 as filed",
+      "evidence_type": "automated",
+      "strength": "execution",
+      "strength_basis": "whole pytest suite ran green on merged main (1566 passed); two 16-run pilots stored 32 of 32 runs",
+      "outcome": "pass",
+      "run": {
+        "timestamp": "2026-11-19T04:59:03Z",
+        "commit": "208935e"
+      },
+      "origin": "llm",
+      "status": "proposed",
+      "superseded": false,
+      "seq": 19
+    },
+    {
+      "id": "e13",
+      "obligation_ref": "o13",
+      "test_ref": "tests/test_measure_runner.py::test_the_real_pre_pr27_commit_runs_through_the_runner",
+      "behavior_text": "an arm runs the harness from a named older commit against the same tasks",
+      "contract_text": "obligation o13 as filed",
+      "evidence_type": "automated",
+      "strength": "execution",
+      "strength_basis": "whole pytest suite ran green on merged main (1566 passed); 16 pilot runs ran on the older commit",
+      "outcome": "pass",
+      "run": {
+        "timestamp": "2026-11-19T04:59:03Z",
+        "commit": "208935e"
+      },
+      "origin": "llm",
+      "status": "proposed",
+      "superseded": false,
+      "seq": 20
+    },
+    {
+      "id": "e14",
+      "obligation_ref": "o14",
+      "test_ref": "tests/test_measure_report.py",
+      "behavior_text": "the sample and agreement commands draw runs for hand grading and compute agreement",
+      "contract_text": "obligation o14 as filed",
+      "evidence_type": "automated",
+      "strength": "execution",
+      "strength_basis": "whole pytest suite ran green on merged main (1566 passed); fixture records only: no sample of 48 real runs was drawn and no agreement figure exists",
+      "outcome": "pass",
+      "run": {
+        "timestamp": "2026-11-19T04:59:03Z",
+        "commit": "208935e"
+      },
+      "origin": "llm",
+      "status": "proposed",
+      "superseded": false,
+      "seq": 21
+    }
+  ],
+  "deltas": [
+    {
+      "id": "b1",
+      "kind": "removed",
+      "behavior_text": "the before/after comparison was not run: no table over 288 runs, no hand-graded sample of 48, no agreement figure; obligation o15 is unmet and o14 is met on fixtures only",
+      "caused_by": [
+        "d7"
+      ],
+      "evidence_refs": [],
+      "origin": "llm",
+      "status": "proposed",
+      "superseded": false
+    }
+  ],
   "supersessions": []
 }
