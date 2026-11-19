@@ -48,6 +48,9 @@ Commands
   associate tokens revoke <id> Stop a token working.
   associate tokens overview    Describe the tokens verbs.
   associate check <export-dir> Re-check an export's hand-back facts; print counts.
+                               check and run --json show each fact's
+                               support score copied from the export (support_source:
+                               extension) when the export holds one; never recomputed.
   associate measure run        Run a comparison of arms over tasks (--arms, --repeats,
                                --output-dir, --detach); needs the committed difference note
                                unless --harness stub (plumbing only). An arm may set
@@ -110,6 +113,8 @@ def _as_json_payload() -> dict[str, object]:
                     "--test-command names checks the harness runs before merging; "
                     "--support-score on|off overrides the model's support-score switch "
                     "for one run); "
+                    "the result carries the support score the export holds as "
+                    "support_facts, labelled support_source: extension; "
                     "exits 2 without serving when the adapter cannot prove its "
                     "extension loaded."
                 ),
@@ -150,7 +155,9 @@ def _as_json_payload() -> dict[str, object]:
                 "path": ["check"],
                 "summary": (
                     "Re-check an export directory's hand-back facts against its walk and "
-                    "saved results; print counts per kind and per source kind."
+                    "saved results; print counts per kind and per source kind. A support "
+                    "score the export holds is copied onto each fact (support_source: "
+                    "extension), never recomputed."
                 ),
             },
             {

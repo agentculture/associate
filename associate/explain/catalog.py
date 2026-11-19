@@ -272,6 +272,28 @@ fact whose quote was found, the decider is asked whether the quote supports the
 value). The switch and its reader in the extension are built and unit-tested;
 nothing has been measured live with it, and it is not a measure of accuracy.
 
+When the export holds a support score, the result carries it beside `accuracy`,
+copied from the extension's `check.json` and never recomputed (the Python side
+makes no network call for it):
+
+- `support_source`: `extension`, naming who computed it;
+- `support_facts`: one `{"id", "support"}` per fact the extension gave a result,
+  where `support` is `{"status": "scored", "score", "at_or_above_cutoff"}`, or
+  `{"status": "not_scored", "reason", "detail"}` (`detail` optional), or
+  `{"status": "not_available", "reason"}` when the entry is malformed or sits on a
+  fact whose quote the Python re-check did not find. A malformed entry is never
+  shown as a score;
+- `support_scored`: how many of those are `scored`, counted from what is shown;
+- `support_scored_reported`: the extension's own count from `report.json`, when it
+  wrote one;
+- `support_unmatched`: fact ids `check.json` gave a result for that the re-check
+  does not know, when there are any.
+
+An export with no support score (the switch off, or written before it existed)
+has none of these keys. The text form prints one `support_scored=` line. The
+score is a separate signal from the quote check: it is not in `accuracy.report`,
+changes no count there, and refuses nothing.
+
 ## A run that times out
 
 `--timeout` (default 900 seconds) bounds the task turn. When pi does not finish
@@ -396,6 +418,27 @@ a statement that the fact is true. A fact that could not be checked (no saved te
 or only part of it) is `unchecked` and is never counted as passed. An export written
 before the walk format marker has no facts: they are reported as not applicable, and
 the calls are still listed.
+
+## The support score, copied
+
+When the run had the support score on, the extension wrote a result for each fact
+whose quote was found into the export's `check.json`. `associate check` copies it;
+it does not recompute it and makes no network call for it. In `--json` each such
+fact gains a `support` object and the result gains `support_source` (`extension`),
+`support_scored` (how many shown results are scored), `support_scored_reported`
+(the extension's own count from `report.json`, when present) and, when there are
+any, `support_unmatched` (ids `check.json` scored that the re-check does not know).
+`support` is `{"status": "scored", "score", "at_or_above_cutoff"}`, or
+`{"status": "not_scored", "reason", "detail"}`, or `{"status": "not_available",
+"reason"}` for an entry that is malformed or sits on a fact whose quote this
+re-check did not find; such an entry is never shown as a score. The text form says
+it under each fact, for example `quote supports the value (support 0.97)`,
+`quote may not support the value (support 0.03)` or `support not scored (timeout)`,
+and closes with where the score came from.
+
+The support score is a separate signal from the quote check. It changes no count
+above, and an export without it (the switch off, or written before it existed)
+prints exactly what it printed before.
 
 ## Usage
 

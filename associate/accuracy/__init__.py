@@ -21,6 +21,8 @@ from __future__ import annotations
 
 import re
 from importlib import metadata
+from pathlib import Path
+from typing import Any, Mapping, Optional
 
 from associate.cli._errors import EXIT_ENV_ERROR, CliError
 
@@ -89,9 +91,11 @@ def require_evidence() -> str:
 
 require_evidence()
 
-from evidence.accuracy.check import (  # noqa: E402 - only after the version check
+from evidence.accuracy.check import (  # noqa: E402 - only after the version check; noqa: E402
     ExportError,
-    accuracy_result,
+)
+from evidence.accuracy.check import accuracy_result as _recheck_result  # noqa: E402
+from evidence.accuracy.check import (  # noqa: E402 - only after the version check; noqa: E402
     check_handback,
     inspect_export,
     load_export,
@@ -100,3 +104,42 @@ from evidence.accuracy.check import (  # noqa: E402 - only after the version che
 )
 from evidence.accuracy.counts import fact_counts  # noqa: E402
 from evidence.accuracy.matcher import check_quote  # noqa: E402
+
+from associate.accuracy import support as _support  # noqa: E402
+
+
+def _inspected(
+    export_dir: Path, accuracy: Mapping[str, Any], continue_from: Optional[Path]
+) -> dict[str, Any]:
+    """The re-check's facts for *export_dir*; no facts when the export cannot be read."""
+    try:
+        return inspect_export(export_dir, accuracy, continue_from)
+    except ExportError:
+        return {"facts": []}
+
+
+def accuracy_result(
+    export_dir: Path,
+    accuracy: Mapping[str, Any],
+    *,
+    continue_from: Optional[Path] = None,
+    check_mode: Optional[str] = None,
+) -> dict[str, Any]:
+    """evidence-cli's ``accuracy_result``, plus the support score the export holds.
+
+    When the export's ``check.json`` carries a support result for any fact (or
+    ``report.json`` a ``support_scored`` count), the result gains
+    ``support_source`` (``"extension"``), ``support_scored``, ``support_facts``
+    (``[{"id", "support"}]``) and, when they apply, ``support_scored_reported``
+    and ``support_unmatched``. They sit beside ``accuracy``, not in it: the
+    score is copied from the extension's files, never recomputed, and is not
+    part of the re-check. An export with no score gets no such key.
+    """
+    export_dir = Path(export_dir)
+    result = _recheck_result(
+        export_dir, accuracy, continue_from=continue_from, check_mode=check_mode
+    )
+    if _support.copy_support(export_dir, []) is None:
+        return result
+    inspected = _inspected(export_dir, accuracy, continue_from)
+    return {**result, **_support.run_fields(inspected, export_dir)}

@@ -11,6 +11,11 @@ install command. Two of its results have no counterpart before the move: an
 export whose walk format it does not support (``unsupported``) is not checked
 and its calls are not listed, and a prior or child run in such a format is not
 loaded (``unsupported_runs``).
+
+When the export holds a support score (the extension's ``facts[i].support`` in
+``check.json``), each fact's result is copied on as ``support`` and the output
+says ``support_source: extension``. It is copied, not recomputed, and the verb
+makes no network call for it (see :mod:`associate.accuracy.support`).
 """
 
 from __future__ import annotations
@@ -63,13 +68,29 @@ def _unsupported_runs_lines(result: dict[str, Any]) -> list[str]:
     return ["", "Runs", f"  not loaded: {named}; its walk format is not supported"]
 
 
+def _fact_lines(fact: dict[str, Any]) -> list[str]:
+    """One fact's line, and under it its support result when the export held one."""
+    from associate.accuracy.support import describe
+
+    reason = f" ({fact['reason']})" if fact["reason"] else ""
+    lines = [
+        f"  {fact['id']}  {fact['source']}  source kind: {fact['source_kind'] or 'none'}  "
+        f"{fact['verdict']}{reason}"
+    ]
+    if "support" in fact:
+        lines.append(f"      {describe(fact['support'])}")
+    return lines
+
+
 def render(result: dict[str, Any]) -> str:
-    """The text form of evidence-cli's ``inspect_export`` result."""
+    """The text form of evidence-cli's ``inspect_export`` result, with any copied support."""
+    from associate.accuracy.support import summary_lines
+
     out = [f"export: {result['export']} (walk format {_format_text(result['walk_format'])})"]
     out += ["", "Calls", *_calls_lines(result), *_unsupported_runs_lines(result), "", "Facts"]
     if not result["applicable"]:
         out.append(f"  not applicable: {result['not_applicable_reason']}")
-        return "\n".join(out)
+        return "\n".join([*out, *summary_lines(result)])
     report = result["report"]
     out.append(_counts_line("all", report["facts"]))
     out.append("  By source kind")
@@ -77,11 +98,7 @@ def render(result: dict[str, Any]) -> str:
         out.append(_counts_line(kind, counts))
     out.append("  Each fact")
     for fact in result["facts"]:
-        reason = f" ({fact['reason']})" if fact["reason"] else ""
-        out.append(
-            f"  {fact['id']}  {fact['source']}  source kind: {fact['source_kind'] or 'none'}  "
-            f"{fact['verdict']}{reason}"
-        )
+        out += _fact_lines(fact)
     concl, stmts = report["conclusions"], report["statements"]
     out += [
         "",
@@ -92,23 +109,26 @@ def render(result: dict[str, Any]) -> str:
         "passed means the quote was found in the saved result the fact cites; it is not a",
         "statement that the fact is true. Unchecked facts are never counted as passed.",
     ]
-    return "\n".join(out)
+    return "\n".join([*out, *summary_lines(result)])
 
 
 def cmd_check(args: argparse.Namespace) -> int:
     # Imported here: without a usable evidence-cli this raises the exit-2 CliError.
     from associate.accuracy import ExportError, inspect_export
+    from associate.accuracy.support import with_support
 
     json_mode = bool(getattr(args, "json", False))
     try:
         prior = Path(args.continue_from) if getattr(args, "continue_from", None) else None
-        result = inspect_export(Path(args.export_dir), load_accuracy(), continue_from=prior)
+        inspected = inspect_export(Path(args.export_dir), load_accuracy(), continue_from=prior)
     except ExportError as err:
         raise CliError(
             code=EXIT_USER_ERROR,
             message=str(err),
             remediation="pass an export directory holding walk.jsonl (<session>/export)",
         ) from err
+    # The support score is the extension's: copied from the export, never recomputed.
+    result = with_support(inspected, Path(args.export_dir))
     emit_result(result if json_mode else render(result), json_mode=json_mode)
     return 0
 
