@@ -4,7 +4,7 @@
   "schema_version": 6,
   "status": "drafting",
   "created": "2026-11-19T18:44:49Z",
-  "updated": "2026-11-19T18:45:11Z",
+  "updated": "2026-11-19T18:49:06Z",
   "claims": [
     {
       "id": "c1",
@@ -81,7 +81,7 @@
     {
       "id": "c6",
       "kind": "after_state",
-      "text": "A fact whose value states a count, a total or an absence is shown in the rendered answer with the command (or search, or read) of the call it cites, as the walk recorded it, and that call's result, so a reader can run it again",
+      "text": "Every fact in the rendered answer is shown with how to check it: the command, search or read of the call it cites, as the walk recorded it, and that call's result, so a reader can run it again",
       "origin": "llm",
       "status": "proposed",
       "honesty_conditions": [
@@ -95,12 +95,18 @@
       "hard_questions": [],
       "links": [],
       "instruction": "",
-      "revisions": []
+      "revisions": [
+        {
+          "text": "A fact whose value states a count, a total or an absence is shown in the rendered answer with the command (or search, or read) of the call it cites, as the walk recorded it, and that call's result, so a reader can run it again",
+          "kind": "after_state",
+          "reason": "operator: all claims, not only counts"
+        }
+      ]
     },
     {
       "id": "c7",
       "kind": "after_state",
-      "text": "The rendered answer is made only of items whose basis passed; the model's unchecked text stays in the export and is not part of the answer",
+      "text": "The rendered answer is made only of items whose basis passed; an item that fails is dropped from the answer, the model is told which items were dropped and why and may answer again, and the model's unchecked text stays in the export and is not part of the answer",
       "origin": "llm",
       "status": "proposed",
       "honesty_conditions": [
@@ -114,7 +120,13 @@
       "hard_questions": [],
       "links": [],
       "instruction": "",
-      "revisions": []
+      "revisions": [
+        {
+          "text": "The rendered answer is made only of items whose basis passed; the model's unchecked text stays in the export and is not part of the answer",
+          "kind": "after_state",
+          "reason": "operator: drop what fails and let the agent know and why"
+        }
+      ]
     },
     {
       "id": "c8",
@@ -157,7 +169,7 @@
     {
       "id": "c10",
       "kind": "requirement",
-      "text": "A fact the decider answers part, little or none is returned to the model once with that answer and the fix (narrow the value to what the quote shows, or cite a source that shows the rest), within the existing retry rounds",
+      "text": "A fact the decider answers part, little or none fails its check: it is dropped and returned to the model with that answer and the fix (narrow the value to what the quote shows, or cite a source that shows the rest), within the existing retry rounds",
       "origin": "llm",
       "status": "proposed",
       "honesty_conditions": [
@@ -171,7 +183,13 @@
       "hard_questions": [],
       "links": [],
       "instruction": "",
-      "revisions": []
+      "revisions": [
+        {
+          "text": "A fact the decider answers part, little or none is returned to the model once with that answer and the fix (narrow the value to what the quote shows, or cite a source that shows the rest), within the existing retry rounds",
+          "kind": "requirement",
+          "reason": "operator: drop what fails and tell the agent why"
+        }
+      ]
     },
     {
       "id": "c11",
@@ -214,7 +232,7 @@
     {
       "id": "c13",
       "kind": "boundary",
-      "text": "No change to lobes-cli or colleague; gate.json stays version 9; every model stays in report mode until a recorded live run; the quote-found count and the new counts are never called accuracy",
+      "text": "No change to lobes-cli or colleague; gate.json stays version 9; the quote-found count and the new counts are never called accuracy",
       "origin": "llm",
       "status": "proposed",
       "honesty_conditions": [
@@ -228,7 +246,13 @@
       "hard_questions": [],
       "links": [],
       "instruction": "",
-      "revisions": []
+      "revisions": [
+        {
+          "text": "No change to lobes-cli or colleague; gate.json stays version 9; every model stays in report mode until a recorded live run; the quote-found count and the new counts are never called accuracy",
+          "kind": "boundary",
+          "reason": "the report-mode clause is replaced by the operator's decision that the strict behaviour is switched on"
+        }
+      ]
     },
     {
       "id": "c14",
@@ -258,6 +282,154 @@
       "id": "c16",
       "kind": "assumption",
       "text": "A model that must attach a command to each count will still state the counts it stated before, and will not move them into the summary; the measured runs show models already put about five in six statements into free text",
+      "origin": "llm",
+      "status": "proposed",
+      "honesty_conditions": [],
+      "hard_questions": [],
+      "links": [],
+      "instruction": "",
+      "revisions": []
+    },
+    {
+      "id": "c17",
+      "kind": "decision",
+      "text": "Operator, 2026-11-19: all claims carry how to check them, not only counts",
+      "origin": "user",
+      "status": "confirmed",
+      "honesty_conditions": [],
+      "hard_questions": [],
+      "links": [],
+      "instruction": "",
+      "revisions": []
+    },
+    {
+      "id": "c18",
+      "kind": "decision",
+      "text": "Operator, 2026-11-19: some claims need an LLM to check; the fact says so ('Some require an LLM, so we write that')",
+      "origin": "user",
+      "status": "confirmed",
+      "honesty_conditions": [],
+      "hard_questions": [],
+      "links": [],
+      "instruction": "",
+      "revisions": []
+    },
+    {
+      "id": "c19",
+      "kind": "decision",
+      "text": "Operator, 2026-11-19: some claims are based on other claims; facts get fields for that, so the check can iterate and, if one breaks, the facts based on it are flagged",
+      "origin": "user",
+      "status": "confirmed",
+      "honesty_conditions": [],
+      "hard_questions": [],
+      "links": [],
+      "instruction": "",
+      "revisions": []
+    },
+    {
+      "id": "c20",
+      "kind": "decision",
+      "text": "Operator, 2026-11-19: the strict behaviour is switched on",
+      "origin": "user",
+      "status": "confirmed",
+      "honesty_conditions": [],
+      "hard_questions": [],
+      "links": [],
+      "instruction": "",
+      "revisions": []
+    },
+    {
+      "id": "c21",
+      "kind": "decision",
+      "text": "Operator, 2026-11-19: what fails is dropped, and the agent is told what was dropped and why",
+      "origin": "user",
+      "status": "confirmed",
+      "honesty_conditions": [],
+      "hard_questions": [],
+      "links": [],
+      "instruction": "",
+      "revisions": []
+    },
+    {
+      "id": "c22",
+      "kind": "requirement",
+      "text": "Each fact states its kind of check: 'direct' (the cited call's result shows it: a quote or a number), 'llm' (a judgement the decider or a model must make, named as such in the answer), or 'derived' (it follows from other facts)",
+      "origin": "llm",
+      "status": "proposed",
+      "honesty_conditions": [
+        {
+          "id": "h9",
+          "text": "a node test and a live run each show a hand-back with the three kinds, rendered with the kind named on each item",
+          "status": "proposed",
+          "instruction": ""
+        }
+      ],
+      "hard_questions": [],
+      "links": [],
+      "instruction": "",
+      "revisions": []
+    },
+    {
+      "id": "c23",
+      "kind": "requirement",
+      "text": "A fact may name the facts it is based on (a based_on list of fact ids); the harness checks the ids exist, refuses a cycle, checks facts in dependency order, and when a fact fails it flags and drops every fact based on it, naming the failed fact as the reason",
+      "origin": "llm",
+      "status": "proposed",
+      "honesty_conditions": [
+        {
+          "id": "h10",
+          "text": "a replay in which fact f1 fails and f2, f3 name f1 in based_on drops all three, and the message to the model names f1 as the reason for f2 and f3; a cycle f1->f2->f1 is refused with the fix",
+          "status": "proposed",
+          "instruction": ""
+        }
+      ],
+      "hard_questions": [],
+      "links": [],
+      "instruction": "",
+      "revisions": []
+    },
+    {
+      "id": "c24",
+      "kind": "requirement",
+      "text": "A fact whose check is 'llm' is sent to the decider with the value and the cited result; the answer shows the decider's option beside it, and it is never counted with the facts a direct check passed",
+      "origin": "llm",
+      "status": "proposed",
+      "honesty_conditions": [
+        {
+          "id": "h11",
+          "text": "report.json counts direct-passed, llm-judged and derived facts separately, and the wording test finds none of them called accuracy",
+          "status": "proposed",
+          "instruction": ""
+        }
+      ],
+      "hard_questions": [],
+      "links": [],
+      "instruction": "",
+      "revisions": []
+    },
+    {
+      "id": "c25",
+      "kind": "requirement",
+      "text": "The strict behaviour is on for worker and cortex by default in the contract, with a per-run switch to turn it off for comparison arms",
+      "origin": "llm",
+      "status": "proposed",
+      "honesty_conditions": [
+        {
+          "id": "h12",
+          "text": "one recorded live run each on worker and cortex with the default contract shows dropped items in the walk and in the message the model received",
+          "status": "proposed",
+          "instruction": ""
+        }
+      ],
+      "hard_questions": [],
+      "links": [],
+      "instruction": "",
+      "revisions": []
+    },
+    {
+      "id": "c26",
+      "kind": "assumption",
+      "text": "Switching the strict behaviour on before a recorded live run departs from the repo rule in CLAUDE.md (no enforce without a recorded report-mode run); the rule is updated in this work and the first live runs are recorded before the PR is marked ready",
       "origin": "llm",
       "status": "proposed",
       "honesty_conditions": [],
