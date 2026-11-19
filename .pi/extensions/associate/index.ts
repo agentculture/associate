@@ -69,6 +69,7 @@ import { createAssociateContext, loadToolModules } from "./lib/runtime.ts";
 import { createSupportCache, type SupportOptions } from "./lib/support.ts";
 import { supportScoreFor } from "./lib/supportswitch.ts";
 import { assistantMessageText, installStatementsRecorder, messageHasToolCalls } from "./lib/statements.ts";
+import { installFinalMessageRecorder } from "./lib/finalmessage.ts";
 import { installContinueFrom, resolveContinueFrom } from "./lib/torch.ts";
 import { activeToolSet, resolveActiveModel, toolsOutsideContract } from "./lib/toolset.ts";
 import { compileRedaction, contentToText, installWalkRecorder, stampContent, stampText } from "./lib/walk.ts";
@@ -155,6 +156,10 @@ export default async function (pi: ExtensionAPI) {
   // recorded read ranges. Installed after the walk so a statement is always
   // verified against a walk that is already on disk.
   installStatementsRecorder(pi, ctx);
+  // The latest prose-only assistant message, whole, as `final_message.md`: the
+  // statements above are a split that drops headings, list markers and code,
+  // and a run that ends without `finish` leaves no answer.md.
+  installFinalMessageRecorder(pi, ctx);
 
   // ----------------------------------------------------------- runtime prompt
   // The launcher passes `--no-context-files` because pi loads AGENTS.md /

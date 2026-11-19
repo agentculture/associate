@@ -62,7 +62,9 @@ Commands
                                hand-graded runs and 95% agreement conditions (read-only).
   associate measure run --broad  The broad tasks: each run stores its whole answer and a
                                first marking of the checklist facts; a real run needs the
-                               committed, confirmed rule file.
+                               committed, confirmed rule file. A run that ended without
+                               finish is read from its whole final message
+                               (answer_source, finished, at_cap).
   associate measure sheet <dir>  Broad tasks: the grading sheet (statements per run, arms
                                hidden, shuffled) and, in a separate file, its key.
   associate measure sheet-check <dir>  What a filled sheet lacks (a verdict per statement,
@@ -179,7 +181,8 @@ def _as_json_payload() -> dict[str, object]:
                 "summary": (
                     "Print the table of the stored results (--reading, --json); for a broad "
                     "comparison, per run: checklist facts marked as stated (a first marking) "
-                    "and, once every run is graded, statements counted false."
+                    "and, once every run is graded, statements counted false; per arm, how "
+                    "many runs ended without finish."
                 ),
             },
             {

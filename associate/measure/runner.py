@@ -1153,9 +1153,11 @@ def _broad_fields(
 
     There is no grade of the whole task. ``broad`` holds, per checklist fact,
     whether the first marking found it in the answer text, the count of those,
-    where the answer came from and whether it is a final reply at the cap.
+    where the answer came from, whether it is a final reply cut at the cap, and
+    whether ``finish`` was accepted. A run that ended without ``finish`` is
+    marked on its whole last message (``answer.broad_answer``).
     """
-    answer = answer_mod.model_answer(result, export_dir)
+    answer = answer_mod.broad_answer(result, export_dir)
     marking = broad_mod.first_marking(task[_K_FACTS], answer.text)
     return {
         "graded": False,
