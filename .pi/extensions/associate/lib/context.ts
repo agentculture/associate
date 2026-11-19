@@ -11,6 +11,7 @@
 
 import type { Contract, ContractPolicy, ContractSchemas } from "./contract.ts";
 import type { SessionDirs } from "./session.ts";
+import type { SupportOptions } from "./support.ts";
 import type { ChildEntry, ChildLink } from "./walk.ts";
 
 /**
@@ -83,6 +84,15 @@ export interface TestWindow {
   changesInFlight(): boolean;
 }
 
+/**
+ * How a tool asks for the session's support-score options (decider-score plan
+ * t4): the same settings, environment, redaction filter and session cache
+ * `finish` scores with, carrying the tool call's own cancellation signal.
+ * `null` means the score is switched on for this session but cannot be asked
+ * (the decider's contract did not compile).
+ */
+export type SupportOptionsFor = (signal?: AbortSignal) => SupportOptions | null;
+
 export interface AssociateContext {
   /** The extension's own version, reported by the `associate_ready` sentinel. */
   readonly extensionVersion: string;
@@ -124,6 +134,14 @@ export interface AssociateContext {
   attachWalk(walk: ChildWalkLinker): void;
   /** The attached walk recorder, or undefined when none was attached (tests). */
   walk(): ChildWalkLinker | undefined;
+  /**
+   * Attach the session's support-score options. `index.ts` does this once,
+   * before any tool module registers, and only when the score is switched on
+   * for the session's model.
+   */
+  attachSupport(optionsFor: SupportOptionsFor): void;
+  /** The attached options, or undefined when the score is off for this session. */
+  support(): SupportOptionsFor | undefined;
 }
 
 /**

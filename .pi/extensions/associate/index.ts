@@ -66,7 +66,7 @@ import { installPromptInjection } from "./lib/prompt.ts";
 import { registerAssociateProvider } from "./lib/provider.ts";
 import { countSentences, renderAnswer } from "./lib/render.ts";
 import { createAssociateContext, loadToolModules } from "./lib/runtime.ts";
-import { createSupportCache } from "./lib/support.ts";
+import { createSupportCache, type SupportOptions } from "./lib/support.ts";
 import { supportScoreFor } from "./lib/supportswitch.ts";
 import { assistantMessageText, installStatementsRecorder, messageHasToolCalls } from "./lib/statements.ts";
 import { installContinueFrom, resolveContinueFrom } from "./lib/torch.ts";
@@ -229,6 +229,15 @@ export default async function (pi: ExtensionAPI) {
       );
     }
   }
+  const supportOptions = (settings: SupportOptions["settings"], config: GateConfig, signal?: AbortSignal): SupportOptions => ({
+    settings,
+    config,
+    env: supportEnv,
+    redaction,
+    fetch: ((...args: Parameters<typeof fetch>) => globalThis.fetch(...args)) as typeof fetch,
+    cache: supportCache,
+    signal,
+  });
   const scoreFacts = async (
     check: HandbackCheck,
     payload: Record<string, unknown>,
@@ -242,16 +251,12 @@ export default async function (pi: ExtensionAPI) {
           : undefined,
       );
     }
-    return scoreCheckedFacts(check, payload, {
-      settings: supportSettings,
-      config: supportConfig,
-      env: supportEnv,
-      redaction,
-      fetch: ((...args: Parameters<typeof fetch>) => globalThis.fetch(...args)) as typeof fetch,
-      cache: supportCache,
-      signal,
-    });
+    return scoreCheckedFacts(check, payload, supportOptions(supportSettings, supportConfig, signal));
   };
+  // check_quote (decider t4) asks with these same options and this same cache.
+  if (supportSettings) {
+    ctx.attachSupport((signal) => (supportConfig ? supportOptions(supportSettings, supportConfig, signal) : null));
+  }
 
   // Per prompt, reset by before_agent_start with `finished`.
   let handbackRefusals = 0;
