@@ -59,7 +59,7 @@ async function settle(
     entries: options.entries ?? [],
     continue: false,
     outcome: options.outcome ?? "completed",
-    context: { canContinue: options.canContinue ?? true, contextEntries: [], contextMessages: [], llmMessages: [], pendingMessages: [] },
+    context: { canContinue: options.canContinue ?? false, contextEntries: [], contextMessages: [], llmMessages: [], pendingMessages: [] },
   };
   for (const handler of pi.handlers.get(SETTLE) ?? []) {
     const result = (await handler(state, {})) as Partial<Boundary> | undefined;
@@ -264,10 +264,10 @@ test("switched on with no section in the contract: no handler, one stderr line",
   }
 });
 
-test("an aborted run, a run that ended in an error, or one pi cannot continue is not reminded", async () => {
+test("an aborted run or a run that ended in an error is not reminded", async () => {
   const s = await openSession(ON);
   try {
-    for (const options of [{ outcome: "aborted" }, { outcome: "error" }, { canContinue: false }]) {
+    for (const options of [{ outcome: "aborted" }, { outcome: "error" }]) {
       const got = await settle(s.pi, options);
       assert.equal(got.continue, false, JSON.stringify(options));
       assert.deepEqual(got.entries, [], JSON.stringify(options));
@@ -397,4 +397,21 @@ test("switch on, a finished run that settles: no reminder file, no reminder line
     }
   }
   assert.equal(walks[0], walks[1]);
+});
+
+test("a run is reminded although pi says it cannot continue yet (seen live on pi 1.5.2)", async () => {
+  // Before the reminder is added the context ends with the model's own
+  // message, so pi 1.5.2 hands the handler `canContinue: false` on every
+  // ordinary settle; it continues once the reminder entry is appended. A trial
+  // run on 2026-11-19 ended without finish and without a reminder because this
+  // flag was read as a reason not to send one.
+  const s = await openSession(ON);
+  try {
+    const got = await settle(s.pi, { canContinue: false });
+    assert.equal(got.continue, true);
+    assert.equal(got.entries.length, 1);
+    assert.equal(reminderLines(s.exportDir).length, 1);
+  } finally {
+    s.dispose();
+  }
 });

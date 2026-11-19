@@ -69,7 +69,6 @@ export function resolveFinishReminder(
 export interface SettleEventLike {
   entries?: unknown;
   outcome?: unknown;
-  context?: { canContinue?: unknown } | undefined;
 }
 
 /** The session state the decision needs, read from index.ts at the boundary. */
@@ -112,7 +111,10 @@ export class FinishReminder {
   atSettle(event: SettleEventLike, state: SettleState): { entries: unknown[]; continue: true } | undefined {
     if (state.finished || state.endedRefused) return undefined;
     if (event.outcome !== "completed") return undefined;
-    if (event.context?.canContinue === false) return undefined;
+    // `event.context.canContinue` is not read: it describes the context before
+    // this handler's entry is added, and that context ends with the model's own
+    // message, so pi 1.5.2 reports false on every ordinary settle and continues
+    // once the reminder is appended.
     if (this.sentCount >= this.options.settings.max) return undefined;
     try {
       this.options.recordLine({ max: this.options.settings.max });
