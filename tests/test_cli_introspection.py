@@ -120,6 +120,9 @@ def test_explain_run_documents_the_accuracy_fields_and_exit_3(
         "--check-mode",
         "check_mode",
         "ASSOCIATE_CHECK_MODE",
+        "--support-score",
+        "support_score",
+        "ASSOCIATE_SUPPORT_SCORE",
         "Exit codes",
         "`3`",
     ):

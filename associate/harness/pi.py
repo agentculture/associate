@@ -621,6 +621,11 @@ class RunTimedOut(HarnessError):
 #: The reasoning settings ``models.json`` allows (``schemas/models.schema.json``).
 REASONING_SETTINGS = ("model-default", "on", "off")
 
+#: ``--support-score`` values, and the variable the launcher sets or clears per
+#: run for the extension's ``lib/supportswitch.ts`` (never inherited).
+SUPPORT_SCORE_SETTINGS = ("on", "off")
+SUPPORT_SCORE_ENV = "ASSOCIATE_SUPPORT_SCORE"
+
 
 class PiHarness(Harness):
     """Run one associate task on the installed ``pi`` binary."""
@@ -636,6 +641,7 @@ class PiHarness(Harness):
         model: str | None = None,
         untrusted_checkout: bool = False,
         check_mode: str | None = None,
+        support_score: str | None = None,
         reasoning: str | None = None,
         executable: str | None = None,
         env: dict[str, str] | None = None,
@@ -647,6 +653,12 @@ class PiHarness(Harness):
         self._model_key = model
         self._untrusted_checkout = untrusted_checkout
         self._check_mode = check_mode
+        if support_score is not None and support_score not in SUPPORT_SCORE_SETTINGS:
+            raise HarnessError(
+                f"unknown support-score setting {support_score!r}",
+                remediation=f"use one of: {', '.join(SUPPORT_SCORE_SETTINGS)}",
+            )
+        self._support_score = support_score
         if reasoning is not None and reasoning not in REASONING_SETTINGS:
             raise HarnessError(
                 f"unknown reasoning setting {reasoning!r}",
@@ -1188,6 +1200,14 @@ class PiHarness(Harness):
             env["ASSOCIATE_CHECK_MODE"] = self._check_mode
         else:
             env.pop("ASSOCIATE_CHECK_MODE", None)
+
+        # The per-run support-score switch, from --support-score only, by the
+        # same rule: set for this run or cleared, never inherited. Absent
+        # leaves accuracy.json's switch for the model in charge.
+        if self._support_score:
+            env[SUPPORT_SCORE_ENV] = self._support_score
+        else:
+            env.pop(SUPPORT_SCORE_ENV, None)
 
         continue_from = self._continue_from or task.get("continue_from")
         if continue_from:

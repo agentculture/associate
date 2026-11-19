@@ -1,9 +1,10 @@
 """The comparison runner: arms by tasks by repeats, resumable (plan task t9).
 
-An :class:`Arm` names a harness commit, a model, a check mode and a reasoning
-setting. :func:`run_comparison` runs every task for every arm and repeat, in
-the order repeat, then task, then arm (so the arms of one task and repeat run
-next to each other), and stores one result file per (task, arm, repeat).
+An :class:`Arm` names a harness commit, a model, a check mode, a reasoning
+setting and a support-score setting. :func:`run_comparison` runs every task
+for every arm and repeat, in the order repeat, then task, then arm (so the
+arms of one task and repeat run next to each other), and stores one result
+file per (task, arm, repeat).
 
 One run
 -------
@@ -42,7 +43,9 @@ What the arm's commit accepts
 -----------------------------
 The command line is built per harness commit from that commit's own
 ``associate run --help``. ``--reasoning``, ``--check-mode`` and
-``--untrusted-checkout`` are passed only when the commit has them; the
+``--untrusted-checkout`` are passed only when the commit has them
+(``--support-score`` is different: an arm that sets it on a commit without the
+flag is refused, see below); the
 reasoning in effect is otherwise the registry's value at that commit, read
 from its ``associate/contract/models.json``. Every stored run lists under
 ``settings`` what was requested, what was applied and how, and in
@@ -79,6 +82,27 @@ Two readings of the grade
   (the export's ``facts.json``, the model's own strings, no harness line).
   Stored only when the export has a ``facts.json``, so never for a harness
   without a hand-back.
+
+The support-score setting as a measurement arm
+----------------------------------------------
+An arm's ``support_score`` is ``on``, ``off`` or absent. ``on`` and ``off`` are
+passed to every run of the arm as ``associate run --support-score``; absent
+passes nothing, so the per-model switch in the harness commit's
+``accuracy.json`` decides. Every stored record names the setting under
+``support_score``: ``on``, ``off`` or ``contract default``. It says what the
+run was asked to use, not that anything was scored.
+
+Before the first run, and before any worktree is made, the arms are checked.
+When they carry more than one support-score setting, each arm that sets one
+must have another arm with a different setting (absent counts as one) that is
+the same in model, reasoning setting, check mode and harness commit; an arm
+with none is refused, naming the nearest arm and what differs. Tasks and
+repeats are part of the same comparison, though one invocation gives every arm
+the same task list and repeat count, so they cannot differ today. An arm that
+sets ``support_score`` on a harness commit whose ``associate run --help`` does
+not list ``--support-score`` is refused too, once the harness commits are
+prepared and before any run: such a run would silently be something other than
+the arm says.
 
 Results directory
 -----------------
@@ -161,6 +185,9 @@ READING_ANSWER = "answer_text"
 READING_WITH_HANDBACK = "answer_text_plus_handback_values"
 REASONING_CHOICES = ("model-default", "on", "off")
 CHECK_MODES = ("report", "enforce")
+SUPPORT_SCORE_CHOICES = ("on", "off")
+#: What a stored record says for an arm that does not set ``support_score``.
+SUPPORT_CONTRACT_DEFAULT = "contract default"
 EXTENSION_RELATIVE = Path(".pi") / "extensions" / "associate" / "index.ts"
 CONTRACT_DIR = "associate/contract"
 FACTS_FILE = "facts.json"
@@ -186,12 +213,15 @@ _REQUIRED_FLAGS += ("--timeout", "--json")
 _PACKAGE_PROBE = "import associate; print(associate.__file__)"
 _FLAG_CHECK_MODE = "--check-mode"
 _FLAG_UNTRUSTED = "--untrusted-checkout"
+_FLAG_SUPPORT = "--support-score"
 _UTF8 = "utf-8"
 _REV_PARSE = "rev-parse"
 
 _K_REASONING = "reasoning"
 _K_CHECK_MODE = "check_mode"
 _K_UNTRUSTED = "untrusted_checkout"
+_K_SUPPORT = "support_score"
+_K_HARNESS_COMMIT = "harness_commit"
 _K_PI_VERSION = "pi_version"
 _K_STATUS = "status"
 _K_REASON = "reason"
@@ -206,6 +236,7 @@ EXPORT_ROOT_DIR = "export-root"
 _K_SESSION_ID = "session_id"
 _K_SETTINGS = "settings"
 _K_IDENTITY = "identity"
+_K_TASKS = "tasks"
 _END_OF_OPTIONS = "--end-of-options"
 _IN_PLAN = f"in {PLAN_FILE}"
 
@@ -223,7 +254,9 @@ class Arm:
     """One side of the comparison.
 
     ``reasoning`` None and ``check_mode`` None pass nothing: the harness
-    commit's own registry value and check mode apply.
+    commit's own registry value and check mode apply. ``support_score`` None
+    passes nothing either: the per-model switch in that commit's
+    ``accuracy.json`` applies.
     """
 
     name: str
@@ -231,6 +264,7 @@ class Arm:
     model: str
     check_mode: str | None = None
     reasoning: str | None = None
+    support_score: str | None = None
 
 
 @dataclass(frozen=True)
@@ -708,7 +742,18 @@ def _optional_flags(ctx: _Context, arm: Arm) -> list[tuple]:
         wanted.append((_K_CHECK_MODE, _FLAG_CHECK_MODE, [arm.check_mode], arm.check_mode))
     if ctx.untrusted_checkout:
         wanted.append((_K_UNTRUSTED, _FLAG_UNTRUSTED, [], True))
+    if arm.support_score is not None:
+        value = _support_choice(arm.support_score)
+        wanted.append((_K_SUPPORT, _FLAG_SUPPORT, [value], value))
     return wanted
+
+
+def _support_choice(value: Any) -> str:
+    """The member of the fixed set that *value* names; only that constant reaches a command line."""
+    for choice in SUPPORT_SCORE_CHOICES:
+        if value == choice:
+            return choice
+    raise RunnerError(f"{_K_SUPPORT} must be one of {SUPPORT_SCORE_CHOICES}, not {value!r}")
 
 
 def _pi_setting(ctx: _Context, harness: _Harness) -> dict | None:
@@ -734,6 +779,7 @@ def _settings(ctx: _Context, arm: Arm, harness: _Harness) -> tuple[list[str], di
         "model": arm.model,
         _K_REASONING: arm.reasoning,
         _K_CHECK_MODE: arm.check_mode,
+        _K_SUPPORT: arm.support_score,
         _K_UNTRUSTED: ctx.untrusted_checkout,
         "timeout_s": ctx.timeout_s,
         "harness": ctx.harness,
@@ -751,13 +797,21 @@ def _settings(ctx: _Context, arm: Arm, harness: _Harness) -> tuple[list[str], di
 
 
 def _arm_identity(arm: Arm, harness: _Harness) -> dict[str, Any]:
-    return {
+    """What a stored record and a plan name as their arm.
+
+    ``support_score`` is a key only when the arm sets it, so a record stored
+    before arms could carry the setting still matches the same arm.
+    """
+    identity = {
         "name": arm.name,
-        "harness_commit": harness.commit,
+        _K_HARNESS_COMMIT: harness.commit,
         "model": arm.model,
         _K_CHECK_MODE: arm.check_mode,
         _K_REASONING: arm.reasoning,
     }
+    if arm.support_score is not None:
+        identity[_K_SUPPORT] = arm.support_score
+    return identity
 
 
 def _digest(value: Any) -> str:
@@ -1101,7 +1155,8 @@ def _base_record(
         "arm": arm_id,
         "repeat": key[2],
         "model": arm_id["model"],
-        "harness_commit": arm_id["harness_commit"],
+        _K_HARNESS_COMMIT: arm_id[_K_HARNESS_COMMIT],
+        _K_SUPPORT: arm_id.get(_K_SUPPORT) or SUPPORT_CONTRACT_DEFAULT,
         _K_ATTEMPT: attempt,
         _K_HISTORY: history,
         "stored_at": time.time(),
@@ -1279,6 +1334,85 @@ def _arm_problems(arm: Arm) -> list[str]:
         problems.append(f"arm {arm.name}: reasoning must be one of {REASONING_CHOICES}")
     if arm.check_mode is not None and arm.check_mode not in CHECK_MODES:
         problems.append(f"arm {arm.name}: check_mode must be one of {CHECK_MODES}")
+    if arm.support_score is not None and arm.support_score not in SUPPORT_SCORE_CHOICES:
+        problems.append(f"arm {arm.name}: {_K_SUPPORT} must be one of {SUPPORT_SCORE_CHOICES}")
+    return problems
+
+
+def _support_label(arm: Arm) -> str:
+    return arm.support_score if arm.support_score is not None else SUPPORT_CONTRACT_DEFAULT
+
+
+def _compared_with(
+    arm: Arm, commits: Mapping[str, str], task_ids: Sequence[str], repeats: int
+) -> dict[str, Any]:
+    """Everything about an arm's runs except its support-score setting."""
+    return {
+        _K_TASKS: list(task_ids),
+        "repeats": repeats,
+        "model": arm.model,
+        _K_REASONING: arm.reasoning,
+        _K_CHECK_MODE: arm.check_mode,
+        _K_HARNESS_COMMIT: commits[arm.harness_commit],
+    }
+
+
+def _unpaired(arm: Arm, others: list[Arm], rest: Mapping[str, dict[str, Any]]) -> str | None:
+    """Why *arm* has no arm that differs from it only in the support-score setting, or None."""
+    own = rest[arm.name]
+    differing = [[name for name in own if own[name] != rest[other.name][name]] for other in others]
+    if any(not names for names in differing):
+        return None
+    start = (
+        f"arm {arm.name} sets {_K_SUPPORT} to {arm.support_score}, and no arm with another "
+        f"{_K_SUPPORT} setting has the same tasks, model, reasoning, check_mode, harness_commit "
+        "and repeats"
+    )
+    if not others:
+        return start
+    nearest = min(range(len(others)), key=lambda index: len(differing[index]))
+    other = others[nearest]
+    detail = ", ".join(
+        f"{name} ({own[name]!r}, {rest[other.name][name]!r})" for name in differing[nearest]
+    )
+    return f"{start}; arm {other.name} ({_support_label(other)}) differs in {detail}"
+
+
+def support_score_problems(
+    arms: Sequence[Arm], commits: Mapping[str, str], task_ids: Sequence[str], repeats: int
+) -> list[str]:
+    """What stops the arms being a comparison of the support-score setting.
+
+    Nothing is checked while every arm has the same setting. Otherwise each
+    arm that sets one must have another arm with a different setting (absent
+    counts as one) whose tasks, model, reasoning setting, check mode, harness
+    commit (as resolved, *commits*) and repeats are the same.
+    """
+    if len({arm.support_score for arm in arms}) < 2:
+        return []
+    rest = {arm.name: _compared_with(arm, commits, task_ids, repeats) for arm in arms}
+    problems = []
+    for arm in arms:
+        if arm.support_score is None:
+            continue
+        others = [other for other in arms if other.support_score != arm.support_score]
+        problems.append(_unpaired(arm, others, rest))
+    return [problem for problem in problems if problem]
+
+
+def _flag_problems(arms: Sequence[Arm], commits: Mapping[str, str], prepared: Mapping) -> list[str]:
+    """Arms that set the support-score setting on a harness commit whose CLI lacks the flag."""
+    problems = []
+    for arm in arms:
+        harness = prepared[commits[arm.harness_commit]]
+        if arm.support_score is None or harness.error is not None:
+            continue
+        if _FLAG_SUPPORT not in harness.flags:
+            problems.append(
+                f"arm {arm.name} sets {_K_SUPPORT} to {arm.support_score}, but `associate run` "
+                f"at its harness commit {harness.commit[:12]} has no {_FLAG_SUPPORT}; leave "
+                f"{_K_SUPPORT} out of that arm or pin a commit that has the flag"
+            )
     return problems
 
 
@@ -1336,6 +1470,9 @@ def run_comparison(
     repo = Path(harness_repo) if harness_repo is not None else Path(__file__).resolve().parents[2]
     main = _main_checkout(repo)
     commits = {arm.harness_commit: _resolve_commit(main, arm.harness_commit) for arm in arms}
+    unpaired = support_score_problems(arms, commits, [str(task["id"]) for task in tasks], repeats)
+    if unpaired:
+        raise RunnerError("; ".join(unpaired))
     with _locked(results), _term_as_interrupt():
         _remove_stale_temporaries(results)
         ctx = _Context(
@@ -1354,6 +1491,9 @@ def run_comparison(
             progress=progress or (lambda _message: None),
         )
         prepared = {full: _prepare_harness(ctx, main, full) for full in set(commits.values())}
+        unknown_flag = _flag_problems(arms, commits, prepared)
+        if unknown_flag:
+            raise RunnerError("; ".join(unknown_flag))
         for repeat in range(1, repeats + 1):
             for task in tasks:
                 for arm in arms:

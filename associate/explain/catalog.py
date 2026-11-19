@@ -259,6 +259,19 @@ refused and the model may answer again for accuracy.json `retry_rounds` more
 rounds; a hand-back still failing ends the run with outcome `refused`, and the verb
 exits `3`. `report` mode records what would have been refused and refuses nothing.
 
+## The support-score switch
+
+`--support-score on|off` overrides the model's switch in accuracy.json
+(`support_score.enabled`) for this run only, by setting `ASSOCIATE_SUPPORT_SCORE`;
+an ambient value in the operator's environment is not inherited, and any other
+value is refused (exit `1`). Without the flag the variable is cleared and the
+contract's switch for the model applies. The result's `support_score` is the flag's
+value, or null when none was given: it says what was asked for, not that anything
+was scored. The support score is a report-only signal that refuses nothing (for a
+fact whose quote was found, the decider is asked whether the quote supports the
+value). The switch and its reader in the extension are built and unit-tested;
+nothing has been measured live with it, and it is not a measure of accuracy.
+
 ## A run that times out
 
 `--timeout` (default 900 seconds) bounds the task turn. When pi does not finish
@@ -305,6 +318,7 @@ is empty.
     associate run --model senses
     associate run --harness stub
     associate run "Summarize the gate" --check-mode enforce --json
+    associate run "Summarize the gate" --support-score on --json
     associate run --continue-from <prior export dir>
     associate run "Summarize the gate" --reasoning off --timeout 1500 --json
     associate run --export-root <dir> --session-id <id>
@@ -636,11 +650,11 @@ _MEASURE = """\
 # associate measure
 
 Runs a comparison of arms over tasks, follows it, and reports what it stored. An
-arm is a harness commit, a model, and optionally a check mode and a reasoning
-setting. Every task runs for every arm and repeat, each against a fresh filtered
-clone of the task's repository without the answer key (`docs/accuracy`), and one
-graded result is stored per task, arm and repeat. A count here is a count of stored
-runs; it is never a score.
+arm is a harness commit, a model, and optionally a check mode, a reasoning
+setting and a support-score setting. Every task runs for every arm and repeat,
+each against a fresh filtered clone of the task's repository without the answer key
+(`docs/accuracy`), and one graded result is stored per task, arm and repeat. A count
+here is a count of stored runs; it is never a score.
 
 ## Usage
 
@@ -657,10 +671,22 @@ Every sub-verb takes `--json`.
 ## run
 
 - `--arms FILE`: a JSON list of arms, each `{"name", "harness_commit", "model"}` and
-  optionally `"check_mode"` (`report` or `enforce`) and `"reasoning"` (`model-default`,
-  `on` or `off`). An unknown key or a duplicate name is refused with the reason.
-  `harness_commit` is a commit id of 7 to 64 hexadecimal characters; a branch or tag
-  name is refused.
+  optionally `"check_mode"` (`report` or `enforce`), `"reasoning"` (`model-default`,
+  `on` or `off`) and `"support_score"` (`on` or `off`). An unknown key or a duplicate
+  name is refused with the reason. `harness_commit` is a commit id of 7 to 64
+  hexadecimal characters; a branch or tag name is refused.
+- `"support_score"` is passed to every run of the arm as `associate run
+  --support-score`; an arm without it passes nothing and the switch in its harness
+  commit's accuracy.json applies. Each stored record names the setting under
+  `support_score`: `on`, `off` or `contract default`. That is what the run was asked
+  to use, not a score and not a statement that anything was scored.
+- Before the first run the arms are checked. When they carry more than one
+  support-score setting (an arm without one counts as a setting), each arm that sets
+  it must have another arm with a different setting and the same model, reasoning,
+  check mode and harness commit; every arm of one comparison already runs the same
+  tasks and repeats. An arm with no such partner is refused, naming the nearest arm
+  and what differs. An arm that sets it on a harness commit whose `associate run` has
+  no `--support-score` is refused too, before any run.
 - `--tasks FILE` (default `docs/accuracy/tasks.json`), `--tasks-filter ID` (repeatable,
   runs only those tasks), `--repeats N` (default 1, at most 1000), `--output-dir DIR`.
 - `--timeout SECONDS`: the limit for one run, default 3600. There is no unlimited

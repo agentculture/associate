@@ -413,6 +413,228 @@ def test_a_stored_key_with_a_different_arm_definition_is_refused(tmp_path, demo,
         run(other_arm, tasks, 1, results, demo_repo, harness_repo, launcher)
 
 
+# --- the support-score setting as a measurement arm (decider-score t7) ----------------
+
+
+def test_an_arm_passes_its_support_score_and_every_record_names_the_setting(
+    tmp_path, demo, current_harness
+):
+    demo_repo, demo_head = demo
+    harness_repo, harness_head = current_harness
+    arms = [
+        Arm("s-on", harness_head, "worker", reasoning="off", support_score="on"),
+        Arm("s-off", harness_head, "worker", reasoning="off", support_score="off"),
+        Arm("s-default", harness_head, "worker", reasoning="off"),
+    ]
+    launcher = Recorder()
+    run(arms, [task("t", demo_head)], 2, tmp_path / "res", demo_repo, harness_repo, launcher)
+
+    passed = {}
+    for launch in launcher.runs:
+        arm_name = _session_key(launch).split("-", 2)[2].rsplit("-r", 1)[0]
+        argv = launch.argv
+        value = argv[argv.index("--support-score") + 1] if "--support-score" in argv else None
+        passed.setdefault(arm_name, set()).add(value)
+        assert "ASSOCIATE_SUPPORT_SCORE" not in launch.env
+    assert passed == {"s-on": {"on"}, "s-off": {"off"}, "s-default": {None}}
+
+    records = load_records(tmp_path / "res")
+    assert len(records) == 6
+    named = {"s-on": "on", "s-off": "off", "s-default": "contract default"}
+    for rec in records:
+        arm_name = rec["arm"]["name"]
+        assert rec["status"] == STATUS_FINISHED, rec.get("reason")
+        assert rec["support_score"] == named[arm_name]
+        requested = rec["settings"]["requested"]["support_score"]
+        assert requested == (None if arm_name == "s-default" else named[arm_name])
+        assert rec["settings"]["not_applied"] == []
+        assert rec["run_result"]["support_score"] == requested
+        if arm_name == "s-default":
+            assert "support_score" not in rec["arm"]
+            assert "support_score" not in rec["settings"]["applied"]
+        else:
+            assert rec["arm"]["support_score"] == named[arm_name]
+            assert rec["settings"]["applied"]["support_score"] == "--support-score"
+    # the arms that differ only in the setting ran the same tasks and repeats
+    ran = {
+        name: sorted((r["task"]["id"], r["repeat"]) for r in records if r["arm"]["name"] == name)
+        for name in named
+    }
+    assert ran["s-on"] == ran["s-off"] == ran["s-default"] == [("t", 1), ("t", 2)]
+
+
+def _refused_before_any_launch(tmp_path, demo, harness_pair, arms, match, **kw):
+    demo_repo, demo_head = demo
+    harness_repo, _head = harness_pair
+    launcher = Recorder()
+    with pytest.raises(RunnerError, match=match) as raised:
+        run(
+            arms,
+            [task("t", demo_head)],
+            1,
+            tmp_path / "res",
+            demo_repo,
+            harness_repo,
+            launcher,
+            **kw,
+        )
+    assert launcher.runs == []
+    assert load_records(tmp_path / "res") == []
+    return launcher, str(raised.value)
+
+
+@pytest.mark.parametrize(
+    ("other", "differs"),
+    [
+        ({"model": "cortex"}, "model"),
+        ({"reasoning": "on"}, "reasoning"),
+        ({"check_mode": "enforce"}, "check_mode"),
+    ],
+)
+def test_arms_that_differ_in_the_support_score_and_something_else_are_refused(
+    tmp_path, demo, current_harness, other, differs
+):
+    head = current_harness[1]
+    base = {"model": "worker", "reasoning": "off", "check_mode": "report"}
+    arms = [
+        Arm("s-on", head, support_score="on", **base),
+        Arm("s-off", head, support_score="off", **{**base, **other}),
+    ]
+    launcher, message = _refused_before_any_launch(
+        tmp_path, demo, current_harness, arms, "support_score"
+    )
+    assert launcher.launches == [], "refused before a worktree or a probe"
+    assert f"arm s-off (off) differs in {differs} " in message
+    assert "arm s-on sets support_score to on" in message
+    assert "arm s-off sets support_score to off" in message
+
+
+def test_an_unset_arm_counts_as_a_setting_when_pairing(tmp_path, demo, current_harness):
+    head = current_harness[1]
+    arms = [Arm("s-on", head, "worker", support_score="on"), Arm("plain", head, "cortex")]
+    _launcher, message = _refused_before_any_launch(
+        tmp_path, demo, current_harness, arms, "support_score"
+    )
+    assert "arm plain (contract default) differs in model ('worker', 'cortex')" in message
+    assert "arm plain sets" not in message
+
+
+def test_support_score_arms_on_two_harness_commits_are_refused(
+    tmp_path, demo, current_harness, old_harness
+):
+    """The pairing is on the resolved commit; the two commits here are in two repositories,
+    so the problems are computed directly."""
+    arms = [
+        Arm("s-on", "a" * 40, "worker", support_score="on"),
+        Arm("s-off", "b" * 40, "worker", support_score="off"),
+    ]
+    commits = {"a" * 40: "a" * 40, "b" * 40: "b" * 40}
+    problems = runner_mod.support_score_problems(arms, commits, ["t"], 1)
+    assert len(problems) == 2
+    assert "differs in harness_commit" in problems[0]
+    # an abbreviated id and the full one resolve to the same commit: no problem
+    arms = [
+        Arm("s-on", "a" * 12, "worker", support_score="on"),
+        Arm("s-off", "a" * 40, "worker", support_score="off"),
+    ]
+    commits = {"a" * 12: "a" * 40, "a" * 40: "a" * 40}
+    assert runner_mod.support_score_problems(arms, commits, ["t"], 1) == []
+
+
+def test_pairs_in_several_groups_and_arms_with_one_setting_are_accepted():
+    head = "c" * 40
+    commits = {head: head}
+    four = [
+        Arm("w-on", head, "worker", support_score="on"),
+        Arm("w-off", head, "worker", support_score="off"),
+        Arm("c-on", head, "cortex", support_score="on"),
+        Arm("c-default", head, "cortex"),
+    ]
+    assert runner_mod.support_score_problems(four, commits, ["t1", "t2"], 3) == []
+    same = [
+        Arm("w", head, "worker", support_score="on"),
+        Arm("c", head, "cortex", support_score="on"),
+    ]
+    assert runner_mod.support_score_problems(same, commits, ["t"], 1) == []
+    none = [Arm("w", head, "worker"), Arm("c", head, "cortex", reasoning="on")]
+    assert runner_mod.support_score_problems(none, commits, ["t"], 1) == []
+    lone = four[:2] + [four[2]]
+    problems = runner_mod.support_score_problems(lone, commits, ["t"], 1)
+    assert len(problems) == 1
+    assert problems[0].startswith("arm c-on sets support_score to on")
+
+
+def test_an_arm_with_another_support_score_value_is_refused(tmp_path, demo, current_harness):
+    arms = [Arm("a", current_harness[1], "worker", support_score="maybe")]
+    launcher, message = _refused_before_any_launch(
+        tmp_path, demo, current_harness, arms, "support_score must be one of"
+    )
+    assert launcher.launches == []
+    assert "maybe" not in message
+
+
+def test_a_support_score_arm_on_a_commit_without_the_flag_is_refused(tmp_path, demo, old_harness):
+    head = old_harness[1]
+    for name, arms in (
+        ("lone", [Arm("old-on", head, "worker", support_score="on")]),
+        (
+            "pair",
+            [
+                Arm("old-on", head, "worker", support_score="on"),
+                Arm("old-off", head, "worker", support_score="off"),
+            ],
+        ),
+    ):
+        launcher, message = _refused_before_any_launch(
+            tmp_path / name, demo, old_harness, arms, "has no --support-score", harness="pi"
+        )
+        assert f"harness commit {head[:12]}" in message
+        assert all("--support-score" not in launch.argv for launch in launcher.launches)
+    # the same commit runs when the arm does not set it, and the record says so
+    demo_repo, demo_head = demo
+    run(
+        [Arm("old", head, "worker")],
+        [task("t", demo_head)],
+        1,
+        tmp_path / "ok",
+        demo_repo,
+        old_harness[0],
+        Recorder(),
+        harness="pi",
+    )
+    rec = only(load_records(tmp_path / "ok"))
+    assert rec["status"] == STATUS_FINISHED
+    assert rec["support_score"] == "contract default"
+
+
+def test_a_stored_key_is_refused_when_the_arms_support_score_changed(
+    tmp_path, demo, current_harness
+):
+    demo_repo, demo_head = demo
+    harness_repo, harness_head = current_harness
+    results, tasks = tmp_path / "res", [task("t", demo_head)]
+    run([Arm("a", harness_head, "worker")], tasks, 1, results, demo_repo, harness_repo, Recorder())
+    stored = only(load_records(results))
+    assert "support_score" not in stored["arm"], "an unset arm keeps the earlier identity"
+    launcher = Recorder()
+    with pytest.raises(RunnerError, match="arm"):
+        run(
+            [Arm("a", harness_head, "worker", support_score="on")],
+            tasks,
+            1,
+            results,
+            demo_repo,
+            harness_repo,
+            launcher,
+        )
+    assert launcher.runs == []
+    # the unchanged arm is skipped, not refused
+    summary = run(
+        [Arm("a", harness_head, "worker")], tasks, 1, results, demo_repo, harness_repo, Recorder()
+    )
+    assert summary.skipped == [("t", "a", 1)]
+
+
 # --- acceptance 3: an older harness commit --------------------------------------------
 
 

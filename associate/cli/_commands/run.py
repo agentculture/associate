@@ -105,6 +105,7 @@ _RESULT_KEYS = (
     "reasoning_source",
     "reasoning_applies_to",
     "check_mode",
+    "support_score",
     "handback_outcome",
     "answer_path",
     "accuracy",
@@ -119,6 +120,9 @@ _TIMEOUT_OUTCOME = "timeout"
 
 #: ``--reasoning`` values: the settings ``models.json`` allows for a model.
 _REASONING_CHOICES = ("model-default", "on", "off")
+
+#: ``--support-score`` values; absent leaves accuracy.json's per-model switch in charge.
+_SUPPORT_SCORE_CHOICES = ("on", "off")
 
 
 def _build(harness_cls: type, args: argparse.Namespace) -> Any:
@@ -135,6 +139,7 @@ def _build(harness_cls: type, args: argparse.Namespace) -> Any:
         "model": args.model,
         "untrusted_checkout": args.untrusted_checkout,
         "check_mode": args.check_mode,
+        "support_score": args.support_score,
         "reasoning": args.reasoning,
     }
     try:
@@ -253,6 +258,8 @@ def _with_settings(result: dict[str, Any], args: argparse.Namespace) -> dict[str
     """*result* with the check mode and the reasoning the operator asked for, when it lacks them."""
     if "check_mode" not in result:
         result = {**result, "check_mode": args.check_mode}
+    if "support_score" not in result:
+        result = {**result, "support_score": args.support_score}
     if args.reasoning and "reasoning" not in result:
         # An adapter that does not apply the setting (the stub) still records
         # what the operator asked for, so the result never omits it.
@@ -599,6 +606,16 @@ def register(sub: argparse._SubParsersAction) -> None:
         "(sets ASSOCIATE_CHECK_MODE for the run; an ambient value is not inherited). "
         "'enforce' refuses a failing hand-back, and one still failing after the allowed "
         "rounds exits 3. Recorded in the result as check_mode.",
+    )
+    p.add_argument(
+        "--support-score",
+        choices=_SUPPORT_SCORE_CHOICES,
+        default=None,
+        help="Per-run switch for the support score (a report-only signal), overriding the "
+        "model's switch in accuracy.json (sets ASSOCIATE_SUPPORT_SCORE for the run; an "
+        "ambient value is not inherited). Without the flag the contract's switch applies. "
+        "Recorded in the result as support_score: what was asked for, not that anything "
+        "was scored.",
     )
     p.add_argument(
         "--test-command",
