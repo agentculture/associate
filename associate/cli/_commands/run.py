@@ -111,6 +111,14 @@ _RESULT_KEYS = (
     "accuracy",
 )
 
+#: The copied support keys the text form folds into its one ``support_scored`` line.
+_SUPPORT_COPY_KEYS = (
+    "support_source",
+    "support_facts",
+    "support_scored_reported",
+    "support_unmatched",
+)
+
 #: The result's ``handback_outcome`` that makes the verb exit 3 (the check refused
 #: the hand-back on every allowed round and the run ended).
 _HANDBACK_REFUSED = "refused_after_rounds"
@@ -492,7 +500,7 @@ def _default_prompt() -> str:
 
 def _render(result: dict[str, Any]) -> str:
     """``key=value`` lines — the artifact paths first, so a reader sees them."""
-    skipped = {"active_tools", "answer"}
+    skipped = {"active_tools", "answer", *_SUPPORT_COPY_KEYS}
     ordered = [key for key in _RESULT_KEYS if key in result]
     ordered += [key for key in result if key not in _RESULT_KEYS and key not in skipped]
     shown = {**result}
@@ -500,10 +508,19 @@ def _render(result: dict[str, Any]) -> str:
         shown["tests"] = _render_tests(result["tests"])
     if isinstance(result.get("accuracy"), dict):
         shown["accuracy"] = _render_accuracy(result["accuracy"])
+    if "support_facts" in result:
+        shown["support_scored"] = _render_support(result)
     text = "\n".join(f"{key}={shown[key]}" for key in ordered if shown[key] is not None)
     if isinstance(result.get("answer"), str) and result["answer"].strip():
         text += "\nanswer:\n" + result["answer"].rstrip("\n")
     return text
+
+
+def _render_support(result: dict[str, Any]) -> str:
+    """One line: how many facts the extension scored, and that the count is copied."""
+    from associate.accuracy.support import count_line
+
+    return count_line(result.get("support_scored") or 0, len(result["support_facts"]))
 
 
 def _render_accuracy(accuracy: dict[str, Any]) -> str:
