@@ -19,14 +19,24 @@
     "min_quote_length": {"type": "integer"},
     "support_score": {
       "type": "object",
-      "description": "Settings for the support score: the decider's judgement of whether a found quote states or directly shows the fact's value. Report-only. Optional: a file without it has the score off for every model. Ranges and registry coverage of `enabled` live in validate.validate_accuracy.",
+      "description": "Settings for the support score: the decider's answer to one choice question, how much of the fact's value a found quote, on its own, shows. Report-only. Optional: a file without it has the score off for every model. Ranges, the option and pass rules, and registry coverage of `enabled` live in validate.validate_accuracy.",
       "additionalProperties": false,
-      "required": ["question", "cutoff", "timeout_ms", "max_facts", "total_timeout_ms", "enabled"],
+      "required": ["question", "options", "passes", "timeout_ms", "max_facts", "total_timeout_ms", "enabled"],
       "properties": {
         "$comment": {"type": "string"},
-        "question": {"type": "string", "pattern": "\\S", "description": "The yes/no question asked of the decider, sent as written."},
+        "question": {"type": "string", "pattern": "\\S", "description": "The choice question asked of the decider, sent as written."},
         "background": {"type": "string", "pattern": "\\S", "description": "What the decider is told before each pair: what a value and a quote are, and when a value counts as shown. Sent as written, before the value and quote. Optional."},
-        "cutoff": {"type": "number", "description": "Score at or above which the quote is reported as supporting the value (0 to 1)."},
+        "options": {
+          "type": "object",
+          "description": "The question's answers, in order: option key -> the criterion the decider is given for it. At least two (validate.validate_accuracy).",
+          "additionalProperties": {"type": "string", "pattern": "\\S"}
+        },
+        "passes": {
+          "type": "array",
+          "description": "The option keys reported as the quote supporting the value. Distinct option keys, never every option (validate.validate_accuracy).",
+          "minItems": 1,
+          "items": {"type": "string", "pattern": "\\S"}
+        },
         "timeout_ms": {"type": "integer", "description": "Time allowed for one fact's request."},
         "max_facts": {"type": "integer", "description": "Most facts scored for one hand-back; the rest are recorded as not scored."},
         "total_timeout_ms": {"type": "integer", "description": "Time allowed for all scoring of one hand-back."},

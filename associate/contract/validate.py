@@ -560,6 +560,43 @@ def _is_number(value: Any) -> bool:
     return isinstance(value, (int, float)) and not isinstance(value, bool)
 
 
+def _is_text(value: Any) -> bool:
+    return isinstance(value, str) and bool(value.strip())
+
+
+def _support_options_errors(options: Any) -> list[str]:
+    """``options``: at least two entries, every key and criterion a non-blank string."""
+    field = f"{SUPPORT_SCORE_KEY}.options"
+    if not isinstance(options, dict) or len(options) < 2:
+        return [f"{field} must be an object with at least two options"]
+    if not all(_is_text(key) and _is_text(criterion) for key, criterion in options.items()):
+        return [f"{field} keys and criteria must be non-blank strings"]
+    return []
+
+
+def _support_passes_errors(passes: Any, options: Any) -> list[str]:
+    """``passes``: distinct option keys, at least one, and never every option."""
+    field = f"{SUPPORT_SCORE_KEY}.passes"
+    known = set(options) if isinstance(options, dict) else set()
+    if not isinstance(passes, list) or not passes:
+        return [f"{field} must be a non-empty list of option keys"]
+    if not all(isinstance(key, str) and key in known for key in passes):
+        return [f"{field} must name only keys of {SUPPORT_SCORE_KEY}.options"]
+    if len(set(passes)) != len(passes):
+        return [f"{field} must not name an option twice"]
+    if set(passes) == known:
+        return [f"{field} must not name every option"]
+    return []
+
+
+def _support_choice_errors(section: dict[str, Any]) -> list[str]:
+    """The choice question's ``options`` and ``passes`` (plan deviation d4)."""
+    options = section.get("options")
+    return _support_options_errors(options) + _support_passes_errors(
+        section.get("passes"), options
+    )
+
+
 def _support_score_errors(section: Any, registry: set[str]) -> list[str]:
     """Rules for the optional ``support_score`` section; absent means the score is off."""
     if section is None:
@@ -575,9 +612,7 @@ def _support_score_errors(section: Any, registry: set[str]) -> list[str]:
         background = section["background"]
         if not isinstance(background, str) or not background.strip():
             errors.append(f"{field}.background must be a non-blank string when given")
-    cutoff = section.get("cutoff")
-    if not _is_number(cutoff) or not 0 <= cutoff <= 1:
-        errors.append(f"{field}.cutoff must be a number from 0 to 1")
+    errors.extend(_support_choice_errors(section))
     for key in ("timeout_ms", "max_facts", "total_timeout_ms"):
         value = section.get(key)
         if not _is_number(value) or value <= 0:
