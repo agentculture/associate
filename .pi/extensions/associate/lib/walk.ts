@@ -235,6 +235,15 @@ export interface ChildEntry extends ChildLink {
   ts: string;
 }
 
+/** One `{"reminder": …}` line of the walk (deviation d3): a finish reminder the extension sent. */
+export interface ReminderEntry {
+  /** `r1`, `r2`, … — its own sequence, never a walk (`w`) id. */
+  id: string;
+  ts: string;
+  /** The contract's reminders-per-session budget the reminder was sent under. */
+  max: number;
+}
+
 // ----------------------------------------------------------------- redaction
 
 export interface RedactionFilter {
@@ -410,6 +419,7 @@ export class WalkRecorder {
 
   private nextId: number;
   private nextChildId: number;
+  private nextReminderId: number;
   private toolCalls = 0;
   private anyTruncated = false;
   private unresolved = 0;
@@ -432,6 +442,7 @@ export class WalkRecorder {
     this.lobes_role = options.lobes_role;
     this.nextId = countExistingEntries(this.walkPath) + 1;
     this.nextChildId = countExistingChildren(this.walkPath) + 1;
+    this.nextReminderId = countExistingLines(this.walkPath, "reminder") + 1;
 
     // A headless `pi -p` may exit without a `session_shutdown`; without this
     // the run record — the only place reliability is recorded (c36) — would be
@@ -655,6 +666,27 @@ export class WalkRecorder {
   }
 
   /**
+   * Append one finish reminder as its own `{"reminder": <$defs/reminder>}`
+   * line (deviation d3). Like a child line it is not a tool event: it takes
+   * no walk id and does not count toward `tool_calls`. Reminder ids are their
+   * own sequence, `r1`, `r2`, …, continued from any reminder lines already in
+   * the file. Throws when the line cannot be written — the reminder is then
+   * not sent, so none is ever sent without its line on disk.
+   */
+  recordReminder(info: { max: number }): ReminderEntry {
+    if (this.finalized) {
+      throw new Error("the walk is already finalized; a reminder can no longer be recorded");
+    }
+    const entry: ReminderEntry = redactValue(
+      { id: `r${this.nextReminderId}`, ts: this.now().toISOString(), max: info.max },
+      this.filter,
+    );
+    this.writeLine({ reminder: entry });
+    this.nextReminderId += 1;
+    return entry;
+  }
+
+  /**
    * Write the run record and close the walk. Idempotent: the session can end
    * through `session_shutdown` and through process exit, and one run record is
    * what the schema describes.
@@ -836,11 +868,11 @@ function countExistingEntries(walkPath: string): number {
     if (!line.trim()) continue;
     try {
       const record = JSON.parse(line) as Record<string, unknown>;
-      // Run, gate, child and format lines are not tool entries and take no walk id.
+      // Run, gate, child, reminder and format lines are not tool entries and take no walk id.
       if (
         record &&
         typeof record === "object" &&
-        ("run" in record || "gate" in record || "child" in record || "format" in record)
+        ("run" in record || "gate" in record || "child" in record || "reminder" in record || "format" in record)
       ) {
         continue;
       }
@@ -854,13 +886,18 @@ function countExistingEntries(walkPath: string): number {
 
 /** Child lines already in a walk file, so a second recorder never re-issues `c1`. */
 function countExistingChildren(walkPath: string): number {
+  return countExistingLines(walkPath, "child");
+}
+
+/** Lines of one non-tool kind (`child`, `reminder`) already in a walk file. */
+function countExistingLines(walkPath: string, kind: string): number {
   if (!existsSync(walkPath)) return 0;
   let count = 0;
   for (const line of readFileSync(walkPath, "utf8").split("\n")) {
     if (!line.trim()) continue;
     try {
       const record = JSON.parse(line) as Record<string, unknown>;
-      if (record && typeof record === "object" && "child" in record) count += 1;
+      if (record && typeof record === "object" && kind in record) count += 1;
     } catch {
       // A torn line is counted as a walk entry by countExistingEntries, not here.
     }

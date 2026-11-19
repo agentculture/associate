@@ -553,13 +553,107 @@ def _check_id_errors(doc: dict[str, Any], errors: list[str]) -> set[str]:
     return seen
 
 
+SUPPORT_SCORE_KEY = "support_score"
+
+
+def _is_number(value: Any) -> bool:
+    return isinstance(value, (int, float)) and not isinstance(value, bool)
+
+
+def _is_text(value: Any) -> bool:
+    return isinstance(value, str) and bool(value.strip())
+
+
+def _support_options_errors(options: Any) -> list[str]:
+    """``options``: at least two entries, every key and criterion a non-blank string."""
+    field = f"{SUPPORT_SCORE_KEY}.options"
+    if not isinstance(options, dict) or len(options) < 2:
+        return [f"{field} must be an object with at least two options"]
+    if not all(_is_text(key) and _is_text(criterion) for key, criterion in options.items()):
+        return [f"{field} keys and criteria must be non-blank strings"]
+    return []
+
+
+def _support_passes_errors(passes: Any, options: Any) -> list[str]:
+    """``passes``: distinct option keys, at least one, and never every option."""
+    field = f"{SUPPORT_SCORE_KEY}.passes"
+    known = set(options) if isinstance(options, dict) else set()
+    if not isinstance(passes, list) or not passes:
+        return [f"{field} must be a non-empty list of option keys"]
+    if not all(isinstance(key, str) and key in known for key in passes):
+        return [f"{field} must name only keys of {SUPPORT_SCORE_KEY}.options"]
+    if len(set(passes)) != len(passes):
+        return [f"{field} must not name an option twice"]
+    if set(passes) == known:
+        return [f"{field} must not name every option"]
+    return []
+
+
+def _support_choice_errors(section: dict[str, Any]) -> list[str]:
+    """The choice question's ``options`` and ``passes`` (plan deviation d4)."""
+    options = section.get("options")
+    return _support_options_errors(options) + _support_passes_errors(section.get("passes"), options)
+
+
+def _support_score_errors(section: Any, registry: set[str]) -> list[str]:
+    """Rules for the optional ``support_score`` section; absent means the score is off."""
+    if section is None:
+        return []
+    field = SUPPORT_SCORE_KEY
+    if not isinstance(section, dict):
+        return [f"{field} must be an object"]
+    errors: list[str] = []
+    question = section.get("question")
+    if not isinstance(question, str) or not question.strip():
+        errors.append(f"{field}.question must be a non-blank string")
+    if "background" in section:
+        background = section["background"]
+        if not isinstance(background, str) or not background.strip():
+            errors.append(f"{field}.background must be a non-blank string when given")
+    errors.extend(_support_choice_errors(section))
+    for key in ("timeout_ms", "max_facts", "total_timeout_ms"):
+        value = section.get(key)
+        if not _is_number(value) or value <= 0:
+            errors.append(f"{field}.{key} must be greater than 0")
+    per_fact, total = section.get("timeout_ms"), section.get("total_timeout_ms")
+    if _is_number(per_fact) and _is_number(total) and total < per_fact:
+        errors.append(f"{field}.total_timeout_ms must be at least {field}.timeout_ms")
+    enabled = section.get("enabled")
+    named = set(enabled) if isinstance(enabled, dict) else set()
+    errors.extend(_coverage_errors(f"{field}.enabled", "model", named, registry))
+    return errors
+
+
+FINISH_REMINDER_KEY = "finish_reminder"
+
+
+def _finish_reminder_errors(section: Any) -> list[str]:
+    """Rules for the optional ``finish_reminder`` section; absent means no reminder."""
+    if section is None:
+        return []
+    field = FINISH_REMINDER_KEY
+    if not isinstance(section, dict):
+        return [f"{field} must be an object"]
+    errors: list[str] = []
+    most = section.get("max")
+    if not isinstance(most, int) or isinstance(most, bool) or most < 1:
+        errors.append(f"{field}.max must be a whole number of at least 1")
+    text = section.get("text")
+    if not isinstance(text, str) or not text.strip():
+        errors.append(f"{field}.text must be a non-blank string")
+    return errors
+
+
 def validate_accuracy(doc: dict[str, Any], models: dict[str, Any] | None = None) -> list[str]:
     """Cross-field rules for ``accuracy.json`` (the schema covers shape).
 
     Modes cover exactly the registry's models, the source-kind table covers
     exactly ``models.json`` ``tool_names``, exempt tools are registered tools,
-    check ids are unique with a non-blank ``motivating_failure``, and every
-    ``refusal_checks`` value names a listed check.
+    check ids are unique with a non-blank ``motivating_failure``, every
+    ``refusal_checks`` value names a listed check, and the optional
+    ``support_score`` section has values in range and a switch for exactly the
+    registry's models, and the optional ``finish_reminder`` section has a
+    ``max`` of at least 1 and a non-blank ``text``.
     """
     if models is None:
         from associate import contract  # noqa: PLC0415 - avoid an import cycle
@@ -578,4 +672,6 @@ def validate_accuracy(doc: dict[str, Any], models: dict[str, Any] | None = None)
     for reason, cid in sorted(doc.get("refusal_checks", {}).items()):
         if cid not in seen:
             errors.append(f"refusal_checks maps {reason!r} to unknown check {cid!r}")
+    errors.extend(_support_score_errors(doc.get(SUPPORT_SCORE_KEY), registry))
+    errors.extend(_finish_reminder_errors(doc.get(FINISH_REMINDER_KEY)))
     return errors

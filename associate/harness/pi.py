@@ -86,7 +86,7 @@ from pathlib import Path
 from typing import Any, Callable, Iterable, Sequence
 
 from associate import contract
-from associate.accuracy import accuracy_result
+from associate.accuracy import accuracy_result, reminder
 from associate.contract import validate
 from associate.harness.base import (
     STATEMENTS_FILENAME,
@@ -621,6 +621,22 @@ class RunTimedOut(HarnessError):
 #: The reasoning settings ``models.json`` allows (``schemas/models.schema.json``).
 REASONING_SETTINGS = ("model-default", "on", "off")
 
+#: ``--support-score`` values, and the variable the launcher sets or clears per
+#: run for the extension's ``lib/supportswitch.ts`` (never inherited).
+SUPPORT_SCORE_SETTINGS = ("on", "off")
+SUPPORT_SCORE_ENV = "ASSOCIATE_SUPPORT_SCORE"
+
+#: ``--finish-reminder`` values, and the variable the launcher sets for every run
+#: for the extension's ``lib/reminder.ts`` (deviation d3; never inherited).
+FINISH_REMINDER_SETTINGS = ("on", "off")
+FINISH_REMINDER_ENV = "ASSOCIATE_FINISH_REMINDER"
+
+
+def default_finish_reminder() -> str:
+    """The finish-reminder setting of a run that names none: ``on`` when the
+    contract's ``accuracy.json`` has a ``finish_reminder`` section, else ``off``."""
+    return "on" if "finish_reminder" in contract.load_accuracy() else "off"
+
 
 class PiHarness(Harness):
     """Run one associate task on the installed ``pi`` binary."""
@@ -636,6 +652,8 @@ class PiHarness(Harness):
         model: str | None = None,
         untrusted_checkout: bool = False,
         check_mode: str | None = None,
+        support_score: str | None = None,
+        finish_reminder: str | None = None,
         reasoning: str | None = None,
         executable: str | None = None,
         env: dict[str, str] | None = None,
@@ -647,6 +665,19 @@ class PiHarness(Harness):
         self._model_key = model
         self._untrusted_checkout = untrusted_checkout
         self._check_mode = check_mode
+        if support_score is not None and support_score not in SUPPORT_SCORE_SETTINGS:
+            raise HarnessError(
+                f"unknown support-score setting {support_score!r}",
+                remediation=f"use one of: {', '.join(SUPPORT_SCORE_SETTINGS)}",
+            )
+        self._support_score = support_score
+        if finish_reminder is not None and finish_reminder not in FINISH_REMINDER_SETTINGS:
+            raise HarnessError(
+                f"unknown finish-reminder setting {finish_reminder!r}",
+                remediation=f"use one of: {', '.join(FINISH_REMINDER_SETTINGS)}",
+            )
+        # None: the contract decides, read when the run starts.
+        self._finish_reminder = finish_reminder
         if reasoning is not None and reasoning not in REASONING_SETTINGS:
             raise HarnessError(
                 f"unknown reasoning setting {reasoning!r}",
@@ -878,6 +909,9 @@ class PiHarness(Harness):
             "model": self.model_key(),
             "lobes_role": self.model_entry().get("lobes_role"),
             **self._reasoning_record(),
+            # d3: the switch this run had, and what the extension recorded.
+            "finish_reminder_switch": self.finish_reminder_setting(),
+            reminder.RESULT_KEY: reminder.run_field(export_dir),
             **accuracy_result(
                 export_dir,
                 contract.load_accuracy(),
@@ -1093,6 +1127,10 @@ class PiHarness(Harness):
             return []
         return ["--provider", "associate", "--model", entry["lobes_role"]]
 
+    def finish_reminder_setting(self) -> str:
+        """``on`` or ``off``: the flag's value, else :func:`default_finish_reminder`."""
+        return self._finish_reminder or default_finish_reminder()
+
     def model_key(self) -> str:
         """The registry key this run uses: ``model=`` or the registry default."""
         return self._model_key or str(contract.load_models()["default"])
@@ -1188,6 +1226,19 @@ class PiHarness(Harness):
             env["ASSOCIATE_CHECK_MODE"] = self._check_mode
         else:
             env.pop("ASSOCIATE_CHECK_MODE", None)
+
+        # The per-run support-score switch, from --support-score only, by the
+        # same rule: set for this run or cleared, never inherited. Absent
+        # leaves accuracy.json's switch for the model in charge.
+        if self._support_score:
+            env[SUPPORT_SCORE_ENV] = self._support_score
+        else:
+            env.pop(SUPPORT_SCORE_ENV, None)
+
+        # d3: the finish reminder, set for every run, never inherited: the
+        # flag's value, else the contract's default. The mesh resident and a
+        # spawned child never pass through here and get no variable at all.
+        env[FINISH_REMINDER_ENV] = self.finish_reminder_setting()
 
         continue_from = self._continue_from or task.get("continue_from")
         if continue_from:

@@ -2,7 +2,7 @@
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "$id": "https://github.com/agentculture/associate/contract/accuracy.schema.json",
   "title": "associate accuracy settings",
-  "description": "The accuracy method's settings (accuracy.json). Structural shape only; cross-field rules (modes cover exactly the registry, the source-kind table covers exactly tool_names, exempt tools are registered, check ids are unique, refusal_checks names only listed checks) live in validate.validate_accuracy.",
+  "description": "The accuracy method's settings (accuracy.json). Structural shape only; cross-field rules (modes cover exactly the registry, the source-kind table covers exactly tool_names, exempt tools are registered, check ids are unique, refusal_checks names only listed checks, the support-score ranges and its switch covering exactly the registry) live in validate.validate_accuracy.",
   "type": "object",
   "additionalProperties": false,
   "required": ["version", "mode", "retry_rounds", "refusal_cap", "min_quote_length", "source_kinds", "purpose_exempt_tools", "checks", "refusal_checks"],
@@ -17,6 +17,47 @@
     "retry_rounds": {"type": "integer"},
     "refusal_cap": {"type": "integer"},
     "min_quote_length": {"type": "integer"},
+    "support_score": {
+      "type": "object",
+      "description": "Settings for the support score: the decider's answer to one choice question, how much of the fact's value a found quote, on its own, shows. Report-only. Optional: a file without it has the score off for every model. Ranges, the option and pass rules, and registry coverage of `enabled` live in validate.validate_accuracy.",
+      "additionalProperties": false,
+      "required": ["question", "options", "passes", "timeout_ms", "max_facts", "total_timeout_ms", "enabled"],
+      "properties": {
+        "$comment": {"type": "string"},
+        "question": {"type": "string", "pattern": "\\S", "description": "The choice question asked of the decider, sent as written."},
+        "background": {"type": "string", "pattern": "\\S", "description": "What the decider is told before each pair: what a value and a quote are, and when a value counts as shown. Sent as written, before the value and quote. Optional."},
+        "options": {
+          "type": "object",
+          "description": "The question's answers, in order: option key -> the criterion the decider is given for it. At least two (validate.validate_accuracy).",
+          "additionalProperties": {"type": "string", "pattern": "\\S"}
+        },
+        "passes": {
+          "type": "array",
+          "description": "The option keys reported as the quote supporting the value. Distinct option keys, never every option (validate.validate_accuracy).",
+          "minItems": 1,
+          "items": {"type": "string", "pattern": "\\S"}
+        },
+        "timeout_ms": {"type": "integer", "description": "Time allowed for one fact's request."},
+        "max_facts": {"type": "integer", "description": "Most facts scored for one hand-back; the rest are recorded as not scored."},
+        "total_timeout_ms": {"type": "integer", "description": "Time allowed for all scoring of one hand-back."},
+        "enabled": {
+          "type": "object",
+          "description": "Registry model key -> whether the score is asked for that model's runs.",
+          "additionalProperties": {"type": "boolean"}
+        }
+      }
+    },
+    "finish_reminder": {
+      "type": "object",
+      "description": "Settings for the finish reminder (deviation d3): what the extension sends a model whose task run is about to settle without an accepted finish, and how often. Optional: a file without it means no reminder. The range of `max` lives in validate.validate_accuracy.",
+      "additionalProperties": false,
+      "required": ["max", "text"],
+      "properties": {
+        "$comment": {"type": "string"},
+        "max": {"type": "integer", "description": "How many reminders one session may send (at least 1)."},
+        "text": {"type": "string", "pattern": "\\S", "description": "The reminder sent to the model, as written."}
+      }
+    },
     "source_kinds": {
       "type": "object",
       "description": "Tool name -> source kind of an entry that tool produces.",

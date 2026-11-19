@@ -259,6 +259,71 @@ refused and the model may answer again for accuracy.json `retry_rounds` more
 rounds; a hand-back still failing ends the run with outcome `refused`, and the verb
 exits `3`. `report` mode records what would have been refused and refuses nothing.
 
+## The support-score switch
+
+`--support-score on|off` overrides the model's switch in accuracy.json
+(`support_score.enabled`) for this run only, by setting `ASSOCIATE_SUPPORT_SCORE`;
+an ambient value in the operator's environment is not inherited, and any other
+value is refused (exit `1`). Without the flag the variable is cleared and the
+contract's switch for the model applies. The result's `support_score` is the flag's
+value, or null when none was given: it says what was asked for, not that anything
+was scored. The support score is a report-only signal that refuses nothing (for a
+fact whose quote was found, the decider is asked one choice question: how much of
+the value the quote, on its own, shows, answered `all`, `mostly`, `part`, `little`
+or `none`, the options in accuracy.json `support_score.options`). The switch, the
+question and their readers in the extension are built and unit-tested against a
+fake decider; the option wording was measured offline on a labelled set; no
+associate run has used it, and it is not a measure of accuracy.
+
+When the export holds a support score, the result carries it beside `accuracy`,
+copied from the extension's `check.json` and never recomputed (the Python side
+makes no network call for it):
+
+- `support_source`: `extension`, naming who computed it;
+- `support_facts`: one `{"id", "support"}` per fact the extension gave a result,
+  where `support` is `{"status": "scored", "answer", "supports", "confidence"}`
+  (`answer` an option key, `supports` whether accuracy.json `support_score.passes`
+  names it, `confidence` the decider's probability for it), or
+  `{"status": "not_scored", "reason", "detail"}` (`detail` optional), or
+  `{"status": "not_available", "reason"}` when the entry is malformed, its answer
+  is not one of the contract's options, or it sits on a fact whose quote the
+  Python re-check did not find. A malformed entry is never shown as a score;
+- `support_scored`: how many of those are `scored`, counted from what is shown;
+- `support_answers`: how many shown results got each answer, one count per
+  contract option in contract order, zeros included;
+- `support_scored_reported`: the extension's own count from `report.json`, when it
+  wrote one;
+- `support_unmatched`: fact ids `check.json` gave a result for that the re-check
+  does not know, when there are any.
+
+An export with no support score (the switch off, or written before it existed)
+has none of these keys. The text form prints one `support_scored=` line and one
+`support_answers=` line (for example `all 1, mostly 0, part 0, little 0, none 1`). The
+score is a separate signal from the quote check: it is not in `accuracy.report`,
+changes no count there, and refuses nothing.
+
+## The finish reminder
+
+A model sometimes ends its task turn without calling `finish` and writes its
+hand-back as a plain final message, which leaves no checked facts (deviation d3).
+`--finish-reminder on|off` switches the reminder for this run by setting
+`ASSOCIATE_FINISH_REMINDER`; an ambient value in the operator's environment is not
+inherited, and any other value is refused (exit `1`). Without the flag it is `on`
+when accuracy.json has a `finish_reminder` section, else `off`. When it is on and
+the run is about to stop with no accepted `finish` (and not ended refused, aborted
+or in a lane error), the extension sends the model the section's `text` once more
+and lets it answer, up to the section's `max` reminders. The mesh resident and
+spawned children get no variable and are never reminded.
+
+The result carries `finish_reminder_switch` (`on` or `off`, what the run had) and
+`finish_reminder`: `{"sent": n, "finish_followed": true|false|null}`.
+`finish_followed` is true when the model called `finish` after the latest reminder
+and null when none was sent; `sent` is null when the export's `reminder.json` is
+not what the extension writes. Each reminder is also a `reminder` line in the walk.
+The text form prints one `finish_reminder=` line. A run with no reminder sent
+leaves every export file as it would without the reminder. Built and unit-tested
+against a fake pi; no run of associate with the reminder has been measured.
+
 ## A run that times out
 
 `--timeout` (default 900 seconds) bounds the task turn. When pi does not finish
@@ -305,6 +370,8 @@ is empty.
     associate run --model senses
     associate run --harness stub
     associate run "Summarize the gate" --check-mode enforce --json
+    associate run "Summarize the gate" --support-score on --json
+    associate run "Summarize the gate" --finish-reminder off --json
     associate run --continue-from <prior export dir>
     associate run "Summarize the gate" --reasoning off --timeout 1500 --json
     associate run --export-root <dir> --session-id <id>
@@ -382,6 +449,40 @@ a statement that the fact is true. A fact that could not be checked (no saved te
 or only part of it) is `unchecked` and is never counted as passed. An export written
 before the walk format marker has no facts: they are reported as not applicable, and
 the calls are still listed.
+
+## The support score, copied
+
+When the run had the support score on, the extension wrote a result for each fact
+whose quote was found into the export's `check.json`. `associate check` copies it;
+it does not recompute it and makes no network call for it. In `--json` each such
+fact gains a `support` object and the result gains `support_source` (`extension`),
+`support_scored` (how many shown results are scored), `support_answers` (how many
+got each answer, one count per contract option in order, zeros included),
+`support_scored_reported` (the extension's own count from `report.json`, when
+present) and, when there are any, `support_unmatched` (ids `check.json` scored that
+the re-check does not know). `support` is `{"status": "scored", "answer",
+"supports", "confidence"}` (`answer` one of the contract's `support_score.options`,
+`supports` whether `support_score.passes` names it, `confidence` the decider's
+probability for it), or `{"status": "not_scored", "reason", "detail"}`, or
+`{"status": "not_available", "reason"}` for an entry that is malformed, whose
+answer is not one of the contract's options, or that sits on a fact whose quote
+this re-check did not find; such an entry is never shown as a score. The text form
+says the answer in words under each fact, never a number: for example
+`support: quote supports the value`, `support: quote shows only part of the value`
+or `support not scored (timeout)`, prints the per-answer counts on one `answers:`
+line, and closes with where the score came from.
+
+The support score is a separate signal from the quote check. It changes no count
+above, and an export without it (the switch off, or written before it existed)
+prints exactly what it printed before.
+
+## The finish reminder
+
+When the run was sent the finish reminder, the export holds `reminder.json`, and
+`associate check` adds `finish_reminder` (`{"sent", "finish_followed"}`) to its
+`--json` result and closes the text form with one `Finish reminder:` line (for
+example `sent 1; finish followed`). An export without `reminder.json` prints exactly
+what it printed before.
 
 ## Usage
 
@@ -636,11 +737,12 @@ _MEASURE = """\
 # associate measure
 
 Runs a comparison of arms over tasks, follows it, and reports what it stored. An
-arm is a harness commit, a model, and optionally a check mode and a reasoning
-setting. Every task runs for every arm and repeat, each against a fresh filtered
-clone of the task's repository without the answer key (`docs/accuracy`), and one
-graded result is stored per task, arm and repeat. A count here is a count of stored
-runs; it is never a score.
+arm is a harness commit, a model, and optionally a check mode, a reasoning
+setting, a support-score setting and a finish-reminder setting. Every task runs
+for every arm and repeat, each against a fresh filtered clone of the task's
+repository without the answer key (`docs/accuracy`), and one graded result is
+stored per task, arm and repeat. A count here is a count of stored runs; it is
+never a score.
 
 ## Usage
 
@@ -650,6 +752,10 @@ runs; it is never a score.
     associate measure report RESULTS [--reading answer_text|answer_text_plus_handback_values]
     associate measure sample RESULTS [--sheet PATH] [--seed N] [--size N] [--reading R]
     associate measure agreement RESULTS --sheet PATH
+    associate measure run --broad --arms arms.json --repeats 3 --output-dir RESULTS
+    associate measure sheet RESULTS [--sheet PATH] [--key PATH] [--seed N] [--overwrite]
+    associate measure sheet-check RESULTS [--sheet PATH] [--clone-root DIR]
+    associate measure report RESULTS [--sheet PATH] [--key PATH] [--clone-root DIR]
     associate measure overview
 
 Every sub-verb takes `--json`.
@@ -657,10 +763,28 @@ Every sub-verb takes `--json`.
 ## run
 
 - `--arms FILE`: a JSON list of arms, each `{"name", "harness_commit", "model"}` and
-  optionally `"check_mode"` (`report` or `enforce`) and `"reasoning"` (`model-default`,
-  `on` or `off`). An unknown key or a duplicate name is refused with the reason.
-  `harness_commit` is a commit id of 7 to 64 hexadecimal characters; a branch or tag
-  name is refused.
+  optionally `"check_mode"` (`report` or `enforce`), `"reasoning"` (`model-default`,
+  `on` or `off`), `"support_score"` (`on` or `off`) and `"finish_reminder"` (`on` or
+  `off`). An unknown key or a duplicate
+  name is refused with the reason. `harness_commit` is a commit id of 7 to 64
+  hexadecimal characters; a branch or tag name is refused.
+- `"support_score"` is passed to every run of the arm as `associate run
+  --support-score`; an arm without it passes nothing and the switch in its harness
+  commit's accuracy.json applies. Each stored record names the setting under
+  `support_score`: `on`, `off` or `contract default`. That is what the run was asked
+  to use, not a score and not a statement that anything was scored.
+- `"finish_reminder"` is passed to every run of the arm as `associate run
+  --finish-reminder`; an arm without it passes nothing and that commit's `associate
+  run` default applies. Each stored record names it under `finish_reminder`: `on`,
+  `off` or `contract default`. An arm that sets it on a harness commit whose
+  `associate run` has no `--finish-reminder` is refused before any run.
+- Before the first run the arms are checked. When they carry more than one
+  support-score setting (an arm without one counts as a setting), each arm that sets
+  it must have another arm with a different setting and the same model, reasoning,
+  check mode and harness commit; every arm of one comparison already runs the same
+  tasks and repeats. An arm with no such partner is refused, naming the nearest arm
+  and what differs. An arm that sets it on a harness commit whose `associate run` has
+  no `--support-score` is refused too, before any run.
 - `--tasks FILE` (default `docs/accuracy/tasks.json`), `--tasks-filter ID` (repeatable,
   runs only those tasks), `--repeats N` (default 1, at most 1000), `--output-dir DIR`.
 - `--timeout SECONDS`: the limit for one run, default 3600. There is no unlimited
@@ -707,11 +831,90 @@ least 48 hand-graded runs, and agreement on at least 95% of them. A share is nev
 rounded up to reach 95%. `--json` carries the same numbers and the share, null when no
 run is hand graded.
 
+## Broad tasks: run --broad, sheet, sheet-check, report
+
+A broad task asks one open question about a repository and is read against a
+checklist of facts (`docs/accuracy/broad-tasks.json`: one prompt, and per task a
+repository, a pinned commit and the facts).
+
+- `run --broad` runs the broad tasks (`--tasks FILE` names another broad file). Each
+  stored run holds the whole answer, `answer_source` (where it came from), `finished`
+  (whether `finish` was accepted, from the result's `handback_outcome`; null when the
+  result does not say) and `at_cap`, and per checklist fact whether it was marked as
+  stated. The answer of a run that finished is what `answer.md` hands the caller, in
+  the model's words: the value of each accepted fact and the text of each accepted
+  conclusion and open item, then the model's unchecked text. The quote, walk id and
+  marks the harness wrote after a fact are left out, so a grader cannot tell the arm
+  from a support mark. A run
+  that ended without `finish` leaves no `answer.md`, and its result keeps only the
+  last 2,000 characters of its last message, so its answer is the fullest text there
+  is, with no line removed, in this order: `final_message.md` (the export's copy of
+  the whole last message; older exports have none), `final_reply` (the result's final
+  reply when it is shorter than the cap, so nothing was cut), `statements.json` (the
+  export's statements joined by blank lines: every paragraph and list item the model
+  wrote in a message without a tool call, but no heading, no list marker and no code
+  block), `final_reply_capped` (the cut final reply; only here is `at_cap` true). A fact
+  is marked when every group of its `match` is found in the answer text by one of the
+  group's alternatives, case-insensitively. That is a first marking: the words were
+  found. Every marking is read by hand. No grade of the whole task is stored.
+- The clone a broad run examines never holds `docs/accuracy/broad-tasks.json`, and a
+  call whose arguments name `broad-tasks.json` is a read of the answer key.
+- A real broad run is refused unless `docs/accuracy/broad-difference-threshold.md`
+  (`--difference-note PATH` names another file) is tracked by git, unmodified and
+  confirmed: `status` in its parameters is `confirmed` and the word DRAFT is nowhere
+  in it. A stub run needs no rule file.
+- `sheet` splits every finished run's answer into statements (sentences, list items,
+  headings, table rows, code blocks; the answer's order is kept) and writes two files.
+  The sheet (`broad-grading-sheet.json`) lists the runs in shuffled order under ids
+  (`s01`, ...) with the task, repository and pinned commit, and no arm. The key
+  (`broad-grading-key.json`) maps each id to its run and arm and holds the seed of
+  the shuffle. The grader must not open the key until every run is graded. `--seed N`
+  fixes the shuffle; without it a new random seed is used. An existing sheet or key
+  is replaced only with `--overwrite`.
+- The grader gives every statement a `verdict`: the string `true`, `false` or
+  `not_checkable`. A `false` needs `file` and `line` (a positive whole number): the
+  place in the repository that contradicts the statement. `note` is optional.
+- `sheet-check` reads the sheet (never the key) and lists every problem: a statement
+  without a verdict, a verdict that is not one of the three, a false without a file
+  and a positive line. With `--clone-root DIR` (one checkout per repository, named as
+  the repository) it also checks that the file exists at the task's pinned commit and
+  has that line. It exits 1 while there is a problem and 0 when the sheet is
+  acceptable.
+- `report` on a broad comparison prints one line per run, grouped by repository and
+  arm: checklist facts marked as stated (n of that repository's facts), the answer
+  source, the cap flag and how the run ended (finish accepted, ended without finish,
+  or not recorded). After the runs it prints, per arm, how many runs ended without
+  `finish` (`without_finish` in `--json`) and how many were reminded to finish (a
+  run's `reminded`, from its result's `finish_reminder`; a reminded run's line says
+  "reminded to finish"). Such a run is graded like the others on its
+  final message (first marking, sheet, statements counted false); the report says in
+  one line that it handed back no checked facts. With no sheet written it says the
+  hand count is not joined. Once
+  a sheet exists it joins sheet and key only when the sheet passes the check, every
+  run of the key is fully graded with its statements unchanged, and the key covers the
+  stored finished runs; then each line also has statements counted false, statements
+  not checkable and the number of statements. Otherwise it refuses (exit 1) and prints
+  nothing. Counts are per run; they are never added up over runs and never printed as
+  a percentage.
+- The report applies the rule file to each count on its own when that file is
+  committed, unmodified and confirmed: per repository an arm is better when every one
+  of its runs is at least as good as every run of the other arm and one is strictly
+  better; "a change" needs that in the stated number of repositories, anything else is
+  "no difference shown". When the stored runs are not the ones the rule was written
+  for it says "not applicable" with the reason. A run that read the answer key, or
+  whose answer was cut at the cap, is left out; a run with no statement to grade is
+  left out of the count of false statements. Beside the verdict the report prints the
+middle value of each arm's runs per repository, with no verdict drawn from it. A rule file
+  whose required number of
+  repositories is not more than half of them is refused. While the rule file is a
+  draft the report says the verdict is not computed.
+
 ## Exit codes
 
 - `0` done
-- `1` a user-input error: a bad arms or task file, a missing difference note, a bad
-  flag, a second runner on the same directory, nothing stored to report
+- `1` a user-input error: a bad arms or task file, a missing difference note or rule
+  file, a bad flag, a second runner on the same directory, nothing stored to report, a
+  grading sheet that is not acceptable or not fully graded
 - `2` the background process could not be started
 """
 
@@ -746,6 +949,8 @@ ENTRIES: dict[tuple[str, ...], str] = {
     ("measure", "report"): _MEASURE,
     ("measure", "sample"): _MEASURE,
     ("measure", "agreement"): _MEASURE,
+    ("measure", "sheet"): _MEASURE,
+    ("measure", "sheet-check"): _MEASURE,
     ("cli",): _CLI,
     ("cli", "overview"): _CLI,
 }

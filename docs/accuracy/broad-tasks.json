@@ -1,0 +1,4048 @@
+{
+  "version": 1,
+  "$comment": "Broad explanation tasks for the decider-score measurement (spec claim c20). Each fact was written by one checker and answered again, from the question alone, by a second checker who did not see the first answer. `match` is a first marking only: every group must be found, by any one of its alternatives, case-insensitively; each marking is read by hand. Checkers were model subagents.",
+  "prompt": "Explain this repository: what it is for, its main parts and how they fit together, its commands or entry points, and how it is built and tested.",
+  "tasks": [
+    {
+      "id": "broad-culture",
+      "repo": {
+        "host": "github.com",
+        "owner": "agentculture",
+        "name": "culture"
+      },
+      "commit": "9217b4163319c86461949eb94e019cbcaf2f93c6",
+      "facts": [
+        {
+          "id": "f1",
+          "question": "Which Python callable does the `culture` console script invoke (module and function)?",
+          "answer": "culture_core.cli:main (the same target is also installed under the alias command `culture-core`).",
+          "match": [
+            [
+              "culture_core.cli:main",
+              "culture_core.cli.main",
+              "culture_core/cli"
+            ]
+          ],
+          "evidence": [
+            {
+              "file": "pyproject.toml",
+              "line": 78,
+              "quote": "culture = \"culture_core.cli:main\""
+            },
+            {
+              "file": "pyproject.toml",
+              "line": 79,
+              "quote": "culture-core = \"culture_core.cli:main\""
+            }
+          ],
+          "second_check": {
+            "answer": "culture_core.cli:main — the main() function in culture_core/cli/__init__.py.",
+            "evidence": [
+              {
+                "file": "pyproject.toml",
+                "line": 78,
+                "quote": "culture = \"culture_core.cli:main\""
+              },
+              {
+                "file": "culture_core/cli/__init__.py",
+                "line": 217,
+                "quote": "def main() -> None:"
+              }
+            ],
+            "agrees": true
+          }
+        },
+        {
+          "id": "f2",
+          "question": "The distribution ships two top-level Python packages. What are they, and by what mechanism do `culture.<submodule>` imports reach the engine code?",
+          "answer": "Packages `culture` (thin front door) and `culture_core` (the engine); `culture/__init__.py` installs a meta-path alias finder so `culture.x` is the identical module object as `culture_core.x`.",
+          "match": [
+            [
+              "culture_core"
+            ],
+            [
+              "meta-path",
+              "meta path",
+              "alias finder",
+              "MetaPathFinder",
+              "alias"
+            ]
+          ],
+          "evidence": [
+            {
+              "file": "pyproject.toml",
+              "line": 89,
+              "quote": "packages = [\"culture\", \"culture_core\"]"
+            },
+            {
+              "file": "culture/__init__.py",
+              "line": 30,
+              "quote": "class _CultureCoreAliasFinder(importlib.abc.MetaPathFinder, importlib.abc.Loader):"
+            },
+            {
+              "file": "culture/__init__.py",
+              "line": 31,
+              "quote": "    \"\"\"Resolve ``culture.<x>`` to the identical ``culture_core.<x>`` module."
+            }
+          ],
+          "second_check": {
+            "answer": "`culture` (thin front-door: version + alias finder) and `culture_core` (the engine). `culture/__init__.py` inserts a meta-path finder/loader (_CultureCoreAliasFinder) at sys.meta_path[0] that resolves `culture.<x>` by importing `culture_core.<x>` and registering that same module object in sys.modules under the alias name (module identity, not re-exports); `culture.__main__` is excluded and is a real file.",
+            "evidence": [
+              {
+                "file": "pyproject.toml",
+                "line": 89,
+                "quote": "packages = [\"culture\", \"culture_core\"]"
+              },
+              {
+                "file": "culture/__init__.py",
+                "line": 30,
+                "quote": "class _CultureCoreAliasFinder(importlib.abc.MetaPathFinder, importlib.abc.Loader):"
+              },
+              {
+                "file": "culture/__init__.py",
+                "line": 62,
+                "quote": "        core_name = _CORE + spec.name[len(_PREFIX) :]"
+              },
+              {
+                "file": "culture/__init__.py",
+                "line": 63,
+                "quote": "        module = importlib.import_module(core_name)"
+              },
+              {
+                "file": "culture/__init__.py",
+                "line": 71,
+                "quote": "        sys.modules[spec.name] = module  # identity alias"
+              },
+              {
+                "file": "culture/__init__.py",
+                "line": 85,
+                "quote": "    sys.meta_path.insert(0, _CultureCoreAliasFinder())"
+              }
+            ],
+            "agrees": true
+          }
+        },
+        {
+          "id": "f3",
+          "question": "Where does the IRC server (IRCd) that `culture server start` runs actually come from: is it implemented in this repository or imported, and from which package?",
+          "answer": "It is imported from the external `agentirc` package (PyPI dependency `agentirc-cli`) and embedded in-process; this repo does not implement the IRCd.",
+          "match": [
+            [
+              "agentirc",
+              "agentirc-cli"
+            ]
+          ],
+          "evidence": [
+            {
+              "file": "culture_core/cli/server.py",
+              "line": 826,
+              "quote": "    from agentirc.ircd import IRCd"
+            },
+            {
+              "file": "culture_core/cli/server.py",
+              "line": 13,
+              "quote": "- ``start`` embeds ``agentirc.ircd.IRCd`` in-process and installs"
+            },
+            {
+              "file": "pyproject.toml",
+              "line": 27,
+              "quote": "    \"agentirc-cli>=9.14.0,<10\","
+            }
+          ],
+          "second_check": {
+            "answer": "Imported, not implemented here: `culture server start` builds `agentirc.ircd.IRCd` in-process, from the `agentirc` package shipped by the `agentirc-cli` dependency (agentirc-cli>=9.14.0,<10). No `class IRCd` exists in this repository; culture_core/agentirc/ is only a re-export of the agentirc.config dataclasses.",
+            "evidence": [
+              {
+                "file": "culture_core/cli/server.py",
+                "line": 826,
+                "quote": "    from agentirc.ircd import IRCd"
+              },
+              {
+                "file": "culture_core/cli/server.py",
+                "line": 848,
+                "quote": "    ircd = IRCd(config)"
+              },
+              {
+                "file": "pyproject.toml",
+                "line": 27,
+                "quote": "    \"agentirc-cli>=9.14.0,<10\","
+              },
+              {
+                "file": "culture_core/agentirc/config.py",
+                "line": 9,
+                "quote": "from agentirc.config import LinkConfig, ServerConfig, TelemetryConfig"
+              }
+            ],
+            "agrees": true
+          }
+        },
+        {
+          "id": "f4",
+          "question": "Where do the agent backend client implementations (e.g. the config classes under `culture_core/clients/<backend>/`) actually live?",
+          "answer": "In the external `cultureagent` dependency; the modules under `culture_core/clients/` are re-export shims.",
+          "match": [
+            [
+              "cultureagent"
+            ]
+          ],
+          "evidence": [
+            {
+              "file": "culture_core/clients/claude/config.py",
+              "line": 1,
+              "quote": "\"\"\"Re-export shim — see ``cultureagent.clients.claude.config``."
+            },
+            {
+              "file": "culture_core/clients/claude/config.py",
+              "line": 10,
+              "quote": "from cultureagent.clients.claude.config import *  # noqa: F401, F403"
+            },
+            {
+              "file": "pyproject.toml",
+              "line": 33,
+              "quote": "    \"cultureagent~=0.16.0\","
+            }
+          ],
+          "second_check": {
+            "answer": "In the external `cultureagent` package (dependency cultureagent~=0.16.0), under cultureagent.clients.<backend>. The modules under culture_core/clients/<backend>/ (and clients/shared/) are re-export shims that wildcard-import from cultureagent.",
+            "evidence": [
+              {
+                "file": "culture_core/clients/claude/config.py",
+                "line": 1,
+                "quote": "\"\"\"Re-export shim — see ``cultureagent.clients.claude.config``."
+              },
+              {
+                "file": "culture_core/clients/claude/config.py",
+                "line": 10,
+                "quote": "from cultureagent.clients.claude.config import *  # noqa: F401, F403"
+              },
+              {
+                "file": "culture_core/clients/codex/config.py",
+                "line": 10,
+                "quote": "from cultureagent.clients.codex.config import *  # noqa: F401, F403"
+              },
+              {
+                "file": "culture_core/clients/colleague/config.py",
+                "line": 11,
+                "quote": "from cultureagent.clients.colleague.config import *  # noqa: F401, F403"
+              },
+              {
+                "file": "pyproject.toml",
+                "line": 33,
+                "quote": "    \"cultureagent~=0.16.0\","
+              }
+            ],
+            "agrees": true
+          }
+        },
+        {
+          "id": "f5",
+          "question": "Which agent backends does the backend-parity guard enforce parity across, and which backends does it treat as stale/exempt?",
+          "answer": "Parity is enforced across claude, codex and colleague; copilot and acp are stale and exempt.",
+          "match": [
+            [
+              "claude"
+            ],
+            [
+              "codex"
+            ],
+            [
+              "colleague"
+            ],
+            [
+              "stale",
+              "exempt",
+              "not enforced"
+            ]
+          ],
+          "evidence": [
+            {
+              "file": "culture_core/devtools/backend_parity.py",
+              "line": 60,
+              "quote": "TARGET_BACKENDS = (\"claude\", \"codex\", \"colleague\")"
+            },
+            {
+              "file": "culture_core/devtools/backend_parity.py",
+              "line": 61,
+              "quote": "STALE_BACKENDS = (\"copilot\", \"acp\")"
+            },
+            {
+              "file": ".github/workflows/tests.yml",
+              "line": 81,
+              "quote": "        run: uv run python -m culture_core.devtools.backend_parity --base origin/main"
+            }
+          ],
+          "second_check": {
+            "answer": "Enforced: claude, codex, colleague (TARGET_BACKENDS; each enforced only if its culture_core/clients/<backend>/ dir exists — all three exist at this commit). Stale/exempt: copilot and acp (STALE_BACKENDS).",
+            "evidence": [
+              {
+                "file": "culture_core/devtools/backend_parity.py",
+                "line": 60,
+                "quote": "TARGET_BACKENDS = (\"claude\", \"codex\", \"colleague\")"
+              },
+              {
+                "file": "culture_core/devtools/backend_parity.py",
+                "line": 61,
+                "quote": "STALE_BACKENDS = (\"copilot\", \"acp\")"
+              },
+              {
+                "file": "culture_core/devtools/backend_parity.py",
+                "line": 99,
+                "quote": "    return tuple(b for b in TARGET_BACKENDS if (root / CLIENTS_PREFIX / b).is_dir())"
+              }
+            ],
+            "agrees": true
+          }
+        },
+        {
+          "id": "f6",
+          "question": "What does the `culture console` command group delegate to?",
+          "answer": "It is a passthrough to the standalone irc-lens CLI (the web console for AgentIRC).",
+          "match": [
+            [
+              "irc-lens",
+              "irc_lens"
+            ]
+          ],
+          "evidence": [
+            {
+              "file": "culture_core/cli/console.py",
+              "line": 1,
+              "quote": "\"\"\"`culture console` — passthrough to the standalone irc-lens CLI."
+            }
+          ],
+          "second_check": {
+            "answer": "The standalone irc-lens CLI (irc_lens.cli.main), embedded in-process as a passthrough; only stop/install/uninstall/replica are culture-owned verbs, and a server-name argument is rewritten into an irc-lens serve invocation.",
+            "evidence": [
+              {
+                "file": "culture_core/cli/console.py",
+                "line": 1,
+                "quote": "\"\"\"`culture console` — passthrough to the standalone irc-lens CLI."
+              },
+              {
+                "file": "culture_core/cli/console.py",
+                "line": 523,
+                "quote": "        from irc_lens.cli import main"
+              },
+              {
+                "file": "culture_core/cli/console.py",
+                "line": 530,
+                "quote": "    return main(argv)"
+              },
+              {
+                "file": "culture_core/cli/console.py",
+                "line": 725,
+                "quote": "    _passthrough.run(_entry, argv)"
+              }
+            ],
+            "agrees": true
+          }
+        },
+        {
+          "id": "f7",
+          "question": "Besides the noun-based command groups, which three universal introspection verbs does the CLI expose at the root?",
+          "answer": "explain, overview and learn.",
+          "match": [
+            [
+              "explain"
+            ],
+            [
+              "overview"
+            ],
+            [
+              "learn"
+            ]
+          ],
+          "evidence": [
+            {
+              "file": "culture_core/cli/introspect.py",
+              "line": 27,
+              "quote": "NAMES = frozenset({\"explain\", \"overview\", \"learn\"})"
+            }
+          ],
+          "second_check": {
+            "answer": "explain, overview, learn.",
+            "evidence": [
+              {
+                "file": "culture_core/cli/introspect.py",
+                "line": 27,
+                "quote": "NAMES = frozenset({\"explain\", \"overview\", \"learn\"})"
+              },
+              {
+                "file": "culture_core/cli/__init__.py",
+                "line": 18,
+                "quote": "    culture explain [topic]    full description of topic (default: culture)"
+              },
+              {
+                "file": "culture_core/cli/__init__.py",
+                "line": 19,
+                "quote": "    culture overview [topic]   shallow summary"
+              },
+              {
+                "file": "culture_core/cli/__init__.py",
+                "line": 20,
+                "quote": "    culture learn [topic]      agent-facing onboarding prompt"
+              }
+            ],
+            "agrees": true
+          }
+        },
+        {
+          "id": "f8",
+          "question": "What is the default path of the server configuration file the CLI reads?",
+          "answer": "~/.culture/server.yaml",
+          "match": [
+            [
+              "~/.culture/server.yaml",
+              ".culture/server.yaml"
+            ]
+          ],
+          "evidence": [
+            {
+              "file": "culture_core/cli/shared/constants.py",
+              "line": 8,
+              "quote": "DEFAULT_CONFIG = os.path.expanduser(\"~/.culture/server.yaml\")"
+            }
+          ],
+          "second_check": {
+            "answer": "~/.culture/server.yaml (expanded with os.path.expanduser).",
+            "evidence": [
+              {
+                "file": "culture_core/cli/shared/constants.py",
+                "line": 8,
+                "quote": "DEFAULT_CONFIG = os.path.expanduser(\"~/.culture/server.yaml\")"
+              },
+              {
+                "file": "culture_core/cli/server.py",
+                "line": 155,
+                "quote": "        default=DEFAULT_CONFIG,"
+              }
+            ],
+            "agrees": true
+          }
+        },
+        {
+          "id": "f9",
+          "question": "How is an agent's full IRC nick composed?",
+          "answer": "`<server name>-<agent suffix>` (server name, a hyphen, then the agent's suffix).",
+          "match": [
+            [
+              "<server>-<suffix>",
+              "server-suffix",
+              "{server_name}-{agent.suffix}",
+              "server name and suffix"
+            ]
+          ],
+          "evidence": [
+            {
+              "file": "culture_core/config.py",
+              "line": 445,
+              "quote": "            agent.nick = f\"{server_name}-{agent.suffix}\""
+            }
+          ],
+          "second_check": {
+            "answer": "`<server name>-<agent suffix>`, i.e. f\"{server_name}-{agent.suffix}\".",
+            "evidence": [
+              {
+                "file": "culture_core/config.py",
+                "line": 445,
+                "quote": "            agent.nick = f\"{server_name}-{agent.suffix}\""
+              },
+              {
+                "file": "culture_core/cli/agents.py",
+                "line": 504,
+                "quote": "    full_nick = f\"{server_name}-{suffix}\""
+              }
+            ],
+            "agrees": true
+          }
+        },
+        {
+          "id": "f10",
+          "question": "What command does CI use to run the test suite, and what coverage floor does the project configuration enforce?",
+          "answer": "`uv run pytest -n auto` (pytest with pytest-xdist, coverage over culture and culture_core); coverage `fail_under = 90`.",
+          "match": [
+            [
+              "pytest"
+            ],
+            [
+              "90"
+            ]
+          ],
+          "evidence": [
+            {
+              "file": ".github/workflows/tests.yml",
+              "line": 35,
+              "quote": "      - run: uv run pytest -n auto --cov=culture --cov=culture_core --cov-report=xml:coverage.xml --cov-report=term -v"
+            },
+            {
+              "file": "pyproject.toml",
+              "line": 176,
+              "quote": "fail_under = 90"
+            }
+          ],
+          "second_check": {
+            "answer": "`uv run pytest -n auto --cov=culture --cov=culture_core --cov-report=xml:coverage.xml --cov-report=term -v`; coverage floor fail_under = 90 ([tool.coverage.report]).",
+            "evidence": [
+              {
+                "file": ".github/workflows/tests.yml",
+                "line": 35,
+                "quote": "      - run: uv run pytest -n auto --cov=culture --cov=culture_core --cov-report=xml:coverage.xml --cov-report=term -v"
+              },
+              {
+                "file": "pyproject.toml",
+                "line": 176,
+                "quote": "fail_under = 90"
+              }
+            ],
+            "agrees": true
+          }
+        },
+        {
+          "id": "f11",
+          "question": "How is the package built and released: which build backend, and where do pull requests versus pushes to main publish?",
+          "answer": "Built with hatchling via `uv build`; pull requests publish a `<version>.dev<run_number>` build to TestPyPI, pushes to main publish to PyPI, both with trusted publishing.",
+          "match": [
+            [
+              "hatchling"
+            ],
+            [
+              "TestPyPI"
+            ]
+          ],
+          "evidence": [
+            {
+              "file": "pyproject.toml",
+              "line": 83,
+              "quote": "build-backend = \"hatchling.build\""
+            },
+            {
+              "file": ".github/workflows/publish.yml",
+              "line": 50,
+              "quote": "          uv publish --publish-url https://test.pypi.org/legacy/ --trusted-publishing always --check-url https://test.pypi.org/simple/"
+            },
+            {
+              "file": ".github/workflows/publish.yml",
+              "line": 76,
+              "quote": "          uv publish --trusted-publishing always --check-url https://pypi.org/simple/"
+            },
+            {
+              "file": ".github/workflows/publish.yml",
+              "line": 42,
+              "quote": "          DEV_VERSION=\"${BASE}.dev${{ github.run_number }}\""
+            }
+          ],
+          "second_check": {
+            "answer": "Build backend hatchling (hatchling.build), built with `uv build` and published with `uv publish` via trusted publishing. Pull requests publish a `<version>.dev<run_number>` build to TestPyPI; pushes to main publish to PyPI.",
+            "evidence": [
+              {
+                "file": "pyproject.toml",
+                "line": 83,
+                "quote": "build-backend = \"hatchling.build\""
+              },
+              {
+                "file": ".github/workflows/publish.yml",
+                "line": 24,
+                "quote": "    if: github.event_name == 'pull_request'"
+              },
+              {
+                "file": ".github/workflows/publish.yml",
+                "line": 42,
+                "quote": "          DEV_VERSION=\"${BASE}.dev${{ github.run_number }}\""
+              },
+              {
+                "file": ".github/workflows/publish.yml",
+                "line": 50,
+                "quote": "          uv publish --publish-url https://test.pypi.org/legacy/ --trusted-publishing always --check-url https://test.pypi.org/simple/"
+              },
+              {
+                "file": ".github/workflows/publish.yml",
+                "line": 58,
+                "quote": "    if: github.event_name == 'push'"
+              },
+              {
+                "file": ".github/workflows/publish.yml",
+                "line": 76,
+                "quote": "          uv publish --trusted-publishing always --check-url https://pypi.org/simple/"
+              }
+            ],
+            "agrees": true
+          }
+        },
+        {
+          "id": "f12",
+          "question": "What does the `version-check` CI job require of a pull request that changes code?",
+          "answer": "That the `pyproject.toml` version differs from main's (a version bump); the job fails if it matches main.",
+          "match": [
+            [
+              "version bump",
+              "bump",
+              "version differs",
+              "version must change"
+            ]
+          ],
+          "evidence": [
+            {
+              "file": ".github/workflows/tests.yml",
+              "line": 123,
+              "quote": "          if [ \"$PR_VERSION\" = \"$MAIN_VERSION\" ]; then"
+            },
+            {
+              "file": ".github/workflows/tests.yml",
+              "line": 139,
+              "quote": "            echo \"::error::Version $PR_VERSION matches main. Bump before merging.\""
+            },
+            {
+              "file": ".github/workflows/tests.yml",
+              "line": 107,
+              "quote": "          CODE_CHANGED=$(git diff --name-only origin/main...HEAD -- 'culture/' 'culture_core/' 'pyproject.toml' 'tests/' | head -1)"
+            }
+          ],
+          "second_check": {
+            "answer": "That the `version` in pyproject.toml differs from the one on origin/main. If the PR changes anything under culture/, culture_core/, pyproject.toml or tests/ and the version equals main's, the job posts/updates a PR comment and exits 1; PRs touching none of those paths skip the check.",
+            "evidence": [
+              {
+                "file": ".github/workflows/tests.yml",
+                "line": 107,
+                "quote": "          CODE_CHANGED=$(git diff --name-only origin/main...HEAD -- 'culture/' 'culture_core/' 'pyproject.toml' 'tests/' | head -1)"
+              },
+              {
+                "file": ".github/workflows/tests.yml",
+                "line": 123,
+                "quote": "          if [ \"$PR_VERSION\" = \"$MAIN_VERSION\" ]; then"
+              },
+              {
+                "file": ".github/workflows/tests.yml",
+                "line": 139,
+                "quote": "            echo \"::error::Version $PR_VERSION matches main. Bump before merging.\""
+              },
+              {
+                "file": ".github/workflows/tests.yml",
+                "line": 140,
+                "quote": "            exit 1"
+              }
+            ],
+            "agrees": true
+          }
+        }
+      ],
+      "dropped": []
+    },
+    {
+      "id": "broad-culture-rules",
+      "repo": {
+        "host": "github.com",
+        "owner": "agentculture",
+        "name": "culture-rules"
+      },
+      "commit": "08be157cb55742019e5f6523db94b538065ae602",
+      "facts": [
+        {
+          "id": "f1",
+          "question": "What is this repository for, in one line?",
+          "answer": "A rules engine for the AgentCulture mesh: rules -> conditions -> workflows -> actions, carried out by actors (agents, humans, code).",
+          "match": [
+            [
+              "rules engine"
+            ]
+          ],
+          "evidence": [
+            {
+              "file": "pyproject.toml",
+              "line": 4,
+              "quote": "Rules engine for the AgentCulture mesh: rules -> conditions -> workflows -> actions, executed by actors (agents, humans, code)."
+            },
+            {
+              "file": "culture_rules/cli/__init__.py",
+              "line": 87,
+              "quote": "description=\"culture-rules — the rules engine for the AgentCulture mesh.\","
+            }
+          ],
+          "second_check": {
+            "answer": "A rules engine for the AgentCulture mesh (rules -> conditions -> workflows -> actions, executed by agent/human/code actors): the Python backend library culture_rules plus a React Flow visual editor.",
+            "evidence": [
+              {
+                "file": "pyproject.toml",
+                "line": 4,
+                "quote": "description = \"Rules engine for the AgentCulture mesh: rules -> conditions -> workflows -> actions, executed by actors (agents, humans, code). Python backend library culture_rules; React Flow (Node.js) visual editor with Workflows, Actors, Variables and Statistics tabs.\""
+              },
+              {
+                "file": "culture_rules/cli/__init__.py",
+                "line": 87,
+                "quote": "        description=\"culture-rules — the rules engine for the AgentCulture mesh.\","
+              }
+            ],
+            "agrees": true
+          }
+        },
+        {
+          "id": "f2",
+          "question": "What is the installed console command and which Python function does it call?",
+          "answer": "The `culture-rules` command, which calls culture_rules.cli:main (an argparse CLI).",
+          "match": [
+            [
+              "culture_rules.cli:main",
+              "culture_rules/cli",
+              "culture_rules.cli"
+            ]
+          ],
+          "evidence": [
+            {
+              "file": "pyproject.toml",
+              "line": 35,
+              "quote": "culture-rules = \"culture_rules.cli:main\""
+            }
+          ],
+          "second_check": {
+            "answer": "The console command is `culture-rules`, which calls `culture_rules.cli:main` (the `main(argv)` function in culture_rules/cli/__init__.py).",
+            "evidence": [
+              {
+                "file": "pyproject.toml",
+                "line": 35,
+                "quote": "culture-rules = \"culture_rules.cli:main\""
+              },
+              {
+                "file": "culture_rules/cli/__init__.py",
+                "line": 149,
+                "quote": "def main(argv: list[str] | None = None) -> int:"
+              }
+            ],
+            "agrees": true
+          }
+        },
+        {
+          "id": "f3",
+          "question": "How many required third-party runtime dependencies does the core package declare, and how are the server, MongoDB store, MCP and other integrations pulled in?",
+          "answer": "None (dependencies = []); everything else is an optional extra (server, store, mcp, events, yaml, backup, agent, github, discord).",
+          "match": [
+            [
+              "no runtime dep",
+              "dependencies = []",
+              "zero runtime dep",
+              "zero dep",
+              "no dependencies",
+              "no third-party dep",
+              "dependency-free",
+              "stdlib only"
+            ],
+            [
+              "extra"
+            ]
+          ],
+          "evidence": [
+            {
+              "file": "pyproject.toml",
+              "line": 16,
+              "quote": "dependencies = []"
+            },
+            {
+              "file": "pyproject.toml",
+              "line": 18,
+              "quote": "# Optional extras: the core library + CLI stay dependency-free (spec c40)."
+            },
+            {
+              "file": "pyproject.toml",
+              "line": 22,
+              "quote": "server = [\"fastapi>=0.115\", \"uvicorn>=0.30\"]"
+            }
+          ],
+          "second_check": {
+            "answer": "Zero: `dependencies = []`. Everything else is an optional extra under [project.optional-dependencies]: yaml (pyyaml), store (pymongo), server (fastapi, uvicorn), backup (boto3), events (events-cli), agent (agentirc-cli), mcp (mcp), github (cryptography), discord (discord.py); the code imports them lazily.",
+            "evidence": [
+              {
+                "file": "pyproject.toml",
+                "line": 16,
+                "quote": "dependencies = []"
+              },
+              {
+                "file": "pyproject.toml",
+                "line": 18,
+                "quote": "# Optional extras: the core library + CLI stay dependency-free (spec c40)."
+              },
+              {
+                "file": "pyproject.toml",
+                "line": 21,
+                "quote": "store = [\"pymongo>=4.8\"]"
+              },
+              {
+                "file": "pyproject.toml",
+                "line": 22,
+                "quote": "server = [\"fastapi>=0.115\", \"uvicorn>=0.30\"]"
+              },
+              {
+                "file": "pyproject.toml",
+                "line": 26,
+                "quote": "mcp = [\"mcp>=1.2,<2\"]"
+              },
+              {
+                "file": "culture_rules/cli/_commands/serve.py",
+                "line": 18,
+                "quote": "    from culture_rules.server import serve as serve_mod  # noqa: PLC0415 - optional extra"
+              }
+            ],
+            "agrees": true
+          }
+        },
+        {
+          "id": "f4",
+          "question": "What happens when a mutating CLI or MCP verb is called without any extra flag, and which flag changes that?",
+          "answer": "Writes are dry-run by default (a preview that changes nothing); `--apply` (MCP: apply=true) commits them.",
+          "match": [
+            [
+              "dry-run",
+              "dry run"
+            ],
+            [
+              "apply"
+            ]
+          ],
+          "evidence": [
+            {
+              "file": "culture_rules/cli/_nounlib.py",
+              "line": 148,
+              "quote": "\"writes are dry-run unless --apply; a dry-run changes nothing\","
+            },
+            {
+              "file": "culture_rules/mcp/tools.py",
+              "line": 4,
+              "quote": "schema. A mutating tool only commits when ``apply`` is exactly ``true``; otherwise the same"
+            }
+          ],
+          "second_check": {
+            "answer": "It is a dry-run: nothing is changed and a dry-run envelope is returned. The CLI flag `--apply` (MCP: argument `apply` exactly true) commits the write.",
+            "evidence": [
+              {
+                "file": "culture_rules/cli/_build.py",
+                "line": 182,
+                "quote": "                \"--apply\", action=\"store_true\", help=\"Commit the write (default: dry-run).\""
+              },
+              {
+                "file": "culture_rules/cli/registry.py",
+                "line": 104,
+                "quote": "                \"description\": \"false = dry-run (change nothing); true = commit the write\","
+              },
+              {
+                "file": "culture_rules/mcp/tools.py",
+                "line": 64,
+                "quote": "    apply = args.pop(\"apply\", False) is True and verb.mutating"
+              },
+              {
+                "file": "culture_rules/cli/_build.py",
+                "line": 119,
+                "quote": "            + \"\\nre-run with --apply to commit\""
+              }
+            ],
+            "agrees": true
+          }
+        },
+        {
+          "id": "f5",
+          "question": "Through what abstraction do components reach persistence, and which adapters implement it?",
+          "answer": "The StoragePort protocol (culture_rules/store/port.py), implemented by an in-memory adapter (MemoryStore) and a MongoDB replica-set adapter (MongoStore).",
+          "match": [
+            [
+              "StoragePort"
+            ],
+            [
+              "Mongo"
+            ],
+            [
+              "memory",
+              "MemoryStore"
+            ]
+          ],
+          "evidence": [
+            {
+              "file": "culture_rules/store/port.py",
+              "line": 1,
+              "quote": "\"\"\"The StoragePort: the one persistence seam every culture-rules component uses."
+            },
+            {
+              "file": "culture_rules/store/memory.py",
+              "line": 87,
+              "quote": "class MemoryStore:"
+            },
+            {
+              "file": "culture_rules/store/mongo.py",
+              "line": 231,
+              "quote": "\"\"\"A StoragePort over a MongoDB replica set (majority writes, change streams).\"\"\""
+            }
+          ],
+          "second_check": {
+            "answer": "The StoragePort protocol (culture_rules/store/port.py), the one persistence seam. Two adapters implement it: the in-memory MemoryStore (store/memory.py) and the MongoDB replica-set MongoStore (store/mongo.py).",
+            "evidence": [
+              {
+                "file": "culture_rules/store/port.py",
+                "line": 1,
+                "quote": "\"\"\"The StoragePort: the one persistence seam every culture-rules component uses."
+              },
+              {
+                "file": "culture_rules/store/port.py",
+                "line": 281,
+                "quote": "class StoragePort(StoreOps, Protocol):"
+              },
+              {
+                "file": "culture_rules/store/memory.py",
+                "line": 87,
+                "quote": "class MemoryStore:"
+              },
+              {
+                "file": "culture_rules/store/mongo.py",
+                "line": 230,
+                "quote": "class MongoStore:"
+              },
+              {
+                "file": "culture_rules/store/mongo.py",
+                "line": 1,
+                "quote": "\"\"\"MongoDB replica-set :class:`~culture_rules.store.port.StoragePort` adapter."
+              }
+            ],
+            "agrees": true
+          }
+        },
+        {
+          "id": "f6",
+          "question": "Which command runs the engine on a host, and how does it differ from the other CLI noun groups in what it talks to?",
+          "answer": "`culture-rules node run` runs the host's engine node; it talks to the store directly, whereas the other nouns are clients of the HTTP API.",
+          "match": [
+            [
+              "node run"
+            ]
+          ],
+          "evidence": [
+            {
+              "file": "culture_rules/cli/_commands/node.py",
+              "line": 1,
+              "quote": "\"\"\"``culture-rules node run`` — run this host's engine node (the rules engine itself)."
+            },
+            {
+              "file": "culture_rules/cli/_commands/node.py",
+              "line": 3,
+              "quote": "Unlike every other noun, ``node`` talks to the store directly: the node *is* the engine,"
+            },
+            {
+              "file": "culture_rules/cli/_nounlib.py",
+              "line": 149,
+              "quote": "\"talks to the HTTP API only (CULTURE_RULES_API_URL, CULTURE_RULES_TOKEN)\","
+            }
+          ],
+          "second_check": {
+            "answer": "`culture-rules node run` (optionally --host/--once/--idle). Unlike the other noun groups, which are clients of the HTTP API, `node` talks to the store directly because the node is the engine itself.",
+            "evidence": [
+              {
+                "file": "culture_rules/cli/_commands/node.py",
+                "line": 1,
+                "quote": "\"\"\"``culture-rules node run`` — run this host's engine node (the rules engine itself)."
+              },
+              {
+                "file": "culture_rules/cli/_commands/node.py",
+                "line": 3,
+                "quote": "Unlike every other noun, ``node`` talks to the store directly: the node *is* the engine,"
+              },
+              {
+                "file": "culture_rules/cli/__init__.py",
+                "line": 104,
+                "quote": "    # Noun groups over the HTTP API; their verbs come from cli/verbs.py (the one registry)."
+              },
+              {
+                "file": "culture_rules/cli/__init__.py",
+                "line": 119,
+                "quote": "    _node.register(sub)  # the engine node: talks to the store directly (lazy import)"
+              }
+            ],
+            "agrees": true
+          }
+        },
+        {
+          "id": "f7",
+          "question": "How are the CLI verbs and the MCP tools kept identical?",
+          "answer": "Both enumerate one command registry (culture_rules.cli.verbs.REGISTRY); the MCP server exposes one tool per registry verb over stdio, and a surface-parity test checks every registry verb exists on the CLI, as an MCP tool and in the OpenAPI paths.",
+          "match": [
+            [
+              "registry"
+            ]
+          ],
+          "evidence": [
+            {
+              "file": "culture_rules/cli/verbs.py",
+              "line": 1,
+              "quote": "\"\"\"The one command registry: every noun module's verbs, registered once."
+            },
+            {
+              "file": "culture_rules/mcp/tools.py",
+              "line": 3,
+              "quote": "One tool per registry verb, named ``<noun>_<verb>`` with ``params_schema()`` as its input"
+            },
+            {
+              "file": "tests/test_surface_parity.py",
+              "line": 1,
+              "quote": "\"\"\"Surface parity: every registry verb exists on the CLI, as an MCP tool and in the OpenAPI paths."
+            }
+          ],
+          "second_check": {
+            "answer": "Both are generated from one command registry (culture_rules.cli.verbs.REGISTRY, classes in cli/registry.py): the CLI builds its argparse tree from it and the MCP server builds one tool per verb (`<noun>_<verb>`) from it; tests/test_surface_parity.py enumerates the registry and checks every verb is on the CLI, in MCP and in the OpenAPI paths.",
+            "evidence": [
+              {
+                "file": "culture_rules/cli/registry.py",
+                "line": 1,
+                "quote": "\"\"\"The command registry: every verb is registered once, and every surface reads this registry."
+              },
+              {
+                "file": "culture_rules/cli/registry.py",
+                "line": 10,
+                "quote": "CLI builds its argparse tree from it, ``learn`` and ``explain`` list it, the MCP server builds"
+              },
+              {
+                "file": "culture_rules/mcp/tools.py",
+                "line": 3,
+                "quote": "One tool per registry verb, named ``<noun>_<verb>`` with ``params_schema()`` as its input"
+              },
+              {
+                "file": "culture_rules/mcp/tools.py",
+                "line": 33,
+                "quote": "    for v in REGISTRY.verbs():"
+              },
+              {
+                "file": "tests/test_surface_parity.py",
+                "line": 1,
+                "quote": "\"\"\"Surface parity: every registry verb exists on the CLI, as an MCP tool and in the OpenAPI paths."
+              }
+            ],
+            "agrees": true
+          }
+        },
+        {
+          "id": "f8",
+          "question": "Which committed file is the HTTP API contract, and how is drift from the code caught?",
+          "answer": "api/openapi.json; a test asserts the OpenAPI the app serves equals the committed file (regenerated with scripts/export-openapi.py).",
+          "match": [
+            [
+              "openapi.json"
+            ]
+          ],
+          "evidence": [
+            {
+              "file": "tests/server/test_openapi_contract.py",
+              "line": 1,
+              "quote": "\"\"\"The served OpenAPI equals the committed api/openapi.json (the single HTTP contract).\"\"\""
+            },
+            {
+              "file": "tests/server/test_openapi_contract.py",
+              "line": 25,
+              "quote": "assert served == committed, \"route/schema drift: run scripts/export-openapi.py --write\""
+            }
+          ],
+          "second_check": {
+            "answer": "api/openapi.json. Drift is caught by tests/server/test_openapi_contract.py (the served OpenAPI from create_app must equal the committed file, and scripts/export-openapi.py --check must exit 0), which runs in the CI pytest job; the script's --write mode regenerates the file.",
+            "evidence": [
+              {
+                "file": "culture_rules/server/contract.py",
+                "line": 11,
+                "quote": "CONTRACT_PATH = Path(\"api\") / \"openapi.json\""
+              },
+              {
+                "file": "tests/server/test_openapi_contract.py",
+                "line": 25,
+                "quote": "    assert served == committed, \"route/schema drift: run scripts/export-openapi.py --write\""
+              },
+              {
+                "file": "tests/server/test_openapi_contract.py",
+                "line": 31,
+                "quote": "        [sys.executable, str(ROOT / \"scripts\" / \"export-openapi.py\"), \"--check\"],"
+              },
+              {
+                "file": "scripts/export-openapi.py",
+                "line": 36,
+                "quote": "        print(f\"{CONTRACT_PATH} is out of date; run: python scripts/export-openapi.py --write\")"
+              }
+            ],
+            "agrees": true
+          }
+        },
+        {
+          "id": "f9",
+          "question": "Where does the visual editor live, what is it built with, and how does it reach users of the Python package?",
+          "answer": "In web/: a React + React Flow (@xyflow/react) app built with Vite/TypeScript. A hatch build hook ships the built web/dist inside the wheel as culture_rules/web_dist, which the API serves, so no Node is needed at runtime.",
+          "match": [
+            [
+              "React"
+            ],
+            [
+              "web_dist",
+              "wheel",
+              "bundled",
+              "hatch"
+            ]
+          ],
+          "evidence": [
+            {
+              "file": "web/package.json",
+              "line": 24,
+              "quote": "\"@xyflow/react\": \"^12.11.2\","
+            },
+            {
+              "file": "web/package.json",
+              "line": 10,
+              "quote": "\"build\": \"tsc -b && vite build\","
+            },
+            {
+              "file": "hatch_build.py",
+              "line": 25,
+              "quote": "WEB_DIST_TARGET = \"culture_rules/web_dist\""
+            },
+            {
+              "file": "culture_rules/server/static.py",
+              "line": 1,
+              "quote": "\"\"\"Serve the packaged web build (``culture_rules/web_dist``) from the API. No Node at runtime."
+            }
+          ],
+          "second_check": {
+            "answer": "In web/ — a React 18 + TypeScript app built with Vite, using React Flow (@xyflow/react). CI runs `npm ci && npm run build` and the hatch build hook (hatch_build.py) force-includes web/dist into the wheel/sdist as culture_rules/web_dist, which the FastAPI server serves (server/static.py), so no Node is needed at runtime.",
+            "evidence": [
+              {
+                "file": "web/package.json",
+                "line": 10,
+                "quote": "    \"build\": \"tsc -b && vite build\","
+              },
+              {
+                "file": "web/package.json",
+                "line": 24,
+                "quote": "    \"@xyflow/react\": \"^12.11.2\","
+              },
+              {
+                "file": "web/package.json",
+                "line": 26,
+                "quote": "    \"react\": \"^18.3.1\","
+              },
+              {
+                "file": "hatch_build.py",
+                "line": 25,
+                "quote": "WEB_DIST_TARGET = \"culture_rules/web_dist\""
+              },
+              {
+                "file": "hatch_build.py",
+                "line": 72,
+                "quote": "        build_data[\"force_include\"].update(web_force_include(self.root, require=require))"
+              },
+              {
+                "file": "culture_rules/server/static.py",
+                "line": 1,
+                "quote": "\"\"\"Serve the packaged web build (``culture_rules/web_dist``) from the API. No Node at runtime."
+              },
+              {
+                "file": ".github/workflows/publish.yml",
+                "line": 109,
+                "quote": "      - name: Build the web UI (shipped in the wheel as culture_rules/web_dist)"
+              }
+            ],
+            "agrees": true
+          }
+        },
+        {
+          "id": "f10",
+          "question": "How does the engine stop several hosts from executing the same rule firing or workflow step twice?",
+          "answer": "Exactly-once claims: before doing work an engine instance claims the firing/step (a claim document keyed by an idempotency key, compare-and-set, with a lease); exactly one claimant wins.",
+          "match": [
+            [
+              "claim",
+              "exactly-once",
+              "exactly once",
+              "idempotency key"
+            ]
+          ],
+          "evidence": [
+            {
+              "file": "culture_rules/engine/claims.py",
+              "line": 1,
+              "quote": "\"\"\"Exactly-once claims on firings and workflow steps, across hosts."
+            },
+            {
+              "file": "culture_rules/engine/claims.py",
+              "line": 4,
+              "quote": "same runnable step. Before doing the work, an instance *claims* it; exactly one"
+            }
+          ],
+          "second_check": {
+            "answer": "With exactly-once claims (culture_rules/engine/claims.py): before doing the work an instance claims it by writing one claim document whose id is the work's idempotency key (hash of run_id+step_id, or rule_id+event_id for a firing); every state change is a compare-and-set (update_if) through the StoragePort, so only one claimant wins. A won claim carries a renewable lease (default 30 s) with an attempt counter as fencing token; a lapsed lease may be reclaimed, a completed claim never.",
+            "evidence": [
+              {
+                "file": "culture_rules/engine/claims.py",
+                "line": 1,
+                "quote": "\"\"\"Exactly-once claims on firings and workflow steps, across hosts."
+              },
+              {
+                "file": "culture_rules/engine/claims.py",
+                "line": 5,
+                "quote": "claimant wins. A claim is one document in :data:`CLAIMS_COLLECTION` whose id is"
+              },
+              {
+                "file": "culture_rules/engine/claims.py",
+                "line": 7,
+                "quote": ":meth:`~culture_rules.store.port.StoreOps.update_if` - so the guarantee holds on"
+              },
+              {
+                "file": "culture_rules/engine/claims.py",
+                "line": 23,
+                "quote": "A won claim carries a lease (``lease_expires_at``). The holder renews it while"
+              },
+              {
+                "file": "culture_rules/engine/claims.py",
+                "line": 78,
+                "quote": "DEFAULT_LEASE = timedelta(seconds=30)"
+              },
+              {
+                "file": "culture_rules/engine/runs.py",
+                "line": 1467,
+                "quote": "        claim = self._claims.claim_step(doc[\"id\"], key, may_reclaim=guard)"
+              }
+            ],
+            "agrees": true
+          }
+        },
+        {
+          "id": "f11",
+          "question": "How are the Python tests run in CI, and what coverage floor is enforced?",
+          "answer": "`uv run pytest -n auto` (pytest with xdist) with coverage of culture_rules and a 60% minimum (--cov-fail-under=60 / fail_under = 60).",
+          "match": [
+            [
+              "pytest"
+            ],
+            [
+              "60"
+            ]
+          ],
+          "evidence": [
+            {
+              "file": ".github/workflows/tests.yml",
+              "line": 54,
+              "quote": "- run: uv run pytest -n auto --cov=culture_rules --cov-fail-under=60 --cov-report=xml:coverage.xml --cov-report=term -v"
+            },
+            {
+              "file": "pyproject.toml",
+              "line": 79,
+              "quote": "fail_under = 60"
+            }
+          ],
+          "second_check": {
+            "answer": "In the `test` job of .github/workflows/tests.yml: `uv sync`, then `uv run pytest -n auto --cov=culture_rules --cov-fail-under=60 ...` (pytest-xdist, COVERAGE_CORE=sysmon, Python 3.12, with the mongo:8.0 image pre-pulled and ffmpeg installed). The floor is 60% (also fail_under = 60 in pyproject). publish.yml also runs `uv run pytest -n auto -v` without coverage before publishing.",
+            "evidence": [
+              {
+                "file": ".github/workflows/tests.yml",
+                "line": 54,
+                "quote": "      - run: uv run pytest -n auto --cov=culture_rules --cov-fail-under=60 --cov-report=xml:coverage.xml --cov-report=term -v"
+              },
+              {
+                "file": "pyproject.toml",
+                "line": 79,
+                "quote": "fail_under = 60"
+              },
+              {
+                "file": ".github/workflows/publish.yml",
+                "line": 33,
+                "quote": "      - run: uv run pytest -n auto -v"
+              }
+            ],
+            "agrees": true
+          }
+        },
+        {
+          "id": "f12",
+          "question": "How is the package built and released?",
+          "answer": "Built with hatchling via `uv build` (after `npm ci && npm run build` in web/); a push to main publishes to PyPI with trusted publishing, and pull requests publish a `<version>.dev<run_number>` build to TestPyPI.",
+          "match": [
+            [
+              "hatchling",
+              "uv build"
+            ],
+            [
+              "PyPI"
+            ],
+            [
+              "push to main",
+              "pushes to main",
+              "pushed to main",
+              "on main",
+              "to main",
+              "main branch"
+            ]
+          ],
+          "evidence": [
+            {
+              "file": "pyproject.toml",
+              "line": 39,
+              "quote": "build-backend = \"hatchling.build\""
+            },
+            {
+              "file": ".github/workflows/publish.yml",
+              "line": 120,
+              "quote": "uv publish --trusted-publishing always --check-url https://pypi.org/simple/"
+            },
+            {
+              "file": ".github/workflows/publish.yml",
+              "line": 57,
+              "quote": "DEV_VERSION=\"${BASE}.dev${{ github.run_number }}\""
+            }
+          ],
+          "second_check": {
+            "answer": "Built with hatchling (custom hook hatch_build.py bundles the web UI and deploy data) via `uv build`, after building the web UI with npm. publish.yml: a push to main (touching pyproject.toml, culture_rules/**, web/**, hatch_build.py) publishes to PyPI with `uv publish --trusted-publishing always`; same-repo PRs publish `<version>.dev<run_number>` to TestPyPI. Both need the test job to pass and set CULTURE_RULES_REQUIRE_WEB=1.",
+            "evidence": [
+              {
+                "file": "pyproject.toml",
+                "line": 39,
+                "quote": "build-backend = \"hatchling.build\""
+              },
+              {
+                "file": "pyproject.toml",
+                "line": 47,
+                "quote": "path = \"hatch_build.py\""
+              },
+              {
+                "file": ".github/workflows/publish.yml",
+                "line": 119,
+                "quote": "          uv build"
+              },
+              {
+                "file": ".github/workflows/publish.yml",
+                "line": 120,
+                "quote": "          uv publish --trusted-publishing always --check-url https://pypi.org/simple/"
+              },
+              {
+                "file": ".github/workflows/publish.yml",
+                "line": 57,
+                "quote": "          DEV_VERSION=\"${BASE}.dev${{ github.run_number }}\""
+              },
+              {
+                "file": ".github/workflows/publish.yml",
+                "line": 79,
+                "quote": "          uv publish --publish-url https://test.pypi.org/legacy/ --trusted-publishing always --check-url https://test.pypi.org/simple/"
+              },
+              {
+                "file": ".github/workflows/publish.yml",
+                "line": 87,
+                "quote": "    if: github.event_name == 'push'"
+              }
+            ],
+            "agrees": true
+          }
+        }
+      ],
+      "dropped": []
+    },
+    {
+      "id": "broad-colleague",
+      "repo": {
+        "host": "github.com",
+        "owner": "agentculture",
+        "name": "colleague"
+      },
+      "commit": "6081b8c82373b3242e630656510e82dc84eeeaed",
+      "facts": [
+        {
+          "id": "f1",
+          "question": "What is the project, in one sentence, according to its package metadata?",
+          "answer": "A swappable coder-agent harness that turns different models into repo workers behind one shared task contract.",
+          "match": [
+            [
+              "coder-agent harness",
+              "agent harness",
+              "turns different models into repo workers",
+              "turns models into repo workers"
+            ]
+          ],
+          "evidence": [
+            {
+              "file": "pyproject.toml",
+              "line": 4,
+              "quote": "description = \"Colleague is a swappable coder-agent harness that turns different models into repo workers behind one shared task contract.\""
+            }
+          ],
+          "second_check": {
+            "answer": "Colleague is a swappable coder-agent harness that turns different models into repo workers behind one shared task contract.",
+            "evidence": [
+              {
+                "file": "pyproject.toml",
+                "line": 4,
+                "quote": "description = \"Colleague is a swappable coder-agent harness that turns different models into repo workers behind one shared task contract.\""
+              }
+            ],
+            "agrees": true
+          }
+        },
+        {
+          "id": "f2",
+          "question": "Which console commands does installing the package provide, and what Python callable do they invoke?",
+          "answer": "`colleague` and its short alias `clg`, both mapped to `colleague.cli:main`.",
+          "match": [
+            [
+              "colleague.cli:main"
+            ],
+            [
+              "clg"
+            ]
+          ],
+          "evidence": [
+            {
+              "file": "pyproject.toml",
+              "line": 109,
+              "quote": "colleague = \"colleague.cli:main\""
+            },
+            {
+              "file": "pyproject.toml",
+              "line": 110,
+              "quote": "clg = \"colleague.cli:main\""
+            }
+          ],
+          "second_check": {
+            "answer": "Two console scripts, `colleague` and `clg`, both invoking `colleague.cli:main` (the `main(argv=None) -> int` function in colleague/cli/__init__.py).",
+            "evidence": [
+              {
+                "file": "pyproject.toml",
+                "line": 109,
+                "quote": "colleague = \"colleague.cli:main\""
+              },
+              {
+                "file": "pyproject.toml",
+                "line": 110,
+                "quote": "clg = \"colleague.cli:main\""
+              },
+              {
+                "file": "colleague/cli/__init__.py",
+                "line": 240,
+                "quote": "def main(argv: list[str] | None = None) -> int:"
+              }
+            ],
+            "agrees": true
+          }
+        },
+        {
+          "id": "f3",
+          "question": "By what mechanism are model backends (engines) discovered, so that an out-of-tree package can add one?",
+          "answer": "Python entry points in the `colleague.engines` group, read by colleague/registry.py.",
+          "match": [
+            [
+              "colleague.engines"
+            ]
+          ],
+          "evidence": [
+            {
+              "file": "colleague/registry.py",
+              "line": 20,
+              "quote": "ENTRY_POINT_GROUP = \"colleague.engines\""
+            },
+            {
+              "file": "pyproject.toml",
+              "line": 115,
+              "quote": "[project.entry-points.\"colleague.engines\"]"
+            }
+          ],
+          "second_check": {
+            "answer": "Python entry points: an engine advertises itself under the `colleague.engines` entry-point group in its package metadata; colleague/registry.py reads the group with importlib.metadata.entry_points (catalog/names/load), so an out-of-tree wheel is discovered with no change to core.",
+            "evidence": [
+              {
+                "file": "colleague/registry.py",
+                "line": 20,
+                "quote": "ENTRY_POINT_GROUP = \"colleague.engines\""
+              },
+              {
+                "file": "colleague/registry.py",
+                "line": 37,
+                "quote": "return list(entry_points(group=ENTRY_POINT_GROUP))"
+              },
+              {
+                "file": "colleague/registry.py",
+                "line": 58,
+                "quote": "engine_cls = ep.load()"
+              },
+              {
+                "file": "pyproject.toml",
+                "line": 115,
+                "quote": "[project.entry-points.\"colleague.engines\"]"
+              }
+            ],
+            "agrees": true
+          }
+        },
+        {
+          "id": "f4",
+          "question": "Which engines ship bundled in this repository?",
+          "answer": "Two: `mock` (MockEngine) and `vllm-openai` (VllmOpenAIEngine).",
+          "match": [
+            [
+              "mock"
+            ],
+            [
+              "vllm-openai"
+            ]
+          ],
+          "evidence": [
+            {
+              "file": "pyproject.toml",
+              "line": 116,
+              "quote": "mock = \"colleague.engines.mock:MockEngine\""
+            },
+            {
+              "file": "pyproject.toml",
+              "line": 117,
+              "quote": "vllm-openai = \"colleague.engines.vllm_openai:VllmOpenAIEngine\""
+            }
+          ],
+          "second_check": {
+            "answer": "Two: `mock` (colleague.engines.mock:MockEngine) and `vllm-openai` (colleague.engines.vllm_openai:VllmOpenAIEngine).",
+            "evidence": [
+              {
+                "file": "pyproject.toml",
+                "line": 116,
+                "quote": "mock = \"colleague.engines.mock:MockEngine\""
+              },
+              {
+                "file": "pyproject.toml",
+                "line": 117,
+                "quote": "vllm-openai = \"colleague.engines.vllm_openai:VllmOpenAIEngine\""
+              },
+              {
+                "file": "colleague/engines/mock.py",
+                "line": 130,
+                "quote": "class MockEngine(Engine):"
+              },
+              {
+                "file": "colleague/engines/vllm_openai.py",
+                "line": 240,
+                "quote": "class VllmOpenAIEngine(Engine):"
+              }
+            ],
+            "agrees": true
+          }
+        },
+        {
+          "id": "f5",
+          "question": "What is the interface every engine/backend adapter must implement?",
+          "answer": "Subclass the abstract `Engine` class (colleague/engine.py) and implement `work(task, config)` returning a `TaskResult`.",
+          "match": [
+            [
+              "Engine"
+            ],
+            [
+              "work(",
+              "Engine.work",
+              "work method",
+              "`work`"
+            ]
+          ],
+          "evidence": [
+            {
+              "file": "colleague/engine.py",
+              "line": 39,
+              "quote": "class Engine(abc.ABC):"
+            },
+            {
+              "file": "colleague/engine.py",
+              "line": 54,
+              "quote": "    def work(self, task: Task, config: EngineConfig) -> TaskResult:"
+            }
+          ],
+          "second_check": {
+            "answer": "Subclass the abstract base class `colleague.engine.Engine` and implement its one abstract method `work(self, task: Task, config: EngineConfig) -> TaskResult` (with a `name` class attribute matching the entry-point name). Other methods (make_complete, make_count_tokens, system_prompt, the deprecated `drive` alias) have base implementations.",
+            "evidence": [
+              {
+                "file": "colleague/engine.py",
+                "line": 39,
+                "quote": "class Engine(abc.ABC):"
+              },
+              {
+                "file": "colleague/engine.py",
+                "line": 51,
+                "quote": "name: str = \"engine\""
+              },
+              {
+                "file": "colleague/engine.py",
+                "line": 53,
+                "quote": "@abc.abstractmethod"
+              },
+              {
+                "file": "colleague/engine.py",
+                "line": 54,
+                "quote": "def work(self, task: Task, config: EngineConfig) -> TaskResult:"
+              }
+            ],
+            "agrees": true
+          }
+        },
+        {
+          "id": "f6",
+          "question": "Which CLI verb runs a task against a repository, and which engine does it use when none is chosen?",
+          "answer": "`colleague work` (deprecated alias `drive`); the engine comes from `--engine` or COLLEAGUE_ENGINE, defaulting to `vllm-openai`.",
+          "match": [
+            [
+              "colleague work",
+              "`work`",
+              "work verb",
+              "work command"
+            ],
+            [
+              "vllm-openai"
+            ]
+          ],
+          "evidence": [
+            {
+              "file": "colleague/cli/_commands/work.py",
+              "line": 966,
+              "quote": "    _add_work_parser(sub, \"work\", help_text=_WORK_HELP)"
+            },
+            {
+              "file": "colleague/config_defaults.py",
+              "line": 304,
+              "quote": "_DEFAULT_ENGINE = \"vllm-openai\""
+            }
+          ],
+          "second_check": {
+            "answer": "`colleague work` (deprecated alias `drive`), with `--repo` naming the repository. With no `--engine`, resolve_engine falls back to the COLLEAGUE_ENGINE environment variable (then legacy CONVERTIBLE_ENGINE), and with none set to the built-in default `vllm-openai`.",
+            "evidence": [
+              {
+                "file": "colleague/cli/_commands/work.py",
+                "line": 966,
+                "quote": "_add_work_parser(sub, \"work\", help_text=_WORK_HELP)"
+              },
+              {
+                "file": "colleague/cli/_commands/_work_parser.py",
+                "line": 69,
+                "quote": "help=\"Backend plugin to use (default: COLLEAGUE_ENGINE or vllm-openai).\","
+              },
+              {
+                "file": "colleague/config_defaults.py",
+                "line": 304,
+                "quote": "_DEFAULT_ENGINE = \"vllm-openai\""
+              },
+              {
+                "file": "colleague/config_flags.py",
+                "line": 354,
+                "quote": "return _DEFAULT_ENGINE"
+              }
+            ],
+            "agrees": true
+          }
+        },
+        {
+          "id": "f7",
+          "question": "What are the package's base runtime dependencies?",
+          "answer": "Exactly one: `agentfront` (the CLI is rendered from an agentfront App); everything else is an opt-in extra, enforced by tests/test_zero_deps.py.",
+          "match": [
+            [
+              "agentfront"
+            ]
+          ],
+          "evidence": [
+            {
+              "file": "pyproject.toml",
+              "line": 27,
+              "quote": "dependencies = [\"agentfront>=0.20.0\"]"
+            },
+            {
+              "file": "tests/test_zero_deps.py",
+              "line": 90,
+              "quote": "    assert dep.startswith(\"agentfront\"), f\"The sole base dependency must be agentfront, got {dep!r}\""
+            }
+          ],
+          "second_check": {
+            "answer": "Exactly one: `agentfront>=0.20.0` (requires Python >=3.12). Everything else (otel, mcp, tui, voice, resident, culture) is an optional extra.",
+            "evidence": [
+              {
+                "file": "pyproject.toml",
+                "line": 27,
+                "quote": "dependencies = [\"agentfront>=0.20.0\"]"
+              },
+              {
+                "file": "pyproject.toml",
+                "line": 7,
+                "quote": "requires-python = \">=3.12\""
+              }
+            ],
+            "agrees": true
+          }
+        },
+        {
+          "id": "f9",
+          "question": "Where in the package is asyncio permitted?",
+          "answer": "Only under `colleague/resident/` (the Culture-resident runtime); tests/test_boundary.py flags an asyncio import anywhere else.",
+          "match": [
+            [
+              "colleague/resident",
+              "resident"
+            ],
+            [
+              "asyncio"
+            ]
+          ],
+          "evidence": [
+            {
+              "file": "tests/test_boundary.py",
+              "line": 298,
+              "quote": "_ASYNC_EXEMPT_PREFIX = \"colleague/resident/\""
+            },
+            {
+              "file": "tests/test_boundary.py",
+              "line": 285,
+              "quote": "        \"asyncio import (no async I/O allowed in colleague)\","
+            }
+          ],
+          "second_check": {
+            "answer": "Only under `colleague/resident/` (the Culture-resident runtime). tests/test_boundary.py flags `import asyncio` / `from asyncio` in every other colleague/**/*.py file; asyncio server primitives (start_server/create_server/start_unix_server) stay forbidden even there.",
+            "evidence": [
+              {
+                "file": "tests/test_boundary.py",
+                "line": 298,
+                "quote": "_ASYNC_EXEMPT_PREFIX = \"colleague/resident/\""
+              },
+              {
+                "file": "tests/test_boundary.py",
+                "line": 286,
+                "quote": "re.compile(r\"^\\s*(import asyncio|from asyncio\\b)\", re.MULTILINE),"
+              },
+              {
+                "file": "tests/test_boundary.py",
+                "line": 324,
+                "quote": "if is_resident and description == _ASYNC_IMPORT_DESCRIPTION:"
+              },
+              {
+                "file": "tests/test_boundary.py",
+                "line": 269,
+                "quote": "re.compile(r\"\\basyncio\\.(start_server|create_server|start_unix_server)\\b\"),"
+              }
+            ],
+            "agrees": true
+          }
+        },
+        {
+          "id": "f10",
+          "question": "What hard size limit do the tests enforce on tracked source files?",
+          "answer": "1000 physical lines per source file (tests/test_file_length_limit.py).",
+          "match": [
+            [
+              "1000"
+            ]
+          ],
+          "evidence": [
+            {
+              "file": "tests/test_file_length_limit.py",
+              "line": 34,
+              "quote": "MAX_SOURCE_FILE_LINES = 1000"
+            }
+          ],
+          "second_check": {
+            "answer": "1000 physical lines per tracked source file (inclusive; comments count), over files from `git ls-files` with extensions .c .cc .go .h .js .jsx .mjs .py .sh .sql .ts .tsx; the grandfather list is empty.",
+            "evidence": [
+              {
+                "file": "tests/test_file_length_limit.py",
+                "line": 34,
+                "quote": "MAX_SOURCE_FILE_LINES = 1000"
+              },
+              {
+                "file": "tests/test_file_length_limit.py",
+                "line": 111,
+                "quote": "if lines <= MAX_SOURCE_FILE_LINES:"
+              },
+              {
+                "file": "tests/test_file_length_limit.py",
+                "line": 39,
+                "quote": "{\".c\", \".cc\", \".go\", \".h\", \".js\", \".jsx\", \".mjs\", \".py\", \".sh\", \".sql\", \".ts\", \".tsx\"}"
+              },
+              {
+                "file": "tests/test_file_length_limit.py",
+                "line": 45,
+                "quote": "GRANDFATHERED: dict[str, int] = {}"
+              }
+            ],
+            "agrees": true
+          }
+        },
+        {
+          "id": "f11",
+          "question": "How does CI run the test suite, and what coverage floor is configured?",
+          "answer": "pytest under uv with xdist: `uv run pytest -n auto --cov=colleague ...`; coverage `fail_under = 60`.",
+          "match": [
+            [
+              "pytest"
+            ],
+            [
+              "60"
+            ]
+          ],
+          "evidence": [
+            {
+              "file": ".github/workflows/tests.yml",
+              "line": 45,
+              "quote": "      - run: uv run pytest -n auto --cov=colleague --cov-report=xml:coverage.xml --cov-report=term -v"
+            },
+            {
+              "file": "pyproject.toml",
+              "line": 163,
+              "quote": "fail_under = 60"
+            }
+          ],
+          "second_check": {
+            "answer": "With uv and pytest-xdist on Python 3.12. The `Tests` workflow (PRs and pushes to main) runs `uv sync --extra culture --extra voice` then `uv run pytest -n auto --cov=colleague --cov-report=xml:coverage.xml --cov-report=term -v`; the publish workflow's `test` job runs a plain `uv sync` and `uv run pytest -n auto -v`. The configured coverage floor is `fail_under = 60`.",
+            "evidence": [
+              {
+                "file": ".github/workflows/tests.yml",
+                "line": 43,
+                "quote": "- run: uv sync --extra culture --extra voice"
+              },
+              {
+                "file": ".github/workflows/tests.yml",
+                "line": 45,
+                "quote": "- run: uv run pytest -n auto --cov=colleague --cov-report=xml:coverage.xml --cov-report=term -v"
+              },
+              {
+                "file": ".github/workflows/publish.yml",
+                "line": 29,
+                "quote": "- run: uv run pytest -n auto -v"
+              },
+              {
+                "file": "pyproject.toml",
+                "line": 163,
+                "quote": "fail_under = 60"
+              }
+            ],
+            "agrees": true
+          }
+        },
+        {
+          "id": "f12",
+          "question": "How is the package built and released?",
+          "answer": "Built with hatchling via `uv build`; publish.yml publishes to PyPI with Trusted Publishing on push to main (PRs publish a .dev build to TestPyPI).",
+          "match": [
+            [
+              "hatchling",
+              "uv build"
+            ],
+            [
+              "PyPI"
+            ]
+          ],
+          "evidence": [
+            {
+              "file": "pyproject.toml",
+              "line": 128,
+              "quote": "build-backend = \"hatchling.build\""
+            },
+            {
+              "file": ".github/workflows/publish.yml",
+              "line": 88,
+              "quote": "          uv publish --trusted-publishing always --check-url https://pypi.org/simple/"
+            },
+            {
+              "file": ".github/workflows/publish.yml",
+              "line": 69,
+              "quote": "    if: github.event_name == 'push'"
+            }
+          ],
+          "second_check": {
+            "answer": "Built with hatchling (wheel packages = [\"colleague\"]) via `uv build`, released by .github/workflows/publish.yml with `uv publish --trusted-publishing always` (OIDC, id-token: write, no API token): a push to main touching pyproject.toml or colleague/** publishes to PyPI after the test job; a same-repo pull request publishes `<version>.dev<run_number>` to TestPyPI (fork PRs are skipped).",
+            "evidence": [
+              {
+                "file": "pyproject.toml",
+                "line": 128,
+                "quote": "build-backend = \"hatchling.build\""
+              },
+              {
+                "file": "pyproject.toml",
+                "line": 131,
+                "quote": "packages = [\"colleague\"]"
+              },
+              {
+                "file": ".github/workflows/publish.yml",
+                "line": 87,
+                "quote": "uv build"
+              },
+              {
+                "file": ".github/workflows/publish.yml",
+                "line": 88,
+                "quote": "uv publish --trusted-publishing always --check-url https://pypi.org/simple/"
+              },
+              {
+                "file": ".github/workflows/publish.yml",
+                "line": 69,
+                "quote": "if: github.event_name == 'push'"
+              },
+              {
+                "file": ".github/workflows/publish.yml",
+                "line": 61,
+                "quote": "uv publish --publish-url https://test.pypi.org/legacy/ --trusted-publishing always --check-url https://test.pypi.org/simple/"
+              },
+              {
+                "file": ".github/workflows/publish.yml",
+                "line": 53,
+                "quote": "DEV_VERSION=\"${BASE}.dev${{ github.run_number }}\""
+              }
+            ],
+            "agrees": true
+          }
+        }
+      ],
+      "dropped": [
+        {
+          "id": "f8",
+          "question": "How is a delegated subagent's work isolated from the parent's working tree?",
+          "reason": "the source disagrees with itself: a docstring says a single spawned child runs in its own worktree, the code gives it the parent's path; only the batch path makes a worktree (second checker)"
+        }
+      ]
+    },
+    {
+      "id": "broad-associate",
+      "repo": {
+        "host": "github.com",
+        "owner": "agentculture",
+        "name": "associate"
+      },
+      "commit": "266dad376813baa8a92a2f34b457222ae7d9d481",
+      "facts": [
+        {
+          "id": "f1",
+          "question": "Which underlying agent runtime/coding-agent does associate run its models on (the thing its extension plugs into)?",
+          "answer": "Pi (the pi coding agent); associate is a multi-model agent harness on Pi, with its extension under .pi/extensions/associate.",
+          "match": [
+            [
+              "on Pi",
+              "Pi extension",
+              "pi coding",
+              "Pi harness",
+              "pi.dev",
+              "Pi ("
+            ]
+          ],
+          "evidence": [
+            {
+              "file": "pyproject.toml",
+              "line": 4,
+              "quote": "description = \"A multi-model agent harness on Pi: runs one fleet model (worker, senses or cortex, addressed by lobes role) on one task with its own tools and prompt, every mutating call behind a CLEF safety gate, and hands back an evidenced result.\""
+            },
+            {
+              "file": "package.json",
+              "line": 5,
+              "quote": "\"extensions\": [\".pi/extensions/associate\"],"
+            }
+          ],
+          "second_check": {
+            "answer": "Pi, the @earendil-works/pi-coding-agent coding agent (pinned to 1.5.2); associate is a Pi extension under .pi/extensions/associate.",
+            "evidence": [
+              {
+                "file": ".pi/extensions/associate/index.ts",
+                "line": 32,
+                "quote": "import type { ExtensionAPI } from \"@earendil-works/pi-coding-agent\";"
+              },
+              {
+                "file": "associate/harness/pi.py",
+                "line": 113,
+                "quote": "PINNED_PI_VERSION = \"1.5.2\""
+              },
+              {
+                "file": "associate/harness/pi.py",
+                "line": 1047,
+                "quote": "f\"install @earendil-works/pi-coding-agent {PINNED_PI_VERSION} \""
+              },
+              {
+                "file": "package.json",
+                "line": 5,
+                "quote": "\"extensions\": [\".pi/extensions/associate\"],"
+              }
+            ],
+            "agrees": true
+          }
+        },
+        {
+          "id": "f2",
+          "question": "What is the installed console command and which Python callable does it map to?",
+          "answer": "The `associate` command, mapped to associate.cli:main (also runnable as python -m associate).",
+          "match": [
+            [
+              "associate.cli:main",
+              "associate/cli/__init__.py",
+              "cli:main"
+            ]
+          ],
+          "evidence": [
+            {
+              "file": "pyproject.toml",
+              "line": 28,
+              "quote": "associate = \"associate.cli:main\""
+            }
+          ],
+          "second_check": {
+            "answer": "Console command `associate`, mapped to `associate.cli:main` (the main() function in associate/cli/__init__.py).",
+            "evidence": [
+              {
+                "file": "pyproject.toml",
+                "line": 28,
+                "quote": "associate = \"associate.cli:main\""
+              }
+            ],
+            "agrees": true
+          }
+        },
+        {
+          "id": "f3",
+          "question": "How many runtime dependencies does the base Python package declare, and how are heavier features (HTTP server, MCP) provided?",
+          "answer": "None (dependencies = []); the HTTP server (fastapi, uvicorn) and MCP support are optional extras named `server` and `mcp`.",
+          "match": [
+            [
+              "no runtime dep",
+              "dependencies = []",
+              "zero runtime dep",
+              "zero dep",
+              "no dependencies",
+              "no third-party dep",
+              "dependency-free",
+              "stdlib only"
+            ],
+            [
+              "extra"
+            ]
+          ],
+          "evidence": [
+            {
+              "file": "pyproject.toml",
+              "line": 16,
+              "quote": "dependencies = []"
+            },
+            {
+              "file": "pyproject.toml",
+              "line": 20,
+              "quote": "server = [\"fastapi>=0.115\", \"uvicorn>=0.30\"]"
+            },
+            {
+              "file": "pyproject.toml",
+              "line": 21,
+              "quote": "mcp = [\"mcp>=1.2,<2\"]"
+            }
+          ],
+          "second_check": {
+            "answer": "Zero runtime dependencies (`dependencies = []`). Heavier features are optional extras: `server` (fastapi + uvicorn) for the HTTP server and `mcp` (the mcp package) for the MCP server.",
+            "evidence": [
+              {
+                "file": "pyproject.toml",
+                "line": 16,
+                "quote": "dependencies = []"
+              },
+              {
+                "file": "pyproject.toml",
+                "line": 18,
+                "quote": "# Optional extras: the base install stays dependency-free."
+              },
+              {
+                "file": "pyproject.toml",
+                "line": 20,
+                "quote": "server = [\"fastapi>=0.115\", \"uvicorn>=0.30\"]"
+              },
+              {
+                "file": "pyproject.toml",
+                "line": 21,
+                "quote": "mcp = [\"mcp>=1.2,<2\"]"
+              }
+            ],
+            "agrees": true
+          }
+        },
+        {
+          "id": "f4",
+          "question": "Where are the available models defined, and which model is the default?",
+          "answer": "In the model registry associate/contract/models.json; the default is `worker` (Pi label \"bolt\").",
+          "match": [
+            [
+              "models.json"
+            ],
+            [
+              "worker"
+            ]
+          ],
+          "evidence": [
+            {
+              "file": "associate/contract/models.json",
+              "line": 4,
+              "quote": "\"default\": \"worker\","
+            },
+            {
+              "file": "associate/contract/models.json",
+              "line": 34,
+              "quote": "\"label\": \"bolt\","
+            }
+          ],
+          "second_check": {
+            "answer": "In the contract registry file associate/contract/models.json (keys worker, senses, cortex, super-vl); the default is `worker` (Pi label \"bolt\").",
+            "evidence": [
+              {
+                "file": "associate/contract/models.json",
+                "line": 4,
+                "quote": "\"default\": \"worker\","
+              },
+              {
+                "file": "associate/contract/models.json",
+                "line": 32,
+                "quote": "\"worker\": {"
+              },
+              {
+                "file": "associate/contract/models.json",
+                "line": 34,
+                "quote": "\"label\": \"bolt\","
+              },
+              {
+                "file": "associate/harness/pi.py",
+                "line": 939,
+                "quote": "return self._model_key or str(contract.load_models()[\"default\"])"
+              }
+            ],
+            "agrees": true
+          }
+        },
+        {
+          "id": "f5",
+          "question": "Which active registry model is read-only (not allowed to mutate the checkout)?",
+          "answer": "`senses` (may_mutate: false); worker and cortex may mutate.",
+          "match": [
+            [
+              "senses"
+            ],
+            [
+              "read-only",
+              "read only",
+              "may_mutate",
+              "not mutate",
+              "no write"
+            ]
+          ],
+          "evidence": [
+            {
+              "file": "associate/contract/models.json",
+              "line": 48,
+              "quote": "\"senses\": {"
+            },
+            {
+              "file": "associate/contract/models.json",
+              "line": 60,
+              "quote": "\"may_mutate\": false,"
+            }
+          ],
+          "second_check": {
+            "answer": "`senses` (status active, may_mutate false). worker and cortex have may_mutate true; super-vl is pending, not active.",
+            "evidence": [
+              {
+                "file": "associate/contract/models.json",
+                "line": 48,
+                "quote": "\"senses\": {"
+              },
+              {
+                "file": "associate/contract/models.json",
+                "line": 49,
+                "quote": "\"status\": \"active\","
+              },
+              {
+                "file": "associate/contract/models.json",
+                "line": 60,
+                "quote": "\"may_mutate\": false,"
+              }
+            ],
+            "agrees": true
+          }
+        },
+        {
+          "id": "f6",
+          "question": "What checks a model's mutating tool calls before they run, and which gateway endpoint path is asked?",
+          "answer": "The CLEF safety gate: each mutating (and gated) call is scored by the lobes decider at POST /v1/systemone and refused when the rules do not hold; settings are in associate/contract/gate.json.",
+          "match": [
+            [
+              "CLEF",
+              "safety gate"
+            ],
+            [
+              "/v1/systemone"
+            ]
+          ],
+          "evidence": [
+            {
+              "file": "associate/contract/gate.json",
+              "line": 5,
+              "quote": "\"path\": \"/v1/systemone\","
+            },
+            {
+              "file": "associate/contract/models.json",
+              "line": 29,
+              "quote": "\"mutating_tools\": [\"write\", \"edit\", \"bash\", \"ledger_append\", \"run_tests\"],"
+            },
+            {
+              "file": ".pi/extensions/associate/lib/gate.ts",
+              "line": 723,
+              "quote": "/** Build the `POST /v1/systemone` request, at {@link deciderUrl}. */"
+            }
+          ],
+          "second_check": {
+            "answer": "The CLEF safety gate (lib/gate.ts, invoked from the extension's tool_call guard) asks the lobes decider with POST to `/v1/systemone` on the gateway (path from gate.json decider.path).",
+            "evidence": [
+              {
+                "file": "associate/contract/gate.json",
+                "line": 5,
+                "quote": "\"path\": \"/v1/systemone\","
+              },
+              {
+                "file": ".pi/extensions/associate/lib/gate.ts",
+                "line": 14,
+                "quote": "*   1. **CLEF** — `POST <base origin><decider.path>` with header"
+              },
+              {
+                "file": ".pi/extensions/associate/lib/gate.ts",
+                "line": 723,
+                "quote": "/** Build the `POST /v1/systemone` request, at {@link deciderUrl}. */"
+              },
+              {
+                "file": "associate/contract/models.json",
+                "line": 29,
+                "quote": "\"mutating_tools\": [\"write\", \"edit\", \"bash\", \"ledger_append\", \"run_tests\"],"
+              }
+            ],
+            "agrees": true
+          }
+        },
+        {
+          "id": "f7",
+          "question": "What happens to mutating tool calls when neither the CLEF decider nor the Super fallback is reachable?",
+          "answer": "The gate falls back to read-only: mutating calls are refused and only read-only calls proceed.",
+          "match": [
+            [
+              "read-only",
+              "readonly",
+              "read only"
+            ]
+          ],
+          "evidence": [
+            {
+              "file": "associate/contract/gate.json",
+              "line": 96,
+              "quote": "\"$comment\": \"When neither CLEF nor Super is reachable, mutating calls are refused and only read-only calls proceed.\","
+            },
+            {
+              "file": "associate/contract/gate.json",
+              "line": 98,
+              "quote": "\"allow\": \"readonly_only\""
+            }
+          ],
+          "second_check": {
+            "answer": "They are refused: the gate falls back to read-only, allowing only calls explicitly declared non-mutating (isMutating === false) and refusing every mutating (and gated) call.",
+            "evidence": [
+              {
+                "file": "associate/contract/gate.json",
+                "line": 96,
+                "quote": "\"$comment\": \"When neither CLEF nor Super is reachable, mutating calls are refused and only read-only calls proceed.\","
+              },
+              {
+                "file": ".pi/extensions/associate/lib/gate.ts",
+                "line": 28,
+                "quote": "*   3. **Read-only** — both unreachable: allow only when the caller passed"
+              },
+              {
+                "file": ".pi/extensions/associate/lib/gate.ts",
+                "line": 1213,
+                "quote": "const readOnly = request.isMutating === false;"
+              },
+              {
+                "file": ".pi/extensions/associate/lib/gate.ts",
+                "line": 1216,
+                "quote": "decision: readOnly ? \"allow\" : \"refuse\","
+              },
+              {
+                "file": ".pi/extensions/associate/lib/gate.ts",
+                "line": 1219,
+                "quote": "(readOnly ? \"read-only call allowed by the fallback\" : \"mutating call refused by the read-only fallback\"),"
+              }
+            ],
+            "agrees": true
+          }
+        },
+        {
+          "id": "f8",
+          "question": "How is a run by a model that may change files isolated from the examined checkout?",
+          "answer": "It runs in a per-run git worktree at <parent of repo>/.worktrees.<repo name>/run-<session>, on a branch associate-run/<session> (merged to local main only on a clean run).",
+          "match": [
+            [
+              "worktree"
+            ]
+          ],
+          "evidence": [
+            {
+              "file": "associate/harness/worktree.py",
+              "line": 76,
+              "quote": "BRANCH_PREFIX = \"associate-run/\""
+            },
+            {
+              "file": "associate/harness/worktree.py",
+              "line": 211,
+              "quote": "return repo.parent / f\".worktrees.{repo.name}\""
+            },
+            {
+              "file": "associate/harness/worktree.py",
+              "line": 215,
+              "quote": "\"\"\"Create ``run-<session>`` on branch ``associate-run/<session>`` at HEAD.\"\"\""
+            }
+          ],
+          "second_check": {
+            "answer": "It runs in its own git worktree: `git worktree add -b associate-run/<session>` at dirname(repo)/.worktrees.<basename(repo)>/run-<session>, based on the checkout's HEAD; only a clean run is committed and merged into local main (never pushed), otherwise the worktree is kept.",
+            "evidence": [
+              {
+                "file": "associate/harness/worktree.py",
+                "line": 4,
+                "quote": "model the registry marks ``may_mutate`` never writes into the operator's"
+              },
+              {
+                "file": "associate/harness/worktree.py",
+                "line": 13,
+                "quote": "worktree), then ``git worktree add -b associate-run/<session>`` at"
+              },
+              {
+                "file": "associate/harness/worktree.py",
+                "line": 14,
+                "quote": "``dirname(repo)/.worktrees.<basename(repo)>/run-<session>``, based on the"
+              },
+              {
+                "file": "associate/harness/worktree.py",
+                "line": 211,
+                "quote": "return repo.parent / f\".worktrees.{repo.name}\""
+              },
+              {
+                "file": "associate/harness/worktree.py",
+                "line": 236,
+                "quote": "_git([\"worktree\", \"add\", \"-q\", \"-b\", branch, str(path), base.stdout.strip()], repo)"
+              },
+              {
+                "file": "associate/cli/_commands/run.py",
+                "line": 218,
+                "quote": "run_wt = _isolate(checkout, session_id) if _may_mutate(args.model) else None"
+              }
+            ],
+            "agrees": true
+          }
+        },
+        {
+          "id": "f9",
+          "question": "Which CLI verb exposes runs over HTTP, and which web framework/optional extra does it need?",
+          "answer": "`associate serve` runs the runs HTTP API (POST /runs, GET /runs, GET /runs/{run_id}, GET /health); it needs the `server` extra (FastAPI + uvicorn).",
+          "match": [
+            [
+              "serve"
+            ],
+            [
+              "FastAPI",
+              "server extra",
+              "`server`",
+              "uvicorn"
+            ]
+          ],
+          "evidence": [
+            {
+              "file": "associate/cli/_commands/serve.py",
+              "line": 95,
+              "quote": "help=\"Run the runs HTTP API (needs the 'server' extra): loopback, and LAN if set.\","
+            },
+            {
+              "file": "associate/server/app.py",
+              "line": 196,
+              "quote": "@app.post(\"/runs\")"
+            },
+            {
+              "file": "pyproject.toml",
+              "line": 20,
+              "quote": "server = [\"fastapi>=0.115\", \"uvicorn>=0.30\"]"
+            }
+          ],
+          "second_check": {
+            "answer": "`associate serve`; it needs FastAPI (with uvicorn) from the optional `server` extra (`pip install 'associate[server]'`).",
+            "evidence": [
+              {
+                "file": "associate/cli/_commands/serve.py",
+                "line": 8,
+                "quote": "\"\"\"``associate serve`` — run the runs HTTP API (the ``server`` extra)."
+              },
+              {
+                "file": "associate/cli/_commands/serve.py",
+                "line": 95,
+                "quote": "help=\"Run the runs HTTP API (needs the 'server' extra): loopback, and LAN if set.\","
+              },
+              {
+                "file": "associate/server/serve.py",
+                "line": 167,
+                "quote": "import fastapi  # noqa: F401, PLC0415"
+              },
+              {
+                "file": "associate/server/serve.py",
+                "line": 168,
+                "quote": "import uvicorn  # noqa: F401, PLC0415"
+              },
+              {
+                "file": "pyproject.toml",
+                "line": 20,
+                "quote": "server = [\"fastapi>=0.115\", \"uvicorn>=0.30\"]"
+              }
+            ],
+            "agrees": true
+          }
+        },
+        {
+          "id": "f10",
+          "question": "How are the Pi extension's TypeScript tests run?",
+          "answer": "With Node's built-in test runner (node --test) via bash .pi/extensions/associate/tests/run.sh, a CI job (extension-tests) on Node 22.",
+          "match": [
+            [
+              "node --test",
+              "run.sh",
+              "Node's built-in test runner",
+              "Node built-in test runner"
+            ]
+          ],
+          "evidence": [
+            {
+              "file": ".pi/extensions/associate/tests/run.sh",
+              "line": 55,
+              "quote": "exec node --test \"$strip_flag\" \"${test_files[@]}\""
+            },
+            {
+              "file": ".github/workflows/tests.yml",
+              "line": 115,
+              "quote": "run: bash .pi/extensions/associate/tests/run.sh"
+            }
+          ],
+          "second_check": {
+            "answer": "`bash .pi/extensions/associate/tests/run.sh`, which runs every *.test.ts under that directory with Node's built-in test runner (`node --test`, with --experimental-strip-types on Node 22.6-22.x; skips below Node 22). CI job `extension-tests` runs it on Node 22.",
+            "evidence": [
+              {
+                "file": ".pi/extensions/associate/tests/run.sh",
+                "line": 2,
+                "quote": "# Runs the associate Pi extension's tests with Node's built-in test runner."
+              },
+              {
+                "file": ".pi/extensions/associate/tests/run.sh",
+                "line": 47,
+                "quote": "test_files=(\"${script_dir}\"/**/*.test.ts)"
+              },
+              {
+                "file": ".pi/extensions/associate/tests/run.sh",
+                "line": 55,
+                "quote": "exec node --test \"$strip_flag\" \"${test_files[@]}\""
+              },
+              {
+                "file": ".github/workflows/tests.yml",
+                "line": 115,
+                "quote": "run: bash .pi/extensions/associate/tests/run.sh"
+              },
+              {
+                "file": ".github/workflows/tests.yml",
+                "line": 112,
+                "quote": "node-version: '22'"
+              }
+            ],
+            "agrees": true
+          }
+        },
+        {
+          "id": "f11",
+          "question": "How is the Python test suite run in CI (tool and runner command)?",
+          "answer": "pytest through uv: `uv run pytest -n auto --cov=associate ...` (pytest-xdist parallel, coverage reported, fail_under 60).",
+          "match": [
+            [
+              "pytest"
+            ],
+            [
+              "uv"
+            ]
+          ],
+          "evidence": [
+            {
+              "file": ".github/workflows/tests.yml",
+              "line": 46,
+              "quote": "- run: uv run pytest -n auto --cov=associate --cov-report=xml:coverage.xml --cov-report=term -v"
+            },
+            {
+              "file": "pyproject.toml",
+              "line": 73,
+              "quote": "fail_under = 60"
+            }
+          ],
+          "second_check": {
+            "answer": "pytest run through uv with pytest-xdist: `uv run pytest -n auto --cov=associate --cov-report=xml:coverage.xml --cov-report=term -v` in the Tests workflow (after `uv sync`).",
+            "evidence": [
+              {
+                "file": ".github/workflows/tests.yml",
+                "line": 46,
+                "quote": "- run: uv run pytest -n auto --cov=associate --cov-report=xml:coverage.xml --cov-report=term -v"
+              },
+              {
+                "file": ".github/workflows/tests.yml",
+                "line": 30,
+                "quote": "- run: uv sync"
+              },
+              {
+                "file": ".github/workflows/publish.yml",
+                "line": 46,
+                "quote": "- run: uv run pytest -n auto -v"
+              }
+            ],
+            "agrees": true
+          }
+        },
+        {
+          "id": "f12",
+          "question": "How and when is the package released, and to which index?",
+          "answer": "The publish workflow builds with `uv build` and publishes to PyPI by Trusted Publishing on push to main; pull requests publish a .dev<run_number> version to TestPyPI.",
+          "match": [
+            [
+              "PyPI"
+            ],
+            [
+              "push to main",
+              "pushes to main",
+              "pushed to main",
+              "on main",
+              "to main",
+              "main branch"
+            ]
+          ],
+          "evidence": [
+            {
+              "file": ".github/workflows/publish.yml",
+              "line": 100,
+              "quote": "if: github.event_name == 'push'"
+            },
+            {
+              "file": ".github/workflows/publish.yml",
+              "line": 133,
+              "quote": "uv publish --trusted-publishing always --check-url https://pypi.org/simple/"
+            },
+            {
+              "file": ".github/workflows/publish.yml",
+              "line": 92,
+              "quote": "uv publish --publish-url https://test.pypi.org/legacy/ --trusted-publishing always --check-url https://test.pypi.org/simple/"
+            }
+          ],
+          "second_check": {
+            "answer": "By the GitHub Actions workflow publish.yml: on a push to main (touching pyproject.toml, associate/**, web/** or hatch_build.py) it runs `uv build` then `uv publish --trusted-publishing always` to PyPI (after tests and the web UI build). Same-repo pull requests to main publish a `<version>.dev<run_number>` build to TestPyPI.",
+            "evidence": [
+              {
+                "file": ".github/workflows/publish.yml",
+                "line": 5,
+                "quote": "branches: [main]"
+              },
+              {
+                "file": ".github/workflows/publish.yml",
+                "line": 100,
+                "quote": "if: github.event_name == 'push'"
+              },
+              {
+                "file": ".github/workflows/publish.yml",
+                "line": 132,
+                "quote": "uv build"
+              },
+              {
+                "file": ".github/workflows/publish.yml",
+                "line": 133,
+                "quote": "uv publish --trusted-publishing always --check-url https://pypi.org/simple/"
+              },
+              {
+                "file": ".github/workflows/publish.yml",
+                "line": 92,
+                "quote": "uv publish --publish-url https://test.pypi.org/legacy/ --trusted-publishing always --check-url https://test.pypi.org/simple/"
+              },
+              {
+                "file": ".github/workflows/publish.yml",
+                "line": 70,
+                "quote": "DEV_VERSION=\"${BASE}.dev${{ github.run_number }}\""
+              }
+            ],
+            "agrees": true
+          }
+        }
+      ],
+      "dropped": []
+    },
+    {
+      "id": "broad-coherence-cli",
+      "repo": {
+        "host": "github.com",
+        "owner": "agentculture",
+        "name": "coherence-cli"
+      },
+      "commit": "a52f7b5be81c636cedcf64535a07cfa878f9be3d",
+      "facts": [
+        {
+          "id": "f1",
+          "question": "What console command does the package install, and which Python callable does it invoke?",
+          "answer": "The `coherence` console script, which calls `main` in `coherence.cli` (coherence/cli/__init__.py); `python -m coherence` calls the same function.",
+          "match": [
+            [
+              "coherence.cli:main",
+              "coherence/cli/__init__.py",
+              "coherence.cli.main",
+              "coherence.cli"
+            ]
+          ],
+          "evidence": [
+            {
+              "file": "pyproject.toml",
+              "line": 26,
+              "quote": "coherence = \"coherence.cli:main\""
+            },
+            {
+              "file": "coherence/__main__.py",
+              "line": 7,
+              "quote": "from coherence.cli import main"
+            }
+          ],
+          "second_check": {
+            "answer": "Console command `coherence`, which invokes `coherence.cli:main` (the `main()` function in coherence/cli/__init__.py).",
+            "evidence": [
+              {
+                "file": "pyproject.toml",
+                "line": 26,
+                "quote": "coherence = \"coherence.cli:main\""
+              },
+              {
+                "file": "coherence/cli/__init__.py",
+                "line": 131,
+                "quote": "def main(argv: list[str] | None = None) -> int:"
+              }
+            ],
+            "agrees": true
+          },
+          "note": "the package installs `coherence`, the in-code help says `coherence-cli`; the fact is matched on the entry function so either name is accepted (operator, 2026-11-19)"
+        },
+        {
+          "id": "f2",
+          "question": "Which environment variable sets the base URL of the embedding endpoint the meaning engine calls, and what kind of endpoint is it?",
+          "answer": "COHERENCE_EMBED_URL (default http://localhost:8002/v1), an OpenAI-compatible /v1/embeddings endpoint.",
+          "match": [
+            [
+              "COHERENCE_EMBED_URL"
+            ]
+          ],
+          "evidence": [
+            {
+              "file": "coherence/meaning/embed.py",
+              "line": 50,
+              "quote": "return os.environ.get(\"COHERENCE_EMBED_URL\", DEFAULT_EMBED_URL)"
+            },
+            {
+              "file": "coherence/meaning/embed.py",
+              "line": 107,
+              "quote": "endpoint = f\"{url.rstrip('/')}/embeddings\""
+            }
+          ],
+          "second_check": {
+            "answer": "`COHERENCE_EMBED_URL` (default http://localhost:8002/v1). It is an OpenAI-compatible `/v1/embeddings` endpoint: the client POSTs {model, input} to `<base URL>/embeddings`.",
+            "evidence": [
+              {
+                "file": "coherence/meaning/embed.py",
+                "line": 50,
+                "quote": "return os.environ.get(\"COHERENCE_EMBED_URL\", DEFAULT_EMBED_URL)"
+              },
+              {
+                "file": "coherence/meaning/embed.py",
+                "line": 107,
+                "quote": "endpoint = f\"{url.rstrip('/')}/embeddings\""
+              },
+              {
+                "file": "coherence/meaning/embed.py",
+                "line": 108,
+                "quote": "payload = {\"model\": model, \"input\": list(texts)}"
+              },
+              {
+                "file": "coherence/meaning/embed.py",
+                "line": 1,
+                "quote": "\"\"\"Env-configured client for an OpenAI-compatible ``/v1/embeddings`` endpoint."
+              },
+              {
+                "file": "coherence/meaning/embed.py",
+                "line": 39,
+                "quote": "DEFAULT_EMBED_URL = \"http://localhost:8002/v1\""
+              }
+            ],
+            "agrees": true
+          }
+        },
+        {
+          "id": "f3",
+          "question": "How does the meaning domain turn an artifact's embedding into a score: how is the axis built and how is the artifact placed on it?",
+          "answer": "The axis is mean(high anchor vectors) minus mean(low anchor vectors), built from contrastive anchor text files; the artifact's embedding is projected onto it by cosine similarity rescaled to [0, 1] as (cos + 1) / 2.",
+          "match": [
+            [
+              "high"
+            ],
+            [
+              "low"
+            ],
+            [
+              "cosine"
+            ]
+          ],
+          "evidence": [
+            {
+              "file": "coherence/meaning/axis.py",
+              "line": 78,
+              "quote": "return high.mean(axis=0) - low.mean(axis=0)"
+            },
+            {
+              "file": "coherence/meaning/axis.py",
+              "line": 100,
+              "quote": "return (cos + 1.0) / 2.0"
+            }
+          ],
+          "second_check": {
+            "answer": "For each dimension the axis is mean(high-anchor embeddings) - mean(low-anchor embeddings), built from contrastive anchor text files (anchors/<dimension>.high.txt / .low.txt). The artifact embedding is placed on it by cosine similarity to the axis, rescaled from [-1,1] to [0,1] as (cos + 1) / 2 (0.5 when either norm is ~zero). The global `meaning` axis gives meaning_score; the other five dimensions give the subdimensions. Artifact and all anchors are embedded in one call.",
+            "evidence": [
+              {
+                "file": "coherence/meaning/axis.py",
+                "line": 78,
+                "quote": "return high.mean(axis=0) - low.mean(axis=0)"
+              },
+              {
+                "file": "coherence/meaning/axis.py",
+                "line": 97,
+                "quote": "cos = float(np.dot(v, a) / (v_norm * a_norm))"
+              },
+              {
+                "file": "coherence/meaning/axis.py",
+                "line": 100,
+                "quote": "return (cos + 1.0) / 2.0"
+              },
+              {
+                "file": "coherence/meaning/score.py",
+                "line": 118,
+                "quote": "vectors = embed_fn([text, *all_lines])"
+              },
+              {
+                "file": "coherence/meaning/score.py",
+                "line": 125,
+                "quote": "dim_axis = axis_mod.build_axis(anchor_vecs[high_span], anchor_vecs[low_span])"
+              },
+              {
+                "file": "coherence/meaning/score.py",
+                "line": 126,
+                "quote": "raw_scores[dim] = axis_mod.project(artifact_vec, dim_axis)"
+              }
+            ],
+            "agrees": true
+          }
+        },
+        {
+          "id": "f4",
+          "question": "Which three components does the quality domain score, and does it need a model or network?",
+          "answer": "freshness, provenance and fidelity; it is offline, rule-based text heuristics with no embeddings and no network (score_type rule_based_heuristic).",
+          "match": [
+            [
+              "freshness"
+            ],
+            [
+              "provenance"
+            ],
+            [
+              "fidelity"
+            ]
+          ],
+          "evidence": [
+            {
+              "file": "coherence/quality/score.py",
+              "line": 49,
+              "quote": "_COMPONENT_ORDER = (\"freshness\", \"provenance\", \"fidelity\")"
+            },
+            {
+              "file": "coherence/quality/score.py",
+              "line": 45,
+              "quote": "_SCORE_TYPE = \"rule_based_heuristic\""
+            }
+          ],
+          "second_check": {
+            "answer": "freshness, provenance and fidelity. No model and no network: it is rule-based, fully offline and deterministic (score_type `rule_based_heuristic`, explicit null frame).",
+            "evidence": [
+              {
+                "file": "coherence/quality/score.py",
+                "line": 49,
+                "quote": "_COMPONENT_ORDER = (\"freshness\", \"provenance\", \"fidelity\")"
+              },
+              {
+                "file": "coherence/quality/score.py",
+                "line": 6,
+                "quote": "offline and deterministic — it wires together the rule-based component scorers"
+              },
+              {
+                "file": "coherence/quality/score.py",
+                "line": 45,
+                "quote": "_SCORE_TYPE = \"rule_based_heuristic\""
+              },
+              {
+                "file": "coherence/quality/score.py",
+                "line": 8,
+                "quote": "of which touches no network and no ``datetime.now()``."
+              }
+            ],
+            "agrees": true
+          }
+        },
+        {
+          "id": "f5",
+          "question": "Which module defines the shared measurement envelope that domain outputs are built and validated through, and what are its required top-level keys?",
+          "answer": "coherence/schema.py (build_envelope / validate_envelope); the five keys are domain, score_type, scores, frame, diagnostics.",
+          "match": [
+            [
+              "coherence/schema.py",
+              "coherence.schema",
+              "schema.py"
+            ]
+          ],
+          "evidence": [
+            {
+              "file": "coherence/schema.py",
+              "line": 59,
+              "quote": "_REQUIRED_KEYS: tuple[str, ...] = (\"domain\", \"score_type\", \"scores\", \"frame\", \"diagnostics\")"
+            }
+          ],
+          "second_check": {
+            "answer": "`coherence/schema.py` (module `coherence.schema`; `build_envelope` / `validate_envelope`). Required top-level keys: domain, score_type, scores, frame, diagnostics.",
+            "evidence": [
+              {
+                "file": "coherence/schema.py",
+                "line": 59,
+                "quote": "_REQUIRED_KEYS: tuple[str, ...] = (\"domain\", \"score_type\", \"scores\", \"frame\", \"diagnostics\")"
+              },
+              {
+                "file": "coherence/schema.py",
+                "line": 94,
+                "quote": "def build_envelope("
+              },
+              {
+                "file": "coherence/schema.py",
+                "line": 127,
+                "quote": "def validate_envelope(envelope: dict[str, Any]) -> dict[str, Any]:"
+              }
+            ],
+            "agrees": true
+          }
+        },
+        {
+          "id": "f6",
+          "question": "How is the investiture score computed, and from what inputs?",
+          "answer": "It is the product of four numbers taken from the meaning engine's result: meaning_score, agency, future_constraint and affordance. It reuses coherence.meaning.score rather than embedding anything itself.",
+          "match": [
+            [
+              "product",
+              "multipl"
+            ],
+            [
+              "agency"
+            ],
+            [
+              "affordance"
+            ]
+          ],
+          "evidence": [
+            {
+              "file": "coherence/investiture/score.py",
+              "line": 157,
+              "quote": "value *= numeric_components[name]"
+            },
+            {
+              "file": "coherence/investiture/score.py",
+              "line": 179,
+              "quote": "meaning_result = meaning_score(path, embed_fn=embed_fn)"
+            }
+          ],
+          "second_check": {
+            "answer": "As a product of four numbers taken from the meaning engine's result for the artifact: meaning_score (renamed meaning_density) * agency (agency_coupling) * future_constraint * affordance. The inputs are the artifact file path, scored by coherence.meaning.score.score (so it needs the embedding endpoint); persistence/integration/behavioral effect are reported as None, not measured.",
+            "evidence": [
+              {
+                "file": "coherence/investiture/score.py",
+                "line": 25,
+                "quote": "estimated_investiture = meaning_score * agency * future_constraint * affordance"
+              },
+              {
+                "file": "coherence/investiture/score.py",
+                "line": 146,
+                "quote": "_MEANING_DENSITY: meaning_result[\"meaning_score\"],"
+              },
+              {
+                "file": "coherence/investiture/score.py",
+                "line": 147,
+                "quote": "_AGENCY_COUPLING: subdimensions[\"agency\"],"
+              },
+              {
+                "file": "coherence/investiture/score.py",
+                "line": 148,
+                "quote": "_FUTURE_CONSTRAINT: subdimensions[\"future_constraint\"],"
+              },
+              {
+                "file": "coherence/investiture/score.py",
+                "line": 149,
+                "quote": "_AFFORDANCE: subdimensions[\"affordance\"],"
+              },
+              {
+                "file": "coherence/investiture/score.py",
+                "line": 157,
+                "quote": "value *= numeric_components[name]"
+              },
+              {
+                "file": "coherence/investiture/score.py",
+                "line": 179,
+                "quote": "meaning_result = meaning_score(path, embed_fn=embed_fn)"
+              }
+            ],
+            "agrees": true
+          }
+        },
+        {
+          "id": "f7",
+          "question": "What exit code does the CLI return for an environment/setup error such as an unreachable embedding endpoint (as opposed to a user-input error)?",
+          "answer": "2 (EXIT_ENV_ERROR); user-input errors, including argparse errors, exit 1; success is 0.",
+          "match": [
+            [
+              "EXIT_ENV_ERROR",
+              "exit code 2",
+              "exits 2",
+              "exit 2",
+              "code 2",
+              "`2`"
+            ]
+          ],
+          "evidence": [
+            {
+              "file": "coherence/cli/_errors.py",
+              "line": 23,
+              "quote": "EXIT_ENV_ERROR = 2"
+            },
+            {
+              "file": "coherence/cli/_errors.py",
+              "line": 22,
+              "quote": "EXIT_USER_ERROR = 1"
+            },
+            {
+              "file": "coherence/cli/_commands/meaning.py",
+              "line": 84,
+              "quote": "except EmbedUnavailable as err:"
+            }
+          ],
+          "second_check": {
+            "answer": "2 (EXIT_ENV_ERROR); a user-input error is 1.",
+            "evidence": [
+              {
+                "file": "coherence/cli/_errors.py",
+                "line": 23,
+                "quote": "EXIT_ENV_ERROR = 2"
+              },
+              {
+                "file": "coherence/cli/_errors.py",
+                "line": 22,
+                "quote": "EXIT_USER_ERROR = 1"
+              },
+              {
+                "file": "coherence/cli/_commands/meaning.py",
+                "line": 84,
+                "quote": "except EmbedUnavailable as err:"
+              },
+              {
+                "file": "coherence/cli/_commands/meaning.py",
+                "line": 86,
+                "quote": "code=EXIT_ENV_ERROR,"
+              },
+              {
+                "file": "coherence/cli/_commands/investiture.py",
+                "line": 72,
+                "quote": "code=EXIT_ENV_ERROR,"
+              }
+            ],
+            "agrees": true
+          }
+        },
+        {
+          "id": "f8",
+          "question": "Which command runs every applicable measurement domain on a single artifact and returns one report, and which domains does it run?",
+          "answer": "`coherence assess <file>` (coherence/assess.py); it runs quality, meaning and investiture, listing any domain that could not run under `unavailable` instead of failing.",
+          "match": [
+            [
+              "assess"
+            ],
+            [
+              "quality"
+            ],
+            [
+              "meaning"
+            ],
+            [
+              "investiture"
+            ]
+          ],
+          "evidence": [
+            {
+              "file": "coherence/cli/_commands/assess.py",
+              "line": 101,
+              "quote": "\"assess\","
+            },
+            {
+              "file": "coherence/assess.py",
+              "line": 91,
+              "quote": "DOMAIN = \"assess\""
+            },
+            {
+              "file": "coherence/assess.py",
+              "line": 5,
+              "quote": "a single artifact — quality, meaning, investiture — and returns ONE report,"
+            }
+          ],
+          "second_check": {
+            "answer": "`coherence assess <file>`. It runs quality (always), meaning, and investiture; meaning and investiture are listed under `unavailable` when the embedding endpoint is unreachable.",
+            "evidence": [
+              {
+                "file": "coherence/cli/_commands/assess.py",
+                "line": 101,
+                "quote": "\"assess\","
+              },
+              {
+                "file": "coherence/assess.py",
+                "line": 5,
+                "quote": "a single artifact — quality, meaning, investiture — and returns ONE report,"
+              },
+              {
+                "file": "coherence/assess.py",
+                "line": 182,
+                "quote": "domains: dict[str, dict] = {\"quality\": quality_score_text(text, reference_date=reference_date)}"
+              },
+              {
+                "file": "coherence/assess.py",
+                "line": 187,
+                "quote": "domains[\"meaning\"] = meaning_score(path, embed_fn=embed_fn)"
+              },
+              {
+                "file": "coherence/assess.py",
+                "line": 210,
+                "quote": "domains[\"investiture\"] = investiture_score(path, embed_fn=embed_fn)"
+              }
+            ],
+            "agrees": true
+          }
+        },
+        {
+          "id": "f9",
+          "question": "Which noun group analyzes a source-agnostic series of measurement points, and what verbs does it offer?",
+          "answer": "`signal`, with the verbs trend, pattern, resonance, forecast and collect.",
+          "match": [
+            [
+              "signal"
+            ],
+            [
+              "trend"
+            ],
+            [
+              "forecast"
+            ]
+          ],
+          "evidence": [
+            {
+              "file": "coherence/cli/_commands/signal.py",
+              "line": 243,
+              "quote": "\"signal\","
+            },
+            {
+              "file": "coherence/cli/_commands/signal.py",
+              "line": 258,
+              "quote": "pa = noun_sub.add_parser(\"pattern\", help=\"Per-field motif detection.\")"
+            },
+            {
+              "file": "coherence/cli/_commands/signal.py",
+              "line": 276,
+              "quote": "\"collect\", help=\"Build a series from N measurement JSONs of any domain.\""
+            }
+          ],
+          "second_check": {
+            "answer": "`coherence signal`, with verbs trend, pattern, resonance, forecast and collect.",
+            "evidence": [
+              {
+                "file": "coherence/cli/_commands/signal.py",
+                "line": 243,
+                "quote": "\"signal\","
+              },
+              {
+                "file": "coherence/cli/_commands/signal.py",
+                "line": 252,
+                "quote": "\"trend\", help=\"Per-field f'/f'' differences, monotonicity, and volatility.\""
+              },
+              {
+                "file": "coherence/cli/_commands/signal.py",
+                "line": 258,
+                "quote": "pa = noun_sub.add_parser(\"pattern\", help=\"Per-field motif detection.\")"
+              },
+              {
+                "file": "coherence/cli/_commands/signal.py",
+                "line": 263,
+                "quote": "re_ = noun_sub.add_parser(\"resonance\", help=\"Pairwise signed alignment between fields.\")"
+              },
+              {
+                "file": "coherence/cli/_commands/signal.py",
+                "line": 269,
+                "quote": "\"forecast\", help=\"Naive next-point extrapolation per field (labelled 'extrapolation').\""
+              },
+              {
+                "file": "coherence/cli/_commands/signal.py",
+                "line": 276,
+                "quote": "\"collect\", help=\"Build a series from N measurement JSONs of any domain.\""
+              },
+              {
+                "file": "coherence/signal/__init__.py",
+                "line": 1,
+                "quote": "\"\"\"coherence.signal — the source-agnostic series analysis layer."
+              }
+            ],
+            "agrees": true
+          }
+        },
+        {
+          "id": "f10",
+          "question": "Which noun group reports the provenance (embedding model, endpoint, anchor set, projection method) behind a measurement and decides whether two measurements are comparable?",
+          "answer": "`frames`, with the verbs inspect and diff.",
+          "match": [
+            [
+              "frames"
+            ],
+            [
+              "inspect"
+            ],
+            [
+              "diff"
+            ]
+          ],
+          "evidence": [
+            {
+              "file": "coherence/cli/_commands/frames.py",
+              "line": 185,
+              "quote": "\"frames\","
+            },
+            {
+              "file": "coherence/cli/_commands/frames.py",
+              "line": 199,
+              "quote": "di = noun_sub.add_parser(\"diff\", help=\"Decide whether two measurements are frame-comparable.\")"
+            }
+          ],
+          "second_check": {
+            "answer": "`coherence frames` (verbs `inspect`, which reports the frame behind a measurement, and `diff`, which decides whether two measurements are frame-comparable).",
+            "evidence": [
+              {
+                "file": "coherence/cli/_commands/frames.py",
+                "line": 185,
+                "quote": "\"frames\","
+              },
+              {
+                "file": "coherence/cli/_commands/frames.py",
+                "line": 193,
+                "quote": "\"inspect\", help=\"Report the frame that produced a measurement and its provenance state.\""
+              },
+              {
+                "file": "coherence/cli/_commands/frames.py",
+                "line": 199,
+                "quote": "di = noun_sub.add_parser(\"diff\", help=\"Decide whether two measurements are frame-comparable.\")"
+              },
+              {
+                "file": "coherence/frames/provenance.py",
+                "line": 11,
+                "quote": "{\"embedding_model\": ..., \"embedding_endpoint\": ...,"
+              },
+              {
+                "file": "coherence/frames/provenance.py",
+                "line": 12,
+                "quote": "\"anchor_set\": ..., \"axis\": ... | \"axes\": [...],"
+              },
+              {
+                "file": "coherence/frames/provenance.py",
+                "line": 13,
+                "quote": "\"projection_method\": ..., \"score_type\": ...}"
+              }
+            ],
+            "agrees": true
+          }
+        },
+        {
+          "id": "f11",
+          "question": "How does the test suite make sure no test reaches a real embedding endpoint?",
+          "answer": "An autouse pytest fixture in tests/conftest.py monkeypatches coherence.meaning.embed.embed_texts to raise; tests inject a synthetic embed_fn or replay recorded vectors (tests/fixtures/meaning/recorded_vectors.json). The suite runs with pytest (CI: `uv run pytest -n auto`).",
+          "match": [
+            [
+              "conftest",
+              "autouse",
+              "monkeypatch",
+              "patches embed_texts",
+              "recorded vectors"
+            ]
+          ],
+          "evidence": [
+            {
+              "file": "tests/conftest.py",
+              "line": 30,
+              "quote": "@pytest.fixture(autouse=True)"
+            },
+            {
+              "file": "tests/conftest.py",
+              "line": 46,
+              "quote": "monkeypatch.setattr(\"coherence.meaning.embed.embed_texts\", _blocked)"
+            },
+            {
+              "file": ".github/workflows/tests.yml",
+              "line": 32,
+              "quote": "- run: uv run pytest -n auto --cov=coherence --cov-report=xml:coverage.xml --cov-report=term -v"
+            }
+          ],
+          "second_check": {
+            "answer": "An autouse pytest fixture in tests/conftest.py (`_no_network_embed`) monkeypatches `coherence.meaning.embed.embed_texts` to a function that raises RuntimeError, so an accidental real embedding call fails loudly; tests instead inject a synthetic or recorded `embed_fn` (or an httpx.MockTransport for the client's own tests).",
+            "evidence": [
+              {
+                "file": "tests/conftest.py",
+                "line": 30,
+                "quote": "@pytest.fixture(autouse=True)"
+              },
+              {
+                "file": "tests/conftest.py",
+                "line": 31,
+                "quote": "def _no_network_embed(monkeypatch: pytest.MonkeyPatch) -> None:"
+              },
+              {
+                "file": "tests/conftest.py",
+                "line": 40,
+                "quote": "raise RuntimeError("
+              },
+              {
+                "file": "tests/conftest.py",
+                "line": 46,
+                "quote": "monkeypatch.setattr(\"coherence.meaning.embed.embed_texts\", _blocked)"
+              }
+            ],
+            "agrees": true
+          }
+        },
+        {
+          "id": "f12",
+          "question": "How is the package built and released: which build backend, and where do pull-request builds and pushes to main get published?",
+          "answer": "Built with hatchling via `uv build`; the publish workflow sends pull-request builds to TestPyPI as a .dev version and pushes to main to PyPI, both by trusted publishing.",
+          "match": [
+            [
+              "hatchling"
+            ],
+            [
+              "TestPyPI"
+            ]
+          ],
+          "evidence": [
+            {
+              "file": "pyproject.toml",
+              "line": 30,
+              "quote": "build-backend = \"hatchling.build\""
+            },
+            {
+              "file": ".github/workflows/publish.yml",
+              "line": 61,
+              "quote": "uv publish --publish-url https://test.pypi.org/legacy/ --trusted-publishing always --check-url https://test.pypi.org/simple/"
+            },
+            {
+              "file": ".github/workflows/publish.yml",
+              "line": 88,
+              "quote": "uv publish --trusted-publishing always --check-url https://pypi.org/simple/"
+            }
+          ],
+          "second_check": {
+            "answer": "Build backend hatchling (`hatchling.build`), built with `uv build` in .github/workflows/publish.yml. Pull-request builds (non-fork PRs to main) publish a `<version>.dev<run_number>` build to TestPyPI; pushes to main publish to PyPI. Both use trusted publishing; the workflow triggers only on changes to pyproject.toml or coherence/**.",
+            "evidence": [
+              {
+                "file": "pyproject.toml",
+                "line": 30,
+                "quote": "build-backend = \"hatchling.build\""
+              },
+              {
+                "file": ".github/workflows/publish.yml",
+                "line": 34,
+                "quote": "if: github.event_name == 'pull_request' && github.event.pull_request.head.repo.full_name == github.repository"
+              },
+              {
+                "file": ".github/workflows/publish.yml",
+                "line": 53,
+                "quote": "DEV_VERSION=\"${BASE}.dev${{ github.run_number }}\""
+              },
+              {
+                "file": ".github/workflows/publish.yml",
+                "line": 61,
+                "quote": "uv publish --publish-url https://test.pypi.org/legacy/ --trusted-publishing always --check-url https://test.pypi.org/simple/"
+              },
+              {
+                "file": ".github/workflows/publish.yml",
+                "line": 69,
+                "quote": "if: github.event_name == 'push'"
+              },
+              {
+                "file": ".github/workflows/publish.yml",
+                "line": 88,
+                "quote": "uv publish --trusted-publishing always --check-url https://pypi.org/simple/"
+              }
+            ],
+            "agrees": true
+          }
+        }
+      ],
+      "dropped": []
+    },
+    {
+      "id": "broad-workledger-cli",
+      "repo": {
+        "host": "github.com",
+        "owner": "agentculture",
+        "name": "workledger-cli"
+      },
+      "commit": "71ef513d20a99d74cb06f954b15fe56d2a999a20",
+      "facts": [
+        {
+          "id": "f1",
+          "question": "What is this tool for, i.e. what does it record and for whom?",
+          "answer": "It keeps an append-only ledger of work entries so agents (and their subagents) can record and prove what they did.",
+          "match": [
+            [
+              "append-only"
+            ],
+            [
+              "ledger"
+            ]
+          ],
+          "evidence": [
+            {
+              "file": "pyproject.toml",
+              "line": 4,
+              "quote": "description = \"Tracks work in a ledger so agents can prove what they did. An agent records its work as append-only ledger entries, hands the ledger down to subagents, and gets it back with their entries folded in, so the whole tree of work and its results stays traceable and checkable.\""
+            },
+            {
+              "file": "workledger/cli/_commands/_store.py",
+              "line": 1,
+              "quote": "\"\"\"Append-only JSONL ledger store (stdlib only)."
+            }
+          ],
+          "second_check": {
+            "answer": "Per the package metadata it tracks work in an append-only ledger so agents can prove what they did: an agent records its work as entries (agent, action, summary, refs, data), hands the ledger to subagents and gets it back with their entries. The audience is AI agents (and whoever checks their work).",
+            "evidence": [
+              {
+                "file": "pyproject.toml",
+                "line": 4,
+                "quote": "description = \"Tracks work in a ledger so agents can prove what they did. An agent records its work as append-only ledger entries, hands the ledger down to subagents, and gets it back with their entries folded in, so the whole tree of work and its results stays traceable and checkable.\""
+              },
+              {
+                "file": "workledger/cli/_commands/_store.py",
+                "line": 1,
+                "quote": "\"\"\"Append-only JSONL ledger store (stdlib only)."
+              },
+              {
+                "file": "workledger/cli/__init__.py",
+                "line": 76,
+                "quote": "        description=\"workledger-cli — a clonable template for AgentCulture mesh agents.\","
+              },
+              {
+                "file": "workledger/cli/_commands/learn.py",
+                "line": 15,
+                "quote": "workledger-cli — a clonable template for AgentCulture mesh agents."
+              },
+              {
+                "file": "workledger/cli/_commands/learn.py",
+                "line": 62,
+                "quote": "        \"purpose\": \"Clonable scaffold for a new AgentCulture mesh agent.\","
+              }
+            ],
+            "agrees": true
+          },
+          "note": "rests on the package metadata and the code's behaviour; the CLI's own description and learn text still describe a template"
+        },
+        {
+          "id": "f2",
+          "question": "What is the name of the console command the package installs, and which function does it call?",
+          "answer": "`ledger`, mapped to workledger.cli:main (also runnable as python -m workledger).",
+          "match": [
+            [
+              "workledger.cli:main",
+              "workledger/cli"
+            ]
+          ],
+          "evidence": [
+            {
+              "file": "pyproject.toml",
+              "line": 23,
+              "quote": "ledger = \"workledger.cli:main\""
+            },
+            {
+              "file": "workledger/__main__.py",
+              "line": 7,
+              "quote": "from workledger.cli import main"
+            }
+          ],
+          "second_check": {
+            "answer": "The console script is `ledger`, which calls `workledger.cli:main` (the `main` function in workledger/cli/__init__.py).",
+            "evidence": [
+              {
+                "file": "pyproject.toml",
+                "line": 23,
+                "quote": "ledger = \"workledger.cli:main\""
+              },
+              {
+                "file": "workledger/cli/__init__.py",
+                "line": 126,
+                "quote": "def main(argv: list[str] | None = None) -> int:"
+              },
+              {
+                "file": "workledger/cli/__init__.py",
+                "line": 75,
+                "quote": "        prog=\"workledger-cli\","
+              }
+            ],
+            "agrees": true
+          },
+          "note": "the package installs `ledger`, the in-code help says `workledger-cli`; the fact is matched on the entry function so either name is accepted (operator, 2026-11-19)"
+        },
+        {
+          "id": "f3",
+          "question": "In what on-disk format is the ledger stored?",
+          "answer": "A JSONL file: one strict-JSON object per line, written by appending a single line.",
+          "match": [
+            [
+              "JSONL",
+              "JSON Lines",
+              "one JSON object per line",
+              "ledger.jsonl"
+            ]
+          ],
+          "evidence": [
+            {
+              "file": "workledger/cli/_commands/_store.py",
+              "line": 23,
+              "quote": "DEFAULT_PATH = Path(\".workledger\") / \"ledger.jsonl\""
+            },
+            {
+              "file": "workledger/cli/_commands/_store.py",
+              "line": 251,
+              "quote": "line = json.dumps(entry, ensure_ascii=False, separators=(\",\", \":\"), allow_nan=False)"
+            }
+          ],
+          "second_check": {
+            "answer": "Append-only JSONL: one compact strict-JSON object per line, UTF-8, newline-terminated, in a file named ledger.jsonl.",
+            "evidence": [
+              {
+                "file": "workledger/cli/_commands/_store.py",
+                "line": 1,
+                "quote": "\"\"\"Append-only JSONL ledger store (stdlib only)."
+              },
+              {
+                "file": "workledger/cli/_commands/_store.py",
+                "line": 251,
+                "quote": "        line = json.dumps(entry, ensure_ascii=False, separators=(\",\", \":\"), allow_nan=False)"
+              },
+              {
+                "file": "workledger/cli/_commands/_store.py",
+                "line": 252,
+                "quote": "        return (line + \"\\n\").encode(\"utf-8\")"
+              },
+              {
+                "file": "workledger/cli/_commands/_store.py",
+                "line": 23,
+                "quote": "DEFAULT_PATH = Path(\".workledger\") / \"ledger.jsonl\""
+              }
+            ],
+            "agrees": true
+          }
+        },
+        {
+          "id": "f4",
+          "question": "Where is the ledger file located by default, and how can that location be overridden?",
+          "answer": ".workledger/ledger.jsonl under the git toplevel of the cwd (or the cwd outside a repo); the WORKLEDGER_PATH environment variable overrides it.",
+          "match": [
+            [
+              "WORKLEDGER_PATH",
+              ".workledger/ledger.jsonl"
+            ]
+          ],
+          "evidence": [
+            {
+              "file": "workledger/cli/_commands/_store.py",
+              "line": 22,
+              "quote": "ENV_PATH = \"WORKLEDGER_PATH\""
+            },
+            {
+              "file": "workledger/cli/_commands/_store.py",
+              "line": 23,
+              "quote": "DEFAULT_PATH = Path(\".workledger\") / \"ledger.jsonl\""
+            },
+            {
+              "file": "workledger/cli/_commands/_store.py",
+              "line": 55,
+              "quote": "return (_git_toplevel(cwd) or cwd) / DEFAULT_PATH"
+            }
+          ],
+          "second_check": {
+            "answer": "Default: `.workledger/ledger.jsonl` under the git toplevel of the current directory (nearest ancestor holding `.git`), or under the cwd when not in a repository. Override: set the `WORKLEDGER_PATH` environment variable (a non-empty value wins). There is no CLI flag for it.",
+            "evidence": [
+              {
+                "file": "workledger/cli/_commands/_store.py",
+                "line": 22,
+                "quote": "ENV_PATH = \"WORKLEDGER_PATH\""
+              },
+              {
+                "file": "workledger/cli/_commands/_store.py",
+                "line": 23,
+                "quote": "DEFAULT_PATH = Path(\".workledger\") / \"ledger.jsonl\""
+              },
+              {
+                "file": "workledger/cli/_commands/_store.py",
+                "line": 51,
+                "quote": "    env = os.environ.get(ENV_PATH)"
+              },
+              {
+                "file": "workledger/cli/_commands/_store.py",
+                "line": 53,
+                "quote": "        return Path(env)"
+              },
+              {
+                "file": "workledger/cli/_commands/_store.py",
+                "line": 55,
+                "quote": "    return (_git_toplevel(cwd) or cwd) / DEFAULT_PATH"
+              },
+              {
+                "file": "workledger/cli/_commands/learn.py",
+                "line": 49,
+                "quote": "Append-only JSONL at $WORKLEDGER_PATH (default ./.workledger/ledger.jsonl)."
+              }
+            ],
+            "agrees": true
+          }
+        },
+        {
+          "id": "f5",
+          "question": "Which fields must a caller supply in a ledger entry, and which optional fields are allowed?",
+          "answer": "Required: agent, action, summary (non-empty strings). Optional: refs (list of strings) and data (object).",
+          "match": [
+            [
+              "agent"
+            ],
+            [
+              "action"
+            ],
+            [
+              "summary"
+            ]
+          ],
+          "evidence": [
+            {
+              "file": "workledger/cli/_commands/_store.py",
+              "line": 25,
+              "quote": "REQUIRED_FIELDS = (\"agent\", \"action\", \"summary\")"
+            },
+            {
+              "file": "workledger/cli/_commands/_store.py",
+              "line": 26,
+              "quote": "INPUT_FIELDS = frozenset(REQUIRED_FIELDS) | {\"refs\", \"data\"}"
+            }
+          ],
+          "second_check": {
+            "answer": "Required: `agent`, `action`, `summary` (each a non-empty string without control characters/newlines). Optional: `refs` (list of strings, default []) and `data` (JSON object, default {}). Any other field is rejected as unknown.",
+            "evidence": [
+              {
+                "file": "workledger/cli/_commands/_store.py",
+                "line": 25,
+                "quote": "REQUIRED_FIELDS = (\"agent\", \"action\", \"summary\")"
+              },
+              {
+                "file": "workledger/cli/_commands/_store.py",
+                "line": 26,
+                "quote": "INPUT_FIELDS = frozenset(REQUIRED_FIELDS) | {\"refs\", \"data\"}"
+              },
+              {
+                "file": "workledger/cli/_commands/_store.py",
+                "line": 149,
+                "quote": "        if not isinstance(value, str) or not value.strip():"
+              },
+              {
+                "file": "workledger/cli/_commands/_store.py",
+                "line": 162,
+                "quote": "    refs = raw.get(\"refs\", [])"
+              },
+              {
+                "file": "workledger/cli/_commands/_store.py",
+                "line": 163,
+                "quote": "    if not isinstance(refs, list) or not all(isinstance(r, str) for r in refs):"
+              },
+              {
+                "file": "workledger/cli/_commands/_store.py",
+                "line": 170,
+                "quote": "    data = raw.get(\"data\", {})"
+              },
+              {
+                "file": "workledger/cli/_commands/_store.py",
+                "line": 171,
+                "quote": "    if not isinstance(data, dict):"
+              },
+              {
+                "file": "workledger/cli/_commands/_store.py",
+                "line": 140,
+                "quote": "    unknown = sorted(set(raw) - INPUT_FIELDS)"
+              }
+            ],
+            "agrees": true
+          }
+        },
+        {
+          "id": "f6",
+          "question": "Which entry fields are generated by the ledger itself rather than supplied by the caller?",
+          "answer": "id (a uuid4 hex) and timestamp (UTC, millisecond precision); supplying either is rejected.",
+          "match": [
+            [
+              "timestamp"
+            ],
+            [
+              "id"
+            ]
+          ],
+          "evidence": [
+            {
+              "file": "workledger/cli/_commands/_store.py",
+              "line": 27,
+              "quote": "GENERATED_FIELDS = frozenset({\"id\", \"timestamp\"})"
+            },
+            {
+              "file": "workledger/cli/_commands/_store.py",
+              "line": 270,
+              "quote": "entry = {\"id\": uuid.uuid4().hex, \"timestamp\": now_utc(), **entry_input}"
+            }
+          ],
+          "second_check": {
+            "answer": "`id` (uuid4 hex) and `timestamp` (UTC, millisecond precision, `Z` suffix). Supplying either in the input is rejected.",
+            "evidence": [
+              {
+                "file": "workledger/cli/_commands/_store.py",
+                "line": 27,
+                "quote": "GENERATED_FIELDS = frozenset({\"id\", \"timestamp\"})"
+              },
+              {
+                "file": "workledger/cli/_commands/_store.py",
+                "line": 270,
+                "quote": "    entry = {\"id\": uuid.uuid4().hex, \"timestamp\": now_utc(), **entry_input}"
+              },
+              {
+                "file": "workledger/cli/_commands/_store.py",
+                "line": 85,
+                "quote": "    return datetime.now(timezone.utc).isoformat(timespec=\"milliseconds\").replace(UTC_OFFSET, \"Z\")"
+              },
+              {
+                "file": "workledger/cli/_commands/_store.py",
+                "line": 137,
+                "quote": "            message=f\"field(s) are generated by the ledger and cannot be supplied: {generated}\","
+              }
+            ],
+            "agrees": true
+          }
+        },
+        {
+          "id": "f7",
+          "question": "Which CLI verb writes to the ledger, and which verb reads entries back?",
+          "answer": "`append` is the only write verb; `list` reads entries (with --agent, --action, --since, --limit filters).",
+          "match": [
+            [
+              "append"
+            ],
+            [
+              "list"
+            ]
+          ],
+          "evidence": [
+            {
+              "file": "workledger/cli/_commands/append.py",
+              "line": 1,
+              "quote": "\"\"\"``workledger-cli append`` — append one entry to the ledger (the only write verb).\"\"\""
+            },
+            {
+              "file": "workledger/cli/_commands/list.py",
+              "line": 1,
+              "quote": "\"\"\"``workledger-cli list`` — read ledger entries, with simple filters.\"\"\""
+            }
+          ],
+          "second_check": {
+            "answer": "`append` writes (the only write verb); `list` reads entries back (filters --agent, --action, --since, --limit).",
+            "evidence": [
+              {
+                "file": "workledger/cli/_commands/append.py",
+                "line": 1,
+                "quote": "\"\"\"``workledger-cli append`` — append one entry to the ledger (the only write verb).\"\"\""
+              },
+              {
+                "file": "workledger/cli/_commands/append.py",
+                "line": 56,
+                "quote": "        \"append\","
+              },
+              {
+                "file": "workledger/cli/_commands/list.py",
+                "line": 1,
+                "quote": "\"\"\"``workledger-cli list`` — read ledger entries, with simple filters.\"\"\""
+              },
+              {
+                "file": "workledger/cli/_commands/list.py",
+                "line": 50,
+                "quote": "    p = sub.add_parser(\"list\", help=\"List ledger entries (oldest first).\")"
+              },
+              {
+                "file": "workledger/cli/__init__.py",
+                "line": 92,
+                "quote": "    _append_cmd.register(sub)"
+              },
+              {
+                "file": "workledger/cli/__init__.py",
+                "line": 93,
+                "quote": "    _list_cmd.register(sub)"
+              }
+            ],
+            "agrees": true
+          }
+        },
+        {
+          "id": "f8",
+          "question": "What is the CLI's exit-code policy?",
+          "answer": "0 success, 1 user-input error, 2 environment/setup error; every failure is raised as a CliError.",
+          "match": [
+            [
+              "user-input",
+              "user input",
+              "user error"
+            ],
+            [
+              "environment",
+              "setup"
+            ]
+          ],
+          "evidence": [
+            {
+              "file": "workledger/cli/_errors.py",
+              "line": 21,
+              "quote": "EXIT_SUCCESS = 0"
+            },
+            {
+              "file": "workledger/cli/_errors.py",
+              "line": 22,
+              "quote": "EXIT_USER_ERROR = 1"
+            },
+            {
+              "file": "workledger/cli/_errors.py",
+              "line": 23,
+              "quote": "EXIT_ENV_ERROR = 2"
+            }
+          ],
+          "second_check": {
+            "answer": "0 = success; 1 = user-input error (also used for argparse errors and for wrapped unexpected exceptions); 2 = environment/setup error (e.g. unreadable/corrupt/unwritable ledger); 3+ reserved.",
+            "evidence": [
+              {
+                "file": "workledger/cli/_errors.py",
+                "line": 17,
+                "quote": "# 0      = success"
+              },
+              {
+                "file": "workledger/cli/_errors.py",
+                "line": 18,
+                "quote": "# 1      = user-input error (bad flag, missing required arg, unknown path)"
+              },
+              {
+                "file": "workledger/cli/_errors.py",
+                "line": 19,
+                "quote": "# 2      = environment / setup error (tool not installed, file unreadable)"
+              },
+              {
+                "file": "workledger/cli/_errors.py",
+                "line": 20,
+                "quote": "# 3+     = reserved for future categorisation"
+              },
+              {
+                "file": "workledger/cli/_errors.py",
+                "line": 21,
+                "quote": "EXIT_SUCCESS = 0"
+              },
+              {
+                "file": "workledger/cli/_errors.py",
+                "line": 22,
+                "quote": "EXIT_USER_ERROR = 1"
+              },
+              {
+                "file": "workledger/cli/_errors.py",
+                "line": 23,
+                "quote": "EXIT_ENV_ERROR = 2"
+              },
+              {
+                "file": "workledger/cli/__init__.py",
+                "line": 51,
+                "quote": "            code=EXIT_USER_ERROR,"
+              },
+              {
+                "file": "workledger/cli/__init__.py",
+                "line": 117,
+                "quote": "            code=EXIT_USER_ERROR,"
+              }
+            ],
+            "agrees": true
+          }
+        },
+        {
+          "id": "f9",
+          "question": "How does the CLI split its output between stdout and stderr?",
+          "answer": "Results go to stdout; diagnostics and errors go to stderr (in JSON mode too), via the _output module.",
+          "match": [
+            [
+              "stdout"
+            ],
+            [
+              "stderr"
+            ]
+          ],
+          "evidence": [
+            {
+              "file": "workledger/cli/_output.py",
+              "line": 3,
+              "quote": "Rule: **results go to stdout, diagnostics and errors go to stderr.** Agents"
+            }
+          ],
+          "second_check": {
+            "answer": "Results go to stdout; errors and diagnostics go to stderr, never mixed. In --json mode the result is JSON on stdout and an error is a {code, message, remediation} JSON object on stderr; in text mode an error is `error: ...` plus `hint: ...` on stderr.",
+            "evidence": [
+              {
+                "file": "workledger/cli/_output.py",
+                "line": 3,
+                "quote": "Rule: **results go to stdout, diagnostics and errors go to stderr.** Agents"
+              },
+              {
+                "file": "workledger/cli/_output.py",
+                "line": 19,
+                "quote": "    s = stream if stream is not None else sys.stdout"
+              },
+              {
+                "file": "workledger/cli/_output.py",
+                "line": 40,
+                "quote": "    s = stream if stream is not None else sys.stderr"
+              },
+              {
+                "file": "workledger/cli/_output.py",
+                "line": 45,
+                "quote": "    s.write(f\"error: {err.message}\\n\")"
+              },
+              {
+                "file": "workledger/cli/_output.py",
+                "line": 46,
+                "quote": "    if err.remediation:"
+              },
+              {
+                "file": "workledger/cli/_output.py",
+                "line": 47,
+                "quote": "        s.write(f\"hint: {err.remediation}\\n\")"
+              },
+              {
+                "file": "workledger/cli/_errors.py",
+                "line": 38,
+                "quote": "        return {"
+              }
+            ],
+            "agrees": true
+          }
+        },
+        {
+          "id": "f10",
+          "question": "What runtime dependencies does the package declare, and what build backend does it use?",
+          "answer": "No runtime dependencies (dependencies = []); built with hatchling.",
+          "match": [
+            [
+              "no runtime dep",
+              "dependencies = []",
+              "zero runtime dep",
+              "zero dep",
+              "no dependencies",
+              "no third-party dep",
+              "dependency-free",
+              "stdlib only"
+            ],
+            [
+              "hatchling"
+            ]
+          ],
+          "evidence": [
+            {
+              "file": "pyproject.toml",
+              "line": 16,
+              "quote": "dependencies = []"
+            },
+            {
+              "file": "pyproject.toml",
+              "line": 27,
+              "quote": "build-backend = \"hatchling.build\""
+            }
+          ],
+          "second_check": {
+            "answer": "No runtime dependencies (`dependencies = []`); build backend is hatchling (`hatchling.build`). Requires Python >=3.12.",
+            "evidence": [
+              {
+                "file": "pyproject.toml",
+                "line": 16,
+                "quote": "dependencies = []"
+              },
+              {
+                "file": "pyproject.toml",
+                "line": 26,
+                "quote": "requires = [\"hatchling\"]"
+              },
+              {
+                "file": "pyproject.toml",
+                "line": 27,
+                "quote": "build-backend = \"hatchling.build\""
+              },
+              {
+                "file": "pyproject.toml",
+                "line": 7,
+                "quote": "requires-python = \">=3.12\""
+              }
+            ],
+            "agrees": true
+          }
+        },
+        {
+          "id": "f11",
+          "question": "How is the test suite run (tool and command used in CI)?",
+          "answer": "pytest, run through uv: `uv run pytest -n auto` with coverage of the workledger package; tests live in tests/.",
+          "match": [
+            [
+              "pytest"
+            ]
+          ],
+          "evidence": [
+            {
+              "file": ".github/workflows/tests.yml",
+              "line": 32,
+              "quote": "- run: uv run pytest -n auto --cov=workledger --cov-report=xml:coverage.xml --cov-report=term -v"
+            },
+            {
+              "file": "pyproject.toml",
+              "line": 74,
+              "quote": "testpaths = [\"tests\"]"
+            }
+          ],
+          "second_check": {
+            "answer": "pytest, run through uv with pytest-xdist. The Tests workflow runs `uv run pytest -n auto --cov=workledger --cov-report=xml:coverage.xml --cov-report=term -v` after `uv sync` on Python 3.12; the publish workflow's test job runs `uv run pytest -n auto -v`.",
+            "evidence": [
+              {
+                "file": ".github/workflows/tests.yml",
+                "line": 32,
+                "quote": "      - run: uv run pytest -n auto --cov=workledger --cov-report=xml:coverage.xml --cov-report=term -v"
+              },
+              {
+                "file": ".github/workflows/tests.yml",
+                "line": 30,
+                "quote": "      - run: uv sync"
+              },
+              {
+                "file": ".github/workflows/publish.yml",
+                "line": 29,
+                "quote": "      - run: uv run pytest -n auto -v"
+              },
+              {
+                "file": "pyproject.toml",
+                "line": 74,
+                "quote": "testpaths = [\"tests\"]"
+              }
+            ],
+            "agrees": true
+          }
+        },
+        {
+          "id": "f12",
+          "question": "How and when is the package released?",
+          "answer": "A GitHub Actions workflow builds with `uv build` and publishes to PyPI by trusted publishing on push to main; pull requests publish a .dev build to TestPyPI.",
+          "match": [
+            [
+              "PyPI"
+            ],
+            [
+              "push to main",
+              "pushes to main",
+              "pushed to main",
+              "on main",
+              "to main",
+              "main branch"
+            ]
+          ],
+          "evidence": [
+            {
+              "file": ".github/workflows/publish.yml",
+              "line": 69,
+              "quote": "if: github.event_name == 'push'"
+            },
+            {
+              "file": ".github/workflows/publish.yml",
+              "line": 88,
+              "quote": "uv publish --trusted-publishing always --check-url https://pypi.org/simple/"
+            },
+            {
+              "file": ".github/workflows/publish.yml",
+              "line": 61,
+              "quote": "uv publish --publish-url https://test.pypi.org/legacy/ --trusted-publishing always --check-url https://test.pypi.org/simple/"
+            }
+          ],
+          "second_check": {
+            "answer": "By the 'Publish to PyPI' GitHub Actions workflow, using `uv build` + `uv publish` with Trusted Publishing (OIDC). A push to main that touches pyproject.toml or workledger/** publishes to PyPI (after the test job); a same-repo pull request to main touching those paths publishes `<version>.dev<run_number>` to TestPyPI (fork PRs skipped). A separate version-check job fails a PR whose version equals main's.",
+            "evidence": [
+              {
+                "file": ".github/workflows/publish.yml",
+                "line": 4,
+                "quote": "  push:"
+              },
+              {
+                "file": ".github/workflows/publish.yml",
+                "line": 5,
+                "quote": "    branches: [main]"
+              },
+              {
+                "file": ".github/workflows/publish.yml",
+                "line": 7,
+                "quote": "      - \"pyproject.toml\""
+              },
+              {
+                "file": ".github/workflows/publish.yml",
+                "line": 8,
+                "quote": "      - \"workledger/**\""
+              },
+              {
+                "file": ".github/workflows/publish.yml",
+                "line": 69,
+                "quote": "    if: github.event_name == 'push'"
+              },
+              {
+                "file": ".github/workflows/publish.yml",
+                "line": 87,
+                "quote": "          uv build"
+              },
+              {
+                "file": ".github/workflows/publish.yml",
+                "line": 88,
+                "quote": "          uv publish --trusted-publishing always --check-url https://pypi.org/simple/"
+              },
+              {
+                "file": ".github/workflows/publish.yml",
+                "line": 34,
+                "quote": "    if: github.event_name == 'pull_request' && github.event.pull_request.head.repo.full_name == github.repository"
+              },
+              {
+                "file": ".github/workflows/publish.yml",
+                "line": 53,
+                "quote": "          DEV_VERSION=\"${BASE}.dev${{ github.run_number }}\""
+              },
+              {
+                "file": ".github/workflows/publish.yml",
+                "line": 61,
+                "quote": "          uv publish --publish-url https://test.pypi.org/legacy/ --trusted-publishing always --check-url https://test.pypi.org/simple/"
+              },
+              {
+                "file": ".github/workflows/tests.yml",
+                "line": 139,
+                "quote": "            echo \"::error::Version $PR_VERSION matches main. Bump before merging.\""
+              }
+            ],
+            "agrees": true
+          }
+        }
+      ],
+      "dropped": []
+    }
+  ]
+}

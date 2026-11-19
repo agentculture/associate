@@ -13,7 +13,8 @@ same whichever harness runs the lane:
 * ``gate.json``   — the pre-mutation safety-gate question set, thresholds and
   fallback rules;
 * ``accuracy.json`` — the accuracy method's settings (mode per model, retry
-  rounds, refusal cap, minimum quote length, source-kind table, checks);
+  rounds, refusal cap, minimum quote length, source-kind table, checks, and
+  the support score's question, cut-off, bounds and per-model switch);
 * ``schemas/``    — JSON Schema documents for the task input, the walk, and the
   statements/hand-back.
 
@@ -48,6 +49,7 @@ __all__ = [
     "walk_run_schema",
     "walk_gate_schema",
     "walk_child_schema",
+    "walk_reminder_schema",
 ]
 
 SCHEMA_NAMES: tuple[str, ...] = (
@@ -156,3 +158,8 @@ def walk_gate_schema() -> dict[str, Any]:
 def walk_child_schema() -> dict[str, Any]:
     """Schema for one walk.jsonl child-walk link line."""
     return _walk_def("child")
+
+
+def walk_reminder_schema() -> dict[str, Any]:
+    """Schema for one walk.jsonl finish-reminder line (deviation d3)."""
+    return _walk_def("reminder")

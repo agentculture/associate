@@ -105,7 +105,7 @@ def sub(key):
     schema = dict(walk["$defs"][key])
     schema["$defs"] = walk["$defs"]
     return schema
-wrapped = {key: sub(key) for key in ("run", "gate", "child", "format")}
+wrapped = {key: sub(key) for key in ("run", "gate", "child", "reminder", "format")}
 entry_schema = sub("entry")
 lines = [l for l in Path(sys.argv[1]).read_text().splitlines() if l.strip()]
 problems = []
@@ -548,6 +548,52 @@ test("recordChild refuses once the walk is finalized", () => {
     const recorder = recorderIn(dir);
     recorder.finalize();
     assert.throws(() => recorder.recordChild({ child_model: "senses", child_walk: "/a", child_session_id: "a" }), /finalized/);
+  });
+});
+
+// --------------------------------------------------- finish reminders (d3)
+
+test("recordReminder appends {reminder} lines r1, r2, … that take no walk id and are not tool calls", () => {
+  withDir((dir) => {
+    const recorder = recorderIn(dir);
+    callAndResult(recorder, "ls", { path: "." }, "a\nb");
+    const first = recorder.recordReminder({ max: 2 });
+    const second = recorder.recordReminder({ max: 2 });
+    callAndResult(recorder, "ls", { path: "." }, "c");
+    assert.equal(first.id, "r1");
+    assert.equal(second.id, "r2");
+    assert.equal(first.max, 2);
+    assert.equal(typeof first.ts, "string");
+    const run = recorder.finalize()!;
+    assert.equal(run.tool_calls, 2);
+    assert.deepEqual(recorder.entryIds(), ["w1", "w2"]);
+    const reminders = readLines(dir).filter((line) => "reminder" in line).map((line) => line.reminder as Record<string, unknown>);
+    assert.deepEqual(reminders, [first, second]);
+    const problems = validateWalkWithContract(dir);
+    if (problems === undefined) {
+      console.log("SKIP schema conformance: uv not on PATH");
+      return;
+    }
+    assert.equal(problems, "", `walk with reminder lines fails the contract schema:\n${problems}`);
+  });
+});
+
+test("a second recorder on the same walk continues reminder ids and walk ids past reminder lines", () => {
+  withDir((dir) => {
+    const one = recorderIn(dir);
+    callAndResult(one, "ls", { path: "." }, "a");
+    one.recordReminder({ max: 1 });
+    const two = recorderIn(dir);
+    assert.equal(two.recordReminder({ max: 1 }).id, "r2");
+    assert.equal(two.entryCount, 1, "a reminder line never occupies a walk id");
+  });
+});
+
+test("recordReminder refuses once the walk is finalized", () => {
+  withDir((dir) => {
+    const recorder = recorderIn(dir);
+    recorder.finalize();
+    assert.throws(() => recorder.recordReminder({ max: 1 }), /finalized/);
   });
 });
 

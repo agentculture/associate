@@ -84,6 +84,10 @@ from associate.harness import available_harnesses, get_harness
 from associate.harness.base import HarnessError
 from associate.harness.testcmds import TEST_TIMEOUT_SECONDS
 
+#: The result keys of the finish reminder (deviation d3): the run's switch, and what was sent.
+_K_REMINDER_SWITCH = "finish_reminder_switch"
+_K_REMINDER = "finish_reminder"
+
 #: Keys printed, in this order, when a key is present in the adapter's result.
 _RESULT_KEYS = (
     "walk_path",
@@ -105,9 +109,20 @@ _RESULT_KEYS = (
     "reasoning_source",
     "reasoning_applies_to",
     "check_mode",
+    "support_score",
+    _K_REMINDER_SWITCH,
+    _K_REMINDER,
     "handback_outcome",
     "answer_path",
     "accuracy",
+)
+
+#: The copied support keys the text form folds into its one ``support_scored`` line.
+_SUPPORT_COPY_KEYS = (
+    "support_source",
+    "support_facts",
+    "support_scored_reported",
+    "support_unmatched",
 )
 
 #: The result's ``handback_outcome`` that makes the verb exit 3 (the check refused
@@ -119,6 +134,12 @@ _TIMEOUT_OUTCOME = "timeout"
 
 #: ``--reasoning`` values: the settings ``models.json`` allows for a model.
 _REASONING_CHOICES = ("model-default", "on", "off")
+
+#: ``--support-score`` values; absent leaves accuracy.json's per-model switch in charge.
+_SUPPORT_SCORE_CHOICES = ("on", "off")
+
+#: ``--finish-reminder`` values; absent means ``on`` when accuracy.json has the section.
+_FINISH_REMINDER_CHOICES = ("on", "off")
 
 
 def _build(harness_cls: type, args: argparse.Namespace) -> Any:
@@ -135,6 +156,8 @@ def _build(harness_cls: type, args: argparse.Namespace) -> Any:
         "model": args.model,
         "untrusted_checkout": args.untrusted_checkout,
         "check_mode": args.check_mode,
+        "support_score": args.support_score,
+        _K_REMINDER: args.finish_reminder,
         "reasoning": args.reasoning,
     }
     try:
@@ -173,6 +196,12 @@ def cmd_run(args: argparse.Namespace) -> int:
     harness_cls = _harness_class(args.harness)
 
     args.model = _resolve_model(args.model)
+    if args.finish_reminder is None:
+        # d3: a run that names no setting gets the contract's default, so the
+        # result records what the run actually had.
+        from associate.harness.pi import default_finish_reminder
+
+        args.finish_reminder = default_finish_reminder()
     test_commands = _parse_test_commands(args.test_commands)
     if args.test_timeout <= 0:
         raise CliError(
@@ -253,6 +282,10 @@ def _with_settings(result: dict[str, Any], args: argparse.Namespace) -> dict[str
     """*result* with the check mode and the reasoning the operator asked for, when it lacks them."""
     if "check_mode" not in result:
         result = {**result, "check_mode": args.check_mode}
+    if "support_score" not in result:
+        result = {**result, "support_score": args.support_score}
+    if _K_REMINDER_SWITCH not in result:
+        result = {**result, _K_REMINDER_SWITCH: args.finish_reminder}
     if args.reasoning and "reasoning" not in result:
         # An adapter that does not apply the setting (the stub) still records
         # what the operator asked for, so the result never omits it.
@@ -485,7 +518,7 @@ def _default_prompt() -> str:
 
 def _render(result: dict[str, Any]) -> str:
     """``key=value`` lines — the artifact paths first, so a reader sees them."""
-    skipped = {"active_tools", "answer"}
+    skipped = {"active_tools", "answer", *_SUPPORT_COPY_KEYS}
     ordered = [key for key in _RESULT_KEYS if key in result]
     ordered += [key for key in result if key not in _RESULT_KEYS and key not in skipped]
     shown = {**result}
@@ -493,10 +526,27 @@ def _render(result: dict[str, Any]) -> str:
         shown["tests"] = _render_tests(result["tests"])
     if isinstance(result.get("accuracy"), dict):
         shown["accuracy"] = _render_accuracy(result["accuracy"])
+    if "support_facts" in result:
+        shown["support_scored"] = _render_support(result)
+    if isinstance(result.get("support_answers"), dict):
+        from associate.accuracy.support import answers_line
+
+        shown["support_answers"] = answers_line(result["support_answers"])
+    if isinstance(result.get(_K_REMINDER), dict):
+        from associate.accuracy.reminder import describe
+
+        shown[_K_REMINDER] = describe(result[_K_REMINDER])
     text = "\n".join(f"{key}={shown[key]}" for key in ordered if shown[key] is not None)
     if isinstance(result.get("answer"), str) and result["answer"].strip():
         text += "\nanswer:\n" + result["answer"].rstrip("\n")
     return text
+
+
+def _render_support(result: dict[str, Any]) -> str:
+    """One line: how many facts the extension scored, and that the count is copied."""
+    from associate.accuracy.support import count_line
+
+    return count_line(result.get("support_scored") or 0, len(result["support_facts"]))
 
 
 def _render_accuracy(accuracy: dict[str, Any]) -> str:
@@ -599,6 +649,27 @@ def register(sub: argparse._SubParsersAction) -> None:
         "(sets ASSOCIATE_CHECK_MODE for the run; an ambient value is not inherited). "
         "'enforce' refuses a failing hand-back, and one still failing after the allowed "
         "rounds exits 3. Recorded in the result as check_mode.",
+    )
+    p.add_argument(
+        "--support-score",
+        choices=_SUPPORT_SCORE_CHOICES,
+        default=None,
+        help="Per-run switch for the support score (a report-only signal), overriding the "
+        "model's switch in accuracy.json (sets ASSOCIATE_SUPPORT_SCORE for the run; an "
+        "ambient value is not inherited). Without the flag the contract's switch applies. "
+        "Recorded in the result as support_score: what was asked for, not that anything "
+        "was scored.",
+    )
+    p.add_argument(
+        "--finish-reminder",
+        choices=_FINISH_REMINDER_CHOICES,
+        default=None,
+        help="Per-run switch for the finish reminder (deviation d3): when the model is about "
+        "to stop without calling finish, the extension sends it accuracy.json's "
+        "finish_reminder text, up to its max times (sets ASSOCIATE_FINISH_REMINDER for the "
+        "run; an ambient value is not inherited). Without the flag: on when accuracy.json "
+        "has the section, else off. Recorded in the result as finish_reminder_switch, and "
+        "what was sent as finish_reminder: {sent, finish_followed}.",
     )
     p.add_argument(
         "--test-command",

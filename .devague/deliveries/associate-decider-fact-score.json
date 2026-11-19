@@ -1,0 +1,66 @@
+{
+  "plan_slug": "associate-decider-fact-score",
+  "schema_version": 2,
+  "created": "2026-11-19T06:30:45Z",
+  "updated": "2026-11-19T11:56:26Z",
+  "deviations": [
+    {
+      "id": "d1",
+      "what": "t11/t12: a broad run that ends without finish is graded on its full final message, read from the export, not on the 2000-character final reply; the report shows per arm how many runs ended without finish. The reminder to call finish is not built here; it is a separate issue",
+      "task_ref": "t12",
+      "reason": "Operator, 2026-11-19: 'I prefer we don't have to rely on the model's opinion. For now, option 1. Open issue for option 2.' 2 of 6 trial runs ended without finish",
+      "affects": [
+        "t11"
+      ],
+      "origin": "user",
+      "status": "approved",
+      "classification": "acceptable",
+      "seq": 1
+    },
+    {
+      "id": "d2",
+      "what": "The planned measurement (t12) runs although the labelled set did not meet the 90% and 10% target, and before it the scorer's setup is improved (background for the decider, question wording, a review of the labelled pairs) and re-measured on the set.",
+      "task_ref": "t9",
+      "reason": "Operator, 2026-11-19: run the planned measurement; improve the setup so results are better. The switch stays off by default.",
+      "affects": [
+        "t12"
+      ],
+      "origin": "user",
+      "status": "approved",
+      "classification": "risky",
+      "seq": 2
+    },
+    {
+      "id": "d3",
+      "what": "The harness reminds a model once to call finish when its task turn ends without it (issue 38), built inside this plan. Not in the confirmed plan.",
+      "task_ref": "t12",
+      "reason": "Operator, 2026-11-19: go on the finish reminder. Two of six broad trial runs ended without finish. A live check showed pi 1.5.2 in headless JSON mode continues after one reminder returned from agent_before_settle.",
+      "affects": [],
+      "origin": "user",
+      "status": "approved",
+      "classification": "risky",
+      "seq": 3
+    },
+    {
+      "id": "d4",
+      "what": "The support check asks the decider a five-option question (all, mostly, part, little, none) with a background, in place of a yes/no probability cut at a number. A fact passes when the answer is all or mostly. The model is shown the option, not a number.",
+      "task_ref": "t9",
+      "reason": "Operator, 2026-11-19: approved after the labelled set showed the yes/no score at 0.5 passing about a third of unsupported real pairs; with the background and five options, 229 of 253 supported and 12 of 152 unsupported real pairs passed.",
+      "affects": [
+        "t2",
+        "t3",
+        "t4",
+        "t5",
+        "t6",
+        "t12"
+      ],
+      "origin": "user",
+      "status": "approved",
+      "classification": "risky",
+      "seq": 4
+    }
+  ],
+  "evidence": [],
+  "deltas": [],
+  "supersessions": []
+}

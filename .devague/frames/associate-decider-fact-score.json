@@ -4,7 +4,7 @@
   "schema_version": 6,
   "status": "exported",
   "created": "2026-11-18T08:35:48Z",
-  "updated": "2026-11-19T04:35:49Z",
+  "updated": "2026-11-19T12:25:05Z",
   "claims": [
     {
       "id": "c1",
@@ -661,6 +661,30 @@
       "seeds": []
     }
   ],
-  "lapses": [],
+  "lapses": [
+    {
+      "id": "l1",
+      "code": "assumption-for-measurement",
+      "what": "The finish reminder was merged with a guard that never lets it fire on pi 1.5.2: it skipped the reminder when the settle event said canContinue false, which pi reports on every ordinary settle. The guard came from reading pi's documentation; the unit tests used a fake event with canContinue true. Found when a trial run ended without finish and without a reminder.",
+      "skipped_check": "one live run of the merged extension that ends without finish, before starting the trial runs",
+      "refs": [
+        "deviation d3",
+        ".pi/extensions/associate/lib/reminder.ts"
+      ],
+      "origin": "llm",
+      "status": "approved"
+    },
+    {
+      "id": "l2",
+      "code": "instrument-changed-mid-series",
+      "what": "The second round of trial runs changed harness code part way: runs 1 and 2 (workledger-cli, coherence-cli) used the reminder that could not fire; later runs use the fixed one.",
+      "skipped_check": "",
+      "refs": [
+        "trial2"
+      ],
+      "origin": "llm",
+      "status": "approved"
+    }
+  ],
   "obligations": []
 }

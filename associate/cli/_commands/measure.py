@@ -14,6 +14,9 @@ Sub-verbs
 ``sample``  the blank hand-grading sheet for a fixed-seed draw of the stored runs.
 ``agreement`` read-only: a filled sheet against the grader, and whether the sample meets
             the two conditions the comparison needs (48 hand-graded runs, 95% agreement).
+``sheet``, ``sheet-check`` and ``run --broad``: the broad tasks, in
+            :mod:`associate.cli._commands.measure_broad`; ``report`` on a broad
+            comparison is that module's too.
 ``overview`` describe these verbs.
 
 The difference note
@@ -88,7 +91,9 @@ PLUMBING_LINE = (
 _UTF8 = "utf-8"
 _K_HARNESS_COMMIT = "harness_commit"
 _ARM_REQUIRED = ("name", _K_HARNESS_COMMIT, "model")
-_ARM_OPTIONAL = ("check_mode", "reasoning")
+_K_SUPPORT = "support_score"
+_K_REMINDER = "finish_reminder"
+_ARM_OPTIONAL = ("check_mode", "reasoning", _K_SUPPORT, _K_REMINDER)
 _ARM_KEYS = frozenset(_ARM_REQUIRED + _ARM_OPTIONAL)
 _COLUMN_NAMES = {
     "runs": "runs",
@@ -100,7 +105,8 @@ _COLUMN_NAMES = {
 }
 _ARMS_HINT = (
     "write the arms file as a JSON list of objects with name, harness_commit and model, "
-    "and optionally check_mode (report or enforce) and reasoning (model-default, on or off)"
+    "and optionally check_mode (report or enforce), reasoning (model-default, on or off), "
+    "support_score (on or off) and finish_reminder (on or off)"
 )
 _STATUS_HINT = "start the comparison with `associate measure run` first"
 _POSITIVE_HINT = "give a positive whole number"
@@ -121,6 +127,15 @@ _K_READING = "reading"
 _K_FINISHED = "finished"
 _K_FAILED = "launch_failed"
 _K_NOT_STORED = "not_stored"
+_K_BROAD = "broad"
+_FLAG_BROAD = "--broad"
+
+
+def _broad_verbs() -> ModuleType:
+    """The broad-task verbs (imported when used: that module imports this one)."""
+    from associate.cli._commands import measure_broad
+
+    return measure_broad
 
 
 def _runner() -> ModuleType:
@@ -216,6 +231,8 @@ def _arm_value_problems(label: str, item: dict[str, Any]) -> list[str]:
     for key, choices in (
         ("check_mode", runner.CHECK_MODES),
         ("reasoning", runner.REASONING_CHOICES),
+        (_K_SUPPORT, runner.SUPPORT_SCORE_CHOICES),
+        (_K_REMINDER, runner.FINISH_REMINDER_CHOICES),
     ):
         if key in item and item[key] not in choices:
             problems.append(f"{label}: {key} must be one of {', '.join(choices)}")
@@ -255,6 +272,8 @@ def load_arms(path: Path) -> list[Arm]:
             model=item["model"],
             check_mode=item.get("check_mode"),
             reasoning=item.get("reasoning"),
+            support_score=item.get(_K_SUPPORT),
+            finish_reminder=item.get(_K_REMINDER),
         )
         for item in doc
     ]
@@ -461,6 +480,7 @@ def _manifest(
         _K_REPEATS: args.repeats,
         _K_EXPECTED: len(ids) * len(arms) * args.repeats,
         "harness": args.harness,
+        _K_BROAD: bool(args.broad),
         _K_PLUMBING: args.harness == STUB,
         "timeout_s": args.timeout,
         "tasks_file": tasks_path,
@@ -527,6 +547,7 @@ def _child_argv(args: argparse.Namespace, results: Path, log: Path) -> list[str]
     argv += ["--arms", str(Path(args.arms).resolve()), _FLAG_REPEATS, str(args.repeats)]
     argv += ["--output-dir", str(results), "--timeout", repr(args.timeout)]
     argv += ["--harness", args.harness, "--log-file", str(log)]
+    argv += [_FLAG_BROAD] if args.broad else []
     for flag, value in (
         ("--tasks", args.tasks),
         ("--difference-note", args.difference_note),
@@ -628,9 +649,16 @@ def _plan(args: argparse.Namespace) -> tuple[Path, dict[str, Any]]:
     _positive_seconds(args.timeout)
     arms = load_arms(Path(args.arms))
     only = args.tasks_filter or []
-    tasks, tasks_path = load_tasks(Path(args.tasks) if args.tasks else None, only)
-    if args.harness != STUB:
-        require_note(Path(args.difference_note) if args.difference_note else DIFFERENCE_NOTE)
+    tasks_file = Path(args.tasks) if args.tasks else None
+    note = Path(args.difference_note) if args.difference_note else None
+    if args.broad:
+        tasks, tasks_path = _broad_verbs().load_tasks(tasks_file, only)
+        if args.harness != STUB:
+            _broad_verbs().require_rule(note or _broad_verbs().BROAD_NOTE)
+    else:
+        tasks, tasks_path = load_tasks(tasks_file, only)
+        if args.harness != STUB:
+            require_note(note or DIFFERENCE_NOTE)
     primary = main_checkout(REPO_ROOT)
     names = list(dict.fromkeys(t["repository"]["name"] for t in tasks))
     checkouts, missing = resolve_checkouts(
@@ -783,6 +811,8 @@ def _report_text(records: list[dict[str, Any]], payload: dict[str, Any], reading
 
 def cmd_report(args: argparse.Namespace) -> int:
     records, manifest = _stored_records(Path(args.output_dir).resolve())
+    if _broad_verbs().is_broad_comparison(records, manifest):
+        return _broad_verbs().cmd_report(args, records, manifest)
     payload = _report_payload(records, manifest, args.reading)
     json_mode = _json_mode(args)
     emit_result(
@@ -987,12 +1017,28 @@ _VERBS = [
     "hand-graded runs and 95% agreement conditions, met or not met",
     "measure overview — describe these verbs",
 ]
+_RUN_BROAD = (
+    "measure run --broad — the broad tasks (docs/accuracy/broad-tasks.json): each run stores "
+    "its whole answer and a first marking of the checklist facts; a real run needs the "
+    "committed, confirmed rule file docs/accuracy/broad-difference-threshold.md"
+)
 
 
 def cmd_overview(args: argparse.Namespace) -> int:
     emit_overview(
         "associate measure",
-        [{"title": "Verbs", "items": list(_VERBS)}],
+        [
+            {
+                "title": "Verbs",
+                "items": [
+                    *_VERBS[:1],
+                    _RUN_BROAD,
+                    *_VERBS[1:-1],
+                    *_broad_verbs().VERBS,
+                    _VERBS[-1],
+                ],
+            }
+        ],
         json_mode=_json_mode(args),
     )
     return 0
@@ -1016,7 +1062,18 @@ def _register_run(noun_sub: Any) -> None:
         ),
     )
     p.add_argument("--arms", required=True, help="JSON list of arms (see the explain page).")
-    p.add_argument("--tasks", help="Task file (default docs/accuracy/tasks.json).")
+    p.add_argument(
+        "--tasks",
+        help="Task file (default docs/accuracy/tasks.json; with --broad, "
+        "docs/accuracy/broad-tasks.json).",
+    )
+    p.add_argument(
+        _FLAG_BROAD,
+        action="store_true",
+        help="Run the broad tasks: each run stores its whole answer and a first marking of "
+        "the task's checklist facts. A real run needs the committed, confirmed rule file "
+        "docs/accuracy/broad-difference-threshold.md.",
+    )
     p.add_argument(_FLAG_REPEATS, type=int, default=1, help="Repeats per task and arm (default 1).")
     p.add_argument("--output-dir", required=True, help="Where results, manifest and log go.")
     p.add_argument("--tasks-filter", action="append", metavar="ID", help="Run only this task id.")
@@ -1061,9 +1118,23 @@ def _register_read_verbs(noun_sub: Any) -> None:
     _add_output_dir(st)
     _add_json(st)
     st.set_defaults(func=cmd_status)
-    rp = noun_sub.add_parser("report", help="Print the table of the stored results.")
+    rp = noun_sub.add_parser(
+        "report",
+        help="Print the table of the stored results; for a broad comparison, the counts per run.",
+        description=(
+            "Print the table of the stored results. For a broad comparison it prints, per "
+            "run and grouped by repository and arm, the checklist facts marked as stated (a "
+            "first marking) and, once every run on the grading sheet is graded, the "
+            "statements counted false. It refuses to join a sheet that is not fully graded. "
+            "--sheet, --key, --clone-root and --difference-note apply to a broad comparison "
+            "only."
+        ),
+    )
     _add_output_dir(rp)
     _register_reading(rp)
+    _broad_verbs().add_sheet_paths(rp)
+    _broad_verbs().add_clone_root(rp)
+    rp.add_argument("--difference-note", help="The broad rule file (default the repository's).")
     _add_json(rp)
     rp.set_defaults(func=cmd_report)
     sp = noun_sub.add_parser("sample", help="Write the blank hand-grading sheet.")
@@ -1100,3 +1171,4 @@ def register(sub: argparse._SubParsersAction) -> None:
     ov.set_defaults(func=cmd_overview)
     _register_run(noun_sub)
     _register_read_verbs(noun_sub)
+    _broad_verbs().register(noun_sub)

@@ -120,6 +120,13 @@ def test_explain_run_documents_the_accuracy_fields_and_exit_3(
         "--check-mode",
         "check_mode",
         "ASSOCIATE_CHECK_MODE",
+        "--support-score",
+        "support_score",
+        "ASSOCIATE_SUPPORT_SCORE",
+        "--finish-reminder",
+        "finish_reminder_switch",
+        "finish_followed",
+        "ASSOCIATE_FINISH_REMINDER",
         "Exit codes",
         "`3`",
     ):
@@ -139,3 +146,23 @@ def test_doctor_recognizes_declared_backend(capsys: pytest.CaptureFixture[str]) 
     assert "unknown backend" not in messages
     assert rc == 0
     assert payload["healthy"] is True
+
+
+def test_learn_names_the_finish_reminder_flag(capsys: pytest.CaptureFixture[str]) -> None:
+    """`associate learn` lists --finish-reminder with run's flags, in text and JSON."""
+    assert main(["learn"]) == 0
+    assert "--finish-reminder" in capsys.readouterr().out
+    assert main(["learn", "--json"]) == 0
+    assert "--finish-reminder" in capsys.readouterr().out
+
+
+def test_explain_check_and_measure_document_the_reminder(
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    """`associate explain check` names reminder.json; `explain measure` the arm key and count."""
+    assert main(["explain", "check"]) == 0
+    assert "reminder.json" in capsys.readouterr().out
+    assert main(["explain", "measure"]) == 0
+    out = capsys.readouterr().out
+    assert '"finish_reminder"' in out
+    assert "reminded to finish" in out

@@ -34,7 +34,7 @@ import { mkdirSync, rmSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { Type } from "typebox";
 import { checkHandback, type HandbackCheck, type HandbackReport } from "./lib/facts.ts";
-import { createGate, type Gate } from "./lib/gate.ts";
+import { compileGate, createGate, type Gate, type GateConfig } from "./lib/gate.ts";
 import { decideToolCall, RefusalCap } from "./lib/guard.ts";
 import {
   ANSWER_FILENAME,
@@ -54,15 +54,24 @@ import {
   rejectedHandbackRecord,
   rejectionStage,
   resolveCheckMode,
+  scoreCheckedFacts,
+  supportAnswerCounts,
+  supportScoredCount,
   unreferencedCount,
+  withSupport,
   withUncheckedCounts,
+  type FactSupport,
   type UncheckedCounts,
 } from "./lib/handback.ts";
 import { installPromptInjection } from "./lib/prompt.ts";
 import { registerAssociateProvider } from "./lib/provider.ts";
 import { countSentences, renderAnswer } from "./lib/render.ts";
 import { createAssociateContext, loadToolModules } from "./lib/runtime.ts";
+import { FinishReminder, resolveFinishReminder, type SettleEventLike } from "./lib/reminder.ts";
+import { createSupportCache, type SupportOptions } from "./lib/support.ts";
+import { supportScoreFor } from "./lib/supportswitch.ts";
 import { assistantMessageText, installStatementsRecorder, messageHasToolCalls } from "./lib/statements.ts";
+import { installFinalMessageRecorder } from "./lib/finalmessage.ts";
 import { installContinueFrom, resolveContinueFrom } from "./lib/torch.ts";
 import { activeToolSet, resolveActiveModel, toolsOutsideContract } from "./lib/toolset.ts";
 import { compileRedaction, contentToText, installWalkRecorder, stampContent, stampText } from "./lib/walk.ts";
@@ -149,6 +158,10 @@ export default async function (pi: ExtensionAPI) {
   // recorded read ranges. Installed after the walk so a statement is always
   // verified against a walk that is already on disk.
   installStatementsRecorder(pi, ctx);
+  // The latest prose-only assistant message, whole, as `final_message.md`: the
+  // statements above are a split that drops headings, list markers and code,
+  // and a run that ends without `finish` leaves no answer.md.
+  installFinalMessageRecorder(pi, ctx);
 
   // ----------------------------------------------------------- runtime prompt
   // The launcher passes `--no-context-files` because pi loads AGENTS.md /
@@ -198,6 +211,64 @@ export default async function (pi: ExtensionAPI) {
   }
   const continueFrom = resolveContinueFrom(process.env);
   const redaction = compileRedaction(contract.policy);
+  // ------------------------------------------------ support score (decider t3)
+  // Spec c1/c2: after the quote check, finish asks the decider whether each
+  // passed fact's quote supports its value and stores the answer beside the
+  // check (check.json `facts[i].support`, report.json `support_scored` and
+  // `support_answers`, one count per contract option). It is
+  // a report-only signal: it is asked after `accepted`, the refusals and the
+  // counts are fixed, and nothing reads it back into them. Off (the default
+  // for every model in accuracy.json) nothing is sent and no field is written.
+  // The switch, the environment (base URL and key) and the gate contract are
+  // snapshotted at load like the gate's; `fetch` is looked up per request, so
+  // a test's fake decider is `globalThis.fetch`. One cache per session (s7):
+  // a retry round reuses every score (only scores are kept, so a pair that
+  // was not scored is asked again), and the message_end rewrite asks nothing,
+  // reading the scores saved with the accepted hand-back. finish writes the
+  // quote-check files before it asks (review finding 1).
+  const supportSettings = supportScoreFor(accuracy, model.key, process.env, (line) => console.error(line));
+  const supportEnv = { ...process.env };
+  const supportCache = createSupportCache();
+  let supportConfig: GateConfig | undefined;
+  if (supportSettings) {
+    try {
+      supportConfig = compileGate(contract);
+    } catch (error) {
+      console.error(
+        `associate: the support score cannot reach the decider (${error instanceof Error ? error.message : String(error)}); ` +
+          "every fact will be recorded as not scored",
+      );
+    }
+  }
+  const supportOptions = (settings: SupportOptions["settings"], config: GateConfig, signal?: AbortSignal): SupportOptions => ({
+    settings,
+    config,
+    env: supportEnv,
+    redaction,
+    fetch: ((...args: Parameters<typeof fetch>) => globalThis.fetch(...args)) as typeof fetch,
+    cache: supportCache,
+    signal,
+  });
+  const scoreFacts = async (
+    check: HandbackCheck,
+    payload: Record<string, unknown>,
+    signal: AbortSignal | undefined,
+  ): Promise<FactSupport | undefined> => {
+    if (!supportSettings) return undefined;
+    if (!supportConfig) {
+      return check.facts.map((f) =>
+        f.verdict === "passed"
+          ? { status: "not_scored" as const, reason: "contract_invalid" as const, detail: "the decider's contract did not compile" }
+          : undefined,
+      );
+    }
+    return scoreCheckedFacts(check, payload, supportOptions(supportSettings, supportConfig, signal));
+  };
+  // check_quote (decider t4) asks with these same options and this same cache.
+  if (supportSettings) {
+    ctx.attachSupport((signal) => (supportConfig ? supportOptions(supportSettings, supportConfig, signal) : null));
+  }
+
   // Per prompt, reset by before_agent_start with `finished`.
   let handbackRefusals = 0;
   let handbackEnded = false;
@@ -216,6 +287,13 @@ export default async function (pi: ExtensionAPI) {
         checkRecord: Record<string, unknown>;
         summary: string;
         answer: string;
+        /**
+         * The support score per fact (decider t3), aligned with `check.facts`;
+         * undefined when the score is off. What check.json's `facts[i].support`
+         * and report.json's `support_scored` are written from, and rewritten
+         * from on message_end without asking again.
+         */
+        support: FactSupport | undefined;
       }
     | undefined;
 
@@ -230,8 +308,35 @@ export default async function (pi: ExtensionAPI) {
     }
   };
   const writeJson = (name: string, value: unknown): void => writeExport(name, `${JSON.stringify(value, null, 2)}\n`);
-  const writeReport = (report: HandbackReport, counts: UncheckedCounts): void =>
-    writeJson(REPORT_FILENAME, withUncheckedCounts(report, counts));
+
+  // ------------------------------------------------ finish reminder (d3)
+  // Issue #38: a run about to settle with no accepted finish is reminded,
+  // with accuracy.json's text, up to its `max` times per session. Only when
+  // `associate run` switched it on ($ASSOCIATE_FINISH_REMINDER=on, snapshotted
+  // at load); absent or off — the mesh resident, a spawned child — nothing is
+  // created and no settle handler is registered below. Each reminder is a
+  // walk line and updates reminder.json; with none sent the export is as it
+  // was without this.
+  const reminderSetting = resolveFinishReminder(accuracy, process.env);
+  if (reminderSetting.problem) console.error(reminderSetting.problem);
+  const finishReminder = reminderSetting.settings
+    ? new FinishReminder({
+        settings: reminderSetting.settings,
+        recordLine: (info) => walk.recordReminder(info),
+        writeJson,
+        warn: (line) => console.error(line),
+      })
+    : undefined;
+  const writeReport = (report: HandbackReport, counts: UncheckedCounts, support?: FactSupport): void =>
+    writeJson(REPORT_FILENAME, {
+      ...withUncheckedCounts(report, counts),
+      ...(support !== undefined && supportSettings
+        ? {
+            support_scored: supportScoredCount(support),
+            support_answers: supportAnswerCounts(support, supportSettings.options),
+          }
+        : {}),
+    });
 
   // ------------------------------------------- the rejected hand-back (t3)
   // Every rejected finish payload — pi's argument validation, the quoted-list
@@ -300,6 +405,8 @@ export default async function (pi: ExtensionAPI) {
       writeRejected({ stage: rejectionStage(error), error, toolCallId });
     }
     if (toolCallId !== undefined) finishStartArgs.delete(toolCallId);
+    // Any finish that ended, accepted, refused or rejected, follows a reminder.
+    finishReminder?.noteFinish();
   });
 
   // ---------------------------------------------------------------- sentinel
@@ -474,7 +581,7 @@ export default async function (pi: ExtensionAPI) {
         ),
       ),
     }),
-    async execute(toolCallId, params) {
+    async execute(toolCallId, params, signal) {
       const raw = (params ?? {}) as Record<string, unknown>;
       // The list fields the model sent quoted, which prepareFinishArguments unquoted.
       const quoted = finishStartArgs.has(toolCallId) ? quotedListFields(finishStartArgs.get(toolCallId)) : [];
@@ -492,17 +599,26 @@ export default async function (pi: ExtensionAPI) {
       const refusals = refusalsOf(check, payload);
       const summary = typeof payload.summary === "string" ? payload.summary : "";
       const counts: UncheckedCounts = { summary_sentences: countSentences(summary), final_message_sentences: 0 };
-      const base = {
+      // check.json's fields shared by both outcomes; `support` adds the score
+      // per fact (decider t3) and is undefined while it is not yet asked or off.
+      const baseFor = (support: FactSupport | undefined) => ({
         mode: checkMode.mode,
         mode_source: checkMode.source,
         accepted: check.accepted,
-        facts: check.facts,
+        facts: withSupport(check.facts, support),
         verdicts: check.verdicts,
         open_items: check.open_items,
         unchecked_text: { ...counts, final_message: "none" },
         ...(quoted.length > 0 ? { quoted_lists: quoted } : {}),
-      };
+      });
+      const base = baseFor(undefined);
       const where = { export_dir: session.exportDir, session_id: session.sessionId };
+      // Review finding 1: every quote-check file and the session state are
+      // written first, exactly as with the score off, so a run killed while
+      // the decider is asked (up to the total scoring time) leaves a whole,
+      // score-less hand-back. Only then is the score asked, and the files it
+      // changes are written again with it.
+      const scoreAfter = () => scoreFacts(check, payload, signal as AbortSignal | undefined);
 
       if (checkMode.mode === "enforce" && !check.accepted) {
         // A refused hand-back is not a hand-back: `finished` stays false, the
@@ -521,14 +637,15 @@ export default async function (pi: ExtensionAPI) {
         const why = capped
           ? `refusal ${handbackRefusals} in a row reached accuracy.json refusal_cap (${handbackCap?.limit})`
           : `accuracy.json retry_rounds (${retryRounds ?? 0}) allowed no further round`;
-        writeJson(CHECK_FILENAME, {
-          ...base,
+        const refusedRecord = (support: FactSupport | undefined) => ({
+          ...baseFor(support),
           outcome: "refused",
           round: handbackRefusals,
           rounds_left: roundsLeft,
           run_ended: last,
           refusals,
         });
+        writeJson(CHECK_FILENAME, refusedRecord(undefined));
         writeReport(check.report, counts);
         rmSync(join(session.exportDir, ANSWER_FILENAME), { force: true });
         accepted = undefined;
@@ -542,6 +659,13 @@ export default async function (pi: ExtensionAPI) {
         if (last) {
           walk.markOutcome("refused");
           handbackEnded = true;
+        }
+        // The refused round is scored too, after it is on disk as refused;
+        // the score changes no refusal, and a later round reuses each score.
+        const refusedSupport = await scoreAfter();
+        if (refusedSupport !== undefined) {
+          writeJson(CHECK_FILENAME, refusedRecord(refusedSupport));
+          writeReport(check.report, counts, refusedSupport);
         }
         const head = {
           outcome: "refused",
@@ -579,13 +703,26 @@ export default async function (pi: ExtensionAPI) {
       // blocked below.
       finished = true;
       handbackCap?.note(undefined);
-      const answer = renderAnswer({ payload, check, summary });
       const wouldRefuse = checkMode.mode === "report" ? refusals : [];
+      let answer = renderAnswer({ payload, check, summary });
       const checkRecord = { ...base, outcome: "accepted", would_refuse: wouldRefuse };
       writeJson(CHECK_FILENAME, checkRecord);
       writeReport(check.report, counts);
       writeExport(ANSWER_FILENAME, answer);
-      accepted = { payload, check, checkRecord, summary, answer };
+      const recorded = { payload, check, checkRecord, summary, answer, support: undefined as FactSupport | undefined };
+      accepted = recorded;
+
+      const support = await scoreAfter();
+      if (support !== undefined) {
+        answer = renderAnswer({ payload, check, summary, support });
+        const scoredRecord = { ...baseFor(support), outcome: "accepted", would_refuse: wouldRefuse };
+        writeJson(CHECK_FILENAME, scoredRecord);
+        writeReport(check.report, counts, support);
+        writeExport(ANSWER_FILENAME, answer);
+        // The saved object the message_end rewrite reads, unless a later
+        // prompt replaced it while the score was asked.
+        if (accepted === recorded) accepted = { ...recorded, checkRecord: scoredRecord, answer, support };
+      }
 
       const count = handback.statements.length;
       const f = check.report.facts;
@@ -656,11 +793,11 @@ export default async function (pi: ExtensionAPI) {
       unchecked_text: { ...counts, final_message: same ? "rendered_answer" : "unchecked" },
     };
     writeJson(CHECK_FILENAME, checkRecord);
-    writeReport(accepted.check.report, counts);
+    writeReport(accepted.check.report, counts, accepted.support);
     if (!same) {
       writeExport(
         ANSWER_FILENAME,
-        renderAnswer({ payload: accepted.payload, check: accepted.check, summary: accepted.summary, finalMessage: said }),
+        renderAnswer({ payload: accepted.payload, check: accepted.check, summary: accepted.summary, finalMessage: said, support: accepted.support }),
       );
     }
   });
@@ -727,6 +864,18 @@ export default async function (pi: ExtensionAPI) {
     capPinned = false;
     capPending = false;
   });
+  // The finish reminder (d3), at pi's last actionable boundary: after
+  // agent_end above (so a refusal-cap pin is already set) and only when no
+  // retry or queued message will run. pi skips this event for an aborted run;
+  // FinishReminder also refuses an outcome other than "completed". A
+  // continuation is not a new prompt (no before_agent_start), so `finished`
+  // and the enforce-mode round count carry over. The preflight never gets
+  // here: lib/preflight.ts exits at before_agent_start.
+  if (finishReminder) {
+    pi.on("agent_before_settle", (event) =>
+      finishReminder.atSettle(event as SettleEventLike, { finished, endedRefused: handbackEnded || capPinned }),
+    );
+  }
   pi.on("tool_call", async (event, eventCtx) => {
     if (finished) {
       // Not counted toward the refusal cap: the hand-back is already recorded,

@@ -214,13 +214,73 @@ run live):
   - **What a run leaves and returns.** The export gains `facts.json`,
     `check.json`, `report.json` and `answer.md` (the answer rendered by the
     harness from accepted items; the model's own summary and final message are
-    kept under an unchecked label and counted). `associate run --json` carries
+    kept under an unchecked label and counted). With or without
+    `finish`, the export also holds `final_message.md` once the model has sent
+    a message that calls no tool: the last such message, redacted and
+    otherwise whole (`lib/finalmessage.ts`;
+    built and unit-tested, not yet written by a live run). `statements.json`
+    is a split of the model's prose that drops headings, list markers and
+    code blocks, so it cannot stand in for it. `associate run --json` carries
     the rendered answer, the counts from a Python re-check
     (`associate/accuracy/`), and `handback_outcome`; a hand-back refused after
     the allowed rounds exits 3 with the result still printed.
     `associate check <export-dir>` prints the same counts for any export.
   - **A passed fact means its quote was found** in the saved result it cites.
     It does not mean the value is true. Never call that count accuracy.
+- **The support score** (issue #31; settings in `accuracy.json`
+  `support_score`; `lib/support.ts`, `lib/supportswitch.ts`, `lib/handback.ts`
+  `scoreCheckedFacts`; Python copy in `associate/accuracy/support.py`). For each
+  fact whose quote was found, the extension can ask the lobes decider one
+  `choice` question (deviation d4): how much of the value the quote, on its
+  own, shows. The options and their criteria are `support_score.options`
+  (`all`, `mostly`, `part`, `little`, `none`), and `support_score.passes`
+  (`all`, `mostly`) names the answers reported as the quote supporting the
+  value; there is no cut-off. A scored fact is `{status: "scored", answer,
+  supports, confidence}` (`confidence` the decider's probability for the
+  answer); a missing choice or one that is not an option is `not_scored`
+  `malformed`. It is report-only: it refuses nothing and never enters
+  `accepted`, the refusals or the counts. `finish` writes the quote-check
+  files first and then, with the score on, writes them again with
+  `facts[i].support` in `check.json`, `support_scored` and `support_answers`
+  (one count per option, in contract order) in `report.json`, and a second
+  mark in `answer.md` that gives the answer in words, never a number. Only scores are kept for
+  the session; a pair that was not scored is asked again later, and one batch
+  stops sending after the first `unreachable`, `timeout` or `http_error`
+  (the rest are `skipped_after_failure`). `check_quote` takes an optional
+  `value` argument and, for a found quote with the score on, adds a `support`
+  key. `associate run --support-score on|off` overrides the switch for one
+  run. The switch is **off for every model**. The question is built and
+  unit-tested against a fake decider only; the option wording and the pass
+  rule were measured offline on a labelled set
+  (`docs/notes/support-score-calibration.md`, two model raters, tentative); no
+  associate run has used the choice question. The earlier yes/no question was
+  probed live once with four pairs (plan
+  `.devague/plans/associate-decider-fact-score.json`). Never call it accuracy.
+- **The finish reminder** (deviation d3, issue #38; settings in
+  `accuracy.json` `finish_reminder`, `max` 1 and the reminder `text`, first
+  values; `lib/reminder.ts`; Python reader `associate/accuracy/reminder.py`).
+  At pi's `agent_before_settle`, a run with no accepted `finish` — not ended
+  refused (last round or refusal cap), not aborted or in a lane error — is
+  sent the contract's text as a hidden custom message and pi runs once more,
+  up to `max` times per session. Only when `associate run` switched it on
+  (`--finish-reminder on|off`, default on when the section exists; the
+  `ASSOCIATE_FINISH_REMINDER` variable); the mesh resident and spawned
+  children get no variable and are never reminded. Each reminder is a
+  `{"reminder": …}` walk line; `reminder.json` in the export (written only
+  once one was sent) gives `associate run --json` its `finish_reminder`
+  (`{"sent", "finish_followed"}`), `associate check` prints it, and a broad
+  `measure` record stores `reminded`. With none sent every export file is
+  byte-identical to before. Built and unit-tested against a fake pi; the pi
+  mechanism was seen once in a live probe with a throwaway extension; no run
+  of associate with the reminder has been measured.
+- **Broad measurement tasks and the measure sheet verbs** (0.14.0):
+  `docs/accuracy/broad-tasks.json` (six repositories, 71 checked facts),
+  `associate measure run --broad`, and `measure sheet`, `measure sheet-check`
+  and `measure report` for blind hand grading
+  (`associate/cli/_commands/measure_broad.py`, `associate/measure/broad.py`).
+  Built and tested on fixtures and the stub harness only; a real broad run is
+  refused while `docs/accuracy/broad-difference-threshold.md` is a draft,
+  missing or modified (the operator confirmed it on 2026-11-19).
 
 ### Measured vs. not measured
 
@@ -270,6 +330,15 @@ is one run.
   children or delegated runs, with a real `ledger` binary, or in enforce mode
   beyond two worker runs; the recording of calls pi rejects before the hook is
   tested against a fake pi only.
+- the support score in any run: the switch is off for every model, the only
+  live contact was one probe of four pairs with the earlier yes/no question,
+  no associate run has asked the five-option choice question, and `finish`,
+  `check_quote` and the per-run switch are tested against a fake decider only;
+- the broad tasks: six trial runs per round were made by hand, no measured
+  comparison has been stored; the sheet verbs are tested on fixtures and the stub
+  harness only;
+- the finish reminder in any run of associate: it is tested against a fake pi
+  only, and whether a reminded model then calls `finish` has not been seen.
 
 Say "built and unit-tested", never "works", for these. Live findings that
 remain open: worker sometimes ends without `finish` (seen again in an
@@ -653,7 +722,9 @@ versions the extension's tests and the worker live runs used:
 - **Node** — **>=22** (pi-acp's floor, and the extension test runner's).
 - **the portable contract** (`associate/contract/`) — `models.json` version 1,
   `gate.json` version 9 (d18 added the `delegate_run` effect),
-  `accuracy.json` version 1, walk format 2. A
+  `accuracy.json` version 1 (its `support_score` section changed shape without
+  a version bump in deviation d4: `cutoff` removed, `options` and `passes`
+  added; the section is optional and off for every model), walk format 2. A
   contract-version bump is a compatibility event, not a patch note; a `gate.json` bump changes what CLEF is asked, so record why
   (`docs/notes/gate-calibration.md`). 0.12.0 changed the contract without a
   version bump of `models.json`: the tool name `check_quote` was added to
@@ -715,6 +786,8 @@ value is not inherited.
 | `ASSOCIATE_REQUIRE_WEB`, `ASSOCIATE_SKIP_WEB` | unset | `hatch_build.py` | At build time: `1` fails a build with no `web/dist`, or leaves the UI out of the wheel on purpose. |
 | `ASSOCIATE_API_URL` | `http://127.0.0.1:8794` | `web/vite.config.ts` | The API the UI's dev server (`npm run dev`) proxies `/api` to. |
 | `ASSOCIATE_DESIGN_SOURCE_REPO` | unset | `web/scripts/check-tokens.mjs` | A culture-rules checkout; when set, the tokens check also compares `tokens.css` with it at the pinned commit. |
+| `ASSOCIATE_SUPPORT_SCORE` | absent (the model's switch in `accuracy.json` `support_score.enabled`) | `lib/supportswitch.ts`; set by `associate run --support-score`, never inherited | `on` or `off` for this run's support score (a report-only signal; decider-score task t7). `on` applies only to a model the contract's settings list; any other value is ignored with one stderr line. `index.ts` reads it once at load (through `supportScoreFor`) and, when the score is on, wires it into `finish` and `check_quote`. Built and unit-tested against a fake decider; no run has been measured with it. A `measure` arm sets it with `"support_score"`. |
+| `ASSOCIATE_FINISH_REMINDER` | absent (no reminder) | `lib/reminder.ts`, `tools/spawn.ts` (never passed to a child); set by `associate run` for every run, never inherited | `on` or `off` for this run's finish reminder (deviation d3): `--finish-reminder` when given, else `on` when `accuracy.json` has a `finish_reminder` section. Absent — the mesh resident, a spawned child — registers no settle handler; any other value is ignored with one stderr line. Built and unit-tested against a fake pi; no run has been measured with it. A `measure` arm sets it with `"finish_reminder"`. |
 | `ASSOCIATE_BENCH_SUITES` | `associate/bench/suites.json` | `associate/bench/public.py` | An alternative suites file for `associate bench`. |
 | `ASSOCIATE_PROVIDER`, `ASSOCIATE_REASONING_EFFORT`, `ASSOCIATE_REASONING` | — | `associate/bench/config.py` | Only labels in a bench row's configuration stamp (provider falls back to `ASSOCIATE_BASE_URL`); they change nothing on the wire. Reasoning is per model in `models.json`. |
 
@@ -811,6 +884,12 @@ root key** — see invariant 3 under "Adding a verb".
   (`retry_rounds`, `refusal_cap`, `min_quote_length`) are first values, not
   measured ones. A new check needs a recorded failure in its
   `motivating_failure`.
+- **Don't treat the support score's options or pass rule as calibrated.**
+  `support_score.options` and `passes` were measured offline on one labelled
+  set with two model raters; they are tentative, and the switch stays off
+  for every model until the operator switches it on. Don't reword a
+  criterion without a new measurement in
+  `docs/notes/support-score-calibration.md`.
 - **Don't treat the 0.5 gate thresholds as calibrated.** They are tentative
   (deviation d9); change them only with new measurements recorded in
   `docs/notes/gate-calibration.md`, or from the issue #13 benchmark.

@@ -22,6 +22,9 @@ import {
   loadContract,
   policySection,
   resolveContractDir,
+  supportChoiceProblem,
+  supportScoreListing,
+  supportScoreSettings,
 } from "../lib/contract.ts";
 import { extensionDir } from "../lib/paths.ts";
 
@@ -218,6 +221,139 @@ test("no accuracy setting appears as a literal in the extension's TypeScript", (
     for (const needle of needles) {
       assert.ok(!text.includes(needle), `${path} restates accuracy.json value ${needle}`);
     }
+  }
+});
+
+test("loadContract exposes the support-score settings, switched off for every model", () => {
+  // Decider-score spec c4/h13, c9/h18.
+  const { accuracy, models } = loadContract({});
+  const settings = accuracy.support_score;
+  assert.ok(settings, "accuracy.json ships a support_score section");
+  assert.equal(typeof settings.question, "string");
+  assert.ok(settings.question.trim().length > 0);
+  assert.equal("cutoff" in settings, false, "the cut-off is gone (deviation d4)");
+  assert.ok(Object.keys(settings.options).length >= 2);
+  assert.ok(settings.passes.length >= 1);
+  assert.ok(settings.passes.every((key) => Object.hasOwn(settings.options, key)));
+  assert.equal(supportChoiceProblem(settings), undefined);
+  for (const value of [settings.timeout_ms, settings.max_facts, settings.total_timeout_ms]) {
+    assert.ok(Number.isInteger(value) && value > 0);
+  }
+  assert.ok(settings.total_timeout_ms >= settings.timeout_ms);
+  assert.deepEqual(Object.keys(settings.enabled).sort(), Object.keys(models.models).sort());
+  for (const key of Object.keys(models.models)) {
+    assert.equal(settings.enabled[key], false, `${key}: the switch is off until the cut-off is fixed`);
+    assert.equal(accuracy.mode[key], "report", `${key}: still report mode`);
+    assert.equal(supportScoreSettings(accuracy, key), undefined);
+  }
+});
+
+test("supportChoiceProblem mirrors validate.py's option and pass rules (deviation d4)", () => {
+  const shipped = loadContract({}).accuracy.support_score!;
+  const bad: Array<[string, unknown]> = [
+    ["no section", undefined],
+    ["not an object", "all"],
+    ["no options", { ...shipped, options: undefined }],
+    ["one option", { ...shipped, options: { all: "x" }, passes: ["all"] }],
+    ["options a list", { ...shipped, options: ["all", "none"], passes: ["all"] }],
+    ["a blank criterion", { ...shipped, options: { all: "x", none: "  " }, passes: ["all"] }],
+    ["a blank key", { ...shipped, options: { all: "x", " ": "y" }, passes: ["all"] }],
+    ["a criterion not a string", { ...shipped, options: { all: "x", none: 3 }, passes: ["all"] }],
+    ["passes empty", { ...shipped, passes: [] }],
+    ["passes not a list", { ...shipped, passes: "all" }],
+    ["passes an unknown key", { ...shipped, passes: ["always"] }],
+    ["passes twice", { ...shipped, passes: ["all", "all"] }],
+    ["passes every option", { ...shipped, passes: Object.keys(shipped.options) }],
+  ];
+  for (const [label, section] of bad) {
+    assert.equal(typeof supportChoiceProblem(section), "string", label);
+  }
+  assert.equal(supportChoiceProblem({ ...shipped, options: { yes: "a", no: "b" }, passes: ["yes"] }), undefined);
+});
+
+test("a section whose options cannot be asked lists no model, so the score stays off", () => {
+  const { accuracy } = loadContract({});
+  const shipped = accuracy.support_score!;
+  const on = { ...shipped, enabled: { ...shipped.enabled, worker: true } };
+  assert.equal(supportScoreListing({ ...accuracy, support_score: on }, "worker"), on);
+  const broken = { ...accuracy, support_score: { ...on, passes: [] } } as never;
+  assert.equal(supportScoreListing(broken, "worker"), undefined);
+  assert.equal(supportScoreSettings(broken, "worker"), undefined);
+});
+
+test("supportScoreSettings returns the settings only for a model switched on with exactly true", () => {
+  const { accuracy } = loadContract({});
+  const shipped = accuracy.support_score!;
+  const on = { ...accuracy, support_score: { ...shipped, enabled: { ...shipped.enabled, worker: true } } };
+  assert.deepEqual(supportScoreSettings(on, "worker"), on.support_score);
+  assert.equal(supportScoreSettings(on, "cortex"), undefined);
+  assert.equal(supportScoreSettings(on, "no-such-model"), undefined);
+  assert.equal(supportScoreSettings(on, "toString"), undefined, "an inherited name is not a switch");
+  for (const notTrue of ["true", 1, "on", null]) {
+    const odd = { ...accuracy, support_score: { ...shipped, enabled: { worker: notTrue } } };
+    assert.equal(supportScoreSettings(odd as never, "worker"), undefined, `${String(notTrue)} is not on`);
+  }
+  // An accuracy.json written before the section existed: the score is off.
+  const { support_score: _dropped, ...older } = accuracy;
+  assert.equal(supportScoreSettings(older, "worker"), undefined);
+  assert.equal(supportScoreSettings({ ...accuracy, support_score: { ...shipped, enabled: undefined } } as never, "worker"), undefined);
+});
+
+/** A numeric literal equal to `value`, however TypeScript lets it be written (0.5, .50, 10_000). */
+function numberLiteral(value: number): RegExp {
+  const [whole, fraction = ""] = String(value).split(".");
+  const digits = whole.split("").join("_?");
+  const body = fraction
+    ? `${whole === "0" ? "0?" : digits}\\.${fraction.split("").join("_?")}0*`
+    : `${digits}(?:\\.0*)?`;
+  return new RegExp(`(?<![\\w.])${body}(?![\\w.])`);
+}
+
+/** Where `text` restates the question wording, an option's criterion or the per-fact timeout. */
+function restatedSupportSettings(
+  text: string,
+  settings: { question: string; options: Readonly<Record<string, string>>; timeout_ms: number },
+): string[] {
+  const found: string[] = [];
+  if (text.includes(settings.question)) found.push("question");
+  for (const [key, criterion] of Object.entries(settings.options)) {
+    if (text.includes(criterion)) found.push(`criterion of ${key}`);
+  }
+  if (numberLiteral(settings.timeout_ms).test(text)) found.push("timeout_ms");
+  return found;
+}
+
+test("no support-score setting appears as a literal in the extension's TypeScript", () => {
+  // Decider-score spec h13: the question wording, the options' criteria and
+  // the per-fact timeout live in accuracy.json and nowhere in code. Comments are
+  // scanned too, so a value is not restated in prose either.
+  const settings = loadContract({}).accuracy.support_score;
+  assert.ok(settings, "fixture assumption: accuracy.json has a support_score section");
+  const keyNeedles = ["support_score", "cutoff", "passes", "max_facts", "total_timeout_ms"].map((word) => `"${word}"`);
+  const shipped = [
+    join(extensionDir, "index.ts"),
+    ...collectTypeScript(join(extensionDir, "lib")),
+    ...collectTypeScript(join(extensionDir, "tools")),
+  ];
+  assert.ok(shipped.length > 10, "fixture assumption: the extension is scanned");
+  for (const path of shipped) {
+    const text = readFileSync(path, "utf8");
+    assert.deepEqual(restatedSupportSettings(text, settings), [], `${path} restates a support-score value`);
+    for (const needle of keyNeedles) {
+      assert.ok(!text.includes(needle), `${path} restates accuracy.json key ${needle}`);
+    }
+  }
+});
+
+test("the support-score literal scan catches each restated value", () => {
+  const settings = { question: "Is it so?", options: { yes: "it is so", no: "it is not" }, timeout_ms: 10000 };
+  assert.deepEqual(restatedSupportSettings("const q = 'Is it so?';", settings), ["question"]);
+  assert.deepEqual(restatedSupportSettings("const c = 'it is not';", settings), ["criterion of no"]);
+  for (const text of ["setTimeout(f, 10000)", "const T = 10_000;", "t = 10000.0"]) {
+    assert.deepEqual(restatedSupportSettings(text, settings), ["timeout_ms"], text);
+  }
+  for (const text of ["x = 0.55", "t = 110000", "t = 100000", "a.timeout_ms", "yes", "it"]) {
+    assert.deepEqual(restatedSupportSettings(text, settings), [], text);
   }
 });
 

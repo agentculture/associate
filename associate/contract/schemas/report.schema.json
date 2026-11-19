@@ -38,6 +38,15 @@
         "final_message_sentences": {"type": "integer"}
       }
     },
+    "support_scored": {
+      "type": "integer",
+      "description": "How many facts the decider gave a support answer (how much of the value the quote, on its own, shows). Written by the extension; absent when the score is switched off. A count of facts answered, whatever the answer: it is no part of the facts counts and says nothing about whether a value is true."
+    },
+    "support_answers": {
+      "type": "object",
+      "description": "How many facts got each support answer: one count per option of the contract's support_score.options, in that order, zeros included. Written by the extension; absent when the score is switched off. No part of the facts counts, and no answer means the value is true.",
+      "additionalProperties": {"type": "integer"}
+    },
     "by_source_kind": {
       "type": "object",
       "additionalProperties": false,

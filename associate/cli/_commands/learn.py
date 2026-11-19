@@ -31,7 +31,8 @@ Commands
   associate overview           Descriptive snapshot of the agent.
   associate doctor             Check the agent-identity invariants.
   associate run [prompt]       Run one task on a harness adapter (--model,
-                               --test-command), or fail closed.
+                               --test-command, --check-mode, --support-score on|off,
+                               --finish-reminder on|off), or fail closed.
   associate bench              Run a public suite (--suite NAME --model KEY) or list suites.
   associate runs start         Start a detached run on a checkout (--checkout, --model,
                                --test-command, instruction); prints a run id at once.
@@ -47,14 +48,30 @@ Commands
   associate tokens revoke <id> Stop a token working.
   associate tokens overview    Describe the tokens verbs.
   associate check <export-dir> Re-check an export's hand-back facts; print counts.
+                               check and run --json show each fact's
+                               support score copied from the export (support_source:
+                               extension) when the export holds one: its answer (all,
+                               mostly, part, little or none), and the counts per
+                               answer as support_answers; never recomputed.
   associate measure run        Run a comparison of arms over tasks (--arms, --repeats,
                                --output-dir, --detach); needs the committed difference note
-                               unless --harness stub (plumbing only).
+                               unless --harness stub (plumbing only). An arm may set
+                               support_score and finish_reminder (on or off); each
+                               stored record names them.
   associate measure status <dir>  Runs stored, failed and not yet stored; the lock; the log.
   associate measure report <dir>  The table of the stored results (--reading, --json).
   associate measure sample <dir>  The blank hand-grading sheet for a fixed-seed draw.
   associate measure agreement <dir> --sheet PATH  A filled sheet against the grader; the 48
                                hand-graded runs and 95% agreement conditions (read-only).
+  associate measure run --broad  The broad tasks: each run stores its whole answer and a
+                               first marking of the checklist facts; a real run needs the
+                               committed, confirmed rule file. A run that ended without
+                               finish is read from its whole final message
+                               (answer_source, finished, at_cap).
+  associate measure sheet <dir>  Broad tasks: the grading sheet (statements per run, arms
+                               hidden, shuffled) and, in a separate file, its key.
+  associate measure sheet-check <dir>  What a filled sheet lacks (a verdict per statement,
+                               a file and line per false); exit 1 until acceptable.
   associate measure overview   Describe the measure verbs.
   associate cli overview       Describe the CLI surface itself.
 
@@ -98,7 +115,14 @@ def _as_json_payload() -> dict[str, object]:
                 "path": ["run"],
                 "summary": (
                     "Run one task on a harness adapter (--model picks a registry model; "
-                    "--test-command names checks the harness runs before merging); "
+                    "--test-command names checks the harness runs before merging; "
+                    "--support-score on|off overrides the model's support-score switch "
+                    "for one run; --finish-reminder on|off switches the reminder sent to a "
+                    "model that stops without finish, default on when the contract has "
+                    "the section); "
+                    "the result carries the support score the export holds as "
+                    "support_facts (each fact's answer, supports and confidence) and "
+                    "support_answers (counts per answer), labelled support_source: extension; "
                     "exits 2 without serving when the adapter cannot prove its "
                     "extension loaded."
                 ),
@@ -139,15 +163,21 @@ def _as_json_payload() -> dict[str, object]:
                 "path": ["check"],
                 "summary": (
                     "Re-check an export directory's hand-back facts against its walk and "
-                    "saved results; print counts per kind and per source kind."
+                    "saved results; print counts per kind and per source kind. A support "
+                    "score the export holds is copied onto each fact (support_source: "
+                    "extension), never recomputed; the text form shows each answer in words "
+                    "and the counts per answer on one line."
                 ),
             },
             {
                 "path": ["measure", "run"],
                 "summary": (
                     "Run a comparison of arms over tasks and store one graded result per task, "
-                    "arm and repeat; --detach runs it in the background. Refuses without the "
-                    "committed difference note except on the stub harness (plumbing only)."
+                    "arm and repeat; --detach runs it in the background. An arm may set "
+                    "support_score and finish_reminder (on or off), named in each stored "
+                    "record. Refuses without the "
+                    "committed difference note except on the stub harness (plumbing only). "
+                    "--broad runs the broad tasks and needs the committed, confirmed rule file."
                 ),
             },
             {
@@ -156,7 +186,12 @@ def _as_json_payload() -> dict[str, object]:
             },
             {
                 "path": ["measure", "report"],
-                "summary": "Print the table of the stored results (--reading, --json).",
+                "summary": (
+                    "Print the table of the stored results (--reading, --json); for a broad "
+                    "comparison, per run: checklist facts marked as stated (a first marking) "
+                    "and, once every run is graded, statements counted false; per arm, how "
+                    "many runs ended without finish."
+                ),
             },
             {
                 "path": ["measure", "sample"],
@@ -167,6 +202,21 @@ def _as_json_payload() -> dict[str, object]:
                 "summary": (
                     "Read a filled hand-grading sheet back and compare it with the grader: "
                     "agreement and the 48-run and 95% conditions, met or not met (read-only)."
+                ),
+            },
+            {
+                "path": ["measure", "sheet"],
+                "summary": (
+                    "Broad tasks: write the grading sheet (each run's statements, runs "
+                    "shuffled under ids that hide the arm) and, separately, the key."
+                ),
+            },
+            {
+                "path": ["measure", "sheet-check"],
+                "summary": (
+                    "Broad tasks: list what a filled grading sheet lacks (a verdict per "
+                    "statement, a file and positive line per false; --clone-root looks "
+                    "them up); exit 1 until acceptable."
                 ),
             },
             {"path": ["measure", "overview"], "summary": "Describe the measure verbs."},

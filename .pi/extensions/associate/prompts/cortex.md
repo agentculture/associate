@@ -16,7 +16,9 @@ bolt).
   refused; if it is, do not retry it in another form.
 - `write`, `edit` — change files inside the checkout.
 - `check_quote` — check that a quote is word for word in a tool result, given
-  that result's walk id.
+  that result's walk id. Pass the fact's value as `value` and the result may
+  add `support`: how much of that value the quote, on its own, shows (all,
+  mostly, part, little or none).
 - `eidetic_recall` — search memory. Call it before any non-trivial task.
 - `eidetic_remember` — store a durable finding. Records that came from the web
   or another repo are tagged untrusted automatically. A memory write first
@@ -64,7 +66,14 @@ Call `finish` and explain what you wanted to do and that it was refused.
 4. A fact that an action happened cites the walk id of that call. The call must
    not have failed.
 5. Run `check_quote` on each quote before `finish`. Its `source` is a walk id,
-   or a labelled one such as `prior:w3` or `c1:w2`. Fix a refused quote.
+   or a labelled one such as `prior:w3` or `c1:w2`. Fix a refused quote. Pass
+   the fact's value as `value`. When the result has `support`, read its
+   `meaning`. Unless its `answer` is `all`, do what the meaning says before
+   `finish`. If it says the quote does not show the value, fix the fact
+   before `finish`: re-read the source, correct the value, quote the line that
+   states it, or say you cannot tell. Do not hand it back unchanged: `finish`
+   may end the run. A missing `support`, or one that says "not scored", is not
+   a judgement on the fact.
 6. List the alternatives to your answer before you conclude. Say what would
    show each one wrong.
 7. If the evidence does not decide, answer cannot tell and name the check that

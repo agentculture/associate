@@ -21,8 +21,9 @@
 import { existsSync, readFileSync } from "node:fs";
 import { join } from "node:path";
 import type { AccuracyMode, ContractAccuracy } from "./contract.ts";
-import type { ChildRun, HandbackCheck, HandbackInput, HandbackReport, RunData } from "./facts.ts";
+import type { ChildRun, FactCheck, HandbackCheck, HandbackInput, HandbackReport, RunData } from "./facts.ts";
 import { loadSavedResult } from "./results.ts";
+import { scoreSupportBatch, type SupportOptions, type SupportPair, type SupportResult } from "./support.ts";
 import { readWalkEntries } from "./statements.ts";
 import { PRIOR_RUN_LABEL, resolveRunLabel } from "./torch.ts";
 import { WALK_FILENAME, redactValue, type RedactionFilter } from "./walk.ts";
@@ -521,4 +522,104 @@ export function withUncheckedCounts(
       final_message_sentences: counts.final_message_sentences,
     },
   };
+}
+
+
+// ------------------------------------------- the support score (decider-score t3)
+//
+// Spec c1/c2, h11/h19: after the quote check, finish asks the decider whether
+// each passed fact's quote, on its own, states or directly shows its value
+// (lib/support.ts). The answer is stored beside the quote check and decides
+// nothing: it never enters `accepted`, a refusal, `would_refuse` or the
+// passed/refused/unchecked counts, which are computed before it is asked.
+// lib/facts.ts stays pure and offline; the score is asked here, by finish.
+
+/**
+ * One fact's support result, aligned by position with `HandbackCheck.facts`
+ * (and with the payload's `facts`): a `SupportResult` for a fact that passed
+ * the quote check, `undefined` for every other fact (refused or unchecked,
+ * which are never sent).
+ */
+export type FactSupport = ReadonlyArray<SupportResult | undefined>;
+
+/** A checked fact as check.json writes it: the checker's verdict, plus `support` when the fact was scored. */
+export type SupportedFactCheck = FactCheck & { readonly support?: SupportResult };
+
+function factPair(raw: unknown): SupportPair {
+  const fact = raw && typeof raw === "object" && !Array.isArray(raw) ? (raw as Record<string, unknown>) : {};
+  return {
+    value: typeof fact.value === "string" ? fact.value : "",
+    quote: typeof fact.quote === "string" ? fact.quote : "",
+  };
+}
+
+/**
+ * Score every fact of `check` that passed the quote check, in payload order,
+ * through `scoreSupportBatch` (its cap, total time and the session cache
+ * apply). `payload` is the redacted facts payload the check ran on; the value
+ * and quote of each passed fact are read from it by position. Never throws:
+ * should the batch itself throw, every passed fact is marked not scored.
+ */
+export async function scoreCheckedFacts(
+  check: HandbackCheck,
+  payload: unknown,
+  options: SupportOptions,
+): Promise<FactSupport> {
+  const record = payload && typeof payload === "object" && !Array.isArray(payload) ? (payload as Record<string, unknown>) : {};
+  const rawFacts = Array.isArray(record.facts) ? record.facts : [];
+  const positions: number[] = [];
+  const pairs: SupportPair[] = [];
+  check.facts.forEach((fact, position) => {
+    if (fact.verdict !== "passed") return;
+    positions.push(position);
+    pairs.push(factPair(rawFacts[position]));
+  });
+  const out: Array<SupportResult | undefined> = check.facts.map(() => undefined);
+  if (pairs.length === 0) return out;
+  let results: SupportResult[];
+  try {
+    results = await scoreSupportBatch(pairs, options);
+  } catch (error) {
+    const detail = `scoring failed: ${error instanceof Error ? error.message : String(error)}`;
+    results = pairs.map(() => ({ status: "not_scored", reason: "unreachable", detail }));
+  }
+  positions.forEach((position, i) => {
+    out[position] = results[i] ?? { status: "not_scored", reason: "unreachable", detail: "no result returned" };
+  });
+  return out;
+}
+
+/**
+ * The checked facts with each one's support result in a `support` field of its
+ * own; a fact with no result gets no field. With no scores at all (the score
+ * switched off) the very same list is returned, so check.json is unchanged.
+ */
+export function withSupport(facts: readonly FactCheck[], support: FactSupport | undefined): readonly SupportedFactCheck[] {
+  if (support === undefined) return facts;
+  return facts.map((fact, position) => {
+    const result = support[position];
+    return result === undefined ? fact : { ...fact, support: result };
+  });
+}
+
+/** How many facts the decider gave an answer (status `scored`), whatever the answer: report.json `support_scored`. */
+export function supportScoredCount(support: FactSupport): number {
+  return support.filter((result) => result?.status === "scored").length;
+}
+
+/**
+ * How many facts got each answer: report.json `support_answers` (deviation
+ * d4). One count per key of the contract's options, in contract order, zeros
+ * included; an answer that is not one of them (none is ever stored) is left
+ * out rather than given a key the contract does not have.
+ */
+export function supportAnswerCounts(
+  support: FactSupport,
+  options: Readonly<Record<string, string>>,
+): Record<string, number> {
+  const counts: Record<string, number> = Object.fromEntries(Object.keys(options).map((key) => [key, 0]));
+  for (const result of support) {
+    if (result?.status === "scored" && Object.hasOwn(counts, result.answer)) counts[result.answer] += 1;
+  }
+  return counts;
 }

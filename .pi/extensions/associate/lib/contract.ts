@@ -93,6 +93,43 @@ export interface AccuracyCheck {
   readonly motivating_failure: string;
 }
 
+/**
+ * The support-score settings of `accuracy.json`: the decider is asked, for a
+ * fact whose quote was found, one choice question, how much of the value the
+ * quote on its own shows (plan deviation d4). Report-only. Field names are
+ * the contract's; no value is restated here.
+ */
+export interface SupportScoreSettings {
+  /** The choice question, sent as written. */
+  readonly question: string;
+  /** What the decider is told before each pair, sent as written; optional. */
+  readonly background?: string;
+  /** The question's answers, in order: option key -> the criterion the decider is given. */
+  readonly options: Readonly<Record<string, string>>;
+  /** The option keys reported as the quote supporting the value. */
+  readonly passes: readonly string[];
+  /** Time allowed for one fact's request. */
+  readonly timeout_ms: number;
+  /** Most facts scored for one hand-back. */
+  readonly max_facts: number;
+  /** Time allowed for all scoring of one hand-back. */
+  readonly total_timeout_ms: number;
+  /** Registry model key -> switch. */
+  readonly enabled: Readonly<Record<string, boolean>>;
+}
+
+/**
+ * The finish-reminder settings of `accuracy.json` (deviation d3): what is sent
+ * to a model whose task run is about to settle without an accepted finish, and
+ * how many times per session. Field names are the contract's.
+ */
+export interface FinishReminderSettings {
+  /** How many reminders one session may send (at least 1). */
+  readonly max: number;
+  /** The reminder sent to the model, as written. */
+  readonly text: string;
+}
+
 /** The parsed `accuracy.json`. Values are the contract's; none is restated here. */
 export interface ContractAccuracy {
   readonly version: number;
@@ -101,6 +138,10 @@ export interface ContractAccuracy {
   readonly retry_rounds: number;
   readonly refusal_cap: number;
   readonly min_quote_length: number;
+  /** Absent in a file written before the support score: the score is then off. */
+  readonly support_score?: SupportScoreSettings;
+  /** Absent in a file written before the finish reminder: no reminder is sent. */
+  readonly finish_reminder?: FinishReminderSettings;
   /** Tool name -> source kind. */
   readonly source_kinds: Readonly<Record<string, SourceKind>>;
   readonly purpose_exempt_tools: readonly string[];
@@ -237,6 +278,110 @@ export function policySection(policy: ContractPolicy, name: string): Record<stri
   return section && typeof section === "object" && !Array.isArray(section)
     ? (section as Record<string, unknown>)
     : {};
+}
+
+/**
+ * The support-score settings section when it lists `model` among its
+ * switches, whatever that switch says; `undefined` when the section is absent,
+ * its `enabled` is not an object, or `model` is not an own key of it. The one
+ * place both the contract switch (`supportScoreSettings`) and the per-run
+ * switch (`lib/supportswitch.ts`) decide which models are listed.
+ */
+export function supportScoreListing(
+  accuracy: { readonly support_score?: SupportScoreSettings } | undefined,
+  model: string | undefined,
+): SupportScoreSettings | undefined {
+  const settings = accuracy?.support_score;
+  const enabled: unknown = settings?.enabled;
+  if (!settings || !enabled || typeof enabled !== "object" || model === undefined) return undefined;
+  if (!Object.hasOwn(enabled, model)) return undefined;
+  // A section whose question cannot be asked lists no model: the score stays off.
+  return supportChoiceProblem(settings) === undefined ? settings : undefined;
+}
+
+function isText(value: unknown): value is string {
+  return typeof value === "string" && value.trim() !== "";
+}
+
+/** What is wrong with the section's `options`, or undefined; mirrors validate.py `_support_options_errors`. */
+function supportOptionsProblem(options: unknown): string | undefined {
+  const where = "support_score.options";
+  if (!options || typeof options !== "object" || Array.isArray(options) || Object.keys(options).length < 2) {
+    return `${where} must be an object with at least two options`;
+  }
+  const entries = Object.entries(options as Record<string, unknown>);
+  if (!entries.every(([key, criterion]) => isText(key) && isText(criterion))) {
+    return `${where} keys and criteria must be non-blank strings`;
+  }
+  return undefined;
+}
+
+/** What is wrong with the section's pass list, or undefined; mirrors validate.py `_support_passes_errors`. */
+function supportPassesProblem(passes: unknown, options: Record<string, unknown>): string | undefined {
+  const where = "support_score.passes";
+  if (!Array.isArray(passes) || passes.length === 0) return `${where} must be a non-empty list of option keys`;
+  if (!passes.every((key) => typeof key === "string" && Object.hasOwn(options, key))) {
+    return `${where} must name only keys of support_score.options`;
+  }
+  const distinct = new Set(passes);
+  if (distinct.size !== passes.length) return `${where} must not name an option twice`;
+  if (distinct.size === Object.keys(options).length) return `${where} must not name every option`;
+  return undefined;
+}
+
+/**
+ * What makes the support-score section's choice question unaskable, or
+ * undefined when it can be asked (plan deviation d4). The same rules as
+ * validate.py: `options` at least two entries, every key and criterion a
+ * non-blank string; the pass list a non-empty list of distinct option keys
+ * that does not name every option. A section with a problem scores nothing.
+ */
+export function supportChoiceProblem(settings: unknown): string | undefined {
+  if (!settings || typeof settings !== "object" || Array.isArray(settings)) return "support_score must be an object";
+  const section = settings as { options?: unknown; passes?: unknown };
+  const optionsProblem = supportOptionsProblem(section.options);
+  if (optionsProblem) return optionsProblem;
+  return supportPassesProblem(section.passes, section.options as Record<string, unknown>);
+}
+
+/**
+ * The support-score settings for one registry model, or `undefined` when the
+ * score is off for it: the section is absent, the model has no switch, or its
+ * switch is anything but exactly `true`.
+ */
+export function supportScoreSettings(
+  accuracy: { readonly support_score?: SupportScoreSettings },
+  model: string,
+): SupportScoreSettings | undefined {
+  const settings = supportScoreListing(accuracy, model);
+  if (!settings) return undefined;
+  return (settings.enabled as Record<string, unknown>)[model] === true ? settings : undefined;
+}
+
+/**
+ * The finish-reminder settings section (deviation d3), mirroring
+ * `validate.py`'s `_finish_reminder_errors`: `max` a whole number of at least
+ * 1 and `text` a non-blank string. No section is `{}` (no reminder, nothing to
+ * say); a malformed one is a `problem` and no settings, so a broken section
+ * never sends a reminder.
+ */
+export function finishReminderSettings(
+  accuracy: { readonly finish_reminder?: unknown } | undefined,
+): { settings?: FinishReminderSettings; problem?: string } {
+  const section: unknown = accuracy?.finish_reminder;
+  if (section === undefined) return {};
+  const where = "accuracy.json finish_reminder";
+  if (!section || typeof section !== "object" || Array.isArray(section)) {
+    return { problem: `${where} must be an object` };
+  }
+  const { max, text } = section as { max?: unknown; text?: unknown };
+  if (typeof max !== "number" || !Number.isInteger(max) || max < 1) {
+    return { problem: `${where}.max must be a whole number of at least 1, got ${JSON.stringify(max)}` };
+  }
+  if (typeof text !== "string" || text.trim() === "") {
+    return { problem: `${where}.text must be a non-blank string` };
+  }
+  return { settings: section as FinishReminderSettings };
 }
 
 /**

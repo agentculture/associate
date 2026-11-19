@@ -13,7 +13,14 @@ import { loadContract, type Contract } from "./contract.ts";
 import { isInside, resolveSessionDirs, type SessionDirs } from "./session.ts";
 import { isWriterTool } from "./guard.ts";
 import { EXTENSION_VERSION, toolsDir as defaultToolsDir } from "./paths.ts";
-import type { AssociateContext, CheckoutHold, ChildWalkLinker, TestWindow, ToolModule } from "./context.ts";
+import type {
+  AssociateContext,
+  CheckoutHold,
+  ChildWalkLinker,
+  SupportOptionsFor,
+  TestWindow,
+  ToolModule,
+} from "./context.ts";
 
 export interface CreateContextOptions {
   /** Defaults to `process.cwd()` — the checkout pi was started in. */
@@ -65,6 +72,7 @@ export function createAssociateContext(options: CreateContextOptions = {}): Asso
   // AssociateContext.declareNonWriter and lib/guard.ts.
   const nonWriters = new Set<string>();
   let walk: ChildWalkLinker | undefined;
+  let support: SupportOptionsFor | undefined;
 
   return {
     extensionVersion: EXTENSION_VERSION,
@@ -108,6 +116,12 @@ export function createAssociateContext(options: CreateContextOptions = {}): Asso
     },
     walk(): ChildWalkLinker | undefined {
       return walk;
+    },
+    attachSupport(optionsFor: SupportOptionsFor): void {
+      support = optionsFor;
+    },
+    support(): SupportOptionsFor | undefined {
+      return support;
     },
   };
 }
