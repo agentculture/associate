@@ -5,6 +5,20 @@ All notable changes to this project will be documented in this file.
 Format follows [Keep a Changelog](https://keepachangelog.com/). This project
 adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.14.0] - 2026-11-19
+
+### Added
+
+- **The support score** (issue #31; plan `docs/plans/2026-11-19-associate-decider-fact-score.md`). For each reported fact whose quote was found, the extension can ask the lobes decider one question, whether the quote on its own states or directly shows the value, and store the answer beside the quote check. It is report-only: it refuses nothing and never enters `accepted`, the refusal list or the passed, refused and unchecked counts. It is built and unit-tested against a fake decider; the switch is off for every model and no measured run has used it yet.
+  - Settings live in `associate/contract/accuracy.json` under `support_score` (question wording, a tentative cut-off of 0.5, a per-fact timeout, a cap on scored facts, a total time, a switch per model). `accuracy.json` stays at version 1: the section is optional and a file without it reads as score off. `gate.json` is unchanged at version 9.
+  - `lib/support.ts` is a client of its own, not the gate's path: no Super tier, no read-only fallback, no gate line in the walk. A missing key, a timeout, a non-2xx answer or a malformed answer is recorded as not scored. Value and quote pass through the policy redaction filter first; an empty value or an over-long pair is not sent. One request per distinct value and quote in a session.
+  - At `finish`, `check.json` gains `facts[i].support` for each quote-found fact and `report.json` gains `support_scored`. With the score off no file changes by a byte.
+  - `check_quote` takes an optional `value` and returns a `support` key with a meaning in plain words when the quote is found and the score is on. The prompts tell the model to pass the value and to fix a fact before `finish`.
+  - `answer.md` shows a second, separate mark on a scored fact (`quote supports the value, support 0.97`, `quote may not support the value, support 0.03`, or `support not scored: <reason>`) and a legend line saying neither mark means the value is true.
+  - `associate run --json` and `associate check` show the score copied from the export, labelled `support_source: extension`; the Python side does not call the decider.
+  - `associate run --support-score on|off` (variable `ASSOCIATE_SUPPORT_SCORE`, set per run and never inherited) overrides the contract switch for one run; an arm in a measure arms file can carry `support_score`.
+- **Broad tasks for measurement**: `docs/accuracy/broad-tasks.json` holds one explanation task for each of six pinned repositories with 71 checked facts, each written by one checker and answered again from the question alone by a second (both were model subagents). `associate measure run --broad` runs them; `measure sheet` writes a blind grading sheet of each answer's statements with the arm hidden and the key in a separate file; `measure sheet-check` requires a file and line for every statement counted false; `measure report` prints per run the checklist facts marked as stated (a first marking by string match) and the statements counted false, never pooled. A real broad run is refused while `docs/accuracy/broad-difference-threshold.md` is a draft, missing or modified; it is a draft now.
+
 ## [0.13.0] - 2026-11-18
 
 ### Added
