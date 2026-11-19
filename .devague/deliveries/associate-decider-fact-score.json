@@ -2,7 +2,7 @@
   "plan_slug": "associate-decider-fact-score",
   "schema_version": 2,
   "created": "2026-11-19T06:30:45Z",
-  "updated": "2026-11-19T10:02:49Z",
+  "updated": "2026-11-19T10:02:56Z",
   "deviations": [
     {
       "id": "d1",
@@ -29,6 +29,17 @@
       "status": "approved",
       "classification": "risky",
       "seq": 2
+    },
+    {
+      "id": "d3",
+      "what": "The harness reminds a model once to call finish when its task turn ends without it (issue 38), built inside this plan. Not in the confirmed plan.",
+      "task_ref": "t12",
+      "reason": "Operator, 2026-11-19: go on the finish reminder. Two of six broad trial runs ended without finish. A live check showed pi 1.5.2 in headless JSON mode continues after one reminder returned from agent_before_settle.",
+      "affects": [],
+      "origin": "user",
+      "status": "approved",
+      "classification": "risky",
+      "seq": 3
     }
   ],
   "evidence": [],
