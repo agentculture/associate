@@ -358,19 +358,6 @@
    "score": 0.9667
   },
   {
-   "pid": "p6e647240c1",
-   "group": "real",
-   "origin": ".associate-runs/20261118T164952Z-6596c1c9/export",
-   "value": "Session id 20261118T164952Z-6596c1c9; worktree /home/ori/git/.worktrees.associate/agent-g-t7",
-   "quote": "\"session\":{\"id\":\"20261118T164952Z-6596c1c9\"",
-   "labels": {
-    "a": "unsupported",
-    "b": "unsupported"
-   },
-   "borderline": [],
-   "score": 0.4003
-  },
-  {
    "pid": "p1ad5b76429",
    "group": "real",
    "origin": ".associate-runs/20261118T164952Z-6596c1c9/export",
