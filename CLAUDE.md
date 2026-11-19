@@ -245,6 +245,23 @@ run live):
   fake decider only; the decider was probed live once with four pairs in the
   client's request shape (plan `.devague/plans/associate-decider-fact-score.json`),
   and no run has been measured with the score on. Never call it accuracy.
+- **The finish reminder** (deviation d3, issue #38; settings in
+  `accuracy.json` `finish_reminder`, `max` 1 and the reminder `text`, first
+  values; `lib/reminder.ts`; Python reader `associate/accuracy/reminder.py`).
+  At pi's `agent_before_settle`, a run with no accepted `finish` — not ended
+  refused (last round or refusal cap), not aborted or in a lane error — is
+  sent the contract's text as a hidden custom message and pi runs once more,
+  up to `max` times per session. Only when `associate run` switched it on
+  (`--finish-reminder on|off`, default on when the section exists; the
+  `ASSOCIATE_FINISH_REMINDER` variable); the mesh resident and spawned
+  children get no variable and are never reminded. Each reminder is a
+  `{"reminder": …}` walk line; `reminder.json` in the export (written only
+  once one was sent) gives `associate run --json` its `finish_reminder`
+  (`{"sent", "finish_followed"}`), `associate check` prints it, and a broad
+  `measure` record stores `reminded`. With none sent every export file is
+  byte-identical to before. Built and unit-tested against a fake pi; the pi
+  mechanism was seen once in a live probe with a throwaway extension; no run
+  of associate with the reminder has been measured.
 - **Broad measurement tasks and the measure sheet verbs** (0.14.0):
   `docs/accuracy/broad-tasks.json` (six repositories, 71 checked facts),
   `associate measure run --broad`, and `measure sheet`, `measure sheet-check`
@@ -306,7 +323,9 @@ is one run.
   the per-run switch are tested against a fake decider only;
 - the broad tasks: no real broad run has been made (one is refused while the
   rule file is a draft); the sheet verbs are tested on fixtures and the stub
-  harness only.
+  harness only;
+- the finish reminder in any run of associate: it is tested against a fake pi
+  only, and whether a reminded model then calls `finish` has not been seen.
 
 Say "built and unit-tested", never "works", for these. Live findings that
 remain open: worker sometimes ends without `finish` (seen again in an
@@ -753,6 +772,7 @@ value is not inherited.
 | `ASSOCIATE_API_URL` | `http://127.0.0.1:8794` | `web/vite.config.ts` | The API the UI's dev server (`npm run dev`) proxies `/api` to. |
 | `ASSOCIATE_DESIGN_SOURCE_REPO` | unset | `web/scripts/check-tokens.mjs` | A culture-rules checkout; when set, the tokens check also compares `tokens.css` with it at the pinned commit. |
 | `ASSOCIATE_SUPPORT_SCORE` | absent (the model's switch in `accuracy.json` `support_score.enabled`) | `lib/supportswitch.ts`; set by `associate run --support-score`, never inherited | `on` or `off` for this run's support score (a report-only signal; decider-score task t7). `on` applies only to a model the contract's settings list; any other value is ignored with one stderr line. `index.ts` reads it once at load (through `supportScoreFor`) and, when the score is on, wires it into `finish` and `check_quote`. Built and unit-tested against a fake decider; no run has been measured with it. A `measure` arm sets it with `"support_score"`. |
+| `ASSOCIATE_FINISH_REMINDER` | absent (no reminder) | `lib/reminder.ts`, `tools/spawn.ts` (never passed to a child); set by `associate run` for every run, never inherited | `on` or `off` for this run's finish reminder (deviation d3): `--finish-reminder` when given, else `on` when `accuracy.json` has a `finish_reminder` section. Absent — the mesh resident, a spawned child — registers no settle handler; any other value is ignored with one stderr line. Built and unit-tested against a fake pi; no run has been measured with it. A `measure` arm sets it with `"finish_reminder"`. |
 | `ASSOCIATE_BENCH_SUITES` | `associate/bench/suites.json` | `associate/bench/public.py` | An alternative suites file for `associate bench`. |
 | `ASSOCIATE_PROVIDER`, `ASSOCIATE_REASONING_EFFORT`, `ASSOCIATE_REASONING` | — | `associate/bench/config.py` | Only labels in a bench row's configuration stamp (provider falls back to `ASSOCIATE_BASE_URL`); they change nothing on the wire. Reasoning is per model in `models.json`. |
 

@@ -2,7 +2,7 @@
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "$id": "https://github.com/agentculture/associate/contract/walk.schema.json",
   "title": "associate walk",
-  "description": "Artifact A of a run (issue #4): an ordered log of every tool call and its result, written by the harness from tool events and never editable by the model. On disk it is walk.jsonl — a first line {\"format\": <$defs/format>} (absent in a walk written before format 2, which reads as format 1), then one $defs/entry per line, interleaved {\"gate\": <$defs/gate>} and {\"child\": <$defs/child>} lines, then a final line {\"run\": <$defs/run>}. This top-level document schema describes the same walk assembled in memory.",
+  "description": "Artifact A of a run (issue #4): an ordered log of every tool call and its result, written by the harness from tool events and never editable by the model. On disk it is walk.jsonl — a first line {\"format\": <$defs/format>} (absent in a walk written before format 2, which reads as format 1), then one $defs/entry per line, interleaved {\"gate\": <$defs/gate>}, {\"child\": <$defs/child>} and {\"reminder\": <$defs/reminder>} lines, then a final line {\"run\": <$defs/run>}. This top-level document schema describes the same walk assembled in memory.",
   "type": "object",
   "required": ["entries", "run"],
   "properties": {
@@ -10,6 +10,7 @@
     "entries": {"type": "array", "items": {"$ref": "#/$defs/entry"}},
     "gates": {"type": "array", "items": {"$ref": "#/$defs/gate"}},
     "children": {"type": "array", "items": {"$ref": "#/$defs/child"}},
+    "reminders": {"type": "array", "items": {"$ref": "#/$defs/reminder"}},
     "run": {"$ref": "#/$defs/run"}
   },
   "$defs": {
@@ -98,6 +99,16 @@
         "child_model": {"type": "string"},
         "child_walk": {"type": "string", "description": "Path of the child's walk.jsonl."},
         "child_session_id": {"type": "string"}
+      }
+    },
+    "reminder": {
+      "description": "A finish reminder the extension sent (deviation d3): the run was about to settle with no accepted finish, and the model was sent accuracy.json finish_reminder.text once more. Not a tool call: it takes no walk id. Absent from a walk written before the reminder existed, or from a run that was never reminded.",
+      "type": "object",
+      "required": ["id", "ts", "max"],
+      "properties": {
+        "id": {"type": "string", "pattern": "^r[1-9][0-9]*$"},
+        "ts": {"type": "string"},
+        "max": {"type": "integer", "description": "accuracy.json finish_reminder.max: the reminders one session may send."}
       }
     },
     "result": {

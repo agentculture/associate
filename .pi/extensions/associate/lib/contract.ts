@@ -114,6 +114,18 @@ export interface SupportScoreSettings {
   readonly enabled: Readonly<Record<string, boolean>>;
 }
 
+/**
+ * The finish-reminder settings of `accuracy.json` (deviation d3): what is sent
+ * to a model whose task run is about to settle without an accepted finish, and
+ * how many times per session. Field names are the contract's.
+ */
+export interface FinishReminderSettings {
+  /** How many reminders one session may send (at least 1). */
+  readonly max: number;
+  /** The reminder sent to the model, as written. */
+  readonly text: string;
+}
+
 /** The parsed `accuracy.json`. Values are the contract's; none is restated here. */
 export interface ContractAccuracy {
   readonly version: number;
@@ -124,6 +136,8 @@ export interface ContractAccuracy {
   readonly min_quote_length: number;
   /** Absent in a file written before the support score: the score is then off. */
   readonly support_score?: SupportScoreSettings;
+  /** Absent in a file written before the finish reminder: no reminder is sent. */
+  readonly finish_reminder?: FinishReminderSettings;
   /** Tool name -> source kind. */
   readonly source_kinds: Readonly<Record<string, SourceKind>>;
   readonly purpose_exempt_tools: readonly string[];
@@ -291,6 +305,32 @@ export function supportScoreSettings(
   const settings = supportScoreListing(accuracy, model);
   if (!settings) return undefined;
   return (settings.enabled as Record<string, unknown>)[model] === true ? settings : undefined;
+}
+
+/**
+ * The finish-reminder settings section (deviation d3), mirroring
+ * `validate.py`'s `_finish_reminder_errors`: `max` a whole number of at least
+ * 1 and `text` a non-blank string. No section is `{}` (no reminder, nothing to
+ * say); a malformed one is a `problem` and no settings, so a broken section
+ * never sends a reminder.
+ */
+export function finishReminderSettings(
+  accuracy: { readonly finish_reminder?: unknown } | undefined,
+): { settings?: FinishReminderSettings; problem?: string } {
+  const section: unknown = accuracy?.finish_reminder;
+  if (section === undefined) return {};
+  const where = "accuracy.json finish_reminder";
+  if (!section || typeof section !== "object" || Array.isArray(section)) {
+    return { problem: `${where} must be an object` };
+  }
+  const { max, text } = section as { max?: unknown; text?: unknown };
+  if (typeof max !== "number" || !Number.isInteger(max) || max < 1) {
+    return { problem: `${where}.max must be a whole number of at least 1, got ${JSON.stringify(max)}` };
+  }
+  if (typeof text !== "string" || text.trim() === "") {
+    return { problem: `${where}.text must be a non-blank string` };
+  }
+  return { settings: section as FinishReminderSettings };
 }
 
 /**

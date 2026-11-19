@@ -294,6 +294,28 @@ has none of these keys. The text form prints one `support_scored=` line. The
 score is a separate signal from the quote check: it is not in `accuracy.report`,
 changes no count there, and refuses nothing.
 
+## The finish reminder
+
+A model sometimes ends its task turn without calling `finish` and writes its
+hand-back as a plain final message, which leaves no checked facts (deviation d3).
+`--finish-reminder on|off` switches the reminder for this run by setting
+`ASSOCIATE_FINISH_REMINDER`; an ambient value in the operator's environment is not
+inherited, and any other value is refused (exit `1`). Without the flag it is `on`
+when accuracy.json has a `finish_reminder` section, else `off`. When it is on and
+the run is about to stop with no accepted `finish` (and not ended refused, aborted
+or in a lane error), the extension sends the model the section's `text` once more
+and lets it answer, up to the section's `max` reminders. The mesh resident and
+spawned children get no variable and are never reminded.
+
+The result carries `finish_reminder_switch` (`on` or `off`, what the run had) and
+`finish_reminder`: `{"sent": n, "finish_followed": true|false|null}`.
+`finish_followed` is true when the model called `finish` after the latest reminder
+and null when none was sent; `sent` is null when the export's `reminder.json` is
+not what the extension writes. Each reminder is also a `reminder` line in the walk.
+The text form prints one `finish_reminder=` line. A run with no reminder sent
+leaves every export file as it would without the reminder. Built and unit-tested
+against a fake pi; no run of associate with the reminder has been measured.
+
 ## A run that times out
 
 `--timeout` (default 900 seconds) bounds the task turn. When pi does not finish
@@ -341,6 +363,7 @@ is empty.
     associate run --harness stub
     associate run "Summarize the gate" --check-mode enforce --json
     associate run "Summarize the gate" --support-score on --json
+    associate run "Summarize the gate" --finish-reminder off --json
     associate run --continue-from <prior export dir>
     associate run "Summarize the gate" --reasoning off --timeout 1500 --json
     associate run --export-root <dir> --session-id <id>
@@ -439,6 +462,14 @@ and closes with where the score came from.
 The support score is a separate signal from the quote check. It changes no count
 above, and an export without it (the switch off, or written before it existed)
 prints exactly what it printed before.
+
+## The finish reminder
+
+When the run was sent the finish reminder, the export holds `reminder.json`, and
+`associate check` adds `finish_reminder` (`{"sent", "finish_followed"}`) to its
+`--json` result and closes the text form with one `Finish reminder:` line (for
+example `sent 1; finish followed`). An export without `reminder.json` prints exactly
+what it printed before.
 
 ## Usage
 
@@ -694,10 +725,11 @@ _MEASURE = """\
 
 Runs a comparison of arms over tasks, follows it, and reports what it stored. An
 arm is a harness commit, a model, and optionally a check mode, a reasoning
-setting and a support-score setting. Every task runs for every arm and repeat,
-each against a fresh filtered clone of the task's repository without the answer key
-(`docs/accuracy`), and one graded result is stored per task, arm and repeat. A count
-here is a count of stored runs; it is never a score.
+setting, a support-score setting and a finish-reminder setting. Every task runs
+for every arm and repeat, each against a fresh filtered clone of the task's
+repository without the answer key (`docs/accuracy`), and one graded result is
+stored per task, arm and repeat. A count here is a count of stored runs; it is
+never a score.
 
 ## Usage
 
@@ -719,7 +751,8 @@ Every sub-verb takes `--json`.
 
 - `--arms FILE`: a JSON list of arms, each `{"name", "harness_commit", "model"}` and
   optionally `"check_mode"` (`report` or `enforce`), `"reasoning"` (`model-default`,
-  `on` or `off`) and `"support_score"` (`on` or `off`). An unknown key or a duplicate
+  `on` or `off`), `"support_score"` (`on` or `off`) and `"finish_reminder"` (`on` or
+  `off`). An unknown key or a duplicate
   name is refused with the reason. `harness_commit` is a commit id of 7 to 64
   hexadecimal characters; a branch or tag name is refused.
 - `"support_score"` is passed to every run of the arm as `associate run
@@ -727,6 +760,11 @@ Every sub-verb takes `--json`.
   commit's accuracy.json applies. Each stored record names the setting under
   `support_score`: `on`, `off` or `contract default`. That is what the run was asked
   to use, not a score and not a statement that anything was scored.
+- `"finish_reminder"` is passed to every run of the arm as `associate run
+  --finish-reminder`; an arm without it passes nothing and that commit's `associate
+  run` default applies. Each stored record names it under `finish_reminder`: `on`,
+  `off` or `contract default`. An arm that sets it on a harness commit whose
+  `associate run` has no `--finish-reminder` is refused before any run.
 - Before the first run the arms are checked. When they carry more than one
   support-score setting (an arm without one counts as a setting), each arm that sets
   it must have another arm with a different setting and the same model, reasoning,
@@ -833,7 +871,9 @@ repository, a pinned commit and the facts).
   arm: checklist facts marked as stated (n of that repository's facts), the answer
   source, the cap flag and how the run ended (finish accepted, ended without finish,
   or not recorded). After the runs it prints, per arm, how many runs ended without
-  `finish` (`without_finish` in `--json`). Such a run is graded like the others on its
+  `finish` (`without_finish` in `--json`) and how many were reminded to finish (a
+  run's `reminded`, from its result's `finish_reminder`; a reminded run's line says
+  "reminded to finish"). Such a run is graded like the others on its
   final message (first marking, sheet, statements counted false); the report says in
   one line that it handed back no checked facts. With no sheet written it says the
   hand count is not joined. Once

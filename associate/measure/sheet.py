@@ -114,6 +114,9 @@ _K_REPLY_CAP = "final_reply_cap"
 _K_BROAD_FINISHED = "finished"
 _K_WITHOUT_FINISH = "without_finish"
 _K_NOT_RECORDED = "finish_not_recorded"
+_K_REMINDED = "reminded"
+_K_REMINDER_NOT_RECORDED = "reminder_not_recorded"
+REMINDED_WORDS = "reminded to finish"
 NO_CHECKED_FACTS_LINE = (
     "A run that ended without finish is graded like the others (first marking, sheet, "
     "statements counted false) on its final message; it handed back no checked facts."
@@ -594,6 +597,7 @@ def run_rows(
                 _K_AT_CAP: bool(broad.get(_K_AT_CAP)),
                 _K_REPLY_CAP: broad.get(_K_REPLY_CAP),
                 _K_BROAD_FINISHED: _finished(broad),
+                _K_REMINDED: _reminded(broad),
                 _K_CONTAMINATED: (record.get("contamination") or {}).get(_K_CONTAMINATED) is True,
             }
         )
@@ -604,6 +608,32 @@ def _finished(broad: Mapping[str, Any]) -> bool | None:
     """Whether ``finish`` was accepted; None for a record stored before that was recorded."""
     value = broad.get(_K_BROAD_FINISHED)
     return value if isinstance(value, bool) else None
+
+
+def _reminded(broad: Mapping[str, Any]) -> bool | None:
+    """Whether the finish reminder was sent; None for a record that does not say."""
+    value = broad.get(_K_REMINDED)
+    return value if isinstance(value, bool) else None
+
+
+def reminded_counts(rows: Sequence[Mapping[str, Any]]) -> dict[str, dict[str, int]]:
+    """Per arm: its runs, those reminded to finish, those that do not say."""
+    counts: dict[str, dict[str, int]] = {}
+    for row in rows:
+        arm = counts.setdefault(
+            row["arm"], {_K_RUNS: 0, _K_REMINDED: 0, _K_REMINDER_NOT_RECORDED: 0}
+        )
+        arm[_K_RUNS] += 1
+        reminded = row.get(_K_REMINDED)
+        arm[_K_REMINDED] += 1 if reminded is True else 0
+        arm[_K_REMINDER_NOT_RECORDED] += 1 if reminded is None else 0
+    return dict(sorted(counts.items()))
+
+
+def _reminded_words(found: Mapping[str, int]) -> str:
+    unknown = found[_K_REMINDER_NOT_RECORDED]
+    tail = f" ({unknown} not recorded)" if unknown else ""
+    return f"; {found[_K_REMINDED]} of {found[_K_RUNS]} {REMINDED_WORDS}{tail}"
 
 
 def finish_counts(rows: Sequence[Mapping[str, Any]]) -> dict[str, dict[str, int]]:
@@ -621,11 +651,12 @@ def finish_counts(rows: Sequence[Mapping[str, Any]]) -> dict[str, dict[str, int]
 def _finish_lines(rows: Sequence[Mapping[str, Any]]) -> list[str]:
     lines = ["", "Runs that ended without finish (a count of runs, per arm):"]
     counts = finish_counts(rows)
+    reminded = reminded_counts(rows)
     for arm, found in counts.items():
         unknown = f" ({found[_K_NOT_RECORDED]} not recorded)" if found[_K_NOT_RECORDED] else ""
         lines.append(
             f"  arm {arm}: {found[_K_WITHOUT_FINISH]} of {found[_K_RUNS]} runs ended without "
-            f"finish{unknown}"
+            f"finish{unknown}{_reminded_words(reminded[arm])}"
         )
     if any(found[_K_WITHOUT_FINISH] for found in counts.values()):
         lines.append(NO_CHECKED_FACTS_LINE)
@@ -679,6 +710,8 @@ def _run_line(row: Mapping[str, Any]) -> str:
     cap = f"at the {row[_K_REPLY_CAP]}-character cap" if row[_K_AT_CAP] else "not at the cap"
     parts.append(f"answer from {row[_K_ANSWER_SOURCE]}, {cap}")
     parts.append(_FINISH_WORDS[row.get(_K_BROAD_FINISHED)])
+    if row.get(_K_REMINDED) is True:
+        parts.append(REMINDED_WORDS)
     whole = left_out(row, _K_FACTS_STATED)
     if whole is not None:
         parts.append(f"{whole} (left out of the rule)")

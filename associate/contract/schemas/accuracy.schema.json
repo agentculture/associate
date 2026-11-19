@@ -36,6 +36,17 @@
         }
       }
     },
+    "finish_reminder": {
+      "type": "object",
+      "description": "Settings for the finish reminder (deviation d3): what the extension sends a model whose task run is about to settle without an accepted finish, and how often. Optional: a file without it means no reminder. The range of `max` lives in validate.validate_accuracy.",
+      "additionalProperties": false,
+      "required": ["max", "text"],
+      "properties": {
+        "$comment": {"type": "string"},
+        "max": {"type": "integer", "description": "How many reminders one session may send (at least 1)."},
+        "text": {"type": "string", "pattern": "\\S", "description": "The reminder sent to the model, as written."}
+      }
+    },
     "source_kinds": {
       "type": "object",
       "description": "Tool name -> source kind of an entry that tool produces.",

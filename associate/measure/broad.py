@@ -251,6 +251,20 @@ def finish_accepted(result: Mapping[str, Any] | None) -> bool | None:
     return outcome == HANDBACK_ACCEPTED if isinstance(outcome, str) else None
 
 
+def was_reminded(result: Mapping[str, Any] | None) -> bool | None:
+    """Whether the run was sent the finish reminder, from the result's ``finish_reminder``.
+
+    True when at least one reminder was sent, false when none was, None when
+    the result does not say (no result, a harness from before the reminder, or
+    a reminder record the harness could not read).
+    """
+    record = (result or {}).get("finish_reminder")
+    sent = record.get("sent") if isinstance(record, Mapping) else None
+    if not isinstance(sent, int) or isinstance(sent, bool):
+        return None
+    return sent > 0
+
+
 def answer_origin(result: Mapping[str, Any] | None, source: str) -> dict[str, Any]:
     """Where the stored answer came from, whether it is cut, and whether the run finished.
 
@@ -259,13 +273,14 @@ def answer_origin(result: Mapping[str, Any] | None, source: str) -> dict[str, An
     cap, so whole), ``statements.json`` (the statements of the export, joined)
     or ``final_reply_capped``. ``at_cap`` is true only for the last: the answer
     is then the last ``FINAL_REPLY_CAP`` characters of a longer message.
-    ``finished`` is :func:`finish_accepted`.
+    ``finished`` is :func:`finish_accepted`, ``reminded`` :func:`was_reminded`.
     """
     return {
         "answer_source": source,
         "at_cap": source == answer_mod.SOURCE_FINAL_REPLY_CAPPED,
         "final_reply_cap": FINAL_REPLY_CAP,
         "finished": finish_accepted(result),
+        "reminded": was_reminded(result),
     }
 
 

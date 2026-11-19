@@ -201,6 +201,8 @@ CHECK_MODES = ("report", "enforce")
 SUPPORT_SCORE_CHOICES = ("on", "off")
 #: What a stored record says for an arm that does not set ``support_score``.
 SUPPORT_CONTRACT_DEFAULT = "contract default"
+#: ``finish_reminder`` values an arm may carry (deviation d3); absent passes nothing.
+FINISH_REMINDER_CHOICES = ("on", "off")
 EXTENSION_RELATIVE = Path(".pi") / "extensions" / "associate" / "index.ts"
 CONTRACT_DIR = "associate/contract"
 FACTS_FILE = "facts.json"
@@ -227,6 +229,7 @@ _PACKAGE_PROBE = "import associate; print(associate.__file__)"
 _FLAG_CHECK_MODE = "--check-mode"
 _FLAG_UNTRUSTED = "--untrusted-checkout"
 _FLAG_SUPPORT = "--support-score"
+_FLAG_REMINDER = "--finish-reminder"
 _UTF8 = "utf-8"
 _REV_PARSE = "rev-parse"
 
@@ -234,6 +237,7 @@ _K_REASONING = "reasoning"
 _K_CHECK_MODE = "check_mode"
 _K_UNTRUSTED = "untrusted_checkout"
 _K_SUPPORT = "support_score"
+_K_REMINDER = "finish_reminder"
 _K_HARNESS_COMMIT = "harness_commit"
 _K_PI_VERSION = "pi_version"
 _K_STATUS = "status"
@@ -270,7 +274,8 @@ class Arm:
     ``reasoning`` None and ``check_mode`` None pass nothing: the harness
     commit's own registry value and check mode apply. ``support_score`` None
     passes nothing either: the per-model switch in that commit's
-    ``accuracy.json`` applies.
+    ``accuracy.json`` applies. ``finish_reminder`` None passes nothing: that
+    commit's ``associate run`` default applies.
     """
 
     name: str
@@ -279,6 +284,7 @@ class Arm:
     check_mode: str | None = None
     reasoning: str | None = None
     support_score: str | None = None
+    finish_reminder: str | None = None
 
 
 @dataclass(frozen=True)
@@ -759,15 +765,23 @@ def _optional_flags(ctx: _Context, arm: Arm) -> list[tuple]:
     if arm.support_score is not None:
         value = _support_choice(arm.support_score)
         wanted.append((_K_SUPPORT, _FLAG_SUPPORT, [value], value))
+    if arm.finish_reminder is not None:
+        value = _fixed_choice(arm.finish_reminder, FINISH_REMINDER_CHOICES, _K_REMINDER)
+        wanted.append((_K_REMINDER, _FLAG_REMINDER, [value], value))
     return wanted
 
 
 def _support_choice(value: Any) -> str:
     """The member of the fixed set that *value* names; only that constant reaches a command line."""
-    for choice in SUPPORT_SCORE_CHOICES:
+    return _fixed_choice(value, SUPPORT_SCORE_CHOICES, _K_SUPPORT)
+
+
+def _fixed_choice(value: Any, choices: tuple[str, ...], setting: str) -> str:
+    """The member of *choices* that *value* names; only that constant reaches a command line."""
+    for choice in choices:
         if value == choice:
             return choice
-    raise RunnerError(f"{_K_SUPPORT} must be one of {SUPPORT_SCORE_CHOICES}, not {value!r}")
+    raise RunnerError(f"{setting} must be one of {choices}, not {value!r}")
 
 
 def _pi_setting(ctx: _Context, harness: _Harness) -> dict | None:
@@ -794,6 +808,7 @@ def _settings(ctx: _Context, arm: Arm, harness: _Harness) -> tuple[list[str], di
         _K_REASONING: arm.reasoning,
         _K_CHECK_MODE: arm.check_mode,
         _K_SUPPORT: arm.support_score,
+        _K_REMINDER: arm.finish_reminder,
         _K_UNTRUSTED: ctx.untrusted_checkout,
         "timeout_s": ctx.timeout_s,
         "harness": ctx.harness,
@@ -813,8 +828,9 @@ def _settings(ctx: _Context, arm: Arm, harness: _Harness) -> tuple[list[str], di
 def _arm_identity(arm: Arm, harness: _Harness) -> dict[str, Any]:
     """What a stored record and a plan name as their arm.
 
-    ``support_score`` is a key only when the arm sets it, so a record stored
-    before arms could carry the setting still matches the same arm.
+    ``support_score`` and ``finish_reminder`` are keys only when the arm sets
+    them, so a record stored before arms could carry the setting still matches
+    the same arm.
     """
     identity = {
         "name": arm.name,
@@ -825,6 +841,8 @@ def _arm_identity(arm: Arm, harness: _Harness) -> dict[str, Any]:
     }
     if arm.support_score is not None:
         identity[_K_SUPPORT] = arm.support_score
+    if arm.finish_reminder is not None:
+        identity[_K_REMINDER] = arm.finish_reminder
     return identity
 
 
@@ -1218,6 +1236,7 @@ def _base_record(
         "model": arm_id["model"],
         _K_HARNESS_COMMIT: arm_id[_K_HARNESS_COMMIT],
         _K_SUPPORT: arm_id.get(_K_SUPPORT) or SUPPORT_CONTRACT_DEFAULT,
+        _K_REMINDER: arm_id.get(_K_REMINDER) or SUPPORT_CONTRACT_DEFAULT,
         _K_ATTEMPT: attempt,
         _K_HISTORY: history,
         "stored_at": time.time(),
@@ -1403,6 +1422,8 @@ def _arm_problems(arm: Arm) -> list[str]:
         problems.append(f"arm {arm.name}: check_mode must be one of {CHECK_MODES}")
     if arm.support_score is not None and arm.support_score not in SUPPORT_SCORE_CHOICES:
         problems.append(f"arm {arm.name}: {_K_SUPPORT} must be one of {SUPPORT_SCORE_CHOICES}")
+    if arm.finish_reminder is not None and arm.finish_reminder not in FINISH_REMINDER_CHOICES:
+        problems.append(f"arm {arm.name}: {_K_REMINDER} must be one of {FINISH_REMINDER_CHOICES}")
     return problems
 
 
@@ -1467,18 +1488,26 @@ def support_score_problems(
     return [problem for problem in problems if problem]
 
 
+#: The arm settings whose flag a harness commit must have when an arm sets them.
+_FLAGGED_SETTINGS = ((_K_SUPPORT, _FLAG_SUPPORT), (_K_REMINDER, _FLAG_REMINDER))
+
+
 def _flag_problems(arms: Sequence[Arm], commits: Mapping[str, str], prepared: Mapping) -> list[str]:
-    """Arms that set the support-score setting on a harness commit whose CLI lacks the flag."""
+    """Arms that set the support-score or finish-reminder setting on a harness commit whose
+    CLI lacks the flag."""
     problems = []
     for arm in arms:
         harness = prepared[commits[arm.harness_commit]]
-        if arm.support_score is None or harness.error is not None:
+        if harness.error is not None:
             continue
-        if _FLAG_SUPPORT not in harness.flags:
+        for setting, flag in _FLAGGED_SETTINGS:
+            value = getattr(arm, setting)
+            if value is None or flag in harness.flags:
+                continue
             problems.append(
-                f"arm {arm.name} sets {_K_SUPPORT} to {arm.support_score}, but `associate run` "
-                f"at its harness commit {harness.commit[:12]} has no {_FLAG_SUPPORT}; leave "
-                f"{_K_SUPPORT} out of that arm or pin a commit that has the flag"
+                f"arm {arm.name} sets {setting} to {value}, but `associate run` "
+                f"at its harness commit {harness.commit[:12]} has no {flag}; leave "
+                f"{setting} out of that arm or pin a commit that has the flag"
             )
     return problems
 
