@@ -1,0 +1,692 @@
+{
+  "slug": "associate-decider-fact-score",
+  "title": "associate decider fact score",
+  "frame_slug": "associate-decider-fact-score",
+  "schema_version": 5,
+  "status": "drafting",
+  "created": "2026-11-19T04:36:30Z",
+  "updated": "2026-11-19T04:37:46Z",
+  "targets": [
+    {
+      "id": "c1",
+      "kind": "announcement",
+      "text": "associate scores each reported fact with the decider: for every fact whose quote was found, it asks whether the quote supports the value and records the answer beside the quote check, so a reader and the model itself can tell a backed claim from a merely cited one",
+      "deferred": false,
+      "deferred_reason": ""
+    },
+    {
+      "id": "h19",
+      "kind": "honesty",
+      "text": "a run with the score switched on leaves a score or a not-scored mark for every quote-found fact, in a field of its own",
+      "deferred": false,
+      "deferred_reason": ""
+    },
+    {
+      "id": "c2",
+      "kind": "requirement",
+      "text": "at finish, after the quote check, the extension asks the decider one question per fact that passed the quote check (does the quote, on its own, state or directly show the value) and stores the score per fact in check.json and a count in report.json under their own names; the score never enters accepted, the refusal list, or the passed, refused and unchecked counts",
+      "deferred": false,
+      "deferred_reason": ""
+    },
+    {
+      "id": "h11",
+      "kind": "honesty",
+      "text": "for a hand-back with a fact whose quote is found, check.json holds a score for that fact and report.json a count of scored facts, while accepted, the refusal list and the passed, refused and unchecked counts are byte-identical to a run with the score switched off",
+      "deferred": false,
+      "deferred_reason": ""
+    },
+    {
+      "id": "c3",
+      "kind": "requirement",
+      "text": "the score is fetched by a small client of its own, not by the gate's evaluate path: no Super tier, no read-only fallback, no gate id and no gate line in the walk; a missing key, timeout, non-2xx or malformed answer is recorded as not scored and never as passed, and finish still writes all its files",
+      "deferred": false,
+      "deferred_reason": ""
+    },
+    {
+      "id": "h12",
+      "kind": "honesty",
+      "text": "with the decider unreachable, timing out, answering non-2xx or answering malformed, finish still writes facts.json, check.json, report.json and answer.md, each fact is recorded as not scored, and the walk gains no gate line",
+      "deferred": false,
+      "deferred_reason": ""
+    },
+    {
+      "id": "c4",
+      "kind": "requirement",
+      "text": "the question wording, the cut-off, the timeout and a per-model on/off switch for the score live in accuracy.json and its schema, and nowhere in code",
+      "deferred": false,
+      "deferred_reason": ""
+    },
+    {
+      "id": "h13",
+      "kind": "honesty",
+      "text": "a test fails if the question wording, the cut-off or the timeout appears as a literal in the extension's TypeScript or in associate's Python",
+      "deferred": false,
+      "deferred_reason": ""
+    },
+    {
+      "id": "c5",
+      "kind": "requirement",
+      "text": "the Python re-check copies the per-fact score from the export with a label naming the extension as its source, as it does for unchecked_text; it never calls the decider, and an export without the score still loads",
+      "deferred": false,
+      "deferred_reason": ""
+    },
+    {
+      "id": "h14",
+      "kind": "honesty",
+      "text": "associate run --json and associate check show the score copied from the export with its source label, the Python side makes no network call, and an export written before this change loads without error",
+      "deferred": false,
+      "deferred_reason": ""
+    },
+    {
+      "id": "c6",
+      "kind": "requirement",
+      "text": "check_quote returns the support score for a quote and value as one added key beside the matcher verdict, so the model can check a claim before it hands back; the existing keys do not change",
+      "deferred": false,
+      "deferred_reason": ""
+    },
+    {
+      "id": "h15",
+      "kind": "honesty",
+      "text": "check_quote returns the same verdict and nearest text as before for the same inputs, plus the new key, and reports not scored when the decider cannot be reached",
+      "deferred": false,
+      "deferred_reason": ""
+    },
+    {
+      "id": "c7",
+      "kind": "requirement",
+      "text": "the rendered answer marks each fact with both signals separately: quote found, and whether the quote supports the value with its score, or not scored",
+      "deferred": false,
+      "deferred_reason": ""
+    },
+    {
+      "id": "h16",
+      "kind": "honesty",
+      "text": "answer.md shows, for a scored fact, both markers as separate text, and never the word accuracy",
+      "deferred": false,
+      "deferred_reason": ""
+    },
+    {
+      "id": "c8",
+      "kind": "boundary",
+      "text": "checkHandback, the matcher and their shared vectors stay pure and unchanged in behaviour: no network call is added inside them",
+      "deferred": false,
+      "deferred_reason": ""
+    },
+    {
+      "id": "h17",
+      "kind": "honesty",
+      "text": "the shared matcher and hand-back vectors pass unchanged on both sides, and a test fails if lib/facts.ts or lib/matcher.ts imports a module that performs a network call",
+      "deferred": false,
+      "deferred_reason": ""
+    },
+    {
+      "id": "c9",
+      "kind": "boundary",
+      "text": "no model is moved to enforce mode by this work, and no refusal is made on the decider score; the score is report-only until a live run in report mode is recorded",
+      "deferred": false,
+      "deferred_reason": ""
+    },
+    {
+      "id": "h18",
+      "kind": "honesty",
+      "text": "accuracy.json still lists every model in report mode, and no code path refuses or retries a hand-back because of a score",
+      "deferred": false,
+      "deferred_reason": ""
+    },
+    {
+      "id": "c15",
+      "kind": "audience",
+      "text": "the operator and any caller reading a run's answer, who need to know which facts are backed by their quote; and the model during a run, which can check a claim before handing it back",
+      "deferred": false,
+      "deferred_reason": ""
+    },
+    {
+      "id": "h1",
+      "kind": "honesty",
+      "text": "the rendered answer and the check_quote result each show the score in words a reader can act on without knowing what the decider is",
+      "deferred": false,
+      "deferred_reason": ""
+    },
+    {
+      "id": "c16",
+      "kind": "before_state",
+      "text": "today the harness checks only that a fact's quote appears in the result it cites; it cannot tell whether the quote supports the value, so a fact with a real quote and a wrong value passes; an offline replay on 85 real facts showed the decider separating true pairs from planted wrong ones (issue #29), but nothing in the harness uses it",
+      "deferred": false,
+      "deferred_reason": ""
+    },
+    {
+      "id": "h2",
+      "kind": "honesty",
+      "text": "the replay numbers quoted here match issue #29",
+      "deferred": false,
+      "deferred_reason": ""
+    },
+    {
+      "id": "c17",
+      "kind": "after_state",
+      "text": "a finished run's files say, for each fact whose quote was found, whether the decider judged the quote to support the value, with the score, or that it was not scored; the model can get the same judgement during the run from check_quote; nothing is refused on it",
+      "deferred": false,
+      "deferred_reason": ""
+    },
+    {
+      "id": "h3",
+      "kind": "honesty",
+      "text": "one live run in report mode on worker and one on cortex each leave a check.json in which every quote-found fact is either scored or marked not scored",
+      "deferred": false,
+      "deferred_reason": ""
+    },
+    {
+      "id": "c18",
+      "kind": "why_it_matters",
+      "text": "it is the first check of whether a claim follows from its evidence, not only whether the evidence exists; it lets the agent strengthen its own claims before hand-back and gives the operator a second, independent signal on each fact",
+      "deferred": false,
+      "deferred_reason": ""
+    },
+    {
+      "id": "h4",
+      "kind": "honesty",
+      "text": "the measurement in the last success signal reports whether answers were more often correct with the score than without it",
+      "deferred": false,
+      "deferred_reason": ""
+    },
+    {
+      "id": "c19",
+      "kind": "success_signal",
+      "text": "on a labelled set of at least 300 real value-and-quote pairs, labelled by two raters, the decider score at the contract cut-off passes at least 90% of the pairs both raters call supported and at most 10% of the pairs both call unsupported; the set and the labels are committed",
+      "deferred": false,
+      "deferred_reason": ""
+    },
+    {
+      "id": "h5",
+      "kind": "honesty",
+      "text": "the two percentages are computed by a committed script from the committed labels and scores",
+      "deferred": false,
+      "deferred_reason": ""
+    },
+    {
+      "id": "c20",
+      "kind": "success_signal",
+      "text": "on one broad explanation task per repository, on six repositories (culture, culture-rules, colleague, associate, coherence-cli, workledger-cli, each pinned to a commit), run at least 3 times per repository on worker with the score switched off and at least 3 times with it on, each run is reported with two counts: how many of that repository's checked facts it states correctly (from a checklist of at least 8 facts per repository, each checked twice independently before the first run), and how many of its statements are false by hand-grading against the repository; counts are reported per run and not pooled into one percentage, the rule for what difference is called a change is committed before the first run, and the result is stated whichever way it comes out",
+      "deferred": false,
+      "deferred_reason": ""
+    },
+    {
+      "id": "h6",
+      "kind": "honesty",
+      "text": "the arm is run with the same tasks, models, reasoning setting and repeats as the arm it is compared with",
+      "deferred": false,
+      "deferred_reason": ""
+    },
+    {
+      "id": "h25",
+      "kind": "honesty",
+      "text": "the person counting false statements does not see which arm a run came from until all runs are graded, and every statement counted as false is recorded with the file and line that contradicts it",
+      "deferred": false,
+      "deferred_reason": ""
+    },
+    {
+      "id": "c21",
+      "kind": "requirement",
+      "text": "the cut-off in the contract is set from the labelled set, and the labelled set, the question wording and the decider's served model are recorded with it, so a later change of any of them is visible",
+      "deferred": false,
+      "deferred_reason": ""
+    },
+    {
+      "id": "h7",
+      "kind": "honesty",
+      "text": "the note names the set size, the raters, the wording, the cut-off and the served model read from a live response",
+      "deferred": false,
+      "deferred_reason": ""
+    },
+    {
+      "id": "c22",
+      "kind": "requirement",
+      "text": "scoring calls are bounded: a per-fact timeout and a per-hand-back cap on the number of scored facts and on total scoring time, all from the contract; facts beyond the cap are recorded as not scored",
+      "deferred": false,
+      "deferred_reason": ""
+    },
+    {
+      "id": "h8",
+      "kind": "honesty",
+      "text": "a hand-back with more facts than the cap leaves the extra facts marked not scored, and finish returns within the configured total time when the decider is slow",
+      "deferred": false,
+      "deferred_reason": ""
+    },
+    {
+      "id": "c23",
+      "kind": "boundary",
+      "text": "the score is never called accuracy and never folded into the quote-found counts; a low score is shown to the model as information, not as a refusal",
+      "deferred": false,
+      "deferred_reason": ""
+    },
+    {
+      "id": "h9",
+      "kind": "honesty",
+      "text": "no user-facing string or document produced by this work describes the score or its count as accuracy",
+      "deferred": false,
+      "deferred_reason": ""
+    },
+    {
+      "id": "c24",
+      "kind": "boundary",
+      "text": "nothing in lobes-cli is changed; anything the decider would need (calibration for this use, several states per request, priority between callers) is filed as an issue on that repository",
+      "deferred": false,
+      "deferred_reason": ""
+    },
+    {
+      "id": "h10",
+      "kind": "honesty",
+      "text": "no commit of this work touches the lobes-cli repository, and each need found is an issue there",
+      "deferred": false,
+      "deferred_reason": ""
+    },
+    {
+      "id": "c25",
+      "kind": "requirement",
+      "text": "the value and quote are passed through the policy redaction filter before they are sent to the decider, as gate state is",
+      "deferred": false,
+      "deferred_reason": ""
+    },
+    {
+      "id": "h20",
+      "kind": "honesty",
+      "text": "a quote containing a string the policy redacts reaches the decider with that string replaced",
+      "deferred": false,
+      "deferred_reason": ""
+    },
+    {
+      "id": "c26",
+      "kind": "requirement",
+      "text": "the labelled set includes quotes that carry text addressed to the scorer (for example an instruction to answer yes), and the share of those that score above the cut-off is reported; the score is not offered as protection against such text until that share is known",
+      "deferred": false,
+      "deferred_reason": ""
+    },
+    {
+      "id": "h21",
+      "kind": "honesty",
+      "text": "the calibration note reports the count and share for that group separately",
+      "deferred": false,
+      "deferred_reason": ""
+    },
+    {
+      "id": "c27",
+      "kind": "requirement",
+      "text": "a score is asked once per distinct value and quote in a session and reused across retry rounds and the rewrite after the final message",
+      "deferred": false,
+      "deferred_reason": ""
+    },
+    {
+      "id": "h22",
+      "kind": "honesty",
+      "text": "a hand-back refused and answered again with the same fact produces one decider request for it, counted by a fake decider in a test",
+      "deferred": false,
+      "deferred_reason": ""
+    },
+    {
+      "id": "c28",
+      "kind": "requirement",
+      "text": "a fact with an empty value, or whose value and quote exceed the decider's input limit, is recorded as not scored with the reason, and is never sent cut short",
+      "deferred": false,
+      "deferred_reason": ""
+    },
+    {
+      "id": "h23",
+      "kind": "honesty",
+      "text": "a fact with an over-long quote is marked not scored with a size reason and the fake decider receives no request for it",
+      "deferred": false,
+      "deferred_reason": ""
+    },
+    {
+      "id": "c29",
+      "kind": "requirement",
+      "text": "the prompts tell the model that check_quote is how it learns the support score during a run; in report mode the score shown after an accepted hand-back is for the caller, since the run has ended",
+      "deferred": false,
+      "deferred_reason": ""
+    },
+    {
+      "id": "h24",
+      "kind": "honesty",
+      "text": "the model prompts name check_quote for this, and no text promises the model a second chance in report mode",
+      "deferred": false,
+      "deferred_reason": ""
+    }
+  ],
+  "tasks": [
+    {
+      "id": "t1",
+      "summary": "Contract settings for the support score",
+      "origin": "llm",
+      "status": "proposed",
+      "acceptance_criteria": [
+        "accuracy.json holds the question wording, the cut-off, the per-fact timeout, the cap on scored facts, the total scoring time and a per-model on/off switch, each declared in accuracy.schema.json and read through lib/contract.ts and the Python contract validator",
+        "report.schema.json declares the new count of scored facts under its own name",
+        "a test fails if the question wording, the cut-off or the timeout appears as a literal in the extension's TypeScript or in associate's Python",
+        "every model is still in report mode and the switch is off for every model until the labelled set fixes the cut-off"
+      ],
+      "deps": [],
+      "covers": [
+        "c4",
+        "h13",
+        "c9",
+        "h18"
+      ],
+      "instruction": "Files: associate/contract/accuracy.json, schemas/accuracy.schema.json, schemas/report.schema.json, associate/contract/validate.py, .pi/extensions/associate/lib/contract.ts and their tests. The cut-off is a first value marked tentative in the file's comment; task t9 replaces it. gate.json is not touched and stays version 9. Bump accuracy.json's version only if the schema change makes an older file invalid, and say which in the changelog."
+    },
+    {
+      "id": "t2",
+      "summary": "The support-score client",
+      "origin": "llm",
+      "status": "proposed",
+      "acceptance_criteria": [
+        "a new module asks the decider one yes/no question for one value and quote and returns a score or a not-scored result with a reason; it never calls createGate().evaluate, writes no gate line and has no Super tier or read-only fallback",
+        "a missing key, a timeout, a non-2xx answer and a malformed answer each return not scored, never a pass",
+        "value and quote pass through the policy redaction filter before sending; a test shows a redacted string replaced in the request a fake decider receives",
+        "an empty value, or a value and quote over the decider's input limit, returns not scored with a size or empty reason and the fake decider receives no request",
+        "a batch call honours the cap on scored facts and the total time from the contract; facts beyond either are returned as not scored, and the call returns within the total time when the fake decider is slow",
+        "the same value and quote asked twice in one session produce one request"
+      ],
+      "deps": [
+        "t1"
+      ],
+      "covers": [
+        "c3",
+        "h12",
+        "c22",
+        "h8",
+        "c25",
+        "h20",
+        "c28",
+        "h23"
+      ],
+      "instruction": "New file .pi/extensions/associate/lib/support.ts with its own test file; reuse buildClefRequest and deciderUrl from lib/gate.ts or copy their pattern, without changing gate.ts behaviour. All settings come from the contract (t1). Tests use a fake decider only; no live call."
+    },
+    {
+      "id": "t3",
+      "summary": "Score at finish, stored beside the quote check",
+      "origin": "llm",
+      "status": "proposed",
+      "acceptance_criteria": [
+        "after checkHandback, finish scores each fact that passed the quote check and writes the score or a not-scored mark per fact in check.json in a field of its own, and a count in report.json",
+        "accepted, the refusal list and the passed, refused and unchecked counts are byte-identical to the same hand-back with the score switched off",
+        "the message_end rewrite keeps the scores from the saved object and sends no new request; a hand-back refused and answered again with the same fact produces one decider request, counted by a fake decider",
+        "with the fake decider failing in each of the four ways, finish still writes facts.json, check.json, report.json and answer.md",
+        "the shared matcher and hand-back vectors pass unchanged, and a test fails if lib/facts.ts or lib/matcher.ts imports a module that performs a network call",
+        "no code path refuses or retries a hand-back because of a score"
+      ],
+      "deps": [
+        "t1",
+        "t2"
+      ],
+      "covers": [
+        "c1",
+        "c2",
+        "h11",
+        "h19",
+        "c8",
+        "h17",
+        "c27",
+        "h22",
+        "c17"
+      ],
+      "instruction": "Files: .pi/extensions/associate/index.ts and lib/handback.ts only where the saved object is built, plus tests. Do not edit lib/facts.ts or lib/matcher.ts. With the switch off, nothing is sent and the files carry no score field."
+    },
+    {
+      "id": "t4",
+      "summary": "check_quote returns the support score",
+      "origin": "llm",
+      "status": "proposed",
+      "acceptance_criteria": [
+        "check_quote returns the same verdict and nearest text as before for the same inputs, plus one added key holding the score or a not-scored reason",
+        "the added key is present only when a value is given and the model's switch is on; with the decider unreachable it reports not scored",
+        "the wording of the added key can be acted on by a reader who does not know what the decider is"
+      ],
+      "deps": [
+        "t3"
+      ],
+      "covers": [
+        "c6",
+        "h15"
+      ],
+      "instruction": "Files: .pi/extensions/associate/tools/check.ts and its test; check.test.ts lines pinning the existing keys must still pass unedited. Uses the client from t2 and its session reuse."
+    },
+    {
+      "id": "t5",
+      "summary": "The rendered answer shows both signals",
+      "origin": "llm",
+      "status": "proposed",
+      "acceptance_criteria": [
+        "answer.md shows, for a scored fact, the quote-found marker and the support marker with its score as separate text, and not scored with its reason otherwise",
+        "the text never contains the word accuracy and reads without knowledge of the decider",
+        "with the switch off answer.md is byte-identical to today's"
+      ],
+      "deps": [
+        "t3"
+      ],
+      "covers": [
+        "c7",
+        "h16",
+        "h1",
+        "c15"
+      ],
+      "instruction": "Files: .pi/extensions/associate/lib/render.ts (factLine) and its tests."
+    },
+    {
+      "id": "t6",
+      "summary": "Python side copies the score from the export",
+      "origin": "llm",
+      "status": "proposed",
+      "acceptance_criteria": [
+        "associate run --json and associate check show each fact's score copied from the export's check.json with a label naming the extension as its source",
+        "the Python side makes no network call for it, shown by a test",
+        "an export written before this change, and one written with the switch off, load without error and show no score"
+      ],
+      "deps": [
+        "t3"
+      ],
+      "covers": [
+        "c5",
+        "h14"
+      ],
+      "instruction": "The re-check now lives in evidence-cli. Do the copy in associate (associate/accuracy/__init__.py or the run and check commands), not in evidence-cli; if that proves impossible, stop and report, do not change evidence-cli. Update associate/explain/catalog.py and learn where the output is described."
+    },
+    {
+      "id": "t7",
+      "summary": "A per-run switch for the score, usable as a measurement arm",
+      "origin": "llm",
+      "status": "proposed",
+      "acceptance_criteria": [
+        "associate run --support-score on|off overrides the model's contract switch for one run through one environment variable set by the launcher and never inherited; any other value is refused",
+        "an arm in a measure arms file can set it, and the stored record of each run names the setting used",
+        "two arms that differ only in this setting run the same tasks, model, reasoning setting and repeats, checked by the runner before the first run"
+      ],
+      "deps": [
+        "t1"
+      ],
+      "covers": [
+        "h6"
+      ],
+      "instruction": "Files: associate/cli/_commands/run.py, associate/harness/pi.py, associate/measure/runner.py, the extension's reader of the variable, explain catalog, learn, and the variable table in CLAUDE.md. Follow the pattern of --check-mode and ASSOCIATE_CHECK_MODE."
+    },
+    {
+      "id": "t8",
+      "summary": "Prompts name check_quote as the way to learn the score",
+      "origin": "llm",
+      "status": "proposed",
+      "acceptance_criteria": [
+        "each model prompt that offers check_quote says it returns whether the quote supports the value, and that the model should use it before handing back",
+        "no prompt text promises the model a second chance after finish in report mode; a test reads the prompt files for both"
+      ],
+      "deps": [
+        "t4"
+      ],
+      "covers": [
+        "c29",
+        "h24"
+      ],
+      "instruction": "Files: .pi/extensions/associate/prompts/ and AGENTS.md if it describes check_quote. Keep the change to a few lines per prompt."
+    },
+    {
+      "id": "t9",
+      "summary": "Labelled set, cut-off and calibration note",
+      "origin": "llm",
+      "status": "proposed",
+      "acceptance_criteria": [
+        "at least 300 real value-and-quote pairs from stored exports are committed with two independent labels each; who the raters were is stated",
+        "the set includes a separately reported group of quotes carrying text addressed to the scorer, and planted wrong values are reported apart from real ones",
+        "a committed script computes, from the committed labels and scores, the share passed of pairs both raters call supported and of pairs both call unsupported",
+        "the contract cut-off is set from the set, and docs/notes/ gains a note naming the set size, the raters, the wording, the cut-off, both shares, and the served model read from a live response",
+        "the result is reported whether or not it meets 90% and 10%; if it does not, the switch stays off and the operator decides",
+        "the replay numbers quoted in the spec are checked against issue #29"
+      ],
+      "deps": [
+        "t1"
+      ],
+      "covers": [
+        "c19",
+        "h5",
+        "c21",
+        "h7",
+        "c26",
+        "h21",
+        "c16",
+        "h2"
+      ],
+      "instruction": "Run by the main agent. Pairs come from the two pilots, the earlier live runs and harvest runs on the six repositories; the dropped comparison supplies none (risk r1). Two raters label without seeing each other's labels or the scores."
+    },
+    {
+      "id": "t10",
+      "summary": "Six broad tasks with twice-checked fact checklists",
+      "origin": "llm",
+      "status": "proposed",
+      "acceptance_criteria": [
+        "one broad explanation task per repository for culture, culture-rules, colleague, associate, coherence-cli and workledger-cli, each pinned to a commit and stored in a committed file",
+        "each repository has a checklist of at least 8 facts a good explanation should state, each with the file and line that shows it, and each checked independently by a second checker who did not see the first one's answer",
+        "a fact the two checkers disagree on is dropped or settled by the operator, and the file records which",
+        "the sibling repositories are read as pinned clones only; no file in them is changed"
+      ],
+      "deps": [],
+      "covers": [
+        "h4"
+      ],
+      "instruction": "New files under docs/accuracy/ beside tasks.json; reuse facts from the 24 short tasks where they fit. Pins: workledger-cli 71ef513, coherence-cli a52f7b5, and origin/main of the others on the day the checklists are written."
+    },
+    {
+      "id": "t11",
+      "summary": "Grading tools for the broad tasks",
+      "origin": "llm",
+      "status": "proposed",
+      "acceptance_criteria": [
+        "associate measure accepts a broad task and stores each run's answer; a report lists, per run, how many checklist facts the answer states correctly, never pooled into one percentage",
+        "a grading sheet command writes the runs' statements in shuffled order under ids that hide the arm; the key that maps ids to arms is written to a separate file",
+        "each statement counted false needs a contradicting file and line before the sheet is accepted",
+        "the report joins sheet and key only when every run is graded, and prints both counts per run",
+        "a real run is refused while the committed difference rule for broad tasks is missing or modified"
+      ],
+      "deps": [
+        "t10",
+        "t7"
+      ],
+      "covers": [
+        "h25"
+      ],
+      "instruction": "Files: associate/measure/ and its tests and command docs. The checklist count is a first marking by the existing grader per fact; the main agent reads every marking by hand."
+    },
+    {
+      "id": "t12",
+      "summary": "Live runs and the measurement",
+      "origin": "llm",
+      "status": "proposed",
+      "acceptance_criteria": [
+        "one live run in report mode on worker and one on cortex with the score on each leave a check.json in which every quote-found fact is scored or marked not scored",
+        "one trial run per repository fixes the time limit before the difference rule is committed",
+        "at least 3 runs per repository on worker with the score off and 3 with it on, same task, model, reasoning setting and repeats",
+        "false statements are counted blind with file and line; the note reports both counts per run and states the result whichever way it comes out, including whether answers were more often correct with the score"
+      ],
+      "deps": [
+        "t5",
+        "t6",
+        "t8",
+        "t9",
+        "t11"
+      ],
+      "covers": [
+        "c20",
+        "h3",
+        "c18"
+      ],
+      "instruction": "Run by the main agent, in the background. The difference rule is proposed to the operator and committed before the first measured run."
+    },
+    {
+      "id": "t13",
+      "summary": "Docs, wording check, lobes-cli issues and release",
+      "origin": "llm",
+      "status": "proposed",
+      "acceptance_criteria": [
+        "a test fails if a user-facing string or document added by this work calls the score or its count accuracy",
+        "no commit touches lobes-cli; each need found (calibration for this use, several states per request, priority between callers, naming the served model) is an issue on that repository",
+        "CLAUDE.md, docs/notes/accuracy-checks.md and the changelog say what was built and what was measured, and the version is bumped"
+      ],
+      "deps": [
+        "t12"
+      ],
+      "covers": [
+        "c23",
+        "h9",
+        "c24",
+        "h10"
+      ],
+      "instruction": "Run by the main agent with the user's go-ahead before filing issues on lobes-cli."
+    }
+  ],
+  "risks": [
+    {
+      "id": "r1",
+      "text": "the labelled set was to be built from the comparison's exports, and the comparison is not run; the pilots and earlier live runs hold roughly 150 facts, so harvest runs are needed to reach 300",
+      "kind": "unknown_nonblocking",
+      "task_id": "t9",
+      "resolved": false,
+      "resolution": ""
+    },
+    {
+      "id": "r2",
+      "text": "the two raters of the labelled set are model subagents unless the operator labels; the note must say so",
+      "kind": "unknown_nonblocking",
+      "task_id": "t9",
+      "resolved": false,
+      "resolution": ""
+    },
+    {
+      "id": "r3",
+      "text": "in report mode the score reaches the model only through check_quote, so the on arm can differ from the off arm only if the model calls check_quote with a value",
+      "kind": "unknown_nonblocking",
+      "task_id": "t12",
+      "resolved": false,
+      "resolution": ""
+    },
+    {
+      "id": "r4",
+      "text": "a broad explanation of a 200,000-line repository may hit the time limit or the model's context",
+      "kind": "unknown_nonblocking",
+      "task_id": "t12",
+      "resolved": false,
+      "resolution": ""
+    },
+    {
+      "id": "r5",
+      "text": "18 runs per arm in total, 3 per repository, can show only a large difference",
+      "kind": "unknown_nonblocking",
+      "task_id": "t12",
+      "resolved": false,
+      "resolution": ""
+    },
+    {
+      "id": "r6",
+      "text": "the Python re-check lives in evidence-cli; if the score cannot be copied on associate's side, evidence-cli needs a release first",
+      "kind": "unknown_nonblocking",
+      "task_id": "t6",
+      "resolved": false,
+      "resolution": ""
+    }
+  ],
+  "obligations": []
+}
