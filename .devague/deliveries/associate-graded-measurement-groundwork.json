@@ -2,7 +2,7 @@
   "plan_slug": "associate-graded-measurement-groundwork",
   "schema_version": 2,
   "created": "2026-11-18T17:08:42Z",
-  "updated": "2026-11-19T04:59:19Z",
+  "updated": "2026-11-19T05:32:03Z",
   "deviations": [
     {
       "id": "d1",
@@ -102,7 +102,7 @@
         "commit": "208935e"
       },
       "origin": "llm",
-      "status": "proposed",
+      "status": "approved",
       "superseded": false,
       "seq": 8
     },
@@ -121,7 +121,7 @@
         "commit": "208935e"
       },
       "origin": "llm",
-      "status": "proposed",
+      "status": "approved",
       "superseded": false,
       "seq": 9
     },
@@ -140,7 +140,7 @@
         "commit": "208935e"
       },
       "origin": "llm",
-      "status": "proposed",
+      "status": "approved",
       "superseded": false,
       "seq": 10
     },
@@ -159,7 +159,7 @@
         "commit": "208935e"
       },
       "origin": "llm",
-      "status": "proposed",
+      "status": "approved",
       "superseded": false,
       "seq": 11
     },
@@ -178,7 +178,7 @@
         "commit": "208935e"
       },
       "origin": "llm",
-      "status": "proposed",
+      "status": "approved",
       "superseded": false,
       "seq": 12
     },
@@ -197,7 +197,7 @@
         "commit": "208935e"
       },
       "origin": "llm",
-      "status": "proposed",
+      "status": "approved",
       "superseded": false,
       "seq": 13
     },
@@ -216,7 +216,7 @@
         "commit": "208935e"
       },
       "origin": "llm",
-      "status": "proposed",
+      "status": "approved",
       "superseded": false,
       "seq": 14
     },
@@ -235,7 +235,7 @@
         "commit": "208935e"
       },
       "origin": "llm",
-      "status": "proposed",
+      "status": "approved",
       "superseded": false,
       "seq": 15
     },
@@ -254,7 +254,7 @@
         "commit": "208935e"
       },
       "origin": "llm",
-      "status": "proposed",
+      "status": "approved",
       "superseded": false,
       "seq": 16
     },
@@ -273,7 +273,7 @@
         "commit": "208935e"
       },
       "origin": "llm",
-      "status": "proposed",
+      "status": "approved",
       "superseded": false,
       "seq": 17
     },
@@ -292,7 +292,7 @@
         "commit": "208935e"
       },
       "origin": "llm",
-      "status": "proposed",
+      "status": "approved",
       "superseded": false,
       "seq": 18
     },
@@ -311,7 +311,7 @@
         "commit": "208935e"
       },
       "origin": "llm",
-      "status": "proposed",
+      "status": "approved",
       "superseded": false,
       "seq": 19
     },
@@ -330,7 +330,7 @@
         "commit": "208935e"
       },
       "origin": "llm",
-      "status": "proposed",
+      "status": "approved",
       "superseded": false,
       "seq": 20
     },
@@ -349,7 +349,7 @@
         "commit": "208935e"
       },
       "origin": "llm",
-      "status": "proposed",
+      "status": "approved",
       "superseded": false,
       "seq": 21
     }
@@ -364,7 +364,7 @@
       ],
       "evidence_refs": [],
       "origin": "llm",
-      "status": "proposed",
+      "status": "approved",
       "superseded": false
     }
   ],

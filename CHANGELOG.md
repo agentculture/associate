@@ -5,6 +5,12 @@ All notable changes to this project will be documented in this file.
 Format follows [Keep a Changelog](https://keepachangelog.com/). This project
 adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.13.1] - 2026-11-19
+
+### Added
+
+- The delivery record for the measurement groundwork (`docs/deliveries/2026-11-18-associate-graded-measurement-groundwork.md`): what each of the 12 plan tasks delivered, the seven approved deviations, and one evidence record per obligation o1 to o14. The before/after comparison was not run (deviation d7), so obligation o15 is unmet and the hand-grading sample exists on test fixtures only. No code changed.
+
 ## [0.13.0] - 2026-11-18
 
 ### Added
