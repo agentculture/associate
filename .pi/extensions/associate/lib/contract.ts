@@ -102,6 +102,8 @@ export interface AccuracyCheck {
 export interface SupportScoreSettings {
   /** The yes/no question, sent as written. */
   readonly question: string;
+  /** What the decider is told before each pair, sent as written; optional. */
+  readonly background?: string;
   /** Score at or above which the quote is reported as supporting the value. */
   readonly cutoff: number;
   /** Time allowed for one fact's request. */

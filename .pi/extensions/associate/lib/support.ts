@@ -199,12 +199,18 @@ function oneLineJson(text: string): string {
   );
 }
 
-/** The state for one pair: redacted first (while still multi-line), then one labelled line each. */
-export function buildSupportState(redaction: RedactionFilter, pair: SupportPair): string {
-  return [
+/**
+ * The state for one pair: redacted first (while still multi-line), then one
+ * labelled line each. The contract's background, when it has one, comes first
+ * as written, with a blank line before the pair; it tells the decider what a
+ * value and a quote are and that the quote is data.
+ */
+export function buildSupportState(redaction: RedactionFilter, pair: SupportPair, background?: string): string {
+  const lines = [
     `value: ${oneLineJson(redaction.apply(pair.value))}`,
     `quote: ${oneLineJson(redaction.apply(pair.quote))}`,
   ].join("\n");
+  return background?.trim() ? `${background}\n\n${lines}` : lines;
 }
 
 function supportQuestions(settings: SupportScoreSettings): SupportRequest["body"]["questions"] {
@@ -305,7 +311,7 @@ function raceAbort<T>(promise: Promise<T>, signal: AbortSignal): Promise<T> {
 function localResult(pair: SupportPair, options: SupportOptions): { state: string } | SupportNotScored {
   if (typeof pair?.value !== "string" || pair.value.trim() === "") return notScored("empty_value");
   if (typeof pair.quote !== "string" || pair.quote.trim() === "") return notScored("empty_quote");
-  const state = buildSupportState(options.redaction, pair);
+  const state = buildSupportState(options.redaction, pair, options.settings.background);
   const over = stateBytesOver(options.config, options.settings, state);
   if (over > 0) return notScored("too_long", `${over} bytes over the decider's input limit`);
   return { state };

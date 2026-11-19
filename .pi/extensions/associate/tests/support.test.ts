@@ -101,8 +101,8 @@ test("one pair is one request: the contract's question, the value and quote in t
   for (const gateQuestion of Object.keys(CONFIG.questions)) {
     assert.equal(gateQuestion in call.body.questions, false);
   }
-  assert.equal(call.body.state, buildSupportState(REDACTION, PAIR));
-  assert.match(call.body.state, /^value: /);
+  assert.equal(call.body.state, buildSupportState(REDACTION, PAIR, SHIPPED.background));
+  assert.ok(call.body.state.startsWith(`${SHIPPED.background}\n\nvalue: `));
   assert.match(call.body.state, /\nquote: /);
   assert.ok(call.body.state.includes("version 9"));
 });
@@ -219,7 +219,7 @@ test("value and quote pass through the policy redaction before sending", async (
   assert.equal(sent.includes(secret), false, "the secret in the value and the quote is replaced");
   assert.equal(sent.includes("abcdefghijklmnop.qrstuv"), false, "the bearer in the quote is replaced");
   const state: string = decider.calls[0]!.body.state;
-  const [valueLine, quoteLine] = state.split("\n");
+  const [valueLine, quoteLine] = state.split("\n").slice(-2);
   assert.ok(valueLine!.includes(REDACTION.replacement));
   assert.ok(quoteLine!.includes(REDACTION.replacement));
 });
@@ -530,4 +530,25 @@ test("no result of any kind says pass or allow", async () => {
     }
     assert.ok(result.status === "scored" || result.status === "not_scored");
   }
+});
+
+test("the contract's background comes before the pair, and a section without one sends the pair alone", async () => {
+  const withBackground = buildSupportState(REDACTION, PAIR, "What a value and a quote are.");
+  assert.equal(withBackground, `What a value and a quote are.\n\n${buildSupportState(REDACTION, PAIR)}`);
+  for (const none of [undefined, "", "   "]) {
+    assert.equal(buildSupportState(REDACTION, PAIR, none), buildSupportState(REDACTION, PAIR));
+  }
+  const { background: _dropped, ...bare } = SHIPPED;
+  const fake = answering(0.9);
+  await scoreSupport(PAIR, options(fake.fn, { settings: bare }));
+  assert.equal(fake.calls[0].body.state, buildSupportState(REDACTION, PAIR));
+});
+
+test("the background counts toward the decider's input limit", async () => {
+  const settings = { ...SHIPPED, background: "b".repeat(CONFIG.maxInputTokens) };
+  const fake = answering(0.9);
+  const result = await scoreSupport(PAIR, options(fake.fn, { settings }));
+  assert.equal(result.status, "not_scored");
+  assert.equal(result.status === "not_scored" && result.reason, "too_long");
+  assert.equal(fake.calls.length, 0);
 });

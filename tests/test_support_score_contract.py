@@ -233,3 +233,26 @@ def test_the_literal_scan_catches_a_restated_setting(tmp_path):
     clean = tmp_path / "clean.py"
     clean.write_text("LIMIT = 7\n", encoding="utf-8")
     assert find_restated_settings([clean], section) == []
+
+
+# --- the background sent with every pair (operator, 2026-11-19) -----------------------------
+
+
+def test_the_shipped_section_has_a_background_and_a_cut_off_of_at_least_0_8():
+    section = contract.load_accuracy()[SECTION]
+    assert section["background"].strip()
+    assert section["cutoff"] >= 0.8
+    assert "background" in contract.load_schema("accuracy")["properties"][SECTION]["properties"]
+
+
+def test_the_background_is_optional():
+    doc = copy.deepcopy(contract.load_accuracy())
+    del doc[SECTION]["background"]
+    assert validate.validate_accuracy(doc) == []
+
+
+@pytest.mark.parametrize("value", ["", "   ", 7, None, ["text"]])
+def test_a_background_that_is_not_a_non_blank_string_is_refused(value):
+    doc = copy.deepcopy(contract.load_accuracy())
+    doc[SECTION]["background"] = value
+    assert any(f"{SECTION}.background" in e for e in validate.validate_accuracy(doc))

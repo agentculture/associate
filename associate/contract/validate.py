@@ -571,6 +571,10 @@ def _support_score_errors(section: Any, registry: set[str]) -> list[str]:
     question = section.get("question")
     if not isinstance(question, str) or not question.strip():
         errors.append(f"{field}.question must be a non-blank string")
+    if "background" in section:
+        background = section["background"]
+        if not isinstance(background, str) or not background.strip():
+            errors.append(f"{field}.background must be a non-blank string when given")
     cutoff = section.get("cutoff")
     if not _is_number(cutoff) or not 0 <= cutoff <= 1:
         errors.append(f"{field}.cutoff must be a number from 0 to 1")

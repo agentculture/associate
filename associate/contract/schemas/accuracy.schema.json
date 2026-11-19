@@ -25,6 +25,7 @@
       "properties": {
         "$comment": {"type": "string"},
         "question": {"type": "string", "pattern": "\\S", "description": "The yes/no question asked of the decider, sent as written."},
+        "background": {"type": "string", "pattern": "\\S", "description": "What the decider is told before each pair: what a value and a quote are, and when a value counts as shown. Sent as written, before the value and quote. Optional."},
         "cutoff": {"type": "number", "description": "Score at or above which the quote is reported as supporting the value (0 to 1)."},
         "timeout_ms": {"type": "integer", "description": "Time allowed for one fact's request."},
         "max_facts": {"type": "integer", "description": "Most facts scored for one hand-back; the rest are recorded as not scored."},
