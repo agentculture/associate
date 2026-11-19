@@ -4,7 +4,7 @@
   "schema_version": 6,
   "status": "exported",
   "created": "2026-11-18T08:35:48Z",
-  "updated": "2026-11-19T12:07:07Z",
+  "updated": "2026-11-19T12:25:05Z",
   "claims": [
     {
       "id": "c1",
@@ -672,7 +672,7 @@
         ".pi/extensions/associate/lib/reminder.ts"
       ],
       "origin": "llm",
-      "status": "proposed"
+      "status": "approved"
     },
     {
       "id": "l2",
@@ -683,7 +683,7 @@
         "trial2"
       ],
       "origin": "llm",
-      "status": "proposed"
+      "status": "approved"
     }
   ],
   "obligations": []
