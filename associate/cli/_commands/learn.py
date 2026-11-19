@@ -31,8 +31,8 @@ Commands
   associate overview           Descriptive snapshot of the agent.
   associate doctor             Check the agent-identity invariants.
   associate run [prompt]       Run one task on a harness adapter (--model,
-                               --test-command, --check-mode, --support-score on|off),
-                               or fail closed.
+                               --test-command, --check-mode, --support-score on|off,
+                               --finish-reminder on|off), or fail closed.
   associate bench              Run a public suite (--suite NAME --model KEY) or list suites.
   associate runs start         Start a detached run on a checkout (--checkout, --model,
                                --test-command, instruction); prints a run id at once.
@@ -54,7 +54,8 @@ Commands
   associate measure run        Run a comparison of arms over tasks (--arms, --repeats,
                                --output-dir, --detach); needs the committed difference note
                                unless --harness stub (plumbing only). An arm may set
-                               support_score (on or off); each stored record names it.
+                               support_score and finish_reminder (on or off); each
+                               stored record names them.
   associate measure status <dir>  Runs stored, failed and not yet stored; the lock; the log.
   associate measure report <dir>  The table of the stored results (--reading, --json).
   associate measure sample <dir>  The blank hand-grading sheet for a fixed-seed draw.
@@ -114,7 +115,9 @@ def _as_json_payload() -> dict[str, object]:
                     "Run one task on a harness adapter (--model picks a registry model; "
                     "--test-command names checks the harness runs before merging; "
                     "--support-score on|off overrides the model's support-score switch "
-                    "for one run); "
+                    "for one run; --finish-reminder on|off switches the reminder sent to a "
+                    "model that stops without finish, default on when the contract has "
+                    "the section); "
                     "the result carries the support score the export holds as "
                     "support_facts, labelled support_source: extension; "
                     "exits 2 without serving when the adapter cannot prove its "
@@ -167,7 +170,8 @@ def _as_json_payload() -> dict[str, object]:
                 "summary": (
                     "Run a comparison of arms over tasks and store one graded result per task, "
                     "arm and repeat; --detach runs it in the background. An arm may set "
-                    "support_score (on or off), named in each stored record. Refuses without the "
+                    "support_score and finish_reminder (on or off), named in each stored "
+                    "record. Refuses without the "
                     "committed difference note except on the stub harness (plumbing only). "
                     "--broad runs the broad tasks and needs the committed, confirmed rule file."
                 ),
