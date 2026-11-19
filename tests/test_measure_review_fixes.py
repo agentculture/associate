@@ -148,8 +148,9 @@ def rule_text(repositories: int, required: int) -> str:
 
 @pytest.mark.parametrize(("repositories", "required"), [(6, 3), (2, 1), (6, 1)])
 def test_a_rule_both_arms_could_meet_is_refused(repositories, required):
+    text = rule_text(repositories, required)
     with pytest.raises(broad.RuleError, match="more than half"):
-        broad.read_rule(rule_text(repositories, required))
+        broad.read_rule(text)
 
 
 @pytest.mark.parametrize(("repositories", "required"), [(6, 4), (6, 5), (1, 1), (3, 2)])
