@@ -4,7 +4,7 @@
   "schema_version": 6,
   "status": "exported",
   "created": "2026-11-19T18:44:49Z",
-  "updated": "2026-11-19T18:57:09Z",
+  "updated": "2026-11-19T19:20:06Z",
   "claims": [
     {
       "id": "c1",
@@ -77,9 +77,9 @@
     {
       "id": "c5",
       "kind": "before_state",
-      "text": "In the 36 measured broad runs of the decider plan (worker, six repositories, 1,657 statements graded by model graders), 65 of the 71 statements graded false were in the model's unchecked text and 6 rested on a quote-found fact; 39 of the 71 were counts. The attribution to facts is by text matching, a heuristic",
+      "text": "In the 36 measured broad runs of the decider plan (worker, six repositories, 1,657 statements), an outside grader (Gemini, the main reading) graded 150 statements false: 133 in the model's unchecked text, 16 resting on a quote-found fact and 1 on a fact whose quote was refused. Two Claude graders with a third for disputes graded 71 false: 65 in unchecked text and 6 on a quote-found fact. The count depends on how strictly a list given as complete and a claim copied from a stale document are judged. No person graded. The attribution of a statement to a fact is by text matching, a heuristic",
       "origin": "user",
-      "status": "confirmed",
+      "status": "proposed",
       "honesty_conditions": [
         {
           "id": "h15",
@@ -96,6 +96,11 @@
           "text": "In the 36 measured broad runs of the decider plan (worker, six repositories, 1,657 statements graded by model graders), 65 of the 71 statements graded false were in the model's unchecked text and 6 rested on a quote-found fact; 39 of the 71 were counts; the attribution to facts is by text matching, a heuristic",
           "kind": "before_state",
           "reason": "captured without --origin llm by mistake; my summary of the measurement, so it goes back to proposed"
+        },
+        {
+          "text": "In the 36 measured broad runs of the decider plan (worker, six repositories, 1,657 statements graded by model graders), 65 of the 71 statements graded false were in the model's unchecked text and 6 rested on a quote-found fact; 39 of the 71 were counts. The attribution to facts is by text matching, a heuristic",
+          "kind": "before_state",
+          "reason": "operator approved restating the before-state with both gradings (2026-11-19); honesty condition h15"
         }
       ]
     },
@@ -501,9 +506,239 @@
       "links": [],
       "instruction": "",
       "revisions": []
+    },
+    {
+      "id": "c30",
+      "kind": "requirement",
+      "text": "The model's final reply, which associate run --json returns as final_reply and delegate_status passes to a peer (tools/delegate.ts:541), is labelled unchecked in every place it is returned, and the checked answer is returned beside it; the strict answer is not the only output a caller sees, so the label travels with the text",
+      "origin": "llm",
+      "status": "proposed",
+      "honesty_conditions": [
+        {
+          "id": "h17",
+          "text": "a test over associate run --json and delegate_status output finds final_reply only under a field or label that says unchecked, with the checked answer beside it",
+          "status": "proposed",
+          "instruction": ""
+        }
+      ],
+      "hard_questions": [],
+      "links": [],
+      "instruction": "",
+      "revisions": []
+    },
+    {
+      "id": "c31",
+      "kind": "requirement",
+      "text": "When the decider cannot be reached or gives a malformed answer, an llm or derived fact is not dropped as failed: it is kept out of the answer under its own label (not judged, with the reason) and the model is told; a run never loses items silently because of an outage",
+      "origin": "llm",
+      "status": "proposed",
+      "honesty_conditions": [
+        {
+          "id": "h18",
+          "text": "a fault-injected run with the decider unreachable keeps every llm and derived fact in the export under 'not judged', drops none as failed, and the message to the model names the outage",
+          "status": "proposed",
+          "instruction": ""
+        }
+      ],
+      "hard_questions": [],
+      "links": [],
+      "instruction": "",
+      "revisions": []
+    },
+    {
+      "id": "c32",
+      "kind": "requirement",
+      "text": "The number check and the printed result read the saved result file; when that file was cut at the contract cap (lib/results.ts:18) and the number or quote is not in the kept part, the fact is reported as not checkable from the saved result, with the fix to cite a narrower call",
+      "origin": "llm",
+      "status": "proposed",
+      "honesty_conditions": [
+        {
+          "id": "h19",
+          "text": "a replay with a saved result cut at the cap and a number beyond the cut reports the fact as not checkable from the saved result, with the fix",
+          "status": "proposed",
+          "instruction": ""
+        }
+      ],
+      "hard_questions": [],
+      "links": [],
+      "instruction": "",
+      "revisions": []
+    },
+    {
+      "id": "c33",
+      "kind": "requirement",
+      "text": "A fact that cites a prior run or a child (prior:wN, cN:wN) shows that run's command and result when the labelled export is available, and is otherwise marked as resting on a labelled run whose result was not read here; it is never shown as directly checked",
+      "origin": "llm",
+      "status": "proposed",
+      "honesty_conditions": [
+        {
+          "id": "h20",
+          "text": "a continued run citing prior:wN renders the prior call's command and result when the prior export is present, and the labelled-run wording when it is not; both are tests",
+          "status": "proposed",
+          "instruction": ""
+        }
+      ],
+      "hard_questions": [],
+      "links": [],
+      "instruction": "",
+      "revisions": []
+    },
+    {
+      "id": "c34",
+      "kind": "requirement",
+      "text": "The command printed in an answer is the recorded arguments with absolute paths under the checkout shown relative to it, and nothing from the environment; a test shows no home-directory path and no bearer value can appear in a rendered answer",
+      "origin": "llm",
+      "status": "proposed",
+      "honesty_conditions": [
+        {
+          "id": "h21",
+          "text": "a test renders an answer from a walk whose arguments hold an absolute worktree path and an environment-looking token, and the output holds neither",
+          "status": "proposed",
+          "instruction": ""
+        }
+      ],
+      "hard_questions": [],
+      "links": [],
+      "instruction": "",
+      "revisions": []
+    },
+    {
+      "id": "c35",
+      "kind": "requirement",
+      "text": "Every dropped item is kept in the export with its reason, the answer states how many items were dropped and for which reasons, and the run result carries those counts, so an answer that lost most of its items is visible as such",
+      "origin": "llm",
+      "status": "proposed",
+      "honesty_conditions": [
+        {
+          "id": "h22",
+          "text": "the measured colleague run in which no fact passed, replayed, renders an answer that states how many items were dropped and why, and the run result carries the same counts",
+          "status": "proposed",
+          "instruction": ""
+        }
+      ],
+      "hard_questions": [],
+      "links": [],
+      "instruction": "",
+      "revisions": []
+    },
+    {
+      "id": "c36",
+      "kind": "requirement",
+      "text": "The derived-fact question to the decider (does the conclusion follow from the listed facts) is tried on a labelled set before it decides drops, as the support question was; until then a derived fact is shown with the decider's answer and is dropped only when one of its inputs fails",
+      "origin": "llm",
+      "status": "proposed",
+      "honesty_conditions": [
+        {
+          "id": "h23",
+          "text": "a committed labelled set of derived facts with two raters, at least one not a Claude model, and the decider's answers on it, exists before the derived answer decides a drop",
+          "status": "proposed",
+          "instruction": ""
+        }
+      ],
+      "hard_questions": [],
+      "links": [],
+      "instruction": "",
+      "revisions": []
+    },
+    {
+      "id": "c37",
+      "kind": "assumption",
+      "text": "Dropping on part, little or none removes true facts too: on the measured runs 63 of 69 facts with those answers were graded true by the stricter grader; the spec accepts this loss, and the measurement reports checklist facts stated beside false statements so the cost is seen",
+      "origin": "llm",
+      "status": "proposed",
+      "honesty_conditions": [],
+      "hard_questions": [],
+      "links": [],
+      "instruction": "",
+      "revisions": []
+    },
+    {
+      "id": "c38",
+      "kind": "requirement",
+      "text": "The measurement arm for strict facts grades what a caller receives: the rendered answer and, separately, the final reply; and it reports run time and the number of retry rounds per run",
+      "origin": "llm",
+      "status": "proposed",
+      "honesty_conditions": [
+        {
+          "id": "h24",
+          "text": "the broad report for the strict arm prints, per run, graded statements of the answer and of the final reply separately, the run time and the retry rounds used",
+          "status": "proposed",
+          "instruction": ""
+        }
+      ],
+      "hard_questions": [],
+      "links": [],
+      "instruction": "",
+      "revisions": []
+    },
+    {
+      "id": "c39",
+      "kind": "requirement",
+      "text": "The change is a contract event: accuracy.json and facts.schema.json get a version bump, exports written before it still load in associate check, and the Python re-check implements the same kinds, order and drops as the extension, with a parity test over shared fixtures",
+      "origin": "llm",
+      "status": "proposed",
+      "honesty_conditions": [
+        {
+          "id": "h25",
+          "text": "associate check loads a stored export written before the bump and one written after, and the parity test gives the same kinds, order and drops from the extension and the Python re-check on the shared fixtures",
+          "status": "proposed",
+          "instruction": ""
+        }
+      ],
+      "hard_questions": [],
+      "links": [],
+      "instruction": "",
+      "revisions": []
+    },
+    {
+      "id": "c40",
+      "kind": "requirement",
+      "text": "A model cannot lower the bar by its choice of kind: a fact whose cited call's result contains its quote or number is checked directly whatever kind it states, and the report counts how many facts of each kind a run used",
+      "origin": "llm",
+      "status": "proposed",
+      "honesty_conditions": [
+        {
+          "id": "h26",
+          "text": "a replay where a fact states kind llm and its quote is in the cited result is checked by the matcher and counted as direct, and report.json lists facts per kind",
+          "status": "proposed",
+          "instruction": ""
+        }
+      ],
+      "hard_questions": [],
+      "links": [],
+      "instruction": "",
+      "revisions": []
     }
   ],
-  "open_vagueness": [],
+  "open_vagueness": [
+    {
+      "id": "v1",
+      "text": "whether a model, told that failing items are dropped, hands back fewer facts or moves claims into its final reply (assumption c16); only a live measurement shows it",
+      "kind": "unknown_nonblocking",
+      "claim_id": null,
+      "resolved": false,
+      "resolution": "",
+      "resolution_claim_id": null
+    },
+    {
+      "id": "v2",
+      "text": "whether spawned children and delegated runs run with strict facts on, and how a parent treats a child's dropped items; the accuracy method is not measured in children or delegated runs at all",
+      "kind": "unknown_nonblocking",
+      "claim_id": null,
+      "resolved": false,
+      "resolution": "",
+      "resolution_claim_id": null
+    },
+    {
+      "id": "v3",
+      "text": "retry rounds add model turns to runs that already take about ten minutes; the time cost of strict facts is unknown until measured",
+      "kind": "unknown_nonblocking",
+      "claim_id": null,
+      "resolved": false,
+      "resolution": "",
+      "resolution_claim_id": null
+    }
+  ],
   "scope_entries": [
     {
       "id": "s1",
@@ -561,6 +796,98 @@
       "seeds": [
         "c5"
       ]
+    },
+    {
+      "id": "s8",
+      "surface": "challenge pass / adjacent-systems lens: associate/harness/pi.py:450 and tools/delegate.ts:541,937",
+      "finding": "final_reply (the model's own words, last 2,000 characters) is returned to the operator and to a delegating peer; dropping unchecked text from answer.md does not remove it from these paths",
+      "seeds": [
+        "c30"
+      ]
+    },
+    {
+      "id": "s9",
+      "surface": "challenge pass / failure-mode lens: lib/support.ts:68-96,378",
+      "finding": "the support check already returns not_scored with reasons unreachable, skipped_after_failure, malformed; with dropping switched on, an outage would otherwise empty the answer",
+      "seeds": [
+        "c31"
+      ]
+    },
+    {
+      "id": "s10",
+      "surface": "challenge pass / data-flow lens: lib/results.ts:18-67",
+      "finding": "saved results are cut at caps.max_raw_chars; a count at the end of a long listing may not be in the saved file",
+      "seeds": [
+        "c32"
+      ]
+    },
+    {
+      "id": "s11",
+      "surface": "challenge pass / lifecycle lens: lib/facts.ts:19-22,420-422",
+      "finding": "labelled references resolve inside prior_runs; whether the other run's saved results are available to print a command and result from is not settled by the code read",
+      "seeds": [
+        "c33"
+      ]
+    },
+    {
+      "id": "s12",
+      "surface": "challenge pass / security lens: lib/walk.ts:195 args_used; CLAUDE.md portability invariant",
+      "finding": "walk arguments hold absolute checkout paths under a per-run worktree; printing them verbatim puts machine paths into answers and committed notes (this happened once in the labelled set)",
+      "seeds": [
+        "c34"
+      ]
+    },
+    {
+      "id": "s13",
+      "surface": "challenge pass / observability lens: lib/render.ts:174, report.json",
+      "finding": "today a refused item is counted in the answer header ('7 items were refused'); with dropping on by default an answer can become nearly empty, as in one measured colleague run where no fact passed",
+      "seeds": [
+        "c35"
+      ]
+    },
+    {
+      "id": "s14",
+      "surface": "challenge pass / counter-evidence lens: docs/notes/support-score-calibration.md",
+      "finding": "the support question passed 229 of 253 supported and 12 of 152 unsupported pairs on model-labelled pairs; in the 36 runs, on Gemini's grading, 5 of 59 facts answered all or mostly and 6 of 69 answered part or little were graded false; no derived-fact question has been tried at all",
+      "seeds": [
+        "c36"
+      ]
+    },
+    {
+      "id": "s15",
+      "surface": "challenge pass / operations lens: associate/measure/answer.py:286 and the t12 run times",
+      "finding": "broad_answer grades accepted items plus the unchecked section; under strict answers the graded text changes shape, so arms are not comparable unless both outputs are graded; runs took about 10 minutes each and each retry round adds model turns",
+      "seeds": [
+        "c38"
+      ]
+    },
+    {
+      "id": "s16",
+      "surface": "challenge pass / migration lens: associate/contract/schemas/facts.schema.json (additionalProperties false), associate/accuracy/",
+      "finding": "new fact fields are rejected by the present schema; CLAUDE.md calls a contract-version bump a compatibility event; two implementations (TypeScript and Python) must agree",
+      "seeds": [
+        "c39"
+      ]
+    },
+    {
+      "id": "s17",
+      "surface": "challenge pass / unstated-assumptions lens: the kind field (c22)",
+      "finding": "the kind is stated by the model; nothing in the frame stopped a model from marking every fact llm or derived to avoid the direct check",
+      "seeds": [
+        "c40"
+      ]
+    },
+    {
+      "id": "s18",
+      "surface": "challenge pass / concurrency lens: lib/handback.ts, lib/support.ts",
+      "finding": "hand-back checking is one process per run reading its own export; dependency order is computed inside one check; no shared state found. Clean on what was read; residual: the one-writer rule for spawned children was not re-read",
+      "seeds": []
+    },
+    {
+      "id": "s19",
+      "surface": "challenge pass / reversibility lens: accuracy.json per-model settings and associate run switches",
+      "finding": "the support check has a contract switch and a per-run flag (--support-score); c25 gives strict facts the same, so turning it off is one flag or one contract line; dropped items stay in the export (c35), so nothing is lost on disk",
+      "seeds": []
     }
   ],
   "lapses": [],
