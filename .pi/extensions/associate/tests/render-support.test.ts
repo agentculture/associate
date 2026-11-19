@@ -30,6 +30,7 @@ const UNCHECKED_FACT = { id: "f4", value: "x y", source: "w2", quote: "not saved
 const NOT_SCORED_PHRASES: ReadonlyArray<readonly [string, string]> = [
   ["no_key", "the check was unavailable"],
   ["bad_url", "the check was unavailable"],
+  ["contract_invalid", "the check was unavailable"],
   ["unreachable", "the check was unavailable"],
   ["http_error", "the check was unavailable"],
   ["malformed", "the check was unavailable"],
@@ -40,6 +41,7 @@ const NOT_SCORED_PHRASES: ReadonlyArray<readonly [string, string]> = [
   ["out_of_time", "no time left for the check"],
   ["timeout", "the check timed out"],
   ["aborted", "the run was stopped before the check"],
+  ["skipped_after_failure", "the check was unavailable"],
 ];
 
 function fixture(facts: readonly Record<string, unknown>[] = [GOOD_FACT, BAD_FACT, SECOND_GOOD_FACT]) {

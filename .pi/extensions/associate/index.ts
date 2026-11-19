@@ -219,7 +219,10 @@ export default async function (pi: ExtensionAPI) {
   // The switch, the environment (base URL and key) and the gate contract are
   // snapshotted at load like the gate's; `fetch` is looked up per request, so
   // a test's fake decider is `globalThis.fetch`. One cache per session (s7):
-  // a retry round and the message_end rewrite reuse every answer.
+  // a retry round reuses every score (only scores are kept, so a pair that
+  // was not scored is asked again), and the message_end rewrite asks nothing,
+  // reading the scores saved with the accepted hand-back. finish writes the
+  // quote-check files before it asks (review finding 1).
   const supportSettings = supportScoreFor(accuracy, model.key, process.env, (line) => console.error(line));
   const supportEnv = { ...process.env };
   const supportCache = createSupportCache();
@@ -252,7 +255,7 @@ export default async function (pi: ExtensionAPI) {
     if (!supportConfig) {
       return check.facts.map((f) =>
         f.verdict === "passed"
-          ? { status: "not_scored" as const, reason: "bad_url" as const, detail: "the decider's contract did not compile" }
+          ? { status: "not_scored" as const, reason: "contract_invalid" as const, detail: "the decider's contract did not compile" }
           : undefined,
       );
     }
@@ -565,11 +568,11 @@ export default async function (pi: ExtensionAPI) {
         accuracy,
       );
       const refusals = refusalsOf(check, payload);
-      // Asked only now, after accepted and the refusals are fixed (decider t3).
-      const support = await scoreFacts(check, payload, signal as AbortSignal | undefined);
       const summary = typeof payload.summary === "string" ? payload.summary : "";
       const counts: UncheckedCounts = { summary_sentences: countSentences(summary), final_message_sentences: 0 };
-      const base = {
+      // check.json's fields shared by both outcomes; `support` adds the score
+      // per fact (decider t3) and is undefined while it is not yet asked or off.
+      const baseFor = (support: FactSupport | undefined) => ({
         mode: checkMode.mode,
         mode_source: checkMode.source,
         accepted: check.accepted,
@@ -578,8 +581,15 @@ export default async function (pi: ExtensionAPI) {
         open_items: check.open_items,
         unchecked_text: { ...counts, final_message: "none" },
         ...(quoted.length > 0 ? { quoted_lists: quoted } : {}),
-      };
+      });
+      const base = baseFor(undefined);
       const where = { export_dir: session.exportDir, session_id: session.sessionId };
+      // Review finding 1: every quote-check file and the session state are
+      // written first, exactly as with the score off, so a run killed while
+      // the decider is asked (up to the total scoring time) leaves a whole,
+      // score-less hand-back. Only then is the score asked, and the files it
+      // changes are written again with it.
+      const scoreAfter = () => scoreFacts(check, payload, signal as AbortSignal | undefined);
 
       if (checkMode.mode === "enforce" && !check.accepted) {
         // A refused hand-back is not a hand-back: `finished` stays false, the
@@ -598,15 +608,16 @@ export default async function (pi: ExtensionAPI) {
         const why = capped
           ? `refusal ${handbackRefusals} in a row reached accuracy.json refusal_cap (${handbackCap?.limit})`
           : `accuracy.json retry_rounds (${retryRounds ?? 0}) allowed no further round`;
-        writeJson(CHECK_FILENAME, {
-          ...base,
+        const refusedRecord = (support: FactSupport | undefined) => ({
+          ...baseFor(support),
           outcome: "refused",
           round: handbackRefusals,
           rounds_left: roundsLeft,
           run_ended: last,
           refusals,
         });
-        writeReport(check.report, counts, support);
+        writeJson(CHECK_FILENAME, refusedRecord(undefined));
+        writeReport(check.report, counts);
         rmSync(join(session.exportDir, ANSWER_FILENAME), { force: true });
         accepted = undefined;
         writeRejected({
@@ -619,6 +630,13 @@ export default async function (pi: ExtensionAPI) {
         if (last) {
           walk.markOutcome("refused");
           handbackEnded = true;
+        }
+        // The refused round is scored too, after it is on disk as refused;
+        // the score changes no refusal, and a later round reuses each score.
+        const refusedSupport = await scoreAfter();
+        if (refusedSupport !== undefined) {
+          writeJson(CHECK_FILENAME, refusedRecord(refusedSupport));
+          writeReport(check.report, counts, refusedSupport);
         }
         const head = {
           outcome: "refused",
@@ -656,13 +674,26 @@ export default async function (pi: ExtensionAPI) {
       // blocked below.
       finished = true;
       handbackCap?.note(undefined);
-      const answer = renderAnswer({ payload, check, summary, support });
       const wouldRefuse = checkMode.mode === "report" ? refusals : [];
+      let answer = renderAnswer({ payload, check, summary });
       const checkRecord = { ...base, outcome: "accepted", would_refuse: wouldRefuse };
       writeJson(CHECK_FILENAME, checkRecord);
-      writeReport(check.report, counts, support);
+      writeReport(check.report, counts);
       writeExport(ANSWER_FILENAME, answer);
-      accepted = { payload, check, checkRecord, summary, answer, support };
+      const recorded = { payload, check, checkRecord, summary, answer, support: undefined as FactSupport | undefined };
+      accepted = recorded;
+
+      const support = await scoreAfter();
+      if (support !== undefined) {
+        answer = renderAnswer({ payload, check, summary, support });
+        const scoredRecord = { ...baseFor(support), outcome: "accepted", would_refuse: wouldRefuse };
+        writeJson(CHECK_FILENAME, scoredRecord);
+        writeReport(check.report, counts, support);
+        writeExport(ANSWER_FILENAME, answer);
+        // The saved object the message_end rewrite reads, unless a later
+        // prompt replaced it while the score was asked.
+        if (accepted === recorded) accepted = { ...recorded, checkRecord: scoredRecord, answer, support };
+      }
 
       const count = handback.statements.length;
       const f = check.report.facts;

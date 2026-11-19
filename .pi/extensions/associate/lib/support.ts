@@ -49,6 +49,8 @@ export type SupportNotScoredReason =
   | "no_key"
   /** The base URL could not be parsed; nothing was sent. */
   | "bad_url"
+  /** The gate contract (the decider's address and input limit) failed to compile; nothing was sent. */
+  | "contract_invalid"
   /** The value is empty or only whitespace; nothing was sent. */
   | "empty_value"
   /** The quote is empty or only whitespace; nothing was sent. */
@@ -68,7 +70,13 @@ export type SupportNotScoredReason =
   /** The answer was not JSON, or held no yes/no probability in [0, 1] for the question. */
   | "malformed"
   /** The caller's own signal ended the request. */
-  | "aborted";
+  | "aborted"
+  /**
+   * Not sent: an earlier request of the same batch came back `unreachable`,
+   * `timeout` or `http_error`, so the rest of that batch was not sent to a
+   * decider that had just failed. A later batch or ask tries again.
+   */
+  | "skipped_after_failure";
 
 export interface SupportScored {
   readonly status: "scored";
@@ -94,13 +102,14 @@ export interface SupportPair {
 }
 
 /**
- * One session's answers, keyed by the exact value and quote. The caller makes
+ * One session's scores, keyed by the exact value and quote. The caller makes
  * one per session with {@link createSupportCache} and hands it to every call,
- * so a fact asked again (a retry round, the rewrite after the final message,
- * `check_quote` before a hand-back) is not sent again.
+ * so a fact scored once (in a retry round, by `check_quote` before a
+ * hand-back) is not sent again. Only a score is kept: a not-scored result is
+ * dropped once it is known, so a later ask tries again.
  */
 export interface SupportCache {
-  /** Distinct pairs held, including any still being asked. */
+  /** Distinct pairs held: each scored pair, and any still being asked. */
   readonly size: number;
   clear(): void;
   /** Internal to this module. */
@@ -302,36 +311,25 @@ function localResult(pair: SupportPair, options: SupportOptions): { state: strin
   return { state };
 }
 
-interface Asked {
-  readonly result: SupportResult;
-  /** Whether a request left this process. Only then is the result kept for the session. */
-  readonly sent: boolean;
-}
-
 /** Send one state and read the answer. `deadline` (epoch ms) is a batch's total-time bound. */
-async function ask(state: string, options: SupportOptions, deadline?: number): Promise<Asked> {
+async function ask(state: string, options: SupportOptions, deadline?: number): Promise<SupportResult> {
   const { settings } = options;
-  const unsent = (reason: SupportNotScoredReason, detail?: string): Asked => ({
-    result: notScored(reason, detail),
-    sent: false,
-  });
-  if ((options.env.ASSOCIATE_API_KEY ?? "").trim() === "") return unsent("no_key");
-  if (options.signal?.aborted) return unsent("aborted");
+  if ((options.env.ASSOCIATE_API_KEY ?? "").trim() === "") return notScored("no_key");
+  if (options.signal?.aborted) return notScored("aborted");
 
   let request: SupportRequest;
   try {
     request = buildSupportRequest(options.config, settings, state, options.env);
   } catch (error) {
-    return unsent("bad_url", errorText(error));
+    return notScored("bad_url", errorText(error));
   }
 
   // The per-fact time, or what is left of the batch's total when that is less.
   const now = options.now ?? Date.now;
   const left = deadline === undefined ? Infinity : deadline - now();
-  if (left <= 0) return unsent("out_of_time");
+  if (left <= 0) return notScored("out_of_time");
   const bounded = left < settings.timeout_ms;
   const timer = stopAfter(bounded ? left : settings.timeout_ms, bounded ? "out_of_time" : "timeout", options.signal);
-  const sent = (result: SupportResult): Asked => ({ result, sent: true });
   const { signal } = timer;
   try {
     let response: Response;
@@ -349,25 +347,25 @@ async function ask(state: string, options: SupportOptions, deadline?: number): P
       );
     } catch (error) {
       const why = timer.stopped();
-      return sent(why ? notScored(why) : notScored("unreachable", errorText(error)));
+      return why ? notScored(why) : notScored("unreachable", errorText(error));
     }
-    if (!response.ok) return sent(notScored("http_error", `HTTP ${response.status}`));
+    if (!response.ok) return notScored("http_error", `HTTP ${response.status}`);
     let text: string;
     try {
       text = await raceAbort(response.text(), signal);
     } catch (error) {
       const why = timer.stopped();
-      return sent(why ? notScored(why) : notScored("unreachable", errorText(error)));
+      return why ? notScored(why) : notScored("unreachable", errorText(error));
     }
     let body: unknown;
     try {
       body = JSON.parse(text);
     } catch {
-      return sent(notScored("malformed", "the answer is not JSON"));
+      return notScored("malformed", "the answer is not JSON");
     }
     const score = readScore(body);
-    if (score === undefined) return sent(notScored("malformed", "the answer holds no yes/no probability"));
-    return sent({ status: "scored", score, at_or_above_cutoff: score >= settings.cutoff });
+    if (score === undefined) return notScored("malformed", "the answer holds no yes/no probability");
+    return { status: "scored", score, at_or_above_cutoff: score >= settings.cutoff };
   } finally {
     timer.done();
   }
@@ -378,26 +376,28 @@ function cacheKey(pair: SupportPair): string {
 }
 
 /**
- * Ask through the session cache. A result is kept when a request was sent
- * for it — a score, and equally a timeout, an HTTP error or a malformed
- * answer — so the same pair is one request per session whatever came back. A
- * result reached without a request (no key, bad URL) and a caller's own abort
- * are not kept. Two asks for one pair at the same time share the request.
+ * Ask through the session cache. Only a score is kept (review finding 2): a
+ * not-scored result of any kind — a timeout, an HTTP error, a malformed
+ * answer, the batch's time running out, no key — is dropped once known, so a
+ * later ask for the pair tries again. Two asks for one pair at the same time
+ * share the request.
  */
 function askCached(pair: SupportPair, state: string, options: SupportOptions, deadline?: number): Promise<SupportResult> {
   const entries = options.cache?.entries;
-  if (!entries) return ask(state, options, deadline).then((asked) => asked.result);
+  if (!entries) return ask(state, options, deadline);
   const key = cacheKey(pair);
   const held = entries.get(key);
   if (held) return held;
+  const forget = () => {
+    if (entries.get(key) === pending) entries.delete(key);
+  };
   const pending: Promise<SupportResult> = ask(state, options, deadline).then(
-    (asked) => {
-      const keep = asked.sent && !(asked.result.status === "not_scored" && asked.result.reason === "aborted");
-      if (!keep && entries.get(key) === pending) entries.delete(key);
-      return asked.result;
+    (result) => {
+      if (result.status !== "scored") forget();
+      return result;
     },
     (error) => {
-      if (entries.get(key) === pending) entries.delete(key);
+      forget();
       throw error;
     },
   );
@@ -435,6 +435,9 @@ function within<T>(promise: Promise<T>, ms: number): Promise<T | undefined> {
   });
 }
 
+/** The failures after which one batch sends nothing more: the decider is down or failing, not one answer odd. */
+const STOPS_BATCH: ReadonlySet<SupportNotScoredReason> = new Set(["unreachable", "timeout", "http_error"]);
+
 /**
  * Score the facts of one hand-back, in order, one request at a time (the
  * decider serves one at a time and the safety gate shares it). Returns one
@@ -448,6 +451,12 @@ function within<T>(promise: Promise<T>, ms: number): Promise<T | undefined> {
  * gone by since the call began, no request starts, a request in flight is
  * stopped, and each fact without an answer is `out_of_time` (one already in
  * the cache is still returned from it).
+ *
+ * One failure bound applies to this call only: after the first answer that is
+ * `unreachable`, `timeout` or `http_error`, no further request is sent, and
+ * each later pair not already in the cache is `skipped_after_failure`. None
+ * of these is kept, so the next call (a retry round, a `check_quote`) tries
+ * again.
  */
 export async function scoreSupportBatch(
   pairs: readonly SupportPair[],
@@ -458,6 +467,7 @@ export async function scoreSupportBatch(
   const deadline = now() + settings.total_timeout_ms;
   const results: SupportResult[] = [];
   let taken = 0;
+  let failed: SupportNotScoredReason | undefined;
   for (const pair of pairs) {
     const local = localResult(pair, options);
     if ("status" in local) {
@@ -469,16 +479,28 @@ export async function scoreSupportBatch(
       continue;
     }
     taken += 1;
-    const held = options.cache?.entries.get(cacheKey(pair));
-    const left = deadline - now();
-    if (!held && left <= 0) {
-      results.push(notScored("out_of_time"));
-      continue;
-    }
-    // A held entry may be another caller's request still in flight: wait for
-    // it no longer than this call's own time.
-    const result = await within(held ?? askCached(pair, local.state, options, deadline), Math.max(0, left));
-    results.push(result ?? notScored("out_of_time"));
+    const result = await batchResult(pair, local.state, options, deadline, failed);
+    if (result.status === "not_scored" && STOPS_BATCH.has(result.reason)) failed ??= result.reason;
+    results.push(result);
   }
   return results;
+}
+
+/** One pair's result inside a batch: from the cache, skipped after a failure, out of time, or asked. */
+async function batchResult(
+  pair: SupportPair,
+  state: string,
+  options: SupportOptions,
+  deadline: number,
+  failed: SupportNotScoredReason | undefined,
+): Promise<SupportResult> {
+  const now = options.now ?? Date.now;
+  const held = options.cache?.entries.get(cacheKey(pair));
+  const left = deadline - now();
+  if (!held && failed !== undefined) return notScored("skipped_after_failure", `not sent after ${failed}`);
+  if (!held && left <= 0) return notScored("out_of_time");
+  // A held entry may be another caller's request still in flight: wait for
+  // it no longer than this call's own time.
+  const result = await within(held ?? askCached(pair, state, options, deadline), Math.max(0, left));
+  return result ?? notScored("out_of_time");
 }

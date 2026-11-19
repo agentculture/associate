@@ -139,7 +139,12 @@ def accuracy_result(
     result = _recheck_result(
         export_dir, accuracy, continue_from=continue_from, check_mode=check_mode
     )
-    if _support.copy_support(export_dir, []) is None:
+    # The two score files are read once. evidence-cli's accuracy_result runs
+    # inspect_export inside itself and does not hand its facts back, so the
+    # facts for the support copy need one more run, and only when the export
+    # holds a support result (review finding 4, measured by tests/test_support_copy.py).
+    held = _support.read_support(export_dir)
+    if held is None:
         return result
     inspected = _inspected(export_dir, accuracy, continue_from)
-    return {**result, **_support.run_fields(inspected, export_dir)}
+    return {**result, **_support.run_fields(inspected, held)}

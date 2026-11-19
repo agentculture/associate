@@ -177,13 +177,27 @@ class Copied(NamedTuple):
     unmatched: list[str]
 
 
-def copy_support(export_dir: Path, facts: Iterable[Mapping[str, Any]]) -> Optional[Copied]:
-    """The export's support results for the re-check's *facts*; None when it holds none."""
+class Held(NamedTuple):
+    """What the export's two score files hold, read once."""
+
+    #: ``(id, support)`` for each fact of check.json that carries a ``support`` field.
+    entries: list[tuple[Any, Any]]
+    #: report.json's ``support_scored`` count, or None.
+    reported: Optional[int]
+
+
+def read_support(export_dir: Path) -> Optional[Held]:
+    """Read check.json and report.json once; None when the export holds no support result."""
     entries = _entries(_read_object(export_dir, _CHECK_FILE))
     reported = _reported(_read_object(export_dir, _REPORT_FILE))
     if not entries and reported is None:
         return None
-    found = _by_id(entries)
+    return Held(entries=entries, reported=reported)
+
+
+def match_support(held: Held, facts: Iterable[Mapping[str, Any]]) -> Copied:
+    """The results *held* for the re-check's *facts*."""
+    found = _by_id(held.entries)
     known = {fact.get("id"): fact for fact in facts}
     by_id = {
         fact_id: _for_fact(known[fact_id], result)
@@ -193,9 +207,15 @@ def copy_support(export_dir: Path, facts: Iterable[Mapping[str, Any]]) -> Option
     return Copied(
         by_id=by_id,
         scored=sum(1 for result in by_id.values() if result[_STATUS] == _SCORED),
-        reported=reported,
+        reported=held.reported,
         unmatched=sorted({_shown_id(fact_id) for fact_id in found if fact_id not in known}),
     )
+
+
+def copy_support(export_dir: Path, facts: Iterable[Mapping[str, Any]]) -> Optional[Copied]:
+    """The export's support results for the re-check's *facts*; None when it holds none."""
+    held = read_support(export_dir)
+    return None if held is None else match_support(held, facts)
 
 
 def _summary_keys(copied: Copied) -> dict[str, Any]:
@@ -226,12 +246,10 @@ def with_support(inspected: Mapping[str, Any], export_dir: Path) -> dict[str, An
     return {**inspected, _FACTS_KEY: marked, **_summary_keys(copied)}
 
 
-def run_fields(inspected: Mapping[str, Any], export_dir: Path) -> dict[str, Any]:
-    """The run result's support keys: ``support_facts`` and the summary; empty when none."""
+def run_fields(inspected: Mapping[str, Any], held: Held) -> dict[str, Any]:
+    """The run result's support keys from the files *held*: ``support_facts`` and the summary."""
     facts = _facts_of(inspected)
-    copied = copy_support(export_dir, facts)
-    if copied is None:
-        return {}
+    copied = match_support(held, facts)
     by_id = copied.by_id
     listed = [
         {"id": fact["id"], _SUPPORT_KEY: by_id[fact["id"]]}

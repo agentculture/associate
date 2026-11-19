@@ -27,7 +27,7 @@
 
 import test from "node:test";
 import assert from "node:assert/strict";
-import { existsSync, readFileSync } from "node:fs";
+import { existsSync, readFileSync, writeFileSync } from "node:fs";
 import { dirname, join, resolve } from "node:path";
 import { libDir } from "../lib/paths.ts";
 import { loadContract } from "../lib/contract.ts";
@@ -233,13 +233,19 @@ test("AC1: scoreCheckedFacts returns one result per checked fact, undefined for 
 const QUOTE_LEGEND = 'A fact marked "quote found" means its quote is in the saved result it cites; it does not mean the value is true.';
 const QUOTE_FOUND_END = "; quote found in the saved result)";
 
-/** The switch-off answer.md with the support legend and `mark` on every shown fact: the exact text expected with the score on. */
-function withSupportText(answer: string, mark: string): string {
+/**
+ * The switch-off answer.md with the support legend and a mark on every shown
+ * fact: the exact text expected with the score on. `mark` is one mark for
+ * every fact, or one per shown fact in order.
+ */
+function withSupportText(answer: string, mark: string | readonly string[]): string {
+  let shown = 0;
+  const next = () => (typeof mark === "string" ? mark : mark[shown++]);
   return answer
     .split("\n")
     .flatMap((line) => {
       if (line === QUOTE_LEGEND) return [line, "", SUPPORT_LEGEND];
-      if (line.startsWith("- f") && line.endsWith(QUOTE_FOUND_END)) return [`${line.slice(0, -1)}; ${mark})`];
+      if (line.startsWith("- f") && line.endsWith(QUOTE_FOUND_END)) return [`${line.slice(0, -1)}; ${next()})`];
       return [line];
     })
     .join("\n");
@@ -362,6 +368,95 @@ test("AC3: a hand-back refused and answered again with the same fact produces on
   }
 });
 
+// --- review finding 1: the quote-check files come before the score -----------
+
+/** A decider whose answers wait until `release` is called; `asked` resolves on the first request. */
+function heldDecider(score = 0.9) {
+  let release!: () => void;
+  const gate = new Promise<void>((resolve) => (release = resolve));
+  let asked!: () => void;
+  const firstAsk = new Promise<void>((resolve) => (asked = resolve));
+  const decider = installDecider(async () => {
+    asked();
+    await gate;
+    return scoreResponse(score);
+  });
+  return { decider, release, firstAsk };
+}
+
+test("finding 1: while the decider has not answered, the export already holds a complete, valid, score-less hand-back", async () => {
+  const held = heldDecider();
+  const s = await openSession(ON);
+  let running: Promise<any> | undefined;
+  try {
+    const params = BAD_PAYLOAD;
+    const decision = (await s.pi.fireToolCall({ type: "tool_call", toolName: "finish", toolCallId: "fin-1", input: params })) as any;
+    assert.notEqual(decision?.block, true);
+    running = s.pi.tool("finish").execute("fin-1", params) as Promise<any>;
+    await held.firstAsk;
+    // A kill here (run timeout, a child's budget) must leave a whole export.
+    const files = snapshot(s.exportDir);
+    for (const name of EXPORT_FILES) assert.notEqual(files[name], null, `${name} is on disk before the score is asked`);
+    const check = JSON.parse(files["check.json"]!);
+    assert.equal(check.outcome, "accepted");
+    assert.doesNotMatch(files["check.json"]!, /"support"/);
+    assert.doesNotMatch(files["report.json"]!, /support_scored/);
+    // Byte-identical to the switch-off hand-back at this point.
+    for (const name of EXPORT_FILES) assert.equal(files[name], GOLDEN.report_finish[name], `${name} while the score is pending`);
+    // The session is finished already: any further tool call is refused.
+    const blocked = (await s.pi.fireToolCall({
+      type: "tool_call",
+      toolName: "read",
+      toolCallId: "tc-after",
+      input: { path: "roles.py", purpose: "after the hand-back" },
+    })) as any;
+    assert.equal(blocked?.block, true, "the hand-back is recorded before the score is asked");
+
+    held.release();
+    const result = await running;
+    assert.equal(result.details.outcome, "accepted");
+    const after = readJson(join(s.exportDir, CHECK_FILENAME));
+    assert.equal(after.facts.find((f: any) => f.id === "f1").support.status, "scored", "the score is written once it comes");
+    assert.equal(readJson(join(s.exportDir, REPORT_FILENAME)).support_scored, 2);
+    assert.match(readFileSync(join(s.exportDir, "answer.md"), "utf8"), new RegExp(SUPPORT_LEGEND.slice(0, 20)));
+    assert.equal(held.decider.calls.length, 2);
+  } finally {
+    held.release();
+    // The finish call ends before the next test installs its own decider.
+    await running?.catch(() => undefined);
+    held.decider.restore();
+    s.dispose();
+  }
+});
+
+test("finding 1: in enforce mode a refused round is on disk as refused before the score is asked", async () => {
+  const held = heldDecider();
+  const s = await openSession({ ...ON, ASSOCIATE_CHECK_MODE: "enforce" });
+  let running: Promise<any> | undefined;
+  try {
+    running = s.pi.tool("finish").execute("fin-1", BAD_PAYLOAD) as Promise<any>;
+    await held.firstAsk;
+    const files = snapshot(s.exportDir);
+    for (const name of ["facts.json", "check.json", "report.json"] as const) {
+      assert.equal(files[name], GOLDEN.enforce_refused[name], `${name} while the score is pending`);
+    }
+    assert.equal(files["answer.md"], null);
+    held.release();
+    const result = await running;
+    assert.equal(result.details.outcome, "refused");
+    const after = readJson(join(s.exportDir, CHECK_FILENAME));
+    assert.equal(after.outcome, "refused");
+    assert.equal(after.facts.find((f: any) => f.id === "f1").support.status, "scored");
+    assert.ok(!existsSync(join(s.exportDir, "answer.md")));
+  } finally {
+    held.release();
+    // The finish call ends before the next test installs its own decider.
+    await running?.catch(() => undefined);
+    held.decider.restore();
+    s.dispose();
+  }
+});
+
 // --- AC4: a failing decider never stops the hand-back ---------------------------
 
 const FAILURES: Array<[string, string, Answer]> = [
@@ -390,15 +485,21 @@ for (const [label, reason, answer] of FAILURES) {
       assert.equal(result.details.outcome, "accepted");
       for (const name of EXPORT_FILES) assert.ok(existsSync(join(s.exportDir, name)), `${name} is written`);
       const check = readJson(join(s.exportDir, CHECK_FILENAME));
+      // After an unreachable, timeout or HTTP error the batch sends nothing
+      // more (review finding 2): f3 is skipped; a malformed answer does not stop it.
+      const stops = reason !== "malformed";
+      const expected: Record<string, string> = { f1: reason, f3: stops ? "skipped_after_failure" : reason };
       for (const id of ["f1", "f3"]) {
         const support = check.facts.find((f: any) => f.id === id).support;
         assert.equal(support.status, "not_scored", `${id}: ${JSON.stringify(support)}`);
-        assert.equal(support.reason, reason);
+        assert.equal(support.reason, expected[id]);
       }
+      assert.equal(decider.calls.length, stops ? 1 : 2);
       assert.equal(readJson(join(s.exportDir, REPORT_FILENAME)).support_scored, 0);
       const files = snapshot(s.exportDir);
       // Each shown fact says it was not scored; nothing else in answer.md moves.
-      assert.equal(files["answer.md"], withSupportText(GOLDEN.report_finish["answer.md"]!, `support not scored: ${phrase}`));
+      const marks = [`support not scored: ${phrase}`, `support not scored: ${stops ? "the check was unavailable" : phrase}`];
+      assert.equal(files["answer.md"], withSupportText(GOLDEN.report_finish["answer.md"]!, marks));
       assert.equal(withoutSupportText(files["answer.md"]!), GOLDEN.report_finish["answer.md"]);
     } finally {
       decider.restore();
@@ -420,6 +521,27 @@ test("AC4: with no key set every passed fact is marked not scored and nothing is
   } finally {
     decider.restore();
     s.dispose();
+  }
+});
+
+test("AC4: with the gate contract failing to compile every passed fact is marked contract_invalid, not bad_url (review finding 3)", async () => {
+  const contract = contractCopy(() => {});
+  const gatePath = join(contract.dir, "gate.json");
+  const gate = readJson(gatePath);
+  gate.decider.path = "no-leading-slash";
+  writeFileSync(gatePath, JSON.stringify(gate, null, 2));
+  const decider = installDecider();
+  const s = await openSession({ ...ON, ASSOCIATE_CONTRACT_DIR: contract.dir });
+  try {
+    await callFinish(s.pi, "fin-1", BAD_PAYLOAD);
+    assert.equal(decider.calls.length, 0);
+    const check = readJson(join(s.exportDir, CHECK_FILENAME));
+    for (const id of ["f1", "f3"]) assert.equal(check.facts.find((f: any) => f.id === id).support.reason, "contract_invalid");
+    for (const name of EXPORT_FILES) assert.ok(existsSync(join(s.exportDir, name)), `${name} is written`);
+  } finally {
+    decider.restore();
+    s.dispose();
+    contract.dispose();
   }
 });
 

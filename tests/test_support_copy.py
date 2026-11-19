@@ -384,6 +384,66 @@ def test_the_run_result_of_an_old_export_is_what_the_re_check_alone_gives(tmp_pa
         assert accuracy_result(export, accuracy) == evidence_result(export, accuracy)
 
 
+class _Counted:
+    """Call counters for the run result's re-check and export reads (review finding 4)."""
+
+    def __init__(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        import evidence.accuracy.check as evidence_check
+
+        import associate.accuracy as accuracy_pkg
+        from associate.accuracy import support as support_mod
+
+        self.inspect_own = 0
+        self.inspect_evidence = 0
+        self.reads: list[str] = []
+        own, theirs = accuracy_pkg.inspect_export, evidence_check.inspect_export
+        read = support_mod._read_object
+
+        def own_inspect(*args: Any, **kwargs: Any) -> Any:
+            self.inspect_own += 1
+            return own(*args, **kwargs)
+
+        def evidence_inspect(*args: Any, **kwargs: Any) -> Any:
+            self.inspect_evidence += 1
+            return theirs(*args, **kwargs)
+
+        def counted_read(export_dir: Path, name: str) -> dict[str, Any]:
+            self.reads.append(name)
+            return read(export_dir, name)
+
+        monkeypatch.setattr(accuracy_pkg, "inspect_export", own_inspect)
+        monkeypatch.setattr(evidence_check, "inspect_export", evidence_inspect)
+        monkeypatch.setattr(support_mod, "_read_object", counted_read)
+
+
+def test_the_run_result_reads_each_score_file_once(tmp_path, monkeypatch):
+    from associate.accuracy import accuracy_result
+
+    counted = _Counted(monkeypatch)
+    result = accuracy_result(scored_export(tmp_path), contract.load_accuracy())
+    assert result["support_scored"] == 2
+    assert sorted(counted.reads) == ["check.json", "report.json"]
+
+
+def test_the_run_result_runs_its_own_re_check_once_with_a_score(tmp_path, monkeypatch):
+    from associate.accuracy import accuracy_result
+
+    counted = _Counted(monkeypatch)
+    accuracy_result(scored_export(tmp_path), contract.load_accuracy())
+    # evidence-cli's own accuracy_result runs inspect_export once inside it,
+    # which associate cannot change; associate adds at most one more.
+    assert counted.inspect_evidence + counted.inspect_own <= 2
+    assert counted.inspect_own <= 1
+
+
+def test_the_run_result_of_an_export_without_a_score_runs_the_re_check_once(tmp_path, monkeypatch):
+    from associate.accuracy import accuracy_result
+
+    counted = _Counted(monkeypatch)
+    accuracy_result(export_with(tmp_path, None), contract.load_accuracy())
+    assert counted.inspect_evidence + counted.inspect_own == 1
+
+
 # --- no network ------------------------------------------------------------------------------
 
 
