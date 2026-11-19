@@ -35,8 +35,6 @@ from typing import Any
 from associate.cli._commands import measure as base
 from associate.cli._output import emit_result
 
-REPO_ROOT = Path(__file__).resolve().parents[3]
-BROAD_NOTE = REPO_ROOT / "docs" / "accuracy" / "broad-difference-threshold.md"
 DEFAULT_SHEET = "broad-grading-sheet.json"
 DEFAULT_KEY = "broad-grading-key.json"
 #: How many problems a refusal names; `sheet-check` lists all of them.
@@ -78,6 +76,13 @@ def _sheet() -> ModuleType:
     from associate.measure import sheet
 
     return sheet
+
+
+def __getattr__(name: str) -> Any:
+    """``BROAD_NOTE`` is the one in ``associate.measure.broad``, loaded when first asked for."""
+    if name == "BROAD_NOTE":
+        return _broad().BROAD_NOTE
+    raise AttributeError(f"module {__name__!r} has no attribute {name!r}")
 
 
 # ------------------------------------------------------------------ run --broad
@@ -356,7 +361,11 @@ def cmd_report(
     rows = sheet.run_rows(records, joined)
     for row in rows:
         row["marking"] = _broad().FIRST_MARKING
-    note = Path(args.difference_note) if getattr(args, "difference_note", None) else BROAD_NOTE
+    note = (
+        Path(args.difference_note)
+        if getattr(args, "difference_note", None)
+        else _broad().BROAD_NOTE
+    )
     not_finished = sorted(
         sheet.run_key(record) for record in records if record.get("status") != "finished"
     )

@@ -68,7 +68,7 @@ import subprocess
 from pathlib import Path
 from typing import Any, Mapping, Sequence
 
-from associate.measure.broad import FIRST_MARKING
+from associate.measure.broad import COMMIT_ID, FIRST_MARKING
 
 SHEET_FORMAT = 1
 KIND_SHEET = "broad_grading_sheet"
@@ -105,6 +105,7 @@ _K_CONTAMINATED = "contaminated"
 _K_REPOSITORY = "repository"
 _K_SUPPORT = "support_score"
 _K_AT_CAP = "at_cap"
+_K_FALSE = "statements_false"
 _K_COMMIT = "commit"
 _K_FACTS_STATED = "facts_stated"
 _K_FACTS_TOTAL = "facts_total"
@@ -127,7 +128,6 @@ _RULE_MARKS = "-*_"
 _TABLE_ROW = re.compile(r"^\s*\|")
 _TABLE_SEPARATOR = re.compile(r"^[\s|:-]+$")
 _SENTENCE_END = re.compile(r"[.!?][\"')\]]*\s+(?=[A-Z\d`\"'(\[*_])", re.ASCII)
-_COMMIT = re.compile(r"[0-9a-f]{40}", re.ASCII)
 _OBJECT_ID = re.compile(r"[0-9a-f]{40,64}", re.ASCII)
 _GIT_TIMEOUT_S = 120
 
@@ -340,7 +340,7 @@ class _Checkouts:
         checkout = self._own.get(name)
         if checkout is None:
             return f"no checkout of {name} in {self._root}"
-        if _COMMIT.fullmatch(commit) is None:
+        if COMMIT_ID.fullmatch(commit) is None:
             return f"the commit on the sheet for {name} is not a full commit id"
         out = self._git(checkout, "ls-tree", "-r", "-z", "--end-of-options", commit)
         if out is None:
@@ -486,7 +486,12 @@ def _key_entry_key(entry: Mapping[str, Any]) -> Key | None:
 
 
 def _sheet_against_key(sheet: Mapping[str, Any], key_runs: Mapping[str, dict]) -> list[str]:
-    on_sheet = {run["id"]: run for run in sheet[_K_RUNS] if isinstance(run, dict)}
+    # A run with no id is named by check_sheet; it cannot be compared with the key.
+    on_sheet = {
+        run["id"]: run
+        for run in sheet[_K_RUNS]
+        if isinstance(run, dict) and isinstance(run.get("id"), str)
+    }
     problems = [f"{i} is in the key and not on the sheet" for i in key_runs if i not in on_sheet]
     problems += [f"{i} is on the sheet and not in the key" for i in on_sheet if i not in key_runs]
     for run_id, run in on_sheet.items():
@@ -582,7 +587,7 @@ def run_rows(
                 _K_FACTS_STATED: broad.get(_K_FACTS_STATED),
                 _K_FACTS_TOTAL: broad.get(_K_FACTS_TOTAL),
                 "facts": broad.get("facts"),
-                "statements_false": counts[VERDICT_FALSE] if counts else None,
+                _K_FALSE: counts[VERDICT_FALSE] if counts else None,
                 "statements_not_checkable": counts[VERDICT_NOT_CHECKABLE] if counts else None,
                 _K_STATEMENTS: counts[_K_STATEMENTS] if counts else None,
                 _K_ANSWER_SOURCE: broad.get(_K_ANSWER_SOURCE),
@@ -634,11 +639,29 @@ _FINISH_WORDS = {
 }
 
 
+def left_out(row: Mapping[str, Any], count: str) -> str | None:
+    """Why a run is left out of the rule for *count*, or None when it is counted.
+
+    A run that read the answer key is left out. So is one whose answer was cut
+    at the cap: both counts would be of part of an answer. For the count of
+    false statements a run with no statement is left out too: it has none
+    counted false only because there was nothing to grade, and a lower count
+    is the better one.
+    """
+    if row[_K_CONTAMINATED]:
+        return "read the answer key"
+    if row[_K_AT_CAP]:
+        return "the answer was cut at the cap"
+    if count == _K_FALSE and row[_K_STATEMENTS] == 0:
+        return "no statement to grade"
+    return None
+
+
 def rule_counts(rows: Sequence[Mapping[str, Any]], count: str) -> dict[str, dict[str, list[int]]]:
-    """Task, then arm, then one value of *count* per run that did not read the answer key."""
+    """Task, then arm, then one value of *count* per run that :func:`left_out` does not name."""
     counts: dict[str, dict[str, list[int]]] = {}
     for row in rows:
-        if not row[_K_CONTAMINATED] and row[count] is not None:
+        if row[count] is not None and left_out(row, count) is None:
             counts.setdefault(row["task"], {}).setdefault(row["arm"], []).append(row[count])
     return counts
 
@@ -649,15 +672,18 @@ def _run_line(row: Mapping[str, Any]) -> str:
     ]
     if row[_K_STATEMENTS] is not None:
         parts += [
-            f"statements counted false {row['statements_false']}",
+            f"statements counted false {row[_K_FALSE]}",
             f"not checkable {row['statements_not_checkable']}",
             f"statements {row[_K_STATEMENTS]}",
         ]
     cap = f"at the {row[_K_REPLY_CAP]}-character cap" if row[_K_AT_CAP] else "not at the cap"
     parts.append(f"answer from {row[_K_ANSWER_SOURCE]}, {cap}")
     parts.append(_FINISH_WORDS[row.get(_K_BROAD_FINISHED)])
-    if row[_K_CONTAMINATED]:
-        parts.append("read the answer key (left out of the rule)")
+    whole = left_out(row, _K_FACTS_STATED)
+    if whole is not None:
+        parts.append(f"{whole} (left out of the rule)")
+    elif row[_K_STATEMENTS] is not None and left_out(row, _K_FALSE) is not None:
+        parts.append(f"{left_out(row, _K_FALSE)} (left out of the rule on false statements)")
     return f"    r{row[_K_REPEAT]}: " + "; ".join(parts)
 
 

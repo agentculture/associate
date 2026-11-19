@@ -43,8 +43,10 @@ The report reads these four values and nothing else from this file.
 The report says "not applicable" and gives the reason when the stored runs are
 not the ones this rule was written for: not exactly two arms, not six
 repositories with runs, or fewer than three usable runs of an arm in a
-repository. A run that failed to launch or read the answer key is not a usable
-run.
+repository. A run that failed to launch, read the answer key, or had its answer
+cut at the 2,000-character cap is not a usable run. For the count of false
+statements, a run with no statement to grade is not a usable run either: it
+has none counted false only because there was nothing to grade.
 
 ## What this measures
 

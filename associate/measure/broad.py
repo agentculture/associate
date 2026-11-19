@@ -55,7 +55,7 @@ BROAD_KEY_PATH = "docs/accuracy/broad-tasks.json"
 BROAD_KEY_NAME = "broad-tasks.json"
 FORMAT_VERSION = 1
 FIRST_MARKING = "first marking"
-#: ``associate.harness.pi.FINAL_REPLY_CHARS``: how much of a final reply a run result keeps.
+#: How much of a final reply a run result keeps.
 FINAL_REPLY_CAP = answer_mod.FINAL_REPLY_CAP
 #: The result's ``handback_outcome`` when ``finish`` was accepted.
 HANDBACK_ACCEPTED = "accepted"
@@ -69,7 +69,7 @@ VERDICT_NOT_APPLICABLE = "not applicable"
 _FILE_KEYS = frozenset({"$comment", "version", "prompt", "tasks"})
 _TASK_KEYS = frozenset({"id", "repo", "commit", "facts", "dropped"})
 _REPO_KEYS = ("host", "owner", "name")
-_COMMIT = re.compile(r"[0-9a-f]{40}", re.ASCII)
+COMMIT_ID = re.compile(r"[0-9a-f]{40}", re.ASCII)
 _SAFE_ID = re.compile(r"[A-Za-z0-9][A-Za-z0-9._-]{0,63}", re.ASCII)
 _PARAMETERS = re.compile(r"^```json\n(.*?)\n```$", re.DOTALL | re.MULTILINE)
 _RULE_NUMBERS = ("repositories", "repositories_required", "runs_per_arm")
@@ -164,7 +164,7 @@ def _task_problems(task: Any, label: str) -> list[str]:
         for key in _REPO_KEYS:
             problems.extend(_text_problem(repo[key], f"{name}: repo.{key}"))
     commit = task.get(_K_COMMIT)
-    if not isinstance(commit, str) or _COMMIT.fullmatch(commit) is None:
+    if not isinstance(commit, str) or COMMIT_ID.fullmatch(commit) is None:
         problems.append(f"{name}: commit must be a full lowercase 40-character hash")
     return problems + _fact_problems(task.get(_K_FACTS), name)
 
@@ -293,6 +293,11 @@ def read_rule(text: str) -> Rule:
         raise RuleError(f"{', '.join(_RULE_NUMBERS)} must be positive whole numbers")
     if values["repositories_required"] > values["repositories"]:
         raise RuleError("repositories_required is more than repositories")
+    if 2 * values["repositories_required"] <= values["repositories"]:
+        raise RuleError(
+            "repositories_required must be more than half of repositories, "
+            "or both arms could meet it at once"
+        )
     return Rule(**values)
 
 

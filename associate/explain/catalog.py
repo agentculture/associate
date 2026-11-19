@@ -790,7 +790,11 @@ repository, a pinned commit and the facts).
   stored run holds the whole answer, `answer_source` (where it came from), `finished`
   (whether `finish` was accepted, from the result's `handback_outcome`; null when the
   result does not say) and `at_cap`, and per checklist fact whether it was marked as
-  stated. The answer of a run that finished is the model's text in `answer.md`. A run
+  stated. The answer of a run that finished is what `answer.md` hands the caller, in
+  the model's words: the value of each accepted fact and the text of each accepted
+  conclusion and open item, then the model's unchecked text. The quote, walk id and
+  marks the harness wrote after a fact are left out, so a grader cannot tell the arm
+  from a support mark. A run
   that ended without `finish` leaves no `answer.md`, and its result keeps only the
   last 2,000 characters of its last message, so its answer is the fullest text there
   is, with no line removed, in this order: `final_message.md` (the export's copy of
@@ -844,8 +848,10 @@ repository, a pinned commit and the facts).
   of its runs is at least as good as every run of the other arm and one is strictly
   better; "a change" needs that in the stated number of repositories, anything else is
   "no difference shown". When the stored runs are not the ones the rule was written
-  for it says "not applicable" with the reason; a run that read the answer key is left
-  out. While the rule file is a draft the report says the verdict is not computed.
+  for it says "not applicable" with the reason. A run that read the answer key, or
+  whose answer was cut at the cap, is left out; a run with no statement to grade is
+  left out of the count of false statements. A rule file whose required number of
+  repositories is not more than half of them is refused. While the rule file is a draft the report says the verdict is not computed.
 
 ## Exit codes
 

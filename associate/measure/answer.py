@@ -31,11 +31,21 @@ a failure.
 The broad tasks
 ---------------
 :func:`model_answer` is the rule above and is what the short tasks are graded
-on. A broad run is read with :func:`broad_answer`, which differs only when the
-export has no ``answer.md``, that is, when the run ended without an accepted
-``finish``. The run result then holds only the last ``FINAL_REPLY_CAP``
-characters of the last message, so the text is taken from the fullest source
-there is, in this order:
+on. A broad run is read with :func:`broad_answer`, which differs in two ways.
+
+With an ``answer.md`` in the export, the text is what the caller was handed in
+the model's words: the value of each accepted fact, the text of each accepted
+conclusion and open item (taken from ``facts.json`` by the id on the rendered
+line; from the line itself when that file does not have it), each as its own
+paragraph, and then the unchecked text :func:`model_answer` gives. The quote, the
+walk id, the source kind and the marks the harness wrote after a fact are left
+out: they are not the model's statements, and a support mark would show a
+grader which arm the run was in.
+
+Without an ``answer.md``, that is, when the run ended without an accepted
+``finish``, the run result holds only the last ``FINAL_REPLY_CAP`` characters of
+the last message, so the text is taken from the fullest source there is, in
+this order:
 
 1. ``final_message.md`` in the export: the last message whole, redacted, as
    the model wrote it (``lib/finalmessage.ts``; exports written before that
@@ -66,6 +76,8 @@ from typing import Any, Mapping
 
 from evidence.answer import grade
 
+from associate.harness.pi import FINAL_REPLY_CHARS
+
 ANSWER_FILE = "answer.md"
 SOURCE_ANSWER_MD = "answer.md"
 SOURCE_FINAL_REPLY = "final_reply"
@@ -75,8 +87,9 @@ STATEMENTS_FILE = "statements.json"
 SOURCE_FINAL_MESSAGE = FINAL_MESSAGE_FILE
 SOURCE_STATEMENTS = STATEMENTS_FILE
 SOURCE_FINAL_REPLY_CAPPED = "final_reply_capped"
-#: ``associate.harness.pi.FINAL_REPLY_CHARS``: how much of a final reply a run result keeps.
-FINAL_REPLY_CAP = 2000
+FACTS_FILE = "facts.json"
+#: How much of a final reply a run result keeps.
+FINAL_REPLY_CAP = FINAL_REPLY_CHARS
 
 REASON_NO_TEXT = "no_model_text"
 REASON_NOTHING_TO_READ = "no_result_and_no_export"
@@ -218,19 +231,71 @@ def _full_message(result: Mapping[str, Any] | None, export_dir: Path | None) -> 
     return reply, SOURCE_FINAL_REPLY_CAPPED
 
 
+# An accepted item's line in answer.md, as lib/render.ts writes it: the id, then
+# the item's own words, then what the harness added.
+_ITEM_LINE = re.compile(r"^- (?P<id>[fvo]\d+)(?:: | \[[a-z_]+\] )(?P<rest>.*)$", re.ASCII)
+_ITEM_KINDS = {"f": ("facts", "value"), "v": ("verdicts", "text"), "o": ("open_items", "text")}
+_FACT_QUOTE = ' \u2014 "'
+_HARNESS_TAIL = re.compile(r" \([^()]*\)$")
+
+
+def _handed_back(export_dir: Path) -> dict[str, str]:
+    """Item id to the model's own words for it, from the export's ``facts.json``."""
+    raw = _read(export_dir / FACTS_FILE)
+    try:
+        parsed = json.loads(raw) if raw else None
+    except ValueError:
+        return {}
+    words: dict[str, str] = {}
+    for section, field in _ITEM_KINDS.values():
+        items = parsed.get(section) if isinstance(parsed, dict) else None
+        for item in items if isinstance(items, list) else []:
+            if isinstance(item, dict) and isinstance(item.get(field), str):
+                words[str(item.get("id"))] = item[field]
+    return words
+
+
+def _from_line(item_id: str, rest: str) -> str:
+    """The item's words cut out of its rendered line, for an export without them."""
+    if item_id.startswith("f"):
+        return rest.partition(_FACT_QUOTE)[0] if _FACT_QUOTE in rest else rest
+    return _HARNESS_TAIL.sub("", rest)
+
+
+def _accepted_items(answer_md: str, export_dir: Path) -> list[str]:
+    """The words of each accepted fact, conclusion and open item, in the order rendered."""
+    words = _handed_back(export_dir)
+    items = []
+    for line in answer_md.splitlines():
+        if line.strip() == _UNCHECKED_HEADING:
+            break
+        found = _ITEM_LINE.match(line)
+        if found is None:
+            continue
+        own = words.get(found["id"]) or _from_line(found["id"], found["rest"])
+        if own.strip():
+            items.append(" ".join(own.split()))
+    return items
+
+
 def broad_answer(
     result: Mapping[str, Any] | None, export_dir: Path | str | None = None
 ) -> ModelAnswer:
-    """The answer of a broad run: ``answer.md`` when there is one, else the whole last message.
+    """The answer of a broad run, in the model's words (see the module text).
 
-    With ``answer.md`` in the export this is :func:`model_answer`. Without it
-    the text is the fullest of ``final_message.md``, an uncut ``final_reply``,
-    the statements of ``statements.json`` and the capped ``final_reply``, with
-    no line removed (see the module text).
+    With ``answer.md`` in the export: the accepted items' own words, then the
+    unchecked text of :func:`model_answer`. Without it the text is the fullest
+    of ``final_message.md``, an uncut ``final_reply``, the statements of
+    ``statements.json`` and the capped ``final_reply``, with no line removed.
     """
     directory = Path(export_dir) if export_dir is not None else None
-    if directory is not None and _read(directory / ANSWER_FILE) is not None:
-        return model_answer(result, directory)
+    rendered = _read(directory / ANSWER_FILE) if directory is not None else None
+    if directory is not None and rendered is not None:
+        own = model_answer(result, directory)
+        parts = _accepted_items(rendered, directory) + ([own.text] if own.text else [])
+        if not parts:
+            return own
+        return ModelAnswer("\n\n".join(parts), SOURCE_ANSWER_MD, None)
     text, source = _full_message(result, directory)
     if text:
         return ModelAnswer(text, source, None)
