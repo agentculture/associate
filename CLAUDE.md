@@ -314,6 +314,15 @@ on its third `finish`; another ended with no `finish`. A continued cortex run
 reviewed a real change and cited the earlier run with a `prior:` label. Each
 is one run.
 
+**The support check, measured live** (2026-11-19, pi 1.5.2, `worker`, reasoning
+on, report mode; `docs/notes/support-score-broad-measurement.md`): 36 runs on
+six broad tasks, three per repository per arm, with the check off and on. Under
+the committed rule no difference is shown, on either count. The statements were
+graded by model graders, not by a person; an outside Gemini grader marked 150
+of 1,657 false and the Claude graders 71. About nine in ten of the false
+statements are in the model's unchecked text. The switch stays off for every
+model. Issue #39 follows from it.
+
 **Not measured yet. Do not describe any of it as working:**
 
 - the resident's first reply on the mesh: it paused under the 23:00–08:00
