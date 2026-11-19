@@ -1,0 +1,124 @@
+# associate decider fact score
+
+> associate scores each reported fact with the decider: for every fact whose quote was found, it asks whether the quote supports the value and records the answer beside the quote check, so a reader and the model itself can tell a backed claim from a merely cited one
+
+## Audience
+
+- the operator and any caller reading a run's answer, who need to know which facts are backed by their quote; and the model during a run, which can check a claim before handing it back
+
+## Before → After
+
+- Before: today the harness checks only that a fact's quote appears in the result it cites; it cannot tell whether the quote supports the value, so a fact with a real quote and a wrong value passes; an offline replay on 85 real facts showed the decider separating true pairs from planted wrong ones (issue #29), but nothing in the harness uses it
+  - instruction: Replay: 67 of 72 true pairs scored 0.5 or more; 0 of 21 with a changed number did.
+- After: a finished run's files say, for each fact whose quote was found, whether the decider judged the quote to support the value, with the score, or that it was not scored; the model can get the same judgement during the run from `check_quote`; nothing is refused on it
+
+## Why it matters
+
+- it is the first check of whether a claim follows from its evidence, not only whether the evidence exists; it lets the agent strengthen its own claims before hand-back and gives the operator a second, independent signal on each fact
+  - instruction: The operator's stated priority on 2026-11-18: use CLEF to improve accuracy.
+
+## Requirements
+
+- at finish, after the quote check, the extension asks the decider one question per fact that passed the quote check (does the quote, on its own, state or directly show the value) and stores the score per fact in check.json and a count in report.json under their own names; the score never enters accepted, the refusal list, or the passed, refused and unchecked counts
+  - instruction: Grounded in scope findings s4 and s5. Fetch the score in index.ts after checkHandback; keep it in the saved object the `message_end` handler rewrites from; declare the new count in report.schema.json.
+  - honesty: for a hand-back with a fact whose quote is found, check.json holds a score for that fact and report.json a count of scored facts, while accepted, the refusal list and the passed, refused and unchecked counts are byte-identical to a run with the score switched off
+- the score is fetched by a small client of its own, not by the gate's evaluate path: no Super tier, no read-only fallback, no gate id and no gate line in the walk; a missing key, timeout, non-2xx or malformed answer is recorded as not scored and never as passed, and finish still writes all its files
+  - instruction: Grounded in scope findings s1 and s2. Reuse buildClefRequest and deciderUrl or copy their pattern; do not call createGate().evaluate.
+  - honesty: with the decider unreachable, timing out, answering non-2xx or answering malformed, finish still writes facts.json, check.json, report.json and answer.md, each fact is recorded as not scored, and the walk gains no gate line
+- the question wording, the cut-off, the timeout and a per-model on/off switch for the score live in accuracy.json and its schema, and nowhere in code
+  - instruction: Grounded in scope finding s5. Declare each new key in accuracy.schema.json and lib/contract.ts.
+  - honesty: a test fails if the question wording, the cut-off or the timeout appears as a literal in the extension's TypeScript or in associate's Python
+- the Python re-check copies the per-fact score from the export with a label naming the extension as its source, as it does for `unchecked_text`; it never calls the decider, and an export without the score still loads
+  - instruction: Grounded in scope finding s3. Follow the `unchecked_text` and `unchecked_text_source` pattern in associate/accuracy/check.py.
+  - honesty: associate run --json and associate check show the score copied from the export with its source label, the Python side makes no network call, and an export written before this change loads without error
+- `check_quote` returns the support score for a quote and value as one added key beside the matcher verdict, so the model can check a claim before it hands back; the existing keys do not change
+  - instruction: Grounded in scope finding s4. check.test.ts:167-190 pins the existing keys.
+  - honesty: `check_quote` returns the same verdict and nearest text as before for the same inputs, plus the new key, and reports not scored when the decider cannot be reached
+- the rendered answer marks each fact with both signals separately: quote found, and whether the quote supports the value with its score, or not scored
+  - instruction: Grounded in scope finding s4. The marker goes in factLine in lib/render.ts.
+  - honesty: answer.md shows, for a scored fact, both markers as separate text, and never the word accuracy
+- the cut-off in the contract is set from the labelled set, and the labelled set, the question wording and the decider's served model are recorded with it, so a later change of any of them is visible
+  - instruction: docs/notes/ gains a calibration note in the style of docs/notes/gate-calibration.md.
+  - honesty: the note names the set size, the raters, the wording, the cut-off and the served model read from a live response
+- scoring calls are bounded: a per-fact timeout and a per-hand-back cap on the number of scored facts and on total scoring time, all from the contract; facts beyond the cap are recorded as not scored
+  - instruction: The decider serves one request at a time and the safety gate shares it (scope finding on lobes-cli).
+  - honesty: a hand-back with more facts than the cap leaves the extra facts marked not scored, and finish returns within the configured total time when the decider is slow
+- the value and quote are passed through the policy redaction filter before they are sent to the decider, as gate state is
+  - honesty: a quote containing a string the policy redacts reaches the decider with that string replaced
+- the labelled set includes quotes that carry text addressed to the scorer (for example an instruction to answer yes), and the share of those that score above the cut-off is reported; the score is not offered as protection against such text until that share is known
+  - honesty: the calibration note reports the count and share for that group separately
+- a score is asked once per distinct value and quote in a session and reused across retry rounds and the rewrite after the final message
+  - honesty: a hand-back refused and answered again with the same fact produces one decider request for it, counted by a fake decider in a test
+- a fact with an empty value, or whose value and quote exceed the decider's input limit, is recorded as not scored with the reason, and is never sent cut short
+  - honesty: a fact with an over-long quote is marked not scored with a size reason and the fake decider receives no request for it
+- the prompts tell the model that `check_quote` is how it learns the support score during a run; in report mode the score shown after an accepted hand-back is for the caller, since the run has ended
+  - honesty: the model prompts name `check_quote` for this, and no text promises the model a second chance in report mode
+
+## Honesty conditions
+
+- a run with the score switched on leaves a score or a not-scored mark for every quote-found fact, in a field of its own
+- the shared matcher and hand-back vectors pass unchanged on both sides, and a test fails if lib/facts.ts or lib/matcher.ts imports a module that performs a network call
+- accuracy.json still lists every model in report mode, and no code path refuses or retries a hand-back because of a score
+- the rendered answer and the `check_quote` result each show the score in words a reader can act on without knowing what the decider is
+- the replay numbers quoted here match issue #29
+- one live run in report mode on worker and one on cortex each leave a check.json in which every quote-found fact is either scored or marked not scored
+- the measurement in the last success signal reports whether answers were more often correct with the score than without it
+- the two percentages are computed by a committed script from the committed labels and scores
+- the arm is run with the same tasks, models, reasoning setting and repeats as the arm it is compared with
+- the person counting false statements does not see which arm a run came from until all runs are graded, and every statement counted as false is recorded with the file and line that contradicts it
+- no user-facing string or document produced by this work describes the score or its count as accuracy
+- no commit of this work touches the lobes-cli repository, and each need found is an issue there
+
+## Success signals
+
+- on a labelled set of at least 300 real value-and-quote pairs, labelled by two raters, the decider score at the contract cut-off passes at least 90% of the pairs both raters call supported and at most 10% of the pairs both call unsupported; the set and the labels are committed
+  - instruction: The replay had 85 facts and one rater. Build the set from stored exports of the groundwork comparison; planted errors are reported separately from real ones.
+- on one broad explanation task per repository, on six repositories (culture, culture-rules, colleague, associate, coherence-cli, workledger-cli, each pinned to a commit), run at least 3 times per repository on worker with the score switched off and at least 3 times with it on, each run is reported with two counts: how many of that repository's checked facts it states correctly (from a checklist of at least 8 facts per repository, each checked twice independently before the first run), and how many of its statements are false by hand-grading against the repository; counts are reported per run and not pooled into one percentage, the rule for what difference is called a change is committed before the first run, and the result is stated whichever way it comes out
+  - instruction: Depends on the groundwork spec being built first.
+
+## Scope / boundaries
+
+- checkHandback, the matcher and their shared vectors stay pure and unchanged in behaviour: no network call is added inside them
+  - instruction: Grounded in scope finding s4.
+- no model is moved to enforce mode by this work, and no refusal is made on the decider score; the score is report-only until a live run in report mode is recorded
+  - instruction: Grounded in scope finding s5 and issue #29.
+- the score is never called accuracy and never folded into the quote-found counts; a low score is shown to the model as information, not as a refusal
+- nothing in lobes-cli is changed; anything the decider would need (calibration for this use, several states per request, priority between callers) is filed as an issue on that repository
+
+## Non-goals
+
+- splitting summary text into single assertions and scoring each one; scoring a value against the whole source text; a per-run final report (issue #28); the checker findings in issue #24
+
+## Assumptions
+
+- a report-only signal with no refusal reason needs no entry in the checks list and so no motivating failure yet; a real recorded case of a found quote that does not support its value is needed before it can ever refuse
+  - instruction: Grounded in scope finding s5.
+- scoring at finish does not starve the safety gate: within one session the model is waiting on finish, so its own gate calls are not in flight; other sessions and children share the decider's single lock
+  - instruction: Grounded in scope finding s2. Not measured; check it with children and a second session before relying on it.
+
+## Scope exploration
+
+- `s1` — `.pi/extensions/associate/lib/gate.ts and associate/contract/gate.json (the decider client)`: buildClefRequest, deciderUrl and judgeClefAnswers are exported (gate.ts:695-784) but tied to the gate's question set and allow rules; askClef, withTimeout and raceAbort, which send and time out, are not exported (gate.ts:790-874). createGate().evaluate mixes in the Super tier, the read-only fallback and g-numbered gate ids (gate.ts:1165-1259): on a decider outage the read-only fallback returns allow for a non-mutating call, which would be wrong for a fact score. gate.json says to bump its version on any change to a question (gate.json:2), so fact questions must not go in it. A truncated state is never sent to CLEF (gate.ts:1189); the limit is 16384 tokens (gate.json:8).
+- `s2` — `lobes-cli decider service (docs/decider.md, lobes/decider_sidecar/, lobes/gateway/server.py) at HEAD 04c86a0`: POST /v1/systemone takes one state and several questions per request, no batch of states (`clef_vllm.py`:84-106); one request at a time per sidecar behind a lock (`clef_vllm.py`:311), so end-of-run fact scoring queues with live gate calls, whose timeout is 30 s (gate.ts:93). Median latency about 516 ms at 1,024 tokens or fewer (docs/decider.md:58). Calibration is documented on 418 labelled questions, top-1 0.9378 (docs/decider.md:43-58); nothing documents yes/no scores on quote-and-claim pairs. The service keeps no state and nothing says it is for the gate only. A third question type, score, exists and associate does not use it (`clef_vllm.py`:70).
+- `s3` — `associate/accuracy/check.py, associate/cli/_commands/check.py, the run result (Python re-check)`: Python recomputes counts and verdicts from walk.jsonl, results and facts.json and never uses the extension's (check.py:894-896); the one value it copies is `unchecked_text`, labelled `unchecked_text_source`: extension (check.py:920-924), which is the pattern for a score it cannot recompute. The re-check is documented as standard library only, no model called (check.py:1-7). `_check_fact` builds each fact from a fixed set of keys (check.py:446-453), so a score in the saved files would be dropped unless copied on purpose. report.schema.json and the fact items of facts.schema.json forbid extra properties (report.schema.json:7, facts.schema.json:19). A missing optional field read with a guard is safe for old exports (check.py:855-860).
+- `s4` — `.pi/extensions/associate/index.ts finish path, lib/facts.ts, lib/handback.ts, lib/render.ts, tools/check.ts`: finish.execute and `check_quote`.execute are already async (index.ts:~381, tools/check.ts:99) and await nothing today. checkHandback is pure and synchronous by its own header (facts.ts:6-9), by test (facts.test.ts:97-101) and by the plan (docs/plans/2026-11-17-associate-accuracy-method.md:54), and its output is compared field by field with vectors shared with Python (facts.test.ts:51-66): a network call cannot go inside it. The `message_end` handler rewrites check.json, report.json and answer.md from a saved object (index.ts:547-570), so a score must be kept in that object. Refusals come from refusalsOf (handback.ts:303) and accepted (facts.ts:~598); a score must enter neither. answer.md skips refused facts and renders the rest through factLine (render.ts:83-93,148). check.test.ts:167-190 pins that `check_quote` and the matcher return the same verdict and nearest, so existing keys must not change.
+- `s5` — `associate/contract/accuracy.json, schemas/accuracy.schema.json, schemas/report.schema.json, schemas/facts.schema.json, validate.py`: accuracy.json states every threshold, retry count, mode and table lives in it and nowhere in code (accuracy.json:2); accuracy.schema.json and report.schema.json forbid extra properties, so a scorer setting and a new count each need a declared property (finish-check.test.ts:508-510 fails on an unknown report key). There is no schema for check.json. facts.schema.json is the model's payload and forbids extra keys on a fact, so a harness-written score cannot live there. A check listed in checks needs a non-blank `motivating_failure` (validate.py:556-581, CLAUDE.md:796-800); a report-only signal with no refusal reason needs no checks entry. `test_accuracy_contract.py` pins every model's mode as report.
+- `s6` — `challenge pass / security lens: associate/contract/gate.json comment, lib/gate.ts redaction`: gate.json line 2 says the state sent to the decider never carries a tool result or fetched web content. A fact's quote is exactly that: text from a file, a command or a web page, chosen by the model. This use sends untrusted text to the decider for the first time, and a quote can be written to push the answer.
+  - seeds: `c25`, `c26`
+- `s7` — `challenge pass / lifecycle lens: index.ts finish rounds and message_end rewrite`: finish can run several times in enforce mode and the `message_end` handler rewrites check.json, report.json and answer.md (index.ts:547-570); without reuse each pass would ask the decider again for the same facts, behind the same single lock the safety gate uses.
+  - seeds: `c27`
+- `s8` — `challenge pass / overlooked-actors lens: who can act on a score`: In report mode finish ends the run, so a low score shown in its result cannot change the model's answer; only `check_quote`, called earlier, or a retry round in enforce mode lets the model act. The spec's audience claim named the model without saying how the score reaches it in time.
+  - seeds: `c28`, `c29`
+- `s9` — `challenge pass / concurrency lens: lobes-cli decider single lock`: Examined from the scoping finding only (`clef_vllm.py`:311, one request at a time); no probe was run with a second session. The cap and timeout requirement bounds one session's use; the effect on other sessions' gate calls stays parked.
+
+## Decisions
+
+- the work is two specs: the measurement groundwork and grader first (issues #30, #22, #32), then the decider score (#31) (operator, 2026-11-18, resolves q3)
+- the decider scores only facts whose quote was found in the cited result (operator, 2026-11-18, resolves q4)
+- the score is measured on a few big asks, not on the 24 short questions: one broad explanation task per repository on six repositories (culture, culture-rules, colleague, associate, coherence-cli, workledger-cli, each pinned to a commit), each run graded on two counts, how many of that repository's checked facts it states correctly and how many of its statements are false by hand-grading; a checklist of checked facts is written for each of the six repositories, each fact checked twice independently as the 24 short tasks were; the facts already checked for associate, coherence-cli and workledger-cli may be reused where they fit a broad explanation (operator, 2026-11-18 and 2026-11-19)
+
+## Open parks
+
+- [unknown_nonblocking] whether the decider's yes/no score is calibrated for quote-and-value pairs: lobes-cli documents calibration on 418 other questions only
+- [unknown_nonblocking] whether end-of-run scoring delays safety-gate calls from other sessions or children enough to trip their 30 second timeout
+- [unknown_nonblocking] the decider's response names its model only as clef, so a change of the served checkpoint cannot be seen from a score; the cut-off could go stale without notice

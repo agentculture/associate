@@ -19,11 +19,14 @@ from dataclasses import dataclass
 # 2      = environment / setup error (tool not installed, file unreadable)
 # 3      = the run served but its hand-back failed the check after the allowed
 #          rounds; the result object is still printed on stdout
-# 4+     = reserved for future categorisation
+# 4      = `run` only: pi did not finish within --timeout and was killed; the
+#          result object (outcome ``timeout``) is still printed on stdout
+# 5+     = reserved for future categorisation
 EXIT_SUCCESS = 0
 EXIT_USER_ERROR = 1
 EXIT_ENV_ERROR = 2
 EXIT_HANDBACK_REFUSED = 3
+EXIT_RUN_TIMEOUT = 4
 
 
 @dataclass

@@ -1,0 +1,92 @@
+{
+  "plan_slug": "associate-graded-measurement-groundwork",
+  "schema_version": 2,
+  "created": "2026-11-18T17:08:42Z",
+  "updated": "2026-11-19T04:35:31Z",
+  "deviations": [
+    {
+      "id": "d1",
+      "what": "t9: the runner stores two labelled readings of the grade for a current-harness run (the answer text alone; the answer text plus the values and conclusions the model wrote in its hand-back). The plan asked for one grade.",
+      "task_ref": "t9",
+      "reason": "t7 found a recorded worker run whose expected values appear only in its conclusions and facts, so the answer text alone would mark it wrong (risk r4). The operator chooses one reading after the pilot.",
+      "affects": [
+        "c32"
+      ],
+      "origin": "llm",
+      "status": "approved",
+      "classification": null,
+      "seq": 1
+    },
+    {
+      "id": "d2",
+      "what": "t8: the second, independent check of each task's answer is done by a separate agent started by the main agent after t8, not inside t8; t8 also revises the expected values of the six converted tasks against the saved real answers of 2026-11-17.",
+      "task_ref": "t8",
+      "reason": "A second check started by the first checker is not independent of it. t6 wrote small values as fixed phrases (for example 'max_lines 1000') that a correct answer in another form would fail.",
+      "affects": [
+        "c23"
+      ],
+      "origin": "llm",
+      "status": "approved",
+      "classification": null,
+      "seq": 2
+    },
+    {
+      "id": "d3",
+      "what": "t1: associate/accuracy/check.py is kept as a re-export module and tests/test_run.py (not in t1's owned files) was edited; t6 edited tests/test_accuracy_tasks.py (not owned).",
+      "task_ref": "t1",
+      "reason": "The harness adapters still import from associate.accuracy.check, and both tests enforced what the tasks changed (the empty dependency list; the old task file header).",
+      "affects": [],
+      "origin": "llm",
+      "status": "approved",
+      "classification": null,
+      "seq": 3
+    },
+    {
+      "id": "d4",
+      "what": "t11: the associate measure verb can start the comparison as a detached background process that survives the terminal, with a status sub-verb that reads the stored records and a log file; the per-run timeout is a flag with a default of 3600 seconds (the plan's runs used 1500). No unlimited timeout: a hung run would stall every run behind it.",
+      "task_ref": "t11",
+      "reason": "Operator, 2026-11-18: increase the timeout or drop it, and run in a background process, which associate should support. Half of six live runs timed out at 1500 seconds, and reasoning is now on in both arms.",
+      "affects": [],
+      "origin": "llm",
+      "status": "approved",
+      "classification": null,
+      "seq": 4
+    },
+    {
+      "id": "d5",
+      "what": "The comparison runs on worker only: 2 arms (worker before PR 27, worker on main) by 24 tasks by 3 repeats, 144 runs, not 288. Cortex is not compared; its only runs are the 16 pilot runs, from which no difference is read. The difference rule (12 of 72 per model) is unchanged and applies to worker.",
+      "task_ref": "t12",
+      "reason": "Operator, 2026-11-18: worker is faster; run the comparison after the code-review fixes on worker only.",
+      "affects": [],
+      "origin": "user",
+      "status": "approved",
+      "classification": "needs-follow-up",
+      "seq": 5
+    },
+    {
+      "id": "d6",
+      "what": "The measurement of whether a mechanism changes answers moves to the decider-score spec as a few big asks (one broad explanation task per pinned repository, graded on checked facts stated and false statements). The 24 short tasks are kept as the checklist.",
+      "task_ref": "t12",
+      "reason": "Operator, 2026-11-18: the short questions leave no room to show a change; confirmed measuring on a few big asks, folded into the decider-score plan.",
+      "affects": [],
+      "origin": "user",
+      "status": "approved",
+      "classification": "needs-follow-up",
+      "seq": 6
+    },
+    {
+      "id": "d7",
+      "what": "The before/after comparison of the accuracy method (issue 32) is not run at all, on either model: deviation d5's 144 worker runs are dropped. This stream delivers the measurement tooling, the 24 checked tasks and two 16-run pilots only.",
+      "task_ref": "t12",
+      "reason": "My reading of the operator's messages of 2026-11-18 ('if we skip this test and move to the decider first', then 'Confirmed' on the big-ask design); not stated outright.",
+      "affects": [],
+      "origin": "llm",
+      "status": "approved",
+      "classification": "needs-follow-up",
+      "seq": 7
+    }
+  ],
+  "evidence": [],
+  "deltas": [],
+  "supersessions": []
+}

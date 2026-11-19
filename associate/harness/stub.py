@@ -18,7 +18,7 @@ from pathlib import Path
 from typing import Any, Iterable
 
 from associate import contract
-from associate.accuracy.check import (
+from associate.accuracy import (
     ANSWER_FILENAME,
     CHECK_FILENAME,
     FACTS_FILENAME,

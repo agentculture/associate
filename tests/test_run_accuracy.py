@@ -467,7 +467,7 @@ def test_an_operators_ambient_check_mode_is_not_inherited(tmp_path: Path):
 
 
 def test_an_export_with_no_facts_is_not_applicable_not_an_error(tmp_path: Path):
-    from associate.accuracy.check import accuracy_result
+    from associate.accuracy import accuracy_result
 
     export = tmp_path / "e"
     export.mkdir()
@@ -488,7 +488,7 @@ def test_an_export_with_no_facts_is_not_applicable_not_an_error(tmp_path: Path):
 
 
 def test_a_refused_round_with_rounds_left_is_named_unresolved_and_does_not_exit_3(tmp_path: Path):
-    from associate.accuracy.check import accuracy_result
+    from associate.accuracy import accuracy_result
 
     result, root = _pi(tmp_path, refused=True, check_mode="enforce")
     export = root / "s1" / "export"

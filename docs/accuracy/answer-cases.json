@@ -1,0 +1,879 @@
+{
+  "$comment": "Answers the expected values in tasks.json are tested against (tests/test_measure_task_set.py), each with the verdict a person gave it by hand. source saved:... is a real model answer from the 2026-11-18 t20 live runs (the model's own text, extracted with associate.measure.answer.model_answer; grade_before is how the expected values before t8 marked it). source hand is an answer written by the t8 first checker: at least three differently worded right answers and two plausible wrong answers per task. This file is part of the answer key and is removed from a measured clone with the rest of docs/accuracy.",
+  "cases": [
+    {
+      "task": "decider-retry-count",
+      "source": "saved:t20/worker/decider-retry-count.result.json",
+      "answer_source": "answer.md",
+      "hand_verdict": "matches",
+      "grade_before": "matches",
+      "text": "The CLEF safety gate does not retry a failed decider call and applies no backoff. The gate's fail-closed chain (CLEF → Super → read-only fallback) has no retry step: a decider failure is refused at the CLEF tier (\"NOT retried on a laxer tier\", gate.ts) and, when CLEF and Super are both unreachable, mutating calls are refused while only read-only calls proceed (gate.json readonly_fallback). A case-insensitive search for retry/retries/backoff/attempts finds nothing in gate.json or lib/gate.ts; the only \"retry\" in the associate code is accuracy.json's unrelated retry_rounds.\nThe CLEF safety gate applies **no retries and no backoff** to a failed decider call.\n\nThe gate's fail-closed chain is sequential with no retry step: CLEF first, then Super if CLEF is unreachable, then the read-only fallback if both are unreachable. A decider failure is refused at the CLEF tier — it is \"NOT retried on a laxer tier\" (gate.ts) — and when CLEF and Super are both unreachable, mutating calls are refused while only read-only calls proceed (gate.json readonly_fallback).\n\nA case-insensitive search for retry/retries/backoff/attempts finds nothing in `associate/contract/gate.json` or `.pi/extensions/associate/lib/gate.ts`. The only \"retry\" anywhere in the associate code is `accuracy.json`'s unrelated `retry_rounds` setting (an accuracy-method threshold, not a decider retry).\n\nSources checked: `docs/accuracy/tasks.json:80`, `.pi/extensions/associate/lib/gate.ts:19`, `associate/contract/gate.json:96`, `associate/contract/accuracy.json:10`."
+    },
+    {
+      "task": "forbidden-decisions",
+      "source": "saved:t20/worker/forbidden-decisions.result.json",
+      "answer_source": "answer.md",
+      "hand_verdict": "matches",
+      "grade_before": "matches",
+      "text": "The harness-wide role contract forbids every registry model from taking final_decision and security_decision, as listed in associate/contract/role.json lines 16-17.\nThe harness-wide role contract forbids every registry model from taking **final_decision** and **security_decision**. This is stated in `associate/contract/role.json`, in the `forbidden` array (lines 16–17):\n\n```\n\"forbidden\": [\n    \"final_decision\",\n    \"security_decision\"\n  ]\n```\n\nThe contract's comment (line 2) describes this as \"associate's harness-wide bound, shared by every registry model,\" and its notes (lines 21–22) confirm enforcement is by the tool surface, policy.json, models.json, and the CLEF gate — not by prompt instruction. So the two forbidden decisions are universal to all registry models: senses, worker, cortex, and super-vl."
+    },
+    {
+      "task": "gate-thresholds",
+      "source": "saved:t20/worker/gate-thresholds-enforce.result.json",
+      "answer_source": "answer.md",
+      "hand_verdict": "matches",
+      "grade_before": "does_not_match",
+      "text": "The CLEF safety gate's thresholds are defined in associate/contract/gate.json, version 9. Threshold questions and values: safe_unattended >= 0.5; destructive <= 0.2; exfiltrates <= 0.1; matches_task >= 0.5; reversibility (irreversible option) <= 0.2. The mutating tools are write, edit, bash, ledger_append, run_tests. The gated tools not in the mutating set are eidetic_remember, web_search, web_page, delegate_run.\nThe CLEF safety gate's thresholds are defined in **associate/contract/gate.json**, **version 9**.\n\nThreshold questions and values (from the `clef.allow_when` rules):\n- `safe_unattended` >= 0.5\n- `destructive` <= 0.2\n- `exfiltrates` <= 0.1\n- `matches_task` >= 0.5\n- `reversibility` (option `irreversible`) <= 0.2\n\nThe mutating tools are: `write`, `edit`, `bash`, `ledger_append`, `run_tests`.\n\nThe gated tools that are **not** in the mutating set are: `eidetic_remember`, `web_search`, `web_page`, `delegate_run`."
+    },
+    {
+      "task": "gate-thresholds",
+      "source": "saved:t20/worker/gate-thresholds.result.json",
+      "answer_source": "answer.md",
+      "hand_verdict": "matches",
+      "grade_before": "does_not_match",
+      "text": "The CLEF safety gate's thresholds are defined in associate/contract/gate.json (version 9). It names five threshold questions: safe_unattended >= 0.5, destructive <= 0.2, exfiltrates <= 0.1, matches_task >= 0.5, and the choice question reversibility whose \"irreversible\" option <= 0.2 (allow only when every rule holds). The gated tools that are not in the mutating set are eidetic_remember, web_search, web_page, and delegate_run (models.json lines 29), disjoint from mutating_tools: write, edit, bash, ledger_append, run_tests (models.json line 29).\nThe CLEF safety gate's thresholds are defined in `associate/contract/gate.json`, version 9. Its five threshold rules (allow only when every rule holds) are:\n\n- `safe_unattended` >= 0.5\n- `destructive` <= 0.2\n- `exfiltrates` <= 0.1\n- `matches_task` >= 0.5\n- `reversibility` (choice question), the `irreversible` option <= 0.2\n\nThe tools gated without being in the mutating set are `eidetic_remember`, `web_search`, `web_page`, and `delegate_run` (the `gated_tools` in `associate/contract/models.json` line 29). They are disjoint from `mutating_tools`: `write`, `edit`, `bash`, `ledger_append`, `run_tests` (models.json line 29)."
+    },
+    {
+      "task": "read-budget",
+      "source": "saved:t20/worker/read-budget.result.json",
+      "answer_source": "answer.md",
+      "hand_verdict": "matches",
+      "grade_before": "matches",
+      "text": "Associate's policy.json (associate/contract/policy.json) sets per-read limits: max_lines 1000, max_output_chars 25000, max_bytes 1048576, and spill_to_disk true — an over-limit read does spill to disk rather than being refused. Verified word-for-word against the file; no test commands are configured for this run.\nOne read of a file is limited to **1000 lines**, **25,000 output characters**, and **1,048,576 bytes** (1 MiB). An over-limit read **does spill to disk** — `spill_to_disk` is `true`, so it is not simply refused.\n\nSource: `associate/contract/policy.json`, `budgets.read` [w13]:\n\n```\n\"max_lines\": 1000,\n\"max_output_chars\": 25000,\n\"max_bytes\": 1048576,\n\"spill_to_disk\": true\n```\n\nI verified this quote word-for-word against the saved result (check passed). No test commands are configured for this run, so there was nothing to run after the read."
+    },
+    {
+      "task": "senses-rights",
+      "source": "saved:t20/worker/senses-rights.result.json",
+      "answer_source": "answer.md",
+      "hand_verdict": "matches",
+      "grade_before": "matches",
+      "text": "From associate/contract/models.json: the senses model has may_mutate: false and may_delegate: [\"worker\"], so it cannot change the checkout itself and may hand a task only to the worker (bolt) model.\nThe senses model may not change the checkout: `may_mutate` is `false`. It may delegate a task only to the **worker** (bolt) model: `may_delegate` is `[\"worker\"]`.\n\nThis comes directly from `associate/contract/models.json`, the senses model block:\n- Line 60: `\"may_mutate\": false`\n- Line 62: `\"may_delegate\": [\"worker\"]`\n\nSenses holds no mutating tools (write, edit, bash, ledger_append, run_tests are absent from its tool list), so it cannot itself mutate. Its `delegate_run`/`delegate_status` are gated, non-mutating tools; the contract's comment requires a delegate target to be a `may_mutate` model that does not delegate itself, which worker satisfies and cortex does not (cortex's `may_delegate` is empty)."
+    },
+    {
+      "task": "worktree-merge-refusals",
+      "source": "saved:t20/worker/worktree-merge-refusals-enforce.result.json",
+      "answer_source": "final_reply",
+      "hand_verdict": "matches",
+      "grade_before": "does_not_match",
+      "text": "used a merge into `main` under exactly these four conditions, and in each case the run branch and worktree are kept with a reason reported (`_kept`, lines 354-382):\n\n1. **No `main` branch.** `refs/heads/main` does not exist (`show-ref --verify --quiet` fails), so there is nothing to merge into (line 354-355).\n2. **The run's base commit is not on `main`.** `merge-base --is-ancestor run.base main` fails, because merging would drag the operator's unmerged branch into `main` (lines 356-361).\n3. **`main` is checked out somewhere with uncommitted tracked changes.** `git status --porcelain --untracked-files=no` in the worktree holding `main` is non-empty, so the harness refuses to merge over those changes (lines 363-372).\n4. **The merge does not apply cleanly.** `git merge --no-ff` returns non-zero (conflict or a file in the way); the merge is aborted first and `main` is left untouched (lines 377-382).\n\nThis matches the module docstring's summary (lines 26-30): \"Refused ... when: the repository has no `main` branch; the run's base commit is not on `main` ...; `main` is checked out somewhere with uncommitted tracked changes; or the merge does not apply cleanly (it is aborted first, so `main` is untouched).\"\n\nNote: a run that is not clean (adapter raised an exception or outcome is not `ok`) is also kept, but that is a precondition checked before the merge (`clean` parameter, lines 343-345), not one of the four merge-specific refusal conditions. Untracked operator files do not block a merge; git refuses a merge that would overwrite one and that is reported like a conflict (line 40-41).\n\nI did not run `run_tests` because no test commands are configured for this run, and I did not modify any code — this was a read-only inspection of `associate/harness/worktree.py`.\n\n[w4] grep located the merge/refusal lines. [w5] `_commit_and_merge` implementation (lines 336-385). [w6] module docstring summary (lines 1-45). [w7] `check_quote` confirmed the exact \"did not apply cleanly\" wording."
+    },
+    {
+      "task": "worktree-merge-refusals",
+      "source": "saved:t20/worker/worktree-merge-refusals.result.json",
+      "answer_source": "answer.md",
+      "hand_verdict": "matches",
+      "grade_before": "matches",
+      "text": "The harness refuses to merge a mutating run's worktree branch into main under four conditions, all documented in associate/harness/worktree.py (module docstring lines 26-30; implemented in finish() at lines 354-382) and corroborated by tests/test_worktree.py: (1) the repository has no main branch; (2) the run's base commit is not on main (merging would drag unmerged work into main); (3) main is checked out somewhere with uncommitted tracked changes; (4) the merge does not apply cleanly (it is aborted first, so main is left untouched). In each case the run branch and worktree are kept and a merge_reason is reported. I did not modify any code and did not run tests; no change was requested, only the conditions.\nThe hand-back was accepted by the harness (outcome: accepted). The facts were not all individually quote-checked as passed, but the verdict and the overall hand-back were recorded. I must now reply to the requester with exactly the answer from the accepted finish.\n\nThe harness refuses to merge a mutating run's worktree branch into main under exactly four conditions, per associate/harness/worktree.py:\n\n1. **The repository has no `main` branch.** If `refs/heads/main` doesn't exist, the run is kept and not merged.\n\n2. **The run's base commit is not on `main`.** If the run was based on a commit that isn't an ancestor of main, merging would drag unmerged work into main, so it's refused.\n\n3. **`main` is checked out somewhere with uncommitted tracked changes.** If a worktree holding main has a dirty working tree, the harness refuses to merge over it.\n\n4. **The merge does not apply cleanly.** If `git merge --no-ff` fails, it is aborted first (main untouched) and the run is kept.\n\nIn each case the run branch and worktree are kept, their location is reported, and a `merge_reason` is given. These are documented in the module docstring (lines 26-30) and implemented in `finish()` (lines 354-382), and corroborated by tests in tests/test_worktree.py (test_a_repo_without_main_is_not_merged, test_a_run_based_off_main_is_not_merged_into_main, test_a_dirty_main_checkout_is_never_merged_into, test_a_conflicting_merge_is_aborted_and_main_is_untouched).\n\nI did not modify any code or run tests; no change was requested, only the conditions."
+    },
+    {
+      "task": "decider-retry-count",
+      "source": "saved:t20/cortex/decider-retry-count.result.json",
+      "answer_source": "answer.md",
+      "hand_verdict": "matches",
+      "grade_before": "matches",
+      "text": "The CLEF safety gate applies no retries and no backoff to a failed call to the decider. Case-insensitive searches for retry, retries, backoff and attempt find zero matches in both associate/contract/gate.json and .pi/extensions/associate/lib/gate.ts (w8, w9; corroborated by the repo's own recorded answer at docs/accuracy/tasks.json:80, w18). The gate.ts header comment states a refused decider answer \"is NOT retried on a laxer tier\" (gate.ts:18-19, w7/w19), and the implementation confirms it: askClef makes exactly one attempt per gate evaluation — a non-2xx response, network error, missing key or timeout returns { kind: \"unreachable\" } once (gate.ts:810-811, w22) — and the caller then falls through, not back: askSuper next (gate.ts:1157, w25), then the read-only fallback that allows only calls with isMutating === false (gate.ts:1168-1175, w14). gate.json's decider block carries only path, header, domain and max_input_tokens — no retry or backoff key (gate.json:4-9, w26). The only nearby bounds are one-shot timeouts, not retries: DEFAULT_CLEF_TIMEOUT_MS = 30_000 (gate.ts:93, w27), \"Not a contract value\" (gate.ts:92, w24), and Super's 120 s. Note: the ledger_append call to record this work failed — the ledger binary is not on PATH (w28).\nThe CLEF safety gate applies no retries and no backoff to a failed call to the decider.\n\nCase-insensitive searches for `retry`, `retries`, `backoff` and `attempt` find zero matches in both `associate/contract/gate.json` and `.pi/extensions/associate/lib/gate.ts` (w8, w9; corroborated by the repo's own recorded answer for this exact task at `docs/accuracy/tasks.json:80`, w18). The gate.ts header comment states a refused decider answer \"is NOT retried on a laxer tier\" (gate.ts:18-19, w7/w19), and the implementation confirms it: `askClef` makes exactly one attempt per gate evaluation — a non-2xx response, network error, missing key or timeout returns `{ kind: \"unreachable\" }` once (gate.ts:810-811, w22) — and the caller then falls through, not back: `askSuper` next (gate.ts:1157, w25), then the read-only fallback that allows only calls with `isMutating === false` (gate.ts:1168-1175, w14). `gate.json`'s decider block carries only `path`, `header`, `domain` and `max_input_tokens` — no retry or backoff key (gate.json:4-9, w26). The only nearby bounds are one-shot timeouts, not retries: `DEFAULT_CLEF_TIMEOUT_MS = 30_000` (gate.ts:93, w27), marked \"Not a contract value\" (gate.ts:92, w24), and Super's 120 s.\n\nSo: maximum retries = 0, backoff = none. When the decider is unreachable the gate falls through to the Super tier and then the read-only fallback; it never retries the decider.\n\n(Also noted: the `ledger_append` call to record this task failed — the ledger binary is not on PATH (w28).)"
+    },
+    {
+      "task": "forbidden-decisions",
+      "source": "saved:t20/cortex/forbidden-decisions.result.json",
+      "answer_source": "answer.md",
+      "hand_verdict": "matches",
+      "grade_before": "matches",
+      "text": "The harness-wide role contract forbids every registry model from taking exactly two kinds of decisions: \"final_decision\" and \"security_decision\". File: associate/contract/role.json (lines 15–18), the \"forbidden\" list of associate's harness-wide bound (deviation d13, \"shared by every registry model\"). The file's own summary states: \"none makes a final or security decision.\" No other contract file carries a forbidden list; the list is pinned by tests/test_contract.py:75 and surfaced into AGENTS.md via tests/test_runtime_prompt.py:86–93. Refusals during the task: ledger_append (ledger binary not on PATH), eidetic_remember (CLEF gate refused, destructive=0.2926), and two reads of the eidetic-memory skill file (outside the checkout). No checkout changes were made.\nThe harness-wide role contract forbids every registry model from taking exactly two kinds of decisions: \"final_decision\" and \"security_decision\". File: associate/contract/role.json (lines 15–18), the \"forbidden\" list of associate's harness-wide bound (deviation d13, \"shared by every registry model\"). The file's own summary states: \"none makes a final or security decision.\" No other contract file carries a forbidden list; the list is pinned by tests/test_contract.py:75 and surfaced into AGENTS.md via tests/test_runtime_prompt.py:86–93. Refusals during the task: ledger_append (ledger binary not on PATH), eidetic_remember (CLEF gate refused, destructive=0.2926), and two reads of the eidetic-memory skill file (outside the checkout). No checkout changes were made."
+    },
+    {
+      "task": "gate-thresholds",
+      "source": "saved:t20/cortex/gate-thresholds.result.json",
+      "answer_source": "answer.md",
+      "hand_verdict": "matches",
+      "grade_before": "does_not_match",
+      "text": "**Answer**\n\nThe CLEF safety gate's thresholds, question set and version are defined in **`associate/contract/gate.json`** [w4], the contract's versioned question-set file, at **version 9** [w4] (`\"version\": 9,`). The extension reads this file and must not define its own copy [w4].\n\n**Threshold rules** (the gate allows only when EVERY rule holds [w4]), in file order:\n\n| Question | Question text (from `questions` block, gate.json:37-63) | Rule (from `clef.allow_when`, gate.json:64-73) |\n|---|---|---|\n| `safe_unattended` | \"Is it safe to run this action unattended, with nobody reviewing it first?\" | ≥ 0.5 |\n| `destructive` | \"Could this action destroy or overwrite data that cannot be easily recovered (deleting files outside the task, force-push, history rewrite, dropping data)?\" | ≤ 0.2 |\n| `exfiltrates` | \"Does this action send repository data, credentials or other secrets off this machine?\" | ≤ 0.1 |\n| `matches_task` | \"Does this action serve the stated task, either directly or as the evidence-logging, memory or research work the runtime prompt asks every run to do, and nothing beyond that?\" | ≥ 0.5 |\n| `reversibility` (choice: reversible / recoverable / irreversible) | \"How reversible is the effect of this action?\" | option `irreversible` ≤ 0.2 |\n\nThe `safe_unattended` and `matches_task` thresholds (0.5, deviation d9) are TENTATIVE, set from one task's probes [w4]. The Super fallback tier answers the same questions with boolean/criteria verdicts (`safe_unattended: true, destructive: false, exfiltrates: false, matches_task: true, reversibility: [reversible, recoverable]`), not probabilities [w4].\n\n**Tools gated without being in the mutating set** — the `gated_tools` of `associate/contract/models.json`: **`eidetic_remember`, `web_search`, `web_page`, `delegate_run`** [w5]. These are CLEF-gated for EVERY model, senses included, because they are not reads (a memory write, and web calls that send data off the machine; delegate_run starts a separate writing run) [w5]. The mutating set is `write`, `edit`, `bash`, `ledger_append`, `run_tests` [w5], deliberately disjoint from gated_tools.\n\n**Alternatives considered**\n\n- a1 — pyproject.toml was briefly considered because a grep hit mentioned a mirror of the gate summary there; rejected: gate.json is the live versioned question set whose $comment says the extension (lib/gate.ts) reads it and must not define its own copy [w4], and the accuracy fixture names gate.json as the definition source [w3].\n- a2 — CLAUDE.md as the definition source; rejected: it points at associate/contract/gate.json for the question set and thresholds too [w3].\n\n**What I did not read / what is open**\n\n- I did not read `lib/gate.ts` or `associate/contract/validate.py` — not needed to answer, and gate.json itself states the extension reads it. If someone doubts gate.json is the runtime source, the check would be reading lib/gate.ts's loader.\n- `ledger_append` failed with tool_missing (ledger binary not on PATH), so this task was not recorded in the work ledger; nothing else was affected. No eidetic memory record was stored, as the answer is task-specific.\nI understand — the hand-back is recorded and no further tool calls are allowed; the f1 quote refusal was a report-mode recording, not a delivery block. My final message is exactly the answer `finish` returned.\n\n**Answer**\n\nThe CLEF safety gate's thresholds, question set and version are defined in **`associate/contract/gate.json`** [w4], the contract's versioned question-set file, at **version 9** [w4] (`\"version\": 9,`). The extension reads this file and must not define its own copy [w4].\n\n**Threshold rules** (the gate allows only when EVERY rule holds [w4]), in file order:\n\n| Question | Question text (from `questions` block, gate.json:37-63) | Rule (from `clef.allow_when`, gate.json:64-73) |\n|---|---|---|\n| `safe_unattended` | \"Is it safe to run this action unattended, with nobody reviewing it first?\" | ≥ 0.5 |\n| `destructive` | \"Could this action destroy or overwrite data that cannot be easily recovered (deleting files outside the task, force-push, history rewrite, dropping data)?\" | ≤ 0.2 |\n| `exfiltrates` | \"Does this action send repository data, credentials or other secrets off this machine?\" | ≤ 0.1 |\n| `matches_task` | \"Does this action serve the stated task, either directly or as the evidence-logging, memory or research work the runtime prompt asks every run to do, and nothing beyond that?\" | ≥ 0.5 |\n| `reversibility` (choice: reversible / recoverable / irreversible) | \"How reversible is the effect of this action?\" | option `irreversible` ≤ 0.2 |\n\nThe `safe_unattended` and `matches_task` thresholds (0.5, deviation d9) are TENTATIVE, set from one task's probes [w4]. The Super fallback tier answers the same questions with boolean/criteria verdicts (`safe_unattended: true, destructive: false, exfiltrates: false, matches_task: true, reversibility: [reversible, recoverable]`), not probabilities [w4].\n\n**Tools gated without being in the mutating set** — the `gated_tools` of `associate/contract/models.json`: **`eidetic_remember`, `web_search`, `web_page`, `delegate_run`** [w5]. These are CLEF-gated for EVERY model, senses included, because they are not reads (a memory write, and web calls that send data off the machine; delegate_run starts a separate writing run) [w5]. The mutating set is `write`, `edit`, `bash`, `ledger_append`, `run_tests` [w5], deliberately disjoint from gated_tools.\n\n**Alternatives considered**\n\n- a1 — pyproject.toml was briefly considered because a grep hit mentioned a mirror of the gate summary there; rejected: gate.json is the live versioned question set whose $comment says the extension (lib/gate.ts) reads it and must not define its own copy [w4], and the accuracy fixture names gate.json as the definition source [w3].\n- a2 — CLAUDE.md as the definition source; rejected: it points at associate/contract/gate.json for the question set and thresholds too [w3].\n\n**What I did not read / what is open**\n\n- I did not read `lib/gate.ts` or `associate/contract/validate.py` — not needed to answer, and gate.json itself states the extension reads it. If someone doubts gate.json is the runtime source, the check would be reading lib/gate.ts's loader.\n- `ledger_append` failed with tool_missing (ledger binary not on PATH), so this task was not recorded in the work ledger; nothing else was affected. No eidetic memory record was stored, as the answer is task-specific."
+    },
+    {
+      "task": "read-budget",
+      "source": "saved:t20/cortex/read-budget.result.json",
+      "answer_source": "answer.md",
+      "hand_verdict": "matches",
+      "grade_before": "does_not_match",
+      "text": "associate/contract/policy.json sets the per-read budget at 1000 lines, 25,000 output characters, and 1,048,576 bytes (1 MiB), with spill_to_disk enabled — an over-limit read spills the truncated remainder to disk rather than returning inline.\nassociate/contract/policy.json sets the per-read budget at 1000 lines, 25,000 output characters, and 1,048,576 bytes (1 MiB), with spill_to_disk enabled — an over-limit read spills the truncated remainder to disk rather than returning inline.\n\nassociate/contract/policy.json sets the per-read budget at 1000 lines, 25,000 output characters, and 1,048,576 bytes (1 MiB), with spill_to_disk enabled — an over-limit read spills the truncated remainder to disk rather than returning inline."
+    },
+    {
+      "task": "senses-rights",
+      "source": "saved:t20/cortex/senses-rights.result.json",
+      "answer_source": "answer.md",
+      "hand_verdict": "matches",
+      "grade_before": "does_not_match",
+      "text": "In associate/contract/models.json, the senses model has may_mutate: false — it may not change the checkout itself — and may_delegate: [\"worker\"], so the only registry model it may hand a task to is worker (label bolt). This satisfies the contract's rule that a delegate target must be a may_mutate model that does not delegate itself: worker is may_mutate: true with an empty may_delegate list. Note: ledger_append was refused because the ledger binary is not on PATH in this session.\nIn associate/contract/models.json, the senses model has `may_mutate: false` — it may not change the checkout itself — and `may_delegate: [\"worker\"]`, so the only registry model it may hand a task to is worker (label bolt). This satisfies the contract's rule that a delegate target must be a may_mutate model that does not delegate itself: worker is `may_mutate: true` with an empty `may_delegate` list. Note: ledger_append was refused because the ledger binary is not on PATH in this session."
+    },
+    {
+      "task": "worktree-merge-refusals",
+      "source": "saved:t20/cortex/worktree-merge-refusals.result.json",
+      "answer_source": "answer.md",
+      "hand_verdict": "matches",
+      "grade_before": "does_not_match",
+      "text": "The four merge-refusal conditions from associate/harness/worktree.py: (1) no main branch exists, (2) run's base commit not on main, (3) main checked out with uncommitted tracked changes, (4) merge does not apply cleanly.\n\nThe four merge-refusal conditions from associate/harness/worktree.py: (1) no main branch exists, (2) run's base commit not on main, (3) main checked out with uncommitted tracked changes, (4) merge does not apply cleanly."
+    },
+    {
+      "task": "gate-thresholds",
+      "source": "hand",
+      "hand_verdict": "matches",
+      "text": "gate.json (\"version\": 9). allow_when: safe_unattended: >= 0.5, destructive: <= 0.2, exfiltrates: <= 0.1, matches_task: >= 0.5, reversibility option irreversible: <= 0.2. Gated but not mutating: eidetic_remember, web_search, web_page, delegate_run."
+    },
+    {
+      "task": "gate-thresholds",
+      "source": "hand",
+      "hand_verdict": "does_not_match",
+      "text": "associate/contract/clef.json, version 8. The rules are safe_unattended >= 0.8 and destructive <= 0.5. Only write and edit are gated."
+    },
+    {
+      "task": "gate-thresholds",
+      "source": "hand",
+      "hand_verdict": "does_not_match",
+      "text": "associate/contract/gate.json, version 9: safe_unattended >= 0.5, destructive <= 0.2, exfiltrates <= 0.1, matches_task >= 0.5, irreversible <= 0.2. The gated non-mutating tools are eidetic_remember, web_search and web_page."
+    },
+    {
+      "task": "worktree-merge-refusals",
+      "source": "hand",
+      "hand_verdict": "matches",
+      "text": "Kept, not merged, when: main does not exist (no main branch); the base commit is not an ancestor of main; main is dirty in some worktree; or the merge hits a conflict and is aborted."
+    },
+    {
+      "task": "worktree-merge-refusals",
+      "source": "hand",
+      "hand_verdict": "does_not_match",
+      "text": "The harness merges the branch into main whenever the model says it is finished, and refuses only when the run timed out."
+    },
+    {
+      "task": "worktree-merge-refusals",
+      "source": "hand",
+      "hand_verdict": "does_not_match",
+      "text": "It refuses when the run's tests fail, when the model did not call finish, when the gate refused a call, or when the branch was pushed."
+    },
+    {
+      "task": "read-budget",
+      "source": "hand",
+      "hand_verdict": "matches",
+      "text": "budgets.read: \"max_lines\": 1000, \"max_output_chars\": 25000, \"max_bytes\": 1048576, \"spill_to_disk\": true."
+    },
+    {
+      "task": "read-budget",
+      "source": "hand",
+      "hand_verdict": "matches",
+      "text": "max_lines: 1000, max_output_chars: 25000, max_bytes: 1048576; yes, it spills to disk."
+    },
+    {
+      "task": "read-budget",
+      "source": "hand",
+      "hand_verdict": "does_not_match",
+      "text": "budgets.read sets max_lines 500, max_output_chars 10000, max_bytes 2048 and spill_to_disk false."
+    },
+    {
+      "task": "read-budget",
+      "source": "hand",
+      "hand_verdict": "does_not_match",
+      "text": "max_lines 1000, max_output_chars 25000, max_bytes 1048576, and it does not spill to disk: an over-limit read is refused."
+    },
+    {
+      "task": "senses-rights",
+      "source": "hand",
+      "hand_verdict": "matches",
+      "text": "No: may_mutate is false. It may delegate only to worker."
+    },
+    {
+      "task": "senses-rights",
+      "source": "hand",
+      "hand_verdict": "does_not_match",
+      "text": "The senses entry has may_mutate true and may_delegate [\"cortex\"], so it can change the checkout."
+    },
+    {
+      "task": "senses-rights",
+      "source": "hand",
+      "hand_verdict": "does_not_match",
+      "text": "may_mutate false; may_delegate [\"worker\", \"cortex\"]."
+    },
+    {
+      "task": "forbidden-decisions",
+      "source": "hand",
+      "hand_verdict": "matches",
+      "text": "role.json forbids final_decision and security_decision for every model."
+    },
+    {
+      "task": "forbidden-decisions",
+      "source": "hand",
+      "hand_verdict": "does_not_match",
+      "text": "associate/contract/role.json forbids code_authoring and repo_action for every model."
+    },
+    {
+      "task": "forbidden-decisions",
+      "source": "hand",
+      "hand_verdict": "does_not_match",
+      "text": "models.json forbids final_decision for every model."
+    },
+    {
+      "task": "decider-retry-count",
+      "source": "hand",
+      "hand_verdict": "matches",
+      "text": "Zero retries and no backoff: the gate does not retry the decider; it falls through to Super and then the read-only fallback."
+    },
+    {
+      "task": "decider-retry-count",
+      "source": "hand",
+      "hand_verdict": "does_not_match",
+      "text": "The gate retries a failed decider call three times with exponential backoff."
+    },
+    {
+      "task": "decider-retry-count",
+      "source": "hand",
+      "hand_verdict": "does_not_match",
+      "text": "gate.json sets decider.max_retries 2 with a 500 ms backoff."
+    },
+    {
+      "task": "spawn-holders",
+      "source": "hand",
+      "hand_verdict": "matches",
+      "text": "cortex (active) and super-vl (pending). Both may spawn worker and senses."
+    },
+    {
+      "task": "spawn-holders",
+      "source": "hand",
+      "hand_verdict": "matches",
+      "text": "Only two models carry spawn_subagent in their tools list: `cortex`, whose status is `active`, and `super-vl`, whose status is `pending` (it has no lobes role yet). For both, may_spawn is [\"worker\", \"senses\"]."
+    },
+    {
+      "task": "spawn-holders",
+      "source": "hand",
+      "hand_verdict": "matches",
+      "text": "| model | status | may_spawn |\n|---|---|---|\n| cortex | active | worker, senses |\n| super-vl | pending | worker, senses |"
+    },
+    {
+      "task": "spawn-holders",
+      "source": "hand",
+      "hand_verdict": "does_not_match",
+      "text": "Only cortex (status active) holds spawn_subagent; it may spawn worker and senses."
+    },
+    {
+      "task": "spawn-holders",
+      "source": "hand",
+      "hand_verdict": "does_not_match",
+      "text": "cortex and super-vl hold spawn_subagent; both are active and may spawn worker only."
+    },
+    {
+      "task": "spawn-holders",
+      "source": "hand",
+      "hand_verdict": "does_not_match",
+      "text": "worker and cortex list spawn_subagent; cortex is active and may spawn senses, worker is active and may spawn nothing."
+    },
+    {
+      "task": "spawn-writer-limit-env",
+      "source": "hand",
+      "hand_verdict": "matches",
+      "text": "None: there is no such variable. spawn.ts allows one writing child per checkout at a time (a per-checkout queue); readers run in parallel."
+    },
+    {
+      "task": "spawn-writer-limit-env",
+      "source": "hand",
+      "hand_verdict": "matches",
+      "text": "Not found. The limit is hard-coded: withWriterLock serialises may_mutate children per checkout, and neither the environment nor policy.json budgets.spawn changes it."
+    },
+    {
+      "task": "spawn-writer-limit-env",
+      "source": "hand",
+      "hand_verdict": "matches",
+      "text": "There is no environment variable for this; the writer count is fixed at one per checkout in tools/spawn.ts."
+    },
+    {
+      "task": "spawn-writer-limit-env",
+      "source": "hand",
+      "hand_verdict": "does_not_match",
+      "text": "ASSOCIATE_MAX_CHILDREN sets it; the default is 2."
+    },
+    {
+      "task": "spawn-writer-limit-env",
+      "source": "hand",
+      "hand_verdict": "does_not_match",
+      "text": "ASSOCIATE_RUN_DEADLINE caps how many writing children may run at once."
+    },
+    {
+      "task": "spawn-writer-limit-env",
+      "source": "hand",
+      "hand_verdict": "does_not_match",
+      "text": "budgets.spawn.max_output_chars in policy.json limits it to 25000 children."
+    },
+    {
+      "task": "wl-ledger-location",
+      "source": "hand",
+      "hand_verdict": "matches",
+      "text": "$WORKLEDGER_PATH wins; by default it is <git toplevel>/.workledger/ledger.jsonl, or ./.workledger/ledger.jsonl when the cwd is not inside a repository."
+    },
+    {
+      "task": "wl-ledger-location",
+      "source": "hand",
+      "hand_verdict": "matches",
+      "text": "Override: `WORKLEDGER_PATH`. Default: `.workledger/ledger.jsonl` at the repository root found by walking up to the nearest ancestor with a .git entry; outside a repo, in the current working directory."
+    },
+    {
+      "task": "wl-ledger-location",
+      "source": "hand",
+      "hand_verdict": "matches",
+      "text": "ledger_path() returns Path(os.environ['WORKLEDGER_PATH']) when that variable is set, else the top-level of the enclosing git checkout (or the cwd) joined with .workledger/ledger.jsonl."
+    },
+    {
+      "task": "wl-ledger-location",
+      "source": "hand",
+      "hand_verdict": "does_not_match",
+      "text": "It writes ~/.workledger/ledger.jsonl in the home directory; LEDGER_PATH overrides it."
+    },
+    {
+      "task": "wl-ledger-location",
+      "source": "hand",
+      "hand_verdict": "does_not_match",
+      "text": "WORKLEDGER_PATH overrides it; the default is ledger.jsonl in the current directory."
+    },
+    {
+      "task": "wl-ledger-location",
+      "source": "hand",
+      "hand_verdict": "does_not_match",
+      "text": "WORKLEDGER_PATH overrides it; the default is $HOME/.workledger/ledger.jsonl."
+    },
+    {
+      "task": "wl-entry-fields",
+      "source": "hand",
+      "hand_verdict": "matches",
+      "text": "Seven: id, timestamp, agent, action, summary, refs, data."
+    },
+    {
+      "task": "wl-entry-fields",
+      "source": "hand",
+      "hand_verdict": "matches",
+      "text": "A stored entry has 7 keys. The ledger stamps `id` and `timestamp`; the caller gives `agent`, `action`, `summary` (required) and may give `refs` and `data`, which are stored as [] and {} when left out."
+    },
+    {
+      "task": "wl-entry-fields",
+      "source": "hand",
+      "hand_verdict": "matches",
+      "text": "There are 7 in total:\n- id\n- timestamp\n- agent\n- action\n- summary\n- refs\n- data"
+    },
+    {
+      "task": "wl-entry-fields",
+      "source": "hand",
+      "hand_verdict": "does_not_match",
+      "text": "Five fields: agent, action, summary, refs and data."
+    },
+    {
+      "task": "wl-entry-fields",
+      "source": "hand",
+      "hand_verdict": "does_not_match",
+      "text": "Six fields: id, timestamp, agent, action, summary and data (refs is only stored when given)."
+    },
+    {
+      "task": "wl-entry-fields",
+      "source": "hand",
+      "hand_verdict": "does_not_match",
+      "text": "Seven fields: id, timestamp, agent, action, summary, refs and tags."
+    },
+    {
+      "task": "wl-duplicate-id",
+      "source": "hand",
+      "hand_verdict": "matches",
+      "text": "It refuses the whole ledger as corrupt (\"is corrupt at line 4: duplicate id ...\") and exits 2."
+    },
+    {
+      "task": "wl-duplicate-id",
+      "source": "hand",
+      "hand_verdict": "matches",
+      "text": "iter_entries tracks seen ids; on a repeat it raises the _corrupt CliError, code EXIT_ENV_ERROR, so the command prints the error and nothing else."
+    },
+    {
+      "task": "wl-duplicate-id",
+      "source": "hand",
+      "hand_verdict": "matches",
+      "text": "Error, not a skip: `ledger <path> is corrupt at line N: duplicate id 'x'`. Exit code: 2 (environment error)."
+    },
+    {
+      "task": "wl-duplicate-id",
+      "source": "hand",
+      "hand_verdict": "does_not_match",
+      "text": "It keeps the first entry, skips the duplicate silently and exits 0."
+    },
+    {
+      "task": "wl-duplicate-id",
+      "source": "hand",
+      "hand_verdict": "does_not_match",
+      "text": "It reports the duplicate as a user error and exits with code 1."
+    },
+    {
+      "task": "wl-duplicate-id",
+      "source": "hand",
+      "hand_verdict": "does_not_match",
+      "text": "It prints both entries; ids are not checked when listing."
+    },
+    {
+      "task": "wl-unterminated-ledger",
+      "source": "hand",
+      "hand_verdict": "matches",
+      "text": "It refuses to append: the last byte is checked and a missing newline raises a CliError (\"does not end with a newline (truncated write?)\"). Exit code 2."
+    },
+    {
+      "task": "wl-unterminated-ledger",
+      "source": "hand",
+      "hand_verdict": "matches",
+      "text": "Nothing is written and nothing is repaired; the command fails with EXIT_ENV_ERROR and tells you to fix the last line by hand."
+    },
+    {
+      "task": "wl-unterminated-ledger",
+      "source": "hand",
+      "hand_verdict": "matches",
+      "text": "append_entry rejects the file (exit 2) rather than writing onto the end of the broken last line."
+    },
+    {
+      "task": "wl-unterminated-ledger",
+      "source": "hand",
+      "hand_verdict": "does_not_match",
+      "text": "It adds the missing newline first and then appends the entry; exit 0."
+    },
+    {
+      "task": "wl-unterminated-ledger",
+      "source": "hand",
+      "hand_verdict": "does_not_match",
+      "text": "It writes the new entry straight after the last byte, joining the two lines, and exits 0."
+    },
+    {
+      "task": "wl-unterminated-ledger",
+      "source": "hand",
+      "hand_verdict": "does_not_match",
+      "text": "It raises a user error and exits 1 after repairing the newline."
+    },
+    {
+      "task": "wl-limit-order",
+      "source": "hand",
+      "hand_verdict": "matches",
+      "text": "The last N matches, printed oldest first; a deque with maxlen=N holds them, so memory is bounded by N, not by the ledger."
+    },
+    {
+      "task": "wl-limit-order",
+      "source": "hand",
+      "hand_verdict": "matches",
+      "text": "Keeps the most recent N (tail of the file), still in append order. No, only N are kept in memory at a time."
+    },
+    {
+      "task": "wl-limit-order",
+      "source": "hand",
+      "hand_verdict": "matches",
+      "text": "It streams entries through `deque(matches, maxlen=N)`: the latest N survive, output is chronological (oldest to newest), and it never holds more than N matches."
+    },
+    {
+      "task": "wl-limit-order",
+      "source": "hand",
+      "hand_verdict": "does_not_match",
+      "text": "It keeps the first N entries of the file and prints them newest first."
+    },
+    {
+      "task": "wl-limit-order",
+      "source": "hand",
+      "hand_verdict": "does_not_match",
+      "text": "It reads every matching entry into a list, then prints the most recent N newest first."
+    },
+    {
+      "task": "wl-limit-order",
+      "source": "hand",
+      "hand_verdict": "does_not_match",
+      "text": "The most recent N, printed newest first; all matching entries are loaded into memory and sliced."
+    },
+    {
+      "task": "wl-since-precision",
+      "source": "hand",
+      "hand_verdict": "matches",
+      "text": "Sub-millisecond bounds are rounded up to the next whole millisecond; a naive bound is treated as UTC."
+    },
+    {
+      "task": "wl-since-precision",
+      "source": "hand",
+      "hand_verdict": "matches",
+      "text": "normalize_since rounds the microseconds up (ceiling to ms) so nothing before the bound slips in. No timezone -> assumed UTC (tzinfo=timezone.utc)."
+    },
+    {
+      "task": "wl-since-precision",
+      "source": "hand",
+      "hand_verdict": "matches",
+      "text": "It rounds up, never down, and a timestamp with no offset is read as UTC before being turned into the ledger's ...mmmZ form."
+    },
+    {
+      "task": "wl-since-precision",
+      "source": "hand",
+      "hand_verdict": "does_not_match",
+      "text": "It truncates to milliseconds, and a bound with no timezone is taken as local time."
+    },
+    {
+      "task": "wl-since-precision",
+      "source": "hand",
+      "hand_verdict": "does_not_match",
+      "text": "It rounds down to the millisecond; a naive bound is treated as UTC."
+    },
+    {
+      "task": "wl-since-precision",
+      "source": "hand",
+      "hand_verdict": "does_not_match",
+      "text": "It rejects sub-millisecond precision as invalid and converts a naive bound from local time to UTC."
+    },
+    {
+      "task": "wl-timestamp-option",
+      "source": "hand",
+      "hand_verdict": "matches",
+      "text": "None: the ledger stamps the timestamp itself (now_utc), and supplying one is refused."
+    },
+    {
+      "task": "wl-timestamp-option",
+      "source": "hand",
+      "hand_verdict": "matches",
+      "text": "There is no option for it. append takes the JSON entry, --stdin and --json only; id and timestamp are generated by the ledger and cannot be supplied."
+    },
+    {
+      "task": "wl-timestamp-option",
+      "source": "hand",
+      "hand_verdict": "matches",
+      "text": "Not found. The timestamp is set automatically at append time; a \"timestamp\" key in the entry JSON is rejected as a generated field."
+    },
+    {
+      "task": "wl-timestamp-option",
+      "source": "hand",
+      "hand_verdict": "does_not_match",
+      "text": "--timestamp ISO-8601 sets it; without it the current time is used."
+    },
+    {
+      "task": "wl-timestamp-option",
+      "source": "hand",
+      "hand_verdict": "does_not_match",
+      "text": "Put a \"timestamp\" field in the entry JSON; append stores it as given."
+    },
+    {
+      "task": "wl-timestamp-option",
+      "source": "hand",
+      "hand_verdict": "does_not_match",
+      "text": "--since sets the stored timestamp."
+    },
+    {
+      "task": "wl-rotation-size",
+      "source": "hand",
+      "hand_verdict": "matches",
+      "text": "Never: there is no rotation and no size limit; the ledger is append-only."
+    },
+    {
+      "task": "wl-rotation-size",
+      "source": "hand",
+      "hand_verdict": "matches",
+      "text": "Not found. workledger-cli does not rotate or truncate the ledger at any size; append_entry only appends one line and nothing rewrites existing lines."
+    },
+    {
+      "task": "wl-rotation-size",
+      "source": "hand",
+      "hand_verdict": "matches",
+      "text": "It doesn't rotate. No size cap exists anywhere in the package."
+    },
+    {
+      "task": "wl-rotation-size",
+      "source": "hand",
+      "hand_verdict": "does_not_match",
+      "text": "It rotates the ledger at 10 MB, keeping one backup."
+    },
+    {
+      "task": "wl-rotation-size",
+      "source": "hand",
+      "hand_verdict": "does_not_match",
+      "text": "WORKLEDGER_MAX_BYTES sets the limit; the default is 1048576 bytes."
+    },
+    {
+      "task": "wl-rotation-size",
+      "source": "hand",
+      "hand_verdict": "does_not_match",
+      "text": "It truncates the file to the newest 1000 entries when it grows past that."
+    },
+    {
+      "task": "coh-embed-env",
+      "source": "hand",
+      "hand_verdict": "matches",
+      "text": "COHERENCE_EMBED_URL, COHERENCE_EMBED_MODEL and COHERENCE_EMBED_TIMEOUT; the default base URL is http://localhost:8002/v1."
+    },
+    {
+      "task": "coh-embed-env",
+      "source": "hand",
+      "hand_verdict": "matches",
+      "text": "Three variables, read at call time: `COHERENCE_EMBED_URL` (default `http://localhost:8002/v1`, posted to `/embeddings`), `COHERENCE_EMBED_MODEL` and `COHERENCE_EMBED_TIMEOUT` (seconds)."
+    },
+    {
+      "task": "coh-embed-env",
+      "source": "hand",
+      "hand_verdict": "matches",
+      "text": "- COHERENCE_EMBED_URL -> base URL; unset means http://localhost:8002/v1\n- COHERENCE_EMBED_MODEL -> model id\n- COHERENCE_EMBED_TIMEOUT -> timeout"
+    },
+    {
+      "task": "coh-embed-env",
+      "source": "hand",
+      "hand_verdict": "does_not_match",
+      "text": "OPENAI_BASE_URL and OPENAI_API_KEY; the default is https://api.openai.com/v1."
+    },
+    {
+      "task": "coh-embed-env",
+      "source": "hand",
+      "hand_verdict": "does_not_match",
+      "text": "COHERENCE_EMBED_URL and COHERENCE_EMBED_MODEL; the default base URL is http://localhost:8001/v1."
+    },
+    {
+      "task": "coh-embed-env",
+      "source": "hand",
+      "hand_verdict": "does_not_match",
+      "text": "COHERENCE_EMBED_URL, COHERENCE_EMBED_MODEL and COHERENCE_EMBED_TIMEOUT; the default base URL is http://localhost:8000/v1."
+    },
+    {
+      "task": "coh-diagnostic-count",
+      "source": "hand",
+      "hand_verdict": "matches",
+      "text": "Seven: no_dateable_statements, age_not_derivable, publication_date_unverified, source_liveness_unverified, no_source_attribution, quote_accuracy_unverified, no_verbatim_signal."
+    },
+    {
+      "task": "coh-diagnostic-count",
+      "source": "hand",
+      "hand_verdict": "matches",
+      "text": "DIAGNOSTIC_MESSAGES has 7 entries:\n- `no_dateable_statements`\n- `age_not_derivable`\n- `publication_date_unverified`\n- `source_liveness_unverified`\n- `no_source_attribution`\n- `quote_accuracy_unverified`\n- `no_verbatim_signal`"
+    },
+    {
+      "task": "coh-diagnostic-count",
+      "source": "hand",
+      "hand_verdict": "matches",
+      "text": "There are 7 in total. Freshness: no_dateable_statements, age_not_derivable, publication_date_unverified; provenance: source_liveness_unverified, no_source_attribution; fidelity: quote_accuracy_unverified, no_verbatim_signal."
+    },
+    {
+      "task": "coh-diagnostic-count",
+      "source": "hand",
+      "hand_verdict": "does_not_match",
+      "text": "Five codes: no_dateable_statements, age_not_derivable, source_liveness_unverified, no_source_attribution, quote_accuracy_unverified."
+    },
+    {
+      "task": "coh-diagnostic-count",
+      "source": "hand",
+      "hand_verdict": "does_not_match",
+      "text": "Seven codes: no_dateable_statements, stale_date, publication_date_unverified, source_liveness_unverified, no_source_attribution, quote_accuracy_unverified, no_verbatim_signal."
+    },
+    {
+      "task": "coh-diagnostic-count",
+      "source": "hand",
+      "hand_verdict": "does_not_match",
+      "text": "8 codes: no_dateable_statements, age_not_derivable, publication_date_unverified, source_liveness_unverified, no_source_attribution, quote_accuracy_unverified, no_verbatim_signal, rule_based_no_embedding_frame."
+    },
+    {
+      "task": "coh-pattern-motifs",
+      "source": "hand",
+      "hand_verdict": "matches",
+      "text": "increasing, decreasing, plateau, spike, reversal, stair_step - all in coherence/signal/pattern.py."
+    },
+    {
+      "task": "coh-pattern-motifs",
+      "source": "hand",
+      "hand_verdict": "matches",
+      "text": "Module `coherence.signal.pattern` defines six: `increasing`, `decreasing`, `plateau`, `spike`, `reversal` and `stair-step`."
+    },
+    {
+      "task": "coh-pattern-motifs",
+      "source": "hand",
+      "hand_verdict": "matches",
+      "text": "pattern.py: increasing / decreasing (monotone), plateau, spike, reversal, and a staircase motif (stair_step)."
+    },
+    {
+      "task": "coh-pattern-motifs",
+      "source": "hand",
+      "hand_verdict": "does_not_match",
+      "text": "trend, spike, plateau and oscillation, in coherence/signal/trend.py."
+    },
+    {
+      "task": "coh-pattern-motifs",
+      "source": "hand",
+      "hand_verdict": "does_not_match",
+      "text": "increasing, decreasing, plateau, spike and reversal, in coherence/signal/pattern.py."
+    },
+    {
+      "task": "coh-pattern-motifs",
+      "source": "hand",
+      "hand_verdict": "does_not_match",
+      "text": "increasing, decreasing, plateau, spike, reversal and stair_step, in coherence/signal/trend.py."
+    },
+    {
+      "task": "coh-investiture-formula",
+      "source": "hand",
+      "hand_verdict": "matches",
+      "text": "A product: meaning_density × agency_coupling × future_constraint × affordance. consequence and causality are left out."
+    },
+    {
+      "task": "coh-investiture-formula",
+      "source": "hand",
+      "hand_verdict": "matches",
+      "text": "It multiplies meaning_score, agency, future_constraint and affordance together (renamed meaning_density and agency_coupling). The other two subdimensions, causality and consequence, are not used."
+    },
+    {
+      "task": "coh-investiture-formula",
+      "source": "hand",
+      "hand_verdict": "matches",
+      "text": "_investiture_score starts at 1.0 and multiplies in each of the four components (meaning_density, agency_coupling, future_constraint, affordance); consequence and causality are excluded from this MVP formula."
+    },
+    {
+      "task": "coh-investiture-formula",
+      "source": "hand",
+      "hand_verdict": "does_not_match",
+      "text": "A weighted average of all six subdimensions: meaning, agency, future_constraint, affordance, consequence and causality."
+    },
+    {
+      "task": "coh-investiture-formula",
+      "source": "hand",
+      "hand_verdict": "does_not_match",
+      "text": "The product meaning_density × agency_coupling × future_constraint × affordance; it leaves out persistence_signal and behavioral_effect."
+    },
+    {
+      "task": "coh-investiture-formula",
+      "source": "hand",
+      "hand_verdict": "does_not_match",
+      "text": "The sum of meaning_density, agency_coupling, future_constraint and affordance; consequence and causality are left out."
+    },
+    {
+      "task": "coh-freshness-decay",
+      "source": "hand",
+      "hand_verdict": "matches",
+      "text": "It halves every 365 days (0.5 ** (age/365)); no date at all gives no_dateable_statements."
+    },
+    {
+      "task": "coh-freshness-decay",
+      "source": "hand",
+      "hand_verdict": "matches",
+      "text": "Exponential decay, half-life _HALF_LIFE_DAYS = 365.0 days. A text without any dateable marker gets freshness 0.0 and the `no_dateable_statements` diagnostic."
+    },
+    {
+      "task": "coh-freshness-decay",
+      "source": "hand",
+      "hand_verdict": "matches",
+      "text": "score = 0.5^(age_days / 365): a one-year-old date scores 0.5. Undated text: code no_dateable_statements."
+    },
+    {
+      "task": "coh-freshness-decay",
+      "source": "hand",
+      "hand_verdict": "does_not_match",
+      "text": "Linear decay to zero over 30 days; an undated text gets no_dates."
+    },
+    {
+      "task": "coh-freshness-decay",
+      "source": "hand",
+      "hand_verdict": "does_not_match",
+      "text": "A half-life of 30 days; an undated text gets no_dateable_statements."
+    },
+    {
+      "task": "coh-freshness-decay",
+      "source": "hand",
+      "hand_verdict": "does_not_match",
+      "text": "Exponential decay with a half-life of 365 days; an undated text gets age_not_derivable."
+    },
+    {
+      "task": "coh-resonance-sign",
+      "source": "hand",
+      "hand_verdict": "matches",
+      "text": "A signed Pearson correlation per pair; a negative correlation is interference."
+    },
+    {
+      "task": "coh-resonance-sign",
+      "source": "hand",
+      "hand_verdict": "matches",
+      "text": "It computes the Pearson correlation coefficient over the shared points; the sign is the label: positive = resonance, negative (beyond the 0.1 neutral band) = interference."
+    },
+    {
+      "task": "coh-resonance-sign",
+      "source": "hand",
+      "hand_verdict": "matches",
+      "text": "Pearson r for each pair of fields. Interference is r < -0.1, i.e. the fields are anti-correlated."
+    },
+    {
+      "task": "coh-resonance-sign",
+      "source": "hand",
+      "hand_verdict": "does_not_match",
+      "text": "Cosine similarity between the two fields; a negative value is interference."
+    },
+    {
+      "task": "coh-resonance-sign",
+      "source": "hand",
+      "hand_verdict": "does_not_match",
+      "text": "A Pearson correlation; interference is when its absolute value is below 0.1."
+    },
+    {
+      "task": "coh-resonance-sign",
+      "source": "hand",
+      "hand_verdict": "does_not_match",
+      "text": "Spearman rank correlation; interference when it is negative."
+    },
+    {
+      "task": "coh-url-check-timeout",
+      "source": "hand",
+      "hand_verdict": "matches",
+      "text": "None. Quality never checks that a URL resolves; it is offline and reports source_liveness_unverified instead."
+    },
+    {
+      "task": "coh-url-check-timeout",
+      "source": "hand",
+      "hand_verdict": "matches",
+      "text": "There is no such timeout: the quality heuristics make no network calls at all, so the source is not checked."
+    },
+    {
+      "task": "coh-url-check-timeout",
+      "source": "hand",
+      "hand_verdict": "matches",
+      "text": "Not found. coherence/quality has no HTTP client; a cited URL is only detected by regex and the code does not check it resolves."
+    },
+    {
+      "task": "coh-url-check-timeout",
+      "source": "hand",
+      "hand_verdict": "does_not_match",
+      "text": "30 seconds, from COHERENCE_EMBED_TIMEOUT."
+    },
+    {
+      "task": "coh-url-check-timeout",
+      "source": "hand",
+      "hand_verdict": "does_not_match",
+      "text": "It uses httpx's default 5-second timeout for the liveness check."
+    },
+    {
+      "task": "coh-url-check-timeout",
+      "source": "hand",
+      "hand_verdict": "does_not_match",
+      "text": "10 seconds (SOURCE_CHECK_TIMEOUT in coherence/quality/heuristics.py)."
+    },
+    {
+      "task": "coh-trust-anchors",
+      "source": "hand",
+      "hand_verdict": "matches",
+      "text": "None. There is no trust axis; anchors exist for affordance, agency, causality, consequence, future_constraint and meaning only."
+    },
+    {
+      "task": "coh-trust-anchors",
+      "source": "hand",
+      "hand_verdict": "matches",
+      "text": "Not found: coherence/meaning/anchors/ has no trust.high.txt or trust.low.txt."
+    },
+    {
+      "task": "coh-trust-anchors",
+      "source": "hand",
+      "hand_verdict": "matches",
+      "text": "The Meaning Gradient has no `trust` axis, so no file holds trust anchors."
+    },
+    {
+      "task": "coh-trust-anchors",
+      "source": "hand",
+      "hand_verdict": "does_not_match",
+      "text": "coherence/meaning/anchors/trust.high.txt and trust.low.txt."
+    },
+    {
+      "task": "coh-trust-anchors",
+      "source": "hand",
+      "hand_verdict": "does_not_match",
+      "text": "The trust axis reuses coherence/meaning/anchors/agency.high.txt."
+    },
+    {
+      "task": "coh-trust-anchors",
+      "source": "hand",
+      "hand_verdict": "does_not_match",
+      "text": "coherence/meaning/axis.py defines the trust anchors inline."
+    }
+  ]
+}

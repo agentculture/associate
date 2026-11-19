@@ -17,7 +17,7 @@ Lifecycle::
 file.
 
 After the model stops, an adapter adds the accuracy fields by calling
-:func:`associate.accuracy.check.accuracy_result` on the export directory
+:func:`associate.accuracy.accuracy_result` on the export directory
 (issue #20, h32): ``answer`` and ``answer_path`` (the harness-rendered answer),
 ``handback_outcome``, ``check_mode`` and an ``accuracy`` object holding the
 counts from the Python re-check and whether it ran. An adapter that does not

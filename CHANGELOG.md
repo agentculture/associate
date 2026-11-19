@@ -5,6 +5,23 @@ All notable changes to this project will be documented in this file.
 Format follows [Keep a Changelog](https://keepachangelog.com/). This project
 adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.13.0] - 2026-11-18
+
+### Added
+
+- `associate measure` (issues #30 and #32; plan `docs/plans/2026-11-18-associate-graded-measurement-groundwork.md`): `run` starts a graded comparison of arms by tasks by repeats (resumable, `--detach` for the background, an arm may name an older harness commit), `status` shows progress, `report` prints the table, `sample` draws a hand-grading sheet and `agreement` reads a filled sheet back. Each run gets a one-commit clone without `docs/accuracy`, its own memory and ledger files, and a check that its walk never read the answer key. A real comparison is refused unless `docs/accuracy/difference-threshold.md` is committed and unmodified.
+- 24 measurement tasks in `docs/accuracy/tasks.json`, 8 each in associate, workledger-cli and coherence-cli at pinned commits, with structured expected values. Each has a first and a second independent check in `docs/accuracy/checks/`; the second check found no disagreement.
+- `docs/accuracy/difference-threshold.md`: 12 more or fewer matching runs of 72 per model is called a change; anything less is "no difference shown".
+- `associate run --reasoning {model-default,on,off}` sets reasoning for one run (issue #22). The setting is run-wide: it is written for every model that can run, so a spawned child gets it too, and the result lists them in `reasoning_applies_to`. A delegated run does not get it.
+- `docs/notes/measure-pilot.md`: a 16-run pilot (four arms, four tasks, reasoning on). All 16 runs were stored; 15 answers were marked as matching and one run ended with no answer. No difference is read from a pilot. A second pilot with the `ledger` binary installed stored 16 of 16 runs, 14 marked as matching. **Not measured:** no comparison has run.
+
+### Changed
+
+- The Python re-check is imported from `evidence-cli` (>=0.7.0), associate's first runtime dependency. The rule is now: no third-party runtime dependency; a named list of first-party packages that have no dependencies of their own. `associate/accuracy/check.py`, `matcher.py` and `counts.py` are gone. The differences in `associate check` output are the ones listed in evidence-cli's 0.7.0 changelog.
+- A run that reaches `--timeout` now returns a result with `outcome: timeout` and exits 4, instead of exiting 2 with no result (issue #22).
+- `finish` accepts a list that arrives as a quoted JSON string, or refuses it with the fix; every rejected hand-back is kept in `rejected_handback.json`.
+- `delegate_status` serves a delegated run that timed out (exit 4) with its result, as it does a refused hand-back (exit 3); before, the result was dropped.
+
 ## [0.12.1] - 2026-11-18
 
 ### Added

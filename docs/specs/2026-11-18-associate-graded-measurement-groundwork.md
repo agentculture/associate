@@ -1,0 +1,144 @@
+# associate graded measurement groundwork
+
+> associate can show whether a harness change makes answers more often correct: one command runs 24 fixed tasks in three repositories against clones that do not hold the answers, evidence-cli grades every run right or wrong, and the results are stored per arm
+
+## Audience
+
+- the operator, who decides from the results whether a harness change is kept; Claude Code sessions that run the comparison and read its table; and the evidence-cli maintainers, whose package becomes the grader and the re-check
+  - instruction: The comparison's output must be readable without the transcript: a table per arm and a file per run.
+
+## Before → After
+
+- Before: today nothing shows that the accuracy method improved answers: the old-harness and new-harness runs used different tasks and reasoning settings, answers were never graded right or wrong, each result is one run, the answer key was readable in the checkout and both models quoted it, every step of the measurement was manual, a run that hits its time limit returns no result, and the Python re-check exists only inside associate
+  - instruction: See docs/notes/accuracy-live-acceptance.md and issues #30, #22 and #32.
+- After: one associate command runs every arm of a comparison on 24 tasks in three repositories, each against a clone without the answers; every run ends with a result object even when it times out; evidence-cli grades each run right or wrong from its export and the task's expected values; associate's own re-check is evidence-cli, imported; the results are stored and printed as one table per arm with correct answers, time, calls and runs that ended without a hand-back
+
+## Why it matters
+
+- without a graded, repeatable comparison no change to the harness, including the decider score that comes next, can be shown to help or to hurt
+
+## Requirements
+
+- during a measured run the model cannot read the answer key by any tool (read, shell, grep, find); a test proves the key is absent from the checkout a measured run examines
+  - instruction: Grounded in scope findings s4 and s5. tools/search.ts has no deny logic, so a deny-list alone is not enough.
+  - honesty: a test builds the filtered clone and fails if any tracked file or any reachable git revision in it contains the answer key; after a measured run, no walk entry names the key's path
+- each measurement task carries structured expected values that a script can grade right or wrong without a model, and the grader scores the final answer, not only the fact quotes
+  - instruction: Grounded in scope findings s4 and s6. Today the answer is free prose and no grader exists.
+  - honesty: grading the same export twice gives the same grade, and for every task a hand-written wrong answer is graded wrong and the recorded answer is graded right
+- a committed runner starts every arm of the comparison (tasks by harness version by mode by repeat) with fixed settings and stores each run's graded result, so no step is done by hand
+  - instruction: Grounded in scope findings s6 and s7.
+  - honesty: starting the runner with a list of arms produces one stored result per task, arm and repeat with no manual edit of any contract file between runs
+- a run that hits its time limit still returns a result object naming the timeout, with whatever the export holds, and reasoning can be set for one run without editing the contract (issue #22)
+  - instruction: Grounded in scope finding s3.
+  - honesty: a run killed at its time limit prints a result object with a timeout outcome and exits with the documented code, and a run started with the per-run reasoning setting records that setting in its result
+- evidence-cli provides two things associate uses: the export re-check (the matcher, the checker and the counts now in associate/accuracy, moved with their tests and still passing the shared vectors), and a grade command that takes an export directory and a task's expected values and returns right, wrong or cannot grade, with no model call
+  - instruction: Built in the evidence-cli repo under its own spec, plan and PR (its issue #3). associate/accuracy becomes a thin import; associate check keeps its output.
+  - honesty: the shared matcher and hand-back vectors pass in evidence-cli, the TypeScript extension still passes the same vectors, and associate check prints the same output for the saved test exports before and after the move
+- associate's dependency rule is rewritten in CLAUDE.md and in the tests that enforce it: no third-party runtime dependency; a first-party AgentCulture package with zero dependencies of its own may be imported with a version floor; evidence-cli is the first
+  - instruction: tests/`test_pi_config.py`:77-79 and tests/`test_base_install.py`:49-51 enforce today's rule.
+  - honesty: a test fails if pyproject.toml gains a dependency that is not on a named first-party list, and fails if a listed package declares dependencies of its own
+- the task set grows to 24 tasks, 8 each in associate and two sibling repositories, each with a prompt, structured expected values and a pinned commit of the repository it is asked about; every answer is checked by hand and by a second, independent check before it is used
+  - instruction: Extend docs/accuracy/tasks.json or split it per repository; keep tests/`test_accuracy_tasks.py`'s drift check for the associate tasks.
+  - honesty: for every task the expected values are found in the repository at its pinned commit by a test, and a recorded second check exists that did not use the first checker's notes
+- the runner can run an arm on an older harness commit, so the commit before PR #27 can be measured on the same tasks as current main
+  - instruction: The old harness has no finish payload with facts and no purpose argument; the grader must work from the final answer alone for that arm.
+  - honesty: one task run on the commit before PR #27 through the runner produces a stored, graded result
+- every measured run starts with an empty memory store and an empty ledger file of its own, so nothing one run remembered can reach another
+  - honesty: two runs of the same task in sequence: the second run's `eidetic_recall` returns no record written by the first
+- the runner marks a run contaminated, excludes it from the table and counts it, when its walk shows the answer key's path, a web search or page fetch that reaches this repository's hosting, or a recalled record; the measured clone has one commit and no history, and files that restate task answers are removed from it
+  - honesty: a run whose walk holds a `web_page` call to the repository's hosting is stored as contaminated and is absent from the correct-answer count
+- each run gets a fresh clone: a clean run by a writing model commits and merges into its checkout's main, so a reused clone would differ from run to run
+  - honesty: the clone's HEAD is the same commit at the start of every run of a task, shown by the stored result
+- the grader reads the same input for every arm: the text the run returned as its answer, not the facts list, because the older harness has no facts; what counts as that text is fixed in the spec of the grade command
+  - honesty: the grade of a run is unchanged when its facts.json is deleted
+- before any table is read, a sample of at least 48 graded runs is graded by hand and the agreement with the grader is reported; below 95% agreement the grader or the expected values are fixed first
+  - honesty: the committed results include the hand grades of the sample and the agreement figure
+- the runner can be stopped and restarted: it skips runs already stored, stores every failed launch with its reason, and never leaves a run counted twice
+  - honesty: killing the runner mid-comparison and starting it again yields exactly one stored result per task, arm and repeat
+- when evidence-cli is missing or older than the floor, associate run and associate check fail with a CliError that names the package and the install command, never a traceback
+  - honesty: with evidence-cli uninstalled, associate check exits with the documented code and a remediation line
+- the size of difference between two arms that will be called a change is written down before the runs start, and the table reports counts per task as well as totals
+  - honesty: the note with the stated difference is committed before the first stored run's timestamp
+- The text given to the answer check is the model's own answer without any line the harness wrote, and expected values avoid bare small numbers. Found in the evidence-cli live test of 2026-11-18 (agentculture/evidence-cli docs/notes/2026-11-18-live-test.md, finding 2): the rendered answer.md holds harness lines such as '2 items were refused' and 'Finish summary (3 sentences)', and a deliberately wrong answer was reported as holding the expected 2 and 3 because of them.
+  - honesty: the wrong answer from the live test (5 and 7 where 2 and 3 are expected, with the harness lines present in answer.md) is reported as not matching when graded the way the runner grades
+- A finish call whose facts field is a string holding a JSON list is either accepted or refused with a fix that names the cause, and a run that times out after a rejected finish keeps that payload in its result, labelled as rejected. Found in the same live test (associate issue 22, comment of 2026-11-18): a worker run lost a complete, correct answer this way.
+  - honesty: replaying the rejected finish payload from the 2026-11-18 worker review run (facts as one quoted JSON list) either yields a hand-back with its eight facts or a refusal whose fix names the quoted list, and a run that times out after it carries the payload in its result, labelled rejected
+
+## Honesty conditions
+
+- the command exists, runs against clones that a test shows hold no answers, and its stored results include a grade from evidence-cli for each completed run
+- git diff against main shows no change under associate/contract/gate.json, and pyproject.toml lists evidence-cli as its only dependency
+- the stored results name, for every run, the task, arm, repeat, model, reasoning setting, harness commit and grade, so a reader needs nothing else to interpret a row
+- each statement in this claim is recorded in docs/notes/accuracy-live-acceptance.md or in issue #30, #22 or #32
+- running the command twice on the same stored exports prints the same table, and the table's correct-answer count for an arm equals a count made by hand from the per-run files
+- the decider-score spec names this comparison as the way its effect is measured
+- the three numbers are computed by a committed script from the stored results, not counted by hand
+- git diff shows no behaviour change in lib/facts.ts or lib/matcher.ts, and a test fails if the vector files in the two repositories differ
+- no file under associate/contract/ gains a decider-score setting in this work, and every printed table carries a line saying it is an internal measurement
+
+## Success signals
+
+- a comparison of the commit before PR #27 against current main in report mode, on worker and cortex, yields a graded result for at least 95% of its 288 runs (24 tasks, 3 repeats, 2 arms, 2 models); grading the same exports a second time changes 0 grades; and 0 of the walks contain a read of the answer key
+  - instruction: Count runs with a stored grade over 288; re-run the grader over the stored exports and diff; search every walk.jsonl for the key's path.
+
+## Scope / boundaries
+
+- gate.json is not changed and stays version 9; nothing in lobes-cli or colleague is changed; no third-party runtime dependency is added to associate, and the only first-party one added is evidence-cli
+  - instruction: Grounded in scope findings s2 and s3.
+- the TypeScript checker and matcher stay in the extension, because they run inside pi and cannot import Python; the shared vectors remain the contract between the two sides, now held in two repositories
+  - instruction: lib/facts.ts and lib/matcher.ts are unchanged by the move.
+- this spec does not add the decider score, does not move any model to enforce mode, and does not report any number as a benchmark score
+  - instruction: The decider score is the next spec.
+
+## Non-goals
+
+- a grader or ledger built inside associate that duplicates what evidence-cli, rigor-cli or workledger-cli will own: the grader goes to evidence-cli and associate uses it
+  - instruction: Grounded in scope finding s1.
+
+## Assumptions
+
+- the two sibling repositories that host tasks are workledger-cli and coherence-cli, because they hold real code; evidence-cli and rigor-cli are scaffolds today
+  - instruction: From scope finding s1.
+- worker and cortex with reasoning off are the models measured; senses is included only if the gateway can serve it on the measuring machine
+  - instruction: docs/notes/accuracy-live-acceptance.md: senses was not feasible on 2026-11-17.
+
+## Scope exploration
+
+- `s1` — `sibling repos: evidence-cli 0.6.1, rigor-cli 0.7.0, workledger-cli 0.8.0 (origin/main), coherence-cli 0.6.1`: evidence-cli and rigor-cli are template scaffolds with no domain code (evidence-cli pyproject.toml:4 promises grading, tree has only scaffold verbs; rigor-cli README.md:66-70 says the ledger is not implemented). workledger-cli has append/list with free-string refs and no verify verb. coherence-cli quality fidelity only detects that a quote exists and emits `quote_accuracy_unverified` (coherence/quality/heuristics.py:91). None reads an associate export, none grades an answer right or wrong, none scores a quote against a value. So neither the answer grader nor the per-fact score has an existing home outside associate.
+- `s2` — `associate/accuracy/check.py, associate/cli/_commands/check.py, the run result (Python re-check)`: Python recomputes counts and verdicts from walk.jsonl, results and facts.json and never uses the extension's (check.py:894-896); the one value it copies is `unchecked_text`, labelled `unchecked_text_source`: extension (check.py:920-924), which is the pattern for a score it cannot recompute. The re-check is documented as standard library only, no model called (check.py:1-7). `_check_fact` builds each fact from a fixed set of keys (check.py:446-453), so a score in the saved files would be dropped unless copied on purpose. report.schema.json and the fact items of facts.schema.json forbid extra properties (report.schema.json:7, facts.schema.json:19). A missing optional field read with a guard is safe for old exports (check.py:855-860).
+- `s3` — `associate/harness/pi.py and associate/cli/_commands/run.py (timeouts, reasoning, continue-from; issue #22)`: On --timeout the launcher kills pi and raises HarnessError (pi.py:844-851); `_assemble_result` is never reached (pi.py:760-770), so the caller gets exit 2 and no result object, though walk.jsonl and saved results stay in the export. Reasoning is per model in models.json and applied in lib/provider.ts:25-35,138-179; there is no per-run override (`ASSOCIATE_REASONING` only labels bench rows, bench/config.py:133). --continue-from loads the prior walk as context and labels it prior (pi.py:1033-1037, check.py:776-781); it is not a resume.
+- `s4` — `docs/accuracy/tasks.json and tests/test_accuracy_tasks.py (the measurement tasks)`: Six tasks, each with prompt, answer (free prose, 83 to 506 characters) and either evidence (file, line, text, stable) or absent (file, patterns); no structured expected values. Only tests/`test_accuracy_tasks.py` reads the file: it pins the path docs/accuracy/tasks.json (line 25), requires answer inside each task (line 67) and checks each evidence text against the file in the repo (lines 83-96). So the key cannot simply leave the tree or be split without changing that test.
+- `s5` — `what a model can read: associate/contract/policy.json read.denylist, lib/contain.ts, tools/read.ts, tools/shell.ts, tools/search.ts, associate run --checkout, associate/harness/worktree.py`: policy.json has a read deny-list of secret-style globs (policy.json:9-32) applied by isDenylisted (contain.ts:390-411) from tools/read.ts:646 and tools/shell.ts:382 only; tools/search.ts has no deny or ignore logic, so grep and find are not covered. There is no per-run hide option. --checkout takes any existing directory (run.py:272-281); a writing model gets a git worktree at HEAD holding every tracked file (worktree.py:214-237), a read-only model runs in place (run.py:218-219). A filtered copy is therefore possible today only by hand, and only a git-tracked filtered clone keeps worktree isolation for writing models.
+- `s6` — `associate/bench/ (suites.json, public.py, config.py, walkstats.py) and the 2026-10-27 multi-model spec`: associate bench runs public suites through their own upstream runner and scorer and never re-implements a scorer (public.py:5-6); every entry is verified: false. The in-house 7-case suite was dropped (CHANGELOG.md:416-417) under a recorded decision that every reported benchmark number comes from a public suite's own scorer (docs/specs/2026-10-27-associate-multi-model-on-pi-1-1-0.md:36-37, 231); the same spec notes nothing then benchmarks the harness itself (line 190). No grader exists that decides an answer right or wrong, and bench has no history store. A graded in-house comparison would reverse or narrow that earlier decision.
+- `s7` — `docs/notes/accuracy-live-acceptance.md (how the measurement was run)`: Every step was manual: a scratch clone, a hand-edited contract copy to turn reasoning off because there is no per-run switch (lines 17-20), 12 launches of associate run with --untrusted-checkout --timeout 1500 --json (lines 14-16), a hand count and a separate re-check script that is not committed (lines 65-72). Correctness of prose answers was not measured (line 198). A comparison with several arms and repeats needs a committed runner.
+- `s8` — `challenge pass / data-flow lens: associate/contract/models.json tool lists`: worker and cortex hold `eidetic_recall`, `eidetic_remember`, `ledger_list` and `ledger_append`; with 3 repeats per task a run can store an answer that a later run recalls. The scoping survey looked only at file reads.
+  - seeds: `c29`
+- `s9` — `challenge pass / adjacent-systems lens: gh repo view (visibility PUBLIC), docs/notes/accuracy-live-acceptance.md, git history`: The repository is public and both models hold `web_search` and `web_page`, so the answer key is reachable on the web whatever the clone holds. docs/notes/accuracy-live-acceptance.md names all six task ids, and a clone with history exposes the key through old revisions.
+  - seeds: `c30`
+- `s10` — `challenge pass / lifecycle lens: associate/harness/worktree.py finish()`: A `may_mutate` model's clean run is committed and merged into the local main of the checkout it ran against (worktree.py finish, merge outcomes merged / `nothing_to_merge` / kept); worker and cortex are `may_mutate`.
+  - seeds: `c31`
+- `s11` — `challenge pass / unstated-assumptions lens: the grader`: The spec assumed a script can grade prose answers from structured expected values. Answers today are free prose (83 to 506 characters) and the models do not reply with the rendered answer (issue #25); nothing measures whether the grader agrees with a person. devague's lapse codes name this case: grader-unverified.
+  - seeds: `c32`, `c33`
+- `s12` — `challenge pass / failure-mode lens: importers of associate.accuracy`: associate/harness/pi.py:88, associate/harness/stub.py:21 and associate/cli/`_commands`/check.py:15-16 import the re-check at module load, so a missing package would break associate run and associate check at import time. Delegated runs start the in-tree python or python3 on PATH (CLAUDE.md, delegation section), which may lack the package.
+  - seeds: `c34`, `c35`
+- `s13` — `challenge pass / counter-evidence lens: 72 runs per model per arm`: With 24 tasks and 3 repeats an arm has 72 runs per model. Nothing in the spec said what difference would count, so any difference could be read as a result after the fact.
+  - seeds: `c36`
+- `s14` — `challenge pass / packaging lens: pyproject.toml of associate, evidence-cli, workledger-cli, rigor-cli`: All four require Python 3.12 or newer and evidence-cli's import package is named evidence with no dependencies; no conflict found. Not examined: how the TestPyPI pre-release job resolves a first-party dependency, and the uv.lock change.
+- `s15` — `challenge pass / security lens: associate run --untrusted-checkout`: Sibling repositories used as task checkouts carry their own AGENTS.md and .pi settings; --untrusted-checkout ignores those (CLAUDE.md, deviation d5), and the live measurement already used it. Clean for this spec; residual risk is a task repository whose files address the model directly.
+
+## Decisions
+
+- the answer key is kept from the model by a filtered clone: the measurement runner builds a scratch git clone with docs/accuracy removed and committed and runs against it; the key and its test stay in the repo (operator, 2026-11-18, resolves q1)
+- an in-house graded comparison is an internal measurement of the harness: never reported as a benchmark score, always stated with its tasks, runs and grader; benchmark numbers still come only from a public suite's own scorer (operator, 2026-11-18, resolves q2)
+- the work is two specs: the measurement groundwork and grader first (issues #30, #22, #32), then the decider score (#31) (operator, 2026-11-18, resolves q3)
+- the grader that marks a run's answer right or wrong lives in evidence-cli, as its first real feature (its issue #3); associate keeps the task set, the filtered clone and the runner (operator, 2026-11-18)
+- this effort includes managed development in the sibling repos: evidence-cli #3, workledger-cli #6, rigor-cli #5, coherence-cli #19 and devague #124, each with its own spec, plan, branch and PR in its own repo, reviewed by the operator (operator, 2026-11-18)
+- code is taken out of associate and moved into the sibling packages, which associate then imports or uses, so associate stays lean and gets their future fixes (operator, 2026-11-18, in the operator's words: taking code out of associate and moving it to the packages, then importing or using would make associate lean, easy to maintain, and enjoy future fixes)
+- the comparison uses 24 tasks, 8 each in associate and two sibling repos, with 3 runs per task per arm (operator, 2026-11-18)
+- associate's dependency rule changes from no runtime dependency to no third-party runtime dependency: first-party AgentCulture packages with zero dependencies of their own may be imported, pinned with a version floor; associate imports evidence-cli for the Python re-check (operator, 2026-11-18)
+
+## Open parks
+
+- [unknown_nonblocking] how the shared vector files are kept identical in two repositories (a copy with an equality test, or one repository reading the other's released file)
+- [unknown_nonblocking] whether the commit before PR #27 can run unmodified on pi 1.5.2, or needs its own pinned pi 1.1.0 beside the current one
+- [unknown_nonblocking] whether running three arms on one machine in sequence adds order or load effects (gateway warm-up, resident agent activity) large enough to matter

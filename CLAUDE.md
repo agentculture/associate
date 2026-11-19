@@ -381,7 +381,9 @@ associate/                  # Python package (top level — no src/ wrapper)
 ├── server/                 # the bridge's HTTP API: app, serve, tokenstore (server extra)
 ├── bridge/                 # cited framework: auth, policy, Access, tokens, MCP server,
 │                           #   static UI serving, origin check
-├── accuracy/               # the Python re-check: matcher.py, check.py, counts.py
+├── accuracy/               # the Python re-check, imported from evidence-cli
+├── measure/                # graded comparison runs: clone, isolation,
+│                           #   contamination, tasks, answer, runner, report
 └── bench/                  # public suites (suites.json, public.py), walkstats
 web/                        # the web UI (Vite + React + TS); built into the wheel as
                             #   associate/web_dist by hatch_build.py (never committed)
@@ -780,12 +782,22 @@ root key** — see invariant 3 under "Adding a verb".
 
 ## What not to invent
 
-- **Don't add a runtime dependency.** `dependencies = []` is deliberate: the
-  harness must install and start fast. The same holds for the root `package.json`: it is
-  a Pi project manifest with no `dependencies` and no `scripts` (the web UI's npm
-  packages live in `web/package.json` and never reach the Python package). `culture.yaml` is parsed by hand in
-  `_commands/whoami.py` specifically to avoid a YAML dependency. If you think you
-  need a dep, that is a conversation, not a commit.
+- **Don't add a third-party runtime dependency.** The harness must install and
+  start fast. `[project].dependencies` holds only first-party AgentCulture
+  packages on a named list, each with a version floor and each with no
+  dependency of its own; the list is `FIRST_PARTY_RUNTIME` in
+  `tests/test_base_install.py`, and its one member is **evidence-cli**
+  (`>=0.7.0`, import name `evidence`), which holds the Python re-check
+  (`associate/accuracy/` imports it). A test fails if `pyproject.toml` gains a
+  dependency not on the list, or if a listed package declares dependencies of
+  its own (installed metadata and `uv.lock`). Without a usable evidence-cli,
+  `associate check` and `associate run` exit 2 naming the install command.
+  Adding a package to the list is a conversation, not a commit. The same holds
+  for the root `package.json`: it is a Pi project manifest with no
+  `dependencies` and no `scripts` (the web UI's npm packages live in
+  `web/package.json` and never reach the Python package). `culture.yaml` is
+  parsed by hand in `_commands/whoami.py` specifically to avoid a YAML
+  dependency.
 - **Don't edit a vendored skill** to fix a bug in it. Fix it upstream.
 - **Don't skip the version bump** because the change is "just docs".
 - **Don't describe a model, the mesh path, the gate's fallbacks, delegation, or

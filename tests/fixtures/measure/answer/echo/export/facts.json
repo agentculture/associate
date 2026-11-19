@@ -1,0 +1,122 @@
+{
+  "summary": "The hand-back checker in evidence/accuracy/check.py loads its bundled default settings from evidence/data/accuracy_defaults.json (constant DEFAULT_SETTINGS_RESOURCE = \"data/accuracy_defaults.json\", read via importlib.resources; the docstring confirms this is the bundled copy of associate's accuracy.json). In that file: retry_rounds = 2, refusal_cap = 3, min_quote_length = 8 (and version = 1). The loader is load_default_settings, defined at evidence/accuracy/check.py:64 with signature -> tuple[dict[str, Any], int]; it re-parses the file on every call and returns (settings, settings[\"version\"]). The constant listing the supported walk format versions is SUPPORTED_WALK_FORMATS: tuple[int, ...] = (1, 2) at evidence/accuracy/check.py:59. Task was read-only: no file was changed. One environment fault: ledger_append/ledger_list are unavailable (ledger is not on PATH), so nothing could be recorded in the work ledger; finish is used to record this instead. Not checked: the byte-identical-to-associate claim (associate/contract/accuracy.json at commit 266dad3 was not fetched), whether the loaded defaults are consumed elsewhere, tests were not run (none needed for a read-only lookup), and memory only surfaced an unrelated matcher_vectors note.",
+  "facts": [
+    {
+      "id": "f1",
+      "quote": "\"retry_rounds\": 2,",
+      "source": "w9",
+      "value": "retry_rounds = 2"
+    },
+    {
+      "id": "f2",
+      "quote": "\"refusal_cap\": 3,",
+      "source": "w9",
+      "value": "refusal_cap = 3"
+    },
+    {
+      "id": "f3",
+      "quote": "\"min_quote_length\": 8,",
+      "source": "w9",
+      "value": "min_quote_length = 8"
+    },
+    {
+      "id": "f4",
+      "quote": ":func:`load_default_settings` returns the bundled copy of associate's\n``accuracy.json`` (``evidence/data/accuracy_defaults.json``) and its version.",
+      "source": "w7",
+      "value": "load_default_settings (in evidence/accuracy/check.py)"
+    },
+    {
+      "id": "f5",
+      "quote": "    settings = json.loads(text)\n    return settings, settings[\"version\"]",
+      "source": "w10",
+      "value": "returns (settings dict, its \"version\" value) — a tuple[dict[str, Any], int]"
+    },
+    {
+      "id": "f6",
+      "quote": "DEFAULT_SETTINGS_RESOURCE = \"data/accuracy_defaults.json\"",
+      "source": "w10",
+      "value": "DEFAULT_SETTINGS_RESOURCE = \"data/accuracy_defaults.json\" (resolved via resources.files(\"evidence\"))"
+    },
+    {
+      "id": "f7",
+      "quote": "SUPPORTED_WALK_FORMATS: tuple[int, ...] = (1, 2)",
+      "source": "w10",
+      "value": "SUPPORTED_WALK_FORMATS = (1, 2)"
+    },
+    {
+      "id": "f8",
+      "quote": "\"version\": 1,",
+      "source": "w9",
+      "value": "version = 1 (returned by load_default_settings)"
+    },
+    {
+      "id": "f9",
+      "quote": "\"code\":\"tool_missing\",\"kind\":\"tool_missing\",\"message\":\"ledger is not on PATH, so this tool is unavailable.",
+      "source": "w4",
+      "value": "ledger_append is unavailable: ledger is not on PATH"
+    }
+  ],
+  "alternatives": [
+    {
+      "id": "a1",
+      "predicts": "A tool other than check.py would carry DEFAULT_SETTINGS_RESOURCE; the constant would appear in e.g. matcher.py or vectors.py instead of check.py.",
+      "refuted_by": "f6: DEFAULT_SETTINGS_RESOURCE is defined in check.py itself (w10), and the docstring ties load_default_settings to evidence/data/accuracy_defaults.json (w7).",
+      "text": "The bundled settings live somewhere else (e.g. matcher_vectors.json or a YAML/TOML config) rather than evidence/data/accuracy_defaults.json"
+    },
+    {
+      "id": "a2",
+      "predicts": "The function body would return only settings or only the version; the annotation would not be tuple[dict[str, Any], int].",
+      "refuted_by": "f5: the body reads `return settings, settings[\"version\"]` (w10) and the signature is `-> tuple[dict[str, Any], int]`.",
+      "text": "load_default_settings returns only the settings dict, not a (settings, version) tuple"
+    },
+    {
+      "id": "a3",
+      "predicts": "A second SUPPORTED_WALK_FORMATS assignment elsewhere in the package would conflict with (1, 2).",
+      "refuted_by": "f7: the only definition found in evidence/accuracy/check.py is (1, 2) (w10).",
+      "text": "SUPPORTED_WALK_FORMATS is defined in another module (e.g. counts.py or vectors.py) or has different versions"
+    }
+  ],
+  "verdicts": [
+    {
+      "basis": [
+        "f1",
+        "f2",
+        "f3",
+        "f6"
+      ],
+      "id": "v1",
+      "text": "The bundled default settings file used by the hand-back checker is evidence/data/accuracy_defaults.json, and its retry_rounds, refusal_cap and min_quote_length are 2, 3 and 8.",
+      "verdict": "supported"
+    },
+    {
+      "basis": [
+        "f4",
+        "f5",
+        "f6"
+      ],
+      "id": "v2",
+      "text": "The settings loader is load_default_settings in evidence/accuracy/check.py, which returns a tuple (settings dict, settings[\"version\"]).",
+      "verdict": "supported"
+    },
+    {
+      "basis": [
+        "f7"
+      ],
+      "id": "v3",
+      "text": "The constant listing the supported walk format versions is SUPPORTED_WALK_FORMATS, with value (1, 2).",
+      "verdict": "supported"
+    }
+  ],
+  "open_items": [
+    {
+      "check": "git show 266dad3:associate/contract/accuracy.json, diffed against evidence/data/accuracy_defaults.json",
+      "id": "o1",
+      "text": "Whether evidence/data/accuracy_defaults.json is still byte-identical to associate's associate/contract/accuracy.json at commit 266dad3 (claimed in the docstring, not verified — the associate repo was not read)"
+    },
+    {
+      "check": "grep SUPPORTED_WALK_FORMATS across tests/ and evidence/cli/_commands/",
+      "id": "o2",
+      "text": "Whether SUPPORTED_WALK_FORMATS is honored/used consistently by the export-inspection path (inspect_export) — its consumers were not read"
+    }
+  ]
+}

@@ -78,7 +78,7 @@ OPERATOR_ONLY_CLI = frozenset(
 )
 #: The agent-first identity and self-description verbs, and the harness's own run and bench.
 OTHER_CLI = frozenset(
-    {"whoami", "learn", "explain", "overview", "doctor", "cli", "run", "bench", "check"}
+    {"whoami", "learn", "explain", "overview", "doctor", "cli", "run", "bench", "check", "measure"}
 )
 
 Params = dict[str, bool]  # accepted name -> required

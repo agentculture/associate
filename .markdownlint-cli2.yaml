@@ -27,3 +27,5 @@ ignores:
   - ".teken/**"
   # Vendored skills are cited verbatim from guildmaster — do not reformat them.
   - ".claude/skills/**"
+  # Test fixtures hold files as a run wrote them (a recorded answer.md); never reformatted.
+  - "tests/fixtures/**"

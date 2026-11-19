@@ -229,7 +229,7 @@ pi version warning, the no-lane note) go to stderr.
 ## The hand-back result (issue #20)
 
 After the model stops, the launcher re-checks the hand-back itself
-(`associate.accuracy.check`, the same code as `associate check`) over the export
+(`associate.accuracy`, the same code as `associate check`) over the export
 directory, the prior run named by `--continue-from` (label `prior`) and each child
 run the walk links (`c1`, `c2`, ...). The result carries:
 
@@ -259,6 +259,35 @@ refused and the model may answer again for accuracy.json `retry_rounds` more
 rounds; a hand-back still failing ends the run with outcome `refused`, and the verb
 exits `3`. `report` mode records what would have been refused and refuses nothing.
 
+## A run that times out
+
+`--timeout` (default 900 seconds) bounds the task turn. When pi does not finish
+in time it is killed with everything it started, and the run still returns a
+result: the same object, built from what the export directory holds, with
+`outcome` `timeout`, `timed_out` true, `timeout_seconds`, and the `export_dir`
+and `walk_path` to read. The `accuracy` block carries the Python re-check counts
+when the export holds facts, and says `python_recheck_ran` false with a
+`not_applicable_reason` when it holds none (a killed run usually holds none). The
+verb exits `4`. A *preflight* that does not finish proved nothing: it exits `2`
+and prints no result. The task turn's `final_reply`, `stop_reason` and
+`lane_error` are absent from a timeout result, because pi never reported them.
+
+## Reasoning for one run
+
+`--reasoning model-default|on|off` sets the reasoning for this run only.
+`models.json` is never edited: the launcher copies the contract directory to a
+temporary directory, changes `reasoning` in the copy, points pi at it with
+`ASSOCIATE_CONTRACT_DIR`, and removes the copy when the run ends. The setting is
+run-wide: it is written to every registry model that can run, not only the
+run's own, because a child started with `spawn_subagent` reads the same copy. A
+`pending` entry is left as it is. A run started with `delegate_run` is a
+separate `associate run` and does not get it.
+The result records `reasoning` and `reasoning_source`: `run` when the flag set
+it (with `reasoning_applies_to`, the models it was set for), `registry` when
+the model's own entry applied. Any other value exits `1`.
+A harness that does not apply it (`--harness stub`) still records it, without
+`reasoning_applies_to`.
+
 ## How the turn ended
 
 With `--json`, the result also says how the task turn ended: `final_reply`
@@ -277,6 +306,7 @@ is empty.
     associate run --harness stub
     associate run "Summarize the gate" --check-mode enforce --json
     associate run --continue-from <prior export dir>
+    associate run "Summarize the gate" --reasoning off --timeout 1500 --json
     associate run --export-root <dir> --session-id <id>
     associate run "Fix the failing parser test" --test-command "uv run pytest -q"
 
@@ -287,12 +317,18 @@ is empty.
   unknown or pending `--model`, an empty or unsplittable `--test-command`, a
   non-positive `--test-timeout`, or a `--checkout` that is not a directory
 - `2` the adapter failed closed (no sentinel, or an active writer tool), pi is
-  not on PATH, the run timed out, or the export root is inside the checkout
+  not on PATH, the preflight did not finish, or the export root is inside the
+  checkout
 - `3` the run served but its hand-back failed the check after the allowed rounds
   (`handback_outcome` `refused_after_rounds`, outcome `refused`). The result
   object is still printed on stdout, and a worktree run is kept, not merged
   (`merge=kept`). A caller that reads only the exit code sees a failure; read the
   result for what ran
+- `4` pi did not finish the task turn within `--timeout` and was killed. The
+  result object is still printed on stdout, with `outcome` `timeout`,
+  `timed_out` true and `timeout_seconds`, built from whatever the export holds
+  (the walk and any hand-back files); a worktree run is kept, not merged. See
+  "A run that times out"
 """
 
 _BENCH = """\
@@ -596,6 +632,90 @@ Roles: `viewer` reads (`GET /runs`), `editor` is above it, `admin` starts runs (
 """
 
 
+_MEASURE = """\
+# associate measure
+
+Runs a comparison of arms over tasks, follows it, and reports what it stored. An
+arm is a harness commit, a model, and optionally a check mode and a reasoning
+setting. Every task runs for every arm and repeat, each against a fresh filtered
+clone of the task's repository without the answer key (`docs/accuracy`), and one
+graded result is stored per task, arm and repeat. A count here is a count of stored
+runs; it is never a score.
+
+## Usage
+
+    associate measure run --arms arms.json --repeats 3 --output-dir RESULTS
+    associate measure run --arms arms.json --output-dir RESULTS --detach
+    associate measure status RESULTS
+    associate measure report RESULTS [--reading answer_text|answer_text_plus_handback_values]
+    associate measure sample RESULTS [--sheet PATH] [--seed N] [--size N] [--reading R]
+    associate measure agreement RESULTS --sheet PATH
+    associate measure overview
+
+Every sub-verb takes `--json`.
+
+## run
+
+- `--arms FILE`: a JSON list of arms, each `{"name", "harness_commit", "model"}` and
+  optionally `"check_mode"` (`report` or `enforce`) and `"reasoning"` (`model-default`,
+  `on` or `off`). An unknown key or a duplicate name is refused with the reason.
+  `harness_commit` is a commit id of 7 to 64 hexadecimal characters; a branch or tag
+  name is refused.
+- `--tasks FILE` (default `docs/accuracy/tasks.json`), `--tasks-filter ID` (repeatable,
+  runs only those tasks), `--repeats N` (default 1, at most 1000), `--output-dir DIR`.
+- `--timeout SECONDS`: the limit for one run, default 3600. There is no unlimited
+  value: zero or less is refused.
+- `--checkout-of NAME=PATH` (repeatable): the local checkout of a task repository.
+  A repository not named defaults to a directory of that name beside this
+  repository's main checkout when it exists, and `associate` is this repository.
+  A repository with no checkout is not a refusal: its runs are stored as failed
+  launches with the reason, and the start-up text says so.
+- `--detach`: start the comparison as a background process in its own session
+  (stdin closed, stdout and stderr appended to `measure-run.log` in the output
+  directory), print the results path, the log path and the process id, and return
+  at once. One runner per output directory: a second one is refused.
+- The run writes `manifest.json` into the output directory; `status` reads it.
+
+It refuses to start unless a note stating the difference that will be called a
+change is committed: `docs/accuracy/difference-threshold.md`, tracked by git and
+unmodified in the working tree (`--difference-note PATH` names another file). The
+refusal names the path. A stub comparison (`--harness stub`) is plumbing only: it
+needs no note and its output is labelled plumbing only.
+
+## status
+
+Reads only. Prints how many of the expected runs (tasks by arms by repeats, from the
+manifest) are stored as finished, stored as failed launches and not yet stored;
+whether a runner holds the lock and whether that process is alive; and the log path.
+
+## report and sample
+
+`report` prints the table of the stored results; `--reading` picks which of the two
+readings of the grade is counted. `sample` writes the blank hand-grading sheet for a
+fixed-seed draw (it refuses to replace a sheet without `--overwrite`).
+
+## agreement
+
+Reads only; it never writes the sheet or the results. It reads the sheet's seed,
+reading and number of entries, redraws the same sample from the stored results and
+refuses (exit 1, with a remediation) when the redrawn runs are not exactly the sheet's
+runs, which means the stored results changed since the sheet was drawn, or when the
+sheet is missing, is not JSON or lacks those fields. It then prints how many hand-graded
+runs agree with the grader (agreed over hand-graded; a missing or invalid hand grade is
+never agreement) and states two conditions, each met or not met with its numbers: at
+least 48 hand-graded runs, and agreement on at least 95% of them. A share is never
+rounded up to reach 95%. `--json` carries the same numbers and the share, null when no
+run is hand graded.
+
+## Exit codes
+
+- `0` done
+- `1` a user-input error: a bad arms or task file, a missing difference note, a bad
+  flag, a second runner on the same directory, nothing stored to report
+- `2` the background process could not be started
+"""
+
+
 ENTRIES: dict[tuple[str, ...], str] = {
     (): _ROOT,
     ("associate",): _ROOT,
@@ -619,6 +739,13 @@ ENTRIES: dict[tuple[str, ...], str] = {
     ("tokens", "revoke"): _TOKENS,
     ("tokens", "overview"): _TOKENS,
     ("check",): _CHECK,
+    ("measure",): _MEASURE,
+    ("measure", "overview"): _MEASURE,
+    ("measure", "run"): _MEASURE,
+    ("measure", "status"): _MEASURE,
+    ("measure", "report"): _MEASURE,
+    ("measure", "sample"): _MEASURE,
+    ("measure", "agreement"): _MEASURE,
     ("cli",): _CLI,
     ("cli", "overview"): _CLI,
 }
