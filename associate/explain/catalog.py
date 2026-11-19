@@ -787,9 +787,18 @@ checklist of facts (`docs/accuracy/broad-tasks.json`: one prompt, and per task a
 repository, a pinned commit and the facts).
 
 - `run --broad` runs the broad tasks (`--tasks FILE` names another broad file). Each
-  stored run holds the whole answer, where it came from (`answer.md`, or the final
-  reply of a run that ended without `finish`) and whether a final reply is at the
-  2,000-character cap, and per checklist fact whether it was marked as stated. A fact
+  stored run holds the whole answer, `answer_source` (where it came from), `finished`
+  (whether `finish` was accepted, from the result's `handback_outcome`; null when the
+  result does not say) and `at_cap`, and per checklist fact whether it was marked as
+  stated. The answer of a run that finished is the model's text in `answer.md`. A run
+  that ended without `finish` leaves no `answer.md`, and its result keeps only the
+  last 2,000 characters of its last message, so its answer is the fullest text there
+  is, with no line removed, in this order: `final_message.md` (the export's copy of
+  the whole last message; older exports have none), `final_reply` (the result's final
+  reply when it is shorter than the cap, so nothing was cut), `statements.json` (the
+  export's statements joined by blank lines: every paragraph and list item the model
+  wrote in a message without a tool call, but no heading, no list marker and no code
+  block), `final_reply_capped` (the cut final reply; only here is `at_cap` true). A fact
   is marked when every group of its `match` is found in the answer text by one of the
   group's alternatives, case-insensitively. That is a first marking: the words were
   found. Every marking is read by hand. No grade of the whole task is stored.
@@ -817,8 +826,13 @@ repository, a pinned commit and the facts).
   has that line. It exits 1 while there is a problem and 0 when the sheet is
   acceptable.
 - `report` on a broad comparison prints one line per run, grouped by repository and
-  arm: checklist facts marked as stated (n of that repository's facts), and the answer
-  source and cap flag. With no sheet written it says the hand count is not joined. Once
+  arm: checklist facts marked as stated (n of that repository's facts), the answer
+  source, the cap flag and how the run ended (finish accepted, ended without finish,
+  or not recorded). After the runs it prints, per arm, how many runs ended without
+  `finish` (`without_finish` in `--json`). Such a run is graded like the others on its
+  final message (first marking, sheet, statements counted false); the report says in
+  one line that it handed back no checked facts. With no sheet written it says the
+  hand count is not joined. Once
   a sheet exists it joins sheet and key only when the sheet passes the check, every
   run of the key is fully graded with its statements unchanged, and the key covers the
   stored finished runs; then each line also has statements counted false, statements

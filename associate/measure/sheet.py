@@ -110,6 +110,13 @@ _K_FACTS_STATED = "facts_stated"
 _K_FACTS_TOTAL = "facts_total"
 _K_ANSWER_SOURCE = "answer_source"
 _K_REPLY_CAP = "final_reply_cap"
+_K_BROAD_FINISHED = "finished"
+_K_WITHOUT_FINISH = "without_finish"
+_K_NOT_RECORDED = "finish_not_recorded"
+NO_CHECKED_FACTS_LINE = (
+    "A run that ended without finish is graded like the others (first marking, sheet, "
+    "statements counted false) on its final message; it handed back no checked facts."
+)
 _ABBREVIATIONS = frozenset({"e.g.", "i.e.", "etc.", "vs.", "cf."})
 _FENCE = re.compile(r"^\s*(```|~~~)")
 _HEADING = re.compile(r"^\s*#{1,6}\s+")
@@ -581,10 +588,50 @@ def run_rows(
                 _K_ANSWER_SOURCE: broad.get(_K_ANSWER_SOURCE),
                 _K_AT_CAP: bool(broad.get(_K_AT_CAP)),
                 _K_REPLY_CAP: broad.get(_K_REPLY_CAP),
+                _K_BROAD_FINISHED: _finished(broad),
                 _K_CONTAMINATED: (record.get("contamination") or {}).get(_K_CONTAMINATED) is True,
             }
         )
     return rows
+
+
+def _finished(broad: Mapping[str, Any]) -> bool | None:
+    """Whether ``finish`` was accepted; None for a record stored before that was recorded."""
+    value = broad.get(_K_BROAD_FINISHED)
+    return value if isinstance(value, bool) else None
+
+
+def finish_counts(rows: Sequence[Mapping[str, Any]]) -> dict[str, dict[str, int]]:
+    """Per arm: its runs, those that ended without ``finish``, those that do not say."""
+    counts: dict[str, dict[str, int]] = {}
+    for row in rows:
+        arm = counts.setdefault(row["arm"], {_K_RUNS: 0, _K_WITHOUT_FINISH: 0, _K_NOT_RECORDED: 0})
+        arm[_K_RUNS] += 1
+        ended = row.get(_K_BROAD_FINISHED)
+        arm[_K_WITHOUT_FINISH] += 1 if ended is False else 0
+        arm[_K_NOT_RECORDED] += 1 if ended is None else 0
+    return dict(sorted(counts.items()))
+
+
+def _finish_lines(rows: Sequence[Mapping[str, Any]]) -> list[str]:
+    lines = ["", "Runs that ended without finish (a count of runs, per arm):"]
+    counts = finish_counts(rows)
+    for arm, found in counts.items():
+        unknown = f" ({found[_K_NOT_RECORDED]} not recorded)" if found[_K_NOT_RECORDED] else ""
+        lines.append(
+            f"  arm {arm}: {found[_K_WITHOUT_FINISH]} of {found[_K_RUNS]} runs ended without "
+            f"finish{unknown}"
+        )
+    if any(found[_K_WITHOUT_FINISH] for found in counts.values()):
+        lines.append(NO_CHECKED_FACTS_LINE)
+    return lines
+
+
+_FINISH_WORDS = {
+    True: "finish accepted",
+    False: "ended without finish",
+    None: "finish not recorded",
+}
 
 
 def rule_counts(rows: Sequence[Mapping[str, Any]], count: str) -> dict[str, dict[str, list[int]]]:
@@ -608,6 +655,7 @@ def _run_line(row: Mapping[str, Any]) -> str:
         ]
     cap = f"at the {row[_K_REPLY_CAP]}-character cap" if row[_K_AT_CAP] else "not at the cap"
     parts.append(f"answer from {row[_K_ANSWER_SOURCE]}, {cap}")
+    parts.append(_FINISH_WORDS[row.get(_K_BROAD_FINISHED)])
     if row[_K_CONTAMINATED]:
         parts.append("read the answer key (left out of the rule)")
     return f"    r{row[_K_REPEAT]}: " + "; ".join(parts)
@@ -639,4 +687,4 @@ def render_rows(rows: Sequence[Mapping[str, Any]]) -> str:
             seen_arm = row["arm"]
             lines.append(f"  arm {row['arm']} (support_score {row[_K_SUPPORT]})")
         lines.append(_run_line(row))
-    return "\n".join(lines)
+    return "\n".join(lines + _finish_lines(rows))

@@ -183,7 +183,7 @@ def test_a_broad_run_from_a_final_reply_at_the_cap_says_so():
     reply = ("hatchling " * 400)[: broad.FINAL_REPLY_CAP]
     assert len(reply) == broad.FINAL_REPLY_CAP
     fields = runner_mod._broad_fields({"final_reply": reply}, None, runner_task())
-    assert fields["broad"]["answer_source"] == "final_reply"
+    assert fields["broad"]["answer_source"] == "final_reply_capped"
     assert fields["broad"]["at_cap"] is True
     assert fields["broad"]["final_reply_cap"] == broad.FINAL_REPLY_CAP
 

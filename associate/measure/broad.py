@@ -56,7 +56,9 @@ BROAD_KEY_NAME = "broad-tasks.json"
 FORMAT_VERSION = 1
 FIRST_MARKING = "first marking"
 #: ``associate.harness.pi.FINAL_REPLY_CHARS``: how much of a final reply a run result keeps.
-FINAL_REPLY_CAP = 2000
+FINAL_REPLY_CAP = answer_mod.FINAL_REPLY_CAP
+#: The result's ``handback_outcome`` when ``finish`` was accepted.
+HANDBACK_ACCEPTED = "accepted"
 DRAFT_WORD = "DRAFT"
 STATUS_CONFIRMED = "confirmed"
 STATUS_DRAFT = "draft"
@@ -239,18 +241,31 @@ def first_marking(facts: Sequence[Mapping[str, Any]], text: str) -> dict[str, An
     }
 
 
-def answer_origin(result: Mapping[str, Any] | None, source: str) -> dict[str, Any]:
-    """Where the stored answer came from, and whether it is a final reply at the cap.
+def finish_accepted(result: Mapping[str, Any] | None) -> bool | None:
+    """Whether ``finish`` was accepted, from the result's ``handback_outcome``.
 
-    A run that ends without ``finish`` leaves only the last ``FINAL_REPLY_CAP``
-    characters of its final reply; an answer of that length may be cut.
+    None when the result does not say (no result, or a harness from before the
+    hand-back check).
     """
-    reply = (result or {}).get("final_reply")
-    capped = source == answer_mod.SOURCE_FINAL_REPLY and isinstance(reply, str)
+    outcome = (result or {}).get("handback_outcome")
+    return outcome == HANDBACK_ACCEPTED if isinstance(outcome, str) else None
+
+
+def answer_origin(result: Mapping[str, Any] | None, source: str) -> dict[str, Any]:
+    """Where the stored answer came from, whether it is cut, and whether the run finished.
+
+    ``answer_source`` is ``answer.md`` (an accepted ``finish``), or for a run
+    that left none: ``final_message.md``, ``final_reply`` (shorter than the
+    cap, so whole), ``statements.json`` (the statements of the export, joined)
+    or ``final_reply_capped``. ``at_cap`` is true only for the last: the answer
+    is then the last ``FINAL_REPLY_CAP`` characters of a longer message.
+    ``finished`` is :func:`finish_accepted`.
+    """
     return {
         "answer_source": source,
-        "at_cap": bool(capped and len(reply) >= FINAL_REPLY_CAP),
+        "at_cap": source == answer_mod.SOURCE_FINAL_REPLY_CAPPED,
         "final_reply_cap": FINAL_REPLY_CAP,
+        "finished": finish_accepted(result),
     }
 
 

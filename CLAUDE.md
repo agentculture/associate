@@ -214,7 +214,13 @@ run live):
   - **What a run leaves and returns.** The export gains `facts.json`,
     `check.json`, `report.json` and `answer.md` (the answer rendered by the
     harness from accepted items; the model's own summary and final message are
-    kept under an unchecked label and counted). `associate run --json` carries
+    kept under an unchecked label and counted). With or without
+    `finish`, the export also holds `final_message.md` once the model has sent
+    a message that calls no tool: the last such message, redacted and
+    otherwise whole (`lib/finalmessage.ts`;
+    built and unit-tested, not yet written by a live run). `statements.json`
+    is a split of the model's prose that drops headings, list markers and
+    code blocks, so it cannot stand in for it. `associate run --json` carries
     the rendered answer, the counts from a Python re-check
     (`associate/accuracy/`), and `handback_outcome`; a hand-back refused after
     the allowed rounds exits 3 with the result still printed.

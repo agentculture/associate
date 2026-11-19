@@ -489,6 +489,7 @@ def test_report_json_lists_every_run_and_no_pooled_number(results, capsys):
         "runs",
         "rule",
         "not_finished",
+        "without_finish",
     }
 
 

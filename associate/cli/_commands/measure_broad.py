@@ -366,6 +366,7 @@ def cmd_report(
         "note": sheet.INTERNAL_LINE,
         _K_PLUMBING: bool((manifest or {}).get(_K_PLUMBING)),
         _K_RUNS: rows,
+        "without_finish": sheet.finish_counts(rows),
         "rule": _rule(note, rows, joined is not None),
         _K_NOT_FINISHED: [list(key) for key in not_finished],
     }
