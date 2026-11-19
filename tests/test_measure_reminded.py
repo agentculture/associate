@@ -199,7 +199,6 @@ def _context_fields(tmp_path):
         pi_on_path=None,
         progress=lambda message: None,
     )
-    yield
 
 
 def test_the_report_text_carries_the_counts(tmp_path, capsys):
