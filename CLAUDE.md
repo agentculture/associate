@@ -230,21 +230,32 @@ run live):
 - **The support score** (issue #31; settings in `accuracy.json`
   `support_score`; `lib/support.ts`, `lib/supportswitch.ts`, `lib/handback.ts`
   `scoreCheckedFacts`; Python copy in `associate/accuracy/support.py`). For each
-  fact whose quote was found, the extension can ask the lobes decider whether
-  the quote on its own states or directly shows the value. It is report-only:
-  it refuses nothing and never enters `accepted`, the refusals or the counts.
-  `finish` writes the quote-check files first and then, with the score on,
-  writes them again with `facts[i].support` in `check.json`, `support_scored`
-  in `report.json` and a second mark in `answer.md`. Only scores are kept for
+  fact whose quote was found, the extension can ask the lobes decider one
+  `choice` question (deviation d4): how much of the value the quote, on its
+  own, shows. The options and their criteria are `support_score.options`
+  (`all`, `mostly`, `part`, `little`, `none`), and `support_score.passes`
+  (`all`, `mostly`) names the answers reported as the quote supporting the
+  value; there is no cut-off. A scored fact is `{status: "scored", answer,
+  supports, confidence}` (`confidence` the decider's probability for the
+  answer); a missing choice or one that is not an option is `not_scored`
+  `malformed`. It is report-only: it refuses nothing and never enters
+  `accepted`, the refusals or the counts. `finish` writes the quote-check
+  files first and then, with the score on, writes them again with
+  `facts[i].support` in `check.json`, `support_scored` and `support_answers`
+  (one count per option, in contract order) in `report.json`, and a second
+  mark in `answer.md` that gives the answer in words, never a number. Only scores are kept for
   the session; a pair that was not scored is asked again later, and one batch
   stops sending after the first `unreachable`, `timeout` or `http_error`
   (the rest are `skipped_after_failure`). `check_quote` takes an optional
   `value` argument and, for a found quote with the score on, adds a `support`
   key. `associate run --support-score on|off` overrides the switch for one
-  run. The switch is **off for every model**. Built and unit-tested against a
-  fake decider only; the decider was probed live once with four pairs in the
-  client's request shape (plan `.devague/plans/associate-decider-fact-score.json`),
-  and no run has been measured with the score on. Never call it accuracy.
+  run. The switch is **off for every model**. The question is built and
+  unit-tested against a fake decider only; the option wording and the pass
+  rule were measured offline on a labelled set
+  (`docs/notes/support-score-calibration.md`, two model raters, tentative); no
+  associate run has used the choice question. The earlier yes/no question was
+  probed live once with four pairs (plan
+  `.devague/plans/associate-decider-fact-score.json`). Never call it accuracy.
 - **The finish reminder** (deviation d3, issue #38; settings in
   `accuracy.json` `finish_reminder`, `max` 1 and the reminder `text`, first
   values; `lib/reminder.ts`; Python reader `associate/accuracy/reminder.py`).
@@ -319,8 +330,9 @@ is one run.
   beyond two worker runs; the recording of calls pi rejects before the hook is
   tested against a fake pi only.
 - the support score in any run: the switch is off for every model, the only
-  live contact was one probe of four pairs, and `finish`, `check_quote` and
-  the per-run switch are tested against a fake decider only;
+  live contact was one probe of four pairs with the earlier yes/no question,
+  no associate run has asked the five-option choice question, and `finish`,
+  `check_quote` and the per-run switch are tested against a fake decider only;
 - the broad tasks: no real broad run has been made (one is refused while the
   rule file is a draft); the sheet verbs are tested on fixtures and the stub
   harness only;
@@ -709,7 +721,9 @@ versions the extension's tests and the worker live runs used:
 - **Node** — **>=22** (pi-acp's floor, and the extension test runner's).
 - **the portable contract** (`associate/contract/`) — `models.json` version 1,
   `gate.json` version 9 (d18 added the `delegate_run` effect),
-  `accuracy.json` version 1, walk format 2. A
+  `accuracy.json` version 1 (its `support_score` section changed shape without
+  a version bump in deviation d4: `cutoff` removed, `options` and `passes`
+  added; the section is optional and off for every model), walk format 2. A
   contract-version bump is a compatibility event, not a patch note; a `gate.json` bump changes what CLEF is asked, so record why
   (`docs/notes/gate-calibration.md`). 0.12.0 changed the contract without a
   version bump of `models.json`: the tool name `check_quote` was added to
@@ -869,6 +883,12 @@ root key** — see invariant 3 under "Adding a verb".
   (`retry_rounds`, `refusal_cap`, `min_quote_length`) are first values, not
   measured ones. A new check needs a recorded failure in its
   `motivating_failure`.
+- **Don't treat the support score's options or pass rule as calibrated.**
+  `support_score.options` and `passes` were measured offline on one labelled
+  set with two model raters; they are tentative, and the switch stays off
+  for every model until the operator switches it on. Don't reword a
+  criterion without a new measurement in
+  `docs/notes/support-score-calibration.md`.
 - **Don't treat the 0.5 gate thresholds as calibrated.** They are tentative
   (deviation d9); change them only with new measurements recorded in
   `docs/notes/gate-calibration.md`, or from the issue #13 benchmark.

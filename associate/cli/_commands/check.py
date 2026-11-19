@@ -128,12 +128,13 @@ def cmd_check(args: argparse.Namespace) -> int:
     # Imported here: without a usable evidence-cli this raises the exit-2 CliError.
     from associate.accuracy import ExportError, inspect_export
     from associate.accuracy.reminder import RESULT_KEY, read_reminder
-    from associate.accuracy.support import with_support
+    from associate.accuracy.support import option_keys, with_support
 
     json_mode = bool(getattr(args, "json", False))
     try:
         prior = Path(args.continue_from) if getattr(args, "continue_from", None) else None
-        inspected = inspect_export(Path(args.export_dir), load_accuracy(), continue_from=prior)
+        accuracy = load_accuracy()
+        inspected = inspect_export(Path(args.export_dir), accuracy, continue_from=prior)
     except ExportError as err:
         raise CliError(
             code=EXIT_USER_ERROR,
@@ -141,7 +142,7 @@ def cmd_check(args: argparse.Namespace) -> int:
             remediation="pass an export directory holding walk.jsonl (<session>/export)",
         ) from err
     # The support score is the extension's: copied from the export, never recomputed.
-    result = with_support(inspected, Path(args.export_dir))
+    result = with_support(inspected, Path(args.export_dir), option_keys(accuracy))
     held = read_reminder(Path(args.export_dir))
     if held is not None:
         result = {**result, RESULT_KEY: held}

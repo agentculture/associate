@@ -1,9 +1,11 @@
 """The support score of each fact, copied from the export. Nothing here computes it.
 
 When the support score is on for a run, the Pi extension asks the decider, for
-each fact whose quote was found, whether the quote supports the value, and
-writes the answer as ``facts[i].support`` in the export's ``check.json`` (and
-the number of scored facts as ``support_scored`` in ``report.json``). The Python
+each fact whose quote was found, one choice question (plan deviation d4): how
+much of the value the quote, on its own, shows. It writes the answer as
+``facts[i].support`` in the export's ``check.json`` (``{"status": "scored",
+"answer", "supports", "confidence"}`` or ``{"status": "not_scored", "reason"}``)
+and the number of answered facts as ``support_scored`` in ``report.json``. The Python
 re-check (evidence-cli) recomputes the quote check from the walk and the saved
 results and knows nothing of that field.
 
@@ -14,9 +16,12 @@ socket, and imports no module that could. An export with no such field (written
 before the score existed, or with the score off) gets no key at all.
 
 What is read is validated. An entry that is not one of the two shapes the
-extension writes, or that sits on a fact whose quote the re-check did not find,
-is shown as ``{"status": "not_available", "reason": ...}``, never as a score.
-Nothing here raises on a bad file.
+extension writes (an export written with the earlier yes/no score among them),
+whose answer is not one of the contract's options, or that sits on a fact whose
+quote the re-check did not find, is shown as ``{"status": "not_available",
+"reason": ...}``, never as a score. The shown answers are counted per option as
+``support_answers``, in the contract's order with zeros included. Nothing here
+raises on a bad file.
 
 The support score is a report-only signal. It is not the quote check, it
 refuses nothing, and it is counted under its own name only.
@@ -44,8 +49,10 @@ _UNMATCHED_KEY = "support_unmatched"
 _STATUS = "status"
 _REASON = "reason"
 _DETAIL = "detail"
-_SCORE = "score"
-_CUTOFF_FLAG = "at_or_above_cutoff"
+_ANSWER = "answer"
+_SUPPORTS = "supports"
+_CONFIDENCE = "confidence"
+_ANSWERS_KEY = "support_answers"
 _SCORED = "scored"
 _NOT_SCORED = "not_scored"
 _NOT_AVAILABLE = "not_available"
@@ -56,6 +63,19 @@ _MAX_BYTES = 16 * 1024 * 1024
 _MAX_DETAIL = 200
 _REASON_RE = re.compile(r"[a-z][a-z0-9_]{0,63}", re.ASCII)
 _ID_RE = re.compile(r"[A-Za-z0-9_.:-]{1,64}", re.ASCII)
+#: An option key as shown: the same plain characters as an id.
+_ANSWER_RE = _ID_RE
+
+#: The words for each answer, keyed by the shipped contract's option keys; the
+#: same words lib/render.ts writes in answer.md (a test compares the two). An
+#: answer with no words here is shown by its key.
+ANSWER_WORDS = {
+    "all": "quote supports the value",
+    "mostly": "quote supports the main claim; a detail of the value is not in the quote",
+    "part": "quote shows only part of the value",
+    "little": "quote shows little of the value",
+    "none": "quote does not show the value",
+}
 _MALFORMED_ID = "<malformed id>"
 
 
@@ -107,15 +127,26 @@ def _one_line(text: str) -> str:
     return cleaned[:_MAX_DETAIL]
 
 
-def _scored(raw: Mapping[str, Any]) -> dict[str, Any]:
-    score, flag = raw.get(_SCORE), raw.get(_CUTOFF_FLAG)
-    if isinstance(score, bool) or not isinstance(score, (int, float)):
-        return _not_available("score_not_a_number")
-    if not math.isfinite(score) or not 0 <= score <= 1:
-        return _not_available("score_out_of_range")
-    if not isinstance(flag, bool):
-        return _not_available("cutoff_flag_not_boolean")
-    return {_STATUS: _SCORED, _SCORE: score, _CUTOFF_FLAG: flag}
+def _confidence_problem(confidence: Any) -> Optional[str]:
+    if isinstance(confidence, bool) or not isinstance(confidence, (int, float)):
+        return "confidence_not_a_number"
+    if not math.isfinite(confidence) or not 0 <= confidence <= 1:
+        return "confidence_out_of_range"
+    return None
+
+
+def _scored(raw: Mapping[str, Any], options: Optional[list[str]]) -> dict[str, Any]:
+    answer, supports, confidence = raw.get(_ANSWER), raw.get(_SUPPORTS), raw.get(_CONFIDENCE)
+    if not isinstance(answer, str) or not _ANSWER_RE.fullmatch(answer):
+        return _not_available("answer_malformed")
+    if options is not None and answer not in options:
+        return _not_available("answer_not_an_option")
+    if not isinstance(supports, bool):
+        return _not_available("supports_not_boolean")
+    problem = _confidence_problem(confidence)
+    if problem:
+        return _not_available(problem)
+    return {_STATUS: _SCORED, _ANSWER: answer, _SUPPORTS: supports, _CONFIDENCE: confidence}
 
 
 def _not_scored(raw: Mapping[str, Any]) -> dict[str, Any]:
@@ -129,12 +160,16 @@ def _not_scored(raw: Mapping[str, Any]) -> dict[str, Any]:
     return {_STATUS: _NOT_SCORED, _REASON: reason, _DETAIL: _one_line(detail)}
 
 
-def validated(raw: Any) -> dict[str, Any]:
-    """One support result as the extension writes it, or ``not_available`` with the reason."""
+def validated(raw: Any, options: Optional[list[str]] = None) -> dict[str, Any]:
+    """One support result as the extension writes it, or ``not_available`` with the reason.
+
+    With *options* (the contract's option keys), a scored answer that is not
+    one of them is ``not_available`` too.
+    """
     if not isinstance(raw, dict):
         return _not_available("not_an_object")
     if raw.get(_STATUS) == _SCORED:
-        return _scored(raw)
+        return _scored(raw, options)
     if raw.get(_STATUS) == _NOT_SCORED:
         return _not_scored(raw)
     return _not_available("unknown_status")
@@ -143,14 +178,37 @@ def validated(raw: Any) -> dict[str, Any]:
 # --- matching to the re-check's facts --------------------------------------------------------
 
 
-def _by_id(entries: Iterable[tuple[Any, Any]]) -> dict[Any, dict[str, Any]]:
+def _by_id(
+    entries: Iterable[tuple[Any, Any]], options: Optional[list[str]]
+) -> dict[Any, dict[str, Any]]:
     """Each id's validated result; an id that appears twice has none."""
     found: dict[Any, dict[str, Any]] = {}
     for fact_id, raw in entries:
         if not isinstance(fact_id, str):
             fact_id = _MALFORMED_ID
-        found[fact_id] = _not_available("duplicate_id") if fact_id in found else validated(raw)
+        duplicate = fact_id in found
+        found[fact_id] = _not_available("duplicate_id") if duplicate else validated(raw, options)
     return found
+
+
+def option_keys(accuracy: Optional[Mapping[str, Any]]) -> Optional[list[str]]:
+    """The contract's support-score option keys, in order; None without a usable section."""
+    section = (accuracy or {}).get("support_score")
+    options = section.get("options") if isinstance(section, Mapping) else None
+    if not isinstance(options, Mapping) or not options:
+        return None
+    return [key for key in options if isinstance(key, str)]
+
+
+def answer_counts(
+    results: Iterable[Mapping[str, Any]], options: Optional[list[str]]
+) -> dict[str, int]:
+    """How many shown results got each answer: the contract's options first, zeros included."""
+    counts = dict.fromkeys(options or [], 0)
+    for result in results:
+        if result[_STATUS] == _SCORED:
+            counts[result[_ANSWER]] = counts.get(result[_ANSWER], 0) + 1
+    return counts
 
 
 def _for_fact(fact: Mapping[str, Any], result: dict[str, Any]) -> dict[str, Any]:
@@ -171,6 +229,8 @@ class Copied(NamedTuple):
     by_id: dict[Any, dict[str, Any]]
     #: How many of those results are shown as scored.
     scored: int
+    #: How many shown results got each answer, the contract's options first.
+    answers: dict[str, int]
     #: The extension's own count from report.json, or None.
     reported: Optional[int]
     #: The ids check.json gave a result for that are not among the re-check's facts.
@@ -195,9 +255,11 @@ def read_support(export_dir: Path) -> Optional[Held]:
     return Held(entries=entries, reported=reported)
 
 
-def match_support(held: Held, facts: Iterable[Mapping[str, Any]]) -> Copied:
-    """The results *held* for the re-check's *facts*."""
-    found = _by_id(held.entries)
+def match_support(
+    held: Held, facts: Iterable[Mapping[str, Any]], options: Optional[list[str]] = None
+) -> Copied:
+    """The results *held* for the re-check's *facts*; *options* are the contract's option keys."""
+    found = _by_id(held.entries, options)
     known = {fact.get("id"): fact for fact in facts}
     by_id = {
         fact_id: _for_fact(known[fact_id], result)
@@ -207,20 +269,27 @@ def match_support(held: Held, facts: Iterable[Mapping[str, Any]]) -> Copied:
     return Copied(
         by_id=by_id,
         scored=sum(1 for result in by_id.values() if result[_STATUS] == _SCORED),
+        answers=answer_counts(by_id.values(), options),
         reported=held.reported,
         unmatched=sorted({_shown_id(fact_id) for fact_id in found if fact_id not in known}),
     )
 
 
-def copy_support(export_dir: Path, facts: Iterable[Mapping[str, Any]]) -> Optional[Copied]:
+def copy_support(
+    export_dir: Path, facts: Iterable[Mapping[str, Any]], options: Optional[list[str]] = None
+) -> Optional[Copied]:
     """The export's support results for the re-check's *facts*; None when it holds none."""
     held = read_support(export_dir)
-    return None if held is None else match_support(held, facts)
+    return None if held is None else match_support(held, facts, options)
 
 
 def _summary_keys(copied: Copied) -> dict[str, Any]:
     """The keys beside the facts: the source label, the count, and what did not match."""
-    keys: dict[str, Any] = {_SOURCE_KEY: SUPPORT_SOURCE, _COUNT_KEY: copied.scored}
+    keys: dict[str, Any] = {
+        _SOURCE_KEY: SUPPORT_SOURCE,
+        _COUNT_KEY: copied.scored,
+        _ANSWERS_KEY: copied.answers,
+    }
     if copied.reported is not None:
         keys[_REPORTED_KEY] = copied.reported
     if copied.unmatched:
@@ -232,10 +301,12 @@ def _facts_of(inspected: Mapping[str, Any]) -> list[Any]:
     return inspected.get(_FACTS_KEY) or []
 
 
-def with_support(inspected: Mapping[str, Any], export_dir: Path) -> dict[str, Any]:
+def with_support(
+    inspected: Mapping[str, Any], export_dir: Path, options: Optional[list[str]] = None
+) -> dict[str, Any]:
     """An ``inspect_export`` result with each fact's ``support`` copied on; unchanged when none."""
     facts = _facts_of(inspected)
-    copied = copy_support(export_dir, facts)
+    copied = copy_support(export_dir, facts, options)
     if copied is None:
         return dict(inspected)
     by_id = copied.by_id
@@ -246,10 +317,12 @@ def with_support(inspected: Mapping[str, Any], export_dir: Path) -> dict[str, An
     return {**inspected, _FACTS_KEY: marked, **_summary_keys(copied)}
 
 
-def run_fields(inspected: Mapping[str, Any], held: Held) -> dict[str, Any]:
+def run_fields(
+    inspected: Mapping[str, Any], held: Held, options: Optional[list[str]] = None
+) -> dict[str, Any]:
     """The run result's support keys from the files *held*: ``support_facts`` and the summary."""
     facts = _facts_of(inspected)
-    copied = match_support(held, facts)
+    copied = match_support(held, facts, options)
     by_id = copied.by_id
     listed = [
         {"id": fact["id"], _SUPPORT_KEY: by_id[fact["id"]]}
@@ -263,15 +336,21 @@ def run_fields(inspected: Mapping[str, Any], held: Held) -> dict[str, Any]:
 
 
 def describe(result: Mapping[str, Any]) -> str:
-    """One support result in plain words."""
+    """One support result in plain words: the answer in words, never a number."""
     status = result.get(_STATUS)
     if status == _SCORED:
-        words = "supports" if result[_CUTOFF_FLAG] else "may not support"
-        return f"quote {words} the value (support {result[_SCORE]:.2f})"
+        answer = result[_ANSWER]
+        words = ANSWER_WORDS.get(answer)
+        return f"support: {words}" if words else f"support answer: {answer}"
     detail = f": {result[_DETAIL]}" if result.get(_DETAIL) else ""
     if status == _NOT_SCORED:
         return f"support not scored ({result[_REASON]}{detail})"
     return f"support not available ({result[_REASON]})"
+
+
+def answers_line(answers: Mapping[str, int]) -> str:
+    """The per-answer counts on one line, in the order given."""
+    return ", ".join(f"{key} {count}" for key, count in answers.items())
 
 
 def count_line(scored: int, shown: int) -> str:
@@ -291,8 +370,9 @@ def summary_lines(result: Mapping[str, Any]) -> list[str]:
     lines = [
         "",
         f"Support: scored {scored} of {shown} facts with a support result",
+        f"  answers: {answers_line(result.get(_ANSWERS_KEY) or {})}",
         "  the support score is copied from the extension's check.json and was not recomputed",
-        "  here. It says whether the decider judged the quote to support the value; it is a",
+        "  here. It says how much of the value the decider judged the quote to show; it is a",
         "  separate signal from the quote check and refuses nothing.",
     ]
     reported = result.get(_REPORTED_KEY)

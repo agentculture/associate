@@ -129,8 +129,10 @@ def accuracy_result(
 
     When the export's ``check.json`` carries a support result for any fact (or
     ``report.json`` a ``support_scored`` count), the result gains
-    ``support_source`` (``"extension"``), ``support_scored``, ``support_facts``
-    (``[{"id", "support"}]``) and, when they apply, ``support_scored_reported``
+    ``support_source`` (``"extension"``), ``support_scored``, ``support_answers``
+    (one count per option of *accuracy*'s support score, in order, zeros
+    included), ``support_facts`` (``[{"id", "support"}]``) and, when they
+    apply, ``support_scored_reported``
     and ``support_unmatched``. They sit beside ``accuracy``, not in it: the
     score is copied from the extension's files, never recomputed, and is not
     part of the re-check. An export with no score gets no such key.
@@ -147,4 +149,5 @@ def accuracy_result(
     if held is None:
         return result
     inspected = _inspected(export_dir, accuracy, continue_from)
-    return {**result, **_support.run_fields(inspected, held)}
+    options = _support.option_keys(accuracy)
+    return {**result, **_support.run_fields(inspected, held, options)}

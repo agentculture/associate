@@ -592,9 +592,7 @@ def _support_passes_errors(passes: Any, options: Any) -> list[str]:
 def _support_choice_errors(section: dict[str, Any]) -> list[str]:
     """The choice question's ``options`` and ``passes`` (plan deviation d4)."""
     options = section.get("options")
-    return _support_options_errors(options) + _support_passes_errors(
-        section.get("passes"), options
-    )
+    return _support_options_errors(options) + _support_passes_errors(section.get("passes"), options)
 
 
 def _support_score_errors(section: Any, registry: set[str]) -> list[str]:
