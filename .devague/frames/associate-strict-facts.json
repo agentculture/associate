@@ -2,9 +2,9 @@
   "slug": "associate-strict-facts",
   "title": "associate strict facts",
   "schema_version": 6,
-  "status": "drafting",
+  "status": "exported",
   "created": "2026-11-19T18:44:49Z",
-  "updated": "2026-11-19T18:54:45Z",
+  "updated": "2026-11-19T18:57:09Z",
   "claims": [
     {
       "id": "c1",
@@ -16,7 +16,7 @@
         {
           "id": "h13",
           "text": "in a recorded live worker run and a recorded live cortex run with the default contract, every item in the answer section of answer.md has a check kind, a cited call and a passed check, and no item appears there that check.json lists as failed",
-          "status": "proposed",
+          "status": "confirmed",
           "instruction": ""
         }
       ],
@@ -59,7 +59,7 @@
         {
           "id": "h14",
           "text": "a reader who was not part of the run takes three items from a recorded answer, runs the printed command or read in the pinned checkout, and gets the printed result for all three",
-          "status": "proposed",
+          "status": "confirmed",
           "instruction": ""
         }
       ],
@@ -84,7 +84,7 @@
         {
           "id": "h15",
           "text": "the numbers are recomputed from the stored t12 results after grading is settled with an outside model's verdicts, and the spec is corrected if they change",
-          "status": "proposed",
+          "status": "confirmed",
           "instruction": ""
         }
       ],
@@ -285,7 +285,7 @@
         {
           "id": "h16",
           "text": "a node test shows that checking a hand-back starts no process and makes no tool call: it reads the walk and the saved results only",
-          "status": "proposed",
+          "status": "confirmed",
           "instruction": ""
         }
       ],
