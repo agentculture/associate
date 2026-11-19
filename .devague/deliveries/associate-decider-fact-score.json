@@ -1,0 +1,24 @@
+{
+  "plan_slug": "associate-decider-fact-score",
+  "schema_version": 2,
+  "created": "2026-11-19T06:30:45Z",
+  "updated": "2026-11-19T06:30:45Z",
+  "deviations": [
+    {
+      "id": "d1",
+      "what": "t11/t12: a broad run that ends without finish is graded on its full final message, read from the export, not on the 2000-character final reply; the report shows per arm how many runs ended without finish. The reminder to call finish is not built here; it is a separate issue",
+      "task_ref": "t12",
+      "reason": "Operator, 2026-11-19: 'I prefer we don't have to rely on the model's opinion. For now, option 1. Open issue for option 2.' 2 of 6 trial runs ended without finish",
+      "affects": [
+        "t11"
+      ],
+      "origin": "user",
+      "status": "approved",
+      "classification": "acceptable",
+      "seq": 1
+    }
+  ],
+  "evidence": [],
+  "deltas": [],
+  "supersessions": []
+}
