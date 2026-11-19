@@ -851,7 +851,8 @@ repository, a pinned commit and the facts).
   for it says "not applicable" with the reason. A run that read the answer key, or
   whose answer was cut at the cap, is left out; a run with no statement to grade is
   left out of the count of false statements. A rule file whose required number of
-  repositories is not more than half of them is refused. While the rule file is a draft the report says the verdict is not computed.
+  repositories is not more than half of them is refused. While the rule file is a
+  draft the report says the verdict is not computed.
 
 ## Exit codes
 
