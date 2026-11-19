@@ -1,22 +1,22 @@
 #!/usr/bin/env python3
-"""Shares of labelled value-and-quote pairs that the support score passes.
+"""Shares of labelled value-and-quote pairs that the support check passes.
 
 Reads the committed labelled set (``docs/accuracy/support-labelled-set.json``):
-pairs with a group, two raters' labels and the decider's score. For one cut-off
-it reports, per group:
+pairs with a group, a half (development or held-out), two raters' labels and
+the decider's answer, one of the set's ``options``. A pair is passed when its
+answer is one of the set's ``passes``. Per group it reports:
 
-- of the pairs both raters call supported, the share with a score at or above
-  the cut-off;
-- of the pairs both raters call unsupported, the share with a score at or
-  above the cut-off.
+- of the pairs both raters call supported, the share passed;
+- of the pairs both raters call unsupported, the share passed;
+- how many pairs got each answer, by what the raters said.
 
-A pair the raters disagree on, or one with no score, is counted and left out of
+A pair the raters disagree on, or one with no answer, is counted and left out of
 both shares. Groups are never added together. These shares describe this set;
 neither is accuracy and neither says a value is true.
 
-    python3 scripts/support_shares.py                 # the contract's cut-off
-    python3 scripts/support_shares.py --cutoff 0.7
-    python3 scripts/support_shares.py --sweep         # every tenth from 0.1 to 0.9
+    python3 scripts/support_shares.py                    # every pair
+    python3 scripts/support_shares.py --half held_out    # one half
+    python3 scripts/support_shares.py --passes all       # another pass rule
     python3 scripts/support_shares.py --json
 
 Standard library only.
@@ -32,24 +32,31 @@ from typing import Any
 
 ROOT = Path(__file__).resolve().parents[1]
 DEFAULT_SET = ROOT / "docs" / "accuracy" / "support-labelled-set.json"
-CONTRACT = ROOT / "associate" / "contract" / "accuracy.json"
 SUPPORTED = "supported"
 UNSUPPORTED = "unsupported"
+DISAGREE = "raters_disagree"
 LABELS = (SUPPORTED, UNSUPPORTED)
-SWEEP = tuple(round(step / 10, 1) for step in range(1, 10))
+ANSWER = "answer"
+PAIRS = "pairs"
+PASSED = "passed"
 
 
 class SetError(ValueError):
     """The labelled set is not of the expected shape."""
 
 
-def _number(value: Any) -> bool:
-    return isinstance(value, (int, float)) and not isinstance(value, bool)
+def _names(value: Any) -> bool:
+    return isinstance(value, list) and bool(value) and all(isinstance(v, str) for v in value)
 
 
-def load_pairs(document: Any) -> list[dict[str, Any]]:
-    """The pairs of a labelled set, each checked for the fields the shares need."""
-    pairs = document.get("pairs") if isinstance(document, dict) else None
+def load_set(document: Any) -> tuple[list[dict[str, Any]], list[str], list[str]]:
+    """The pairs, the options and the pass rule of a labelled set, each checked."""
+    if not isinstance(document, dict):
+        raise SetError("the set is not an object")
+    options, passes = document.get("options"), document.get("passes")
+    if not _names(options) or not _names(passes) or not set(passes) < set(options):
+        raise SetError("the set needs options, and passes naming some but not all of them")
+    pairs = document.get(PAIRS)
     if not isinstance(pairs, list) or not pairs:
         raise SetError("the set has no pairs list")
     for position, pair in enumerate(pairs):
@@ -60,95 +67,103 @@ def load_pairs(document: Any) -> list[dict[str, Any]]:
             raise SetError(f"pairs[{position}] has a label that is not one of {LABELS}")
         if not isinstance(pair.get("group"), str):
             raise SetError(f"pairs[{position}] has no group")
-        if "score" in pair and not _number(pair["score"]):
-            raise SetError(f"pairs[{position}] has a score that is not a number")
-    return pairs
+        if ANSWER in pair and pair[ANSWER] not in options:
+            raise SetError(f"pairs[{position}] has an answer that is not one of the options")
+    return pairs, options, passes
 
 
-def _agreed(pair: dict[str, Any]) -> str | None:
+def _agreed(pair: dict[str, Any]) -> str:
     first, second = pair["labels"].values()
-    return first if first == second else None
+    return first if first == second else DISAGREE
 
 
 def _share(passed: int, of: int) -> float | None:
     return round(passed / of, 4) if of else None
 
 
-def group_shares(pairs: list[dict[str, Any]], cutoff: float) -> dict[str, dict[str, Any]]:
-    """Per group: the counts, and the share passed among each kind of agreed pair."""
+def _empty(options: list[str]) -> dict[str, Any]:
+    by_label = {name: dict.fromkeys(options, 0) for name in (*LABELS, DISAGREE)}
+    return {
+        PAIRS: 0,
+        DISAGREE: 0,
+        "not_answered": 0,
+        SUPPORTED: {PAIRS: 0, PASSED: 0},
+        UNSUPPORTED: {PAIRS: 0, PASSED: 0},
+        "answers": by_label,
+    }
+
+
+def group_shares(
+    pairs: list[dict[str, Any]], options: list[str], passes: list[str]
+) -> dict[str, dict[str, Any]]:
+    """Per group: the counts, the share passed among each kind of agreed pair, the answers."""
     groups: dict[str, dict[str, Any]] = {}
     for pair in pairs:
-        found = groups.setdefault(
-            pair["group"],
-            {
-                "pairs": 0,
-                "raters_disagree": 0,
-                "not_scored": 0,
-                SUPPORTED: {"pairs": 0, "passed": 0},
-                UNSUPPORTED: {"pairs": 0, "passed": 0},
-            },
-        )
-        found["pairs"] += 1
+        found = groups.setdefault(pair["group"], _empty(options))
+        found[PAIRS] += 1
         agreed = _agreed(pair)
-        if agreed is None:
-            found["raters_disagree"] += 1
+        found[DISAGREE] += 1 if agreed == DISAGREE else 0
+        if ANSWER not in pair:
+            found["not_answered"] += 1
             continue
-        if "score" not in pair:
-            found["not_scored"] += 1
-            continue
-        found[agreed]["pairs"] += 1
-        found[agreed]["passed"] += 1 if pair["score"] >= cutoff else 0
+        found["answers"][agreed][pair[ANSWER]] += 1
+        if agreed != DISAGREE:
+            found[agreed][PAIRS] += 1
+            found[agreed][PASSED] += 1 if pair[ANSWER] in passes else 0
     for found in groups.values():
         for label in LABELS:
-            found[label]["share_passed"] = _share(found[label]["passed"], found[label]["pairs"])
+            found[label]["share_passed"] = _share(found[label][PASSED], found[label][PAIRS])
     return dict(sorted(groups.items()))
-
-
-def contract_cutoff() -> float:
-    """The cut-off in the contract's ``support_score`` settings."""
-    return float(json.loads(CONTRACT.read_text(encoding="utf-8"))["support_score"]["cutoff"])
 
 
 def _shown(share: float | None) -> str:
     return "none" if share is None else f"{share * 100:.1f}%"
 
 
-def render(cutoff: float, groups: dict[str, dict[str, Any]]) -> str:
-    lines = [f"Cut-off {cutoff}: a pair is passed when its score is at or above it."]
+def render(passes: list[str], groups: dict[str, dict[str, Any]]) -> str:
+    lines = [f"A pair is passed when the answer is one of: {', '.join(passes)}."]
     for name, found in groups.items():
         yes, no = found[SUPPORTED], found[UNSUPPORTED]
         lines += [
-            f"  group {name}: {found['pairs']} pairs "
-            f"({found['raters_disagree']} the raters disagree on, "
-            f"{found['not_scored']} not scored)",
-            f"    both raters say supported: {yes['passed']} of {yes['pairs']} passed "
+            f"  group {name}: {found[PAIRS]} pairs "
+            f"({found[DISAGREE]} the raters disagree on, "
+            f"{found['not_answered']} not answered)",
+            f"    both raters say supported: {yes[PASSED]} of {yes[PAIRS]} passed "
             f"({_shown(yes['share_passed'])})",
-            f"    both raters say unsupported: {no['passed']} of {no['pairs']} passed "
+            f"    both raters say unsupported: {no[PASSED]} of {no[PAIRS]} passed "
             f"({_shown(no['share_passed'])})",
         ]
+        for label, counts in found["answers"].items():
+            shown = ", ".join(f"{option} {count}" for option, count in counts.items())
+            lines.append(f"    answers, {label.replace('_', ' ')}: {shown}")
     return "\n".join(lines)
 
 
 def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(description=__doc__.splitlines()[0])
     parser.add_argument("--set", type=Path, default=DEFAULT_SET, help="the labelled set file")
-    parser.add_argument("--cutoff", type=float, help="default: the contract's cut-off")
-    parser.add_argument("--sweep", action="store_true", help="report every tenth from 0.1 to 0.9")
+    parser.add_argument("--half", help="only the pairs of this half (development or held_out)")
+    parser.add_argument("--passes", action="append", help="an answer that passes (repeatable)")
     parser.add_argument("--json", action="store_true")
     args = parser.parse_args(argv)
     try:
-        pairs = load_pairs(json.loads(args.set.read_text(encoding="utf-8")))
+        document = json.loads(args.set.read_text(encoding="utf-8"))
+        if args.passes:
+            document = (
+                {**document, "passes": args.passes} if isinstance(document, dict) else document
+            )
+        pairs, options, passes = load_set(document)
     except (OSError, ValueError) as error:
         print(f"error: {args.set}: {error}", file=sys.stderr)
         return 1
-    cutoffs = (
-        SWEEP if args.sweep else (args.cutoff if args.cutoff is not None else contract_cutoff(),)
-    )
-    results = [{"cutoff": cutoff, "groups": group_shares(pairs, cutoff)} for cutoff in cutoffs]
+    if args.half:
+        pairs = [pair for pair in pairs if pair.get("half") == args.half]
+    groups = group_shares(pairs, options, passes)
     if args.json:
-        print(json.dumps({"set": str(args.set), "pairs": len(pairs), "results": results}, indent=1))
+        found = {"set": str(args.set), PAIRS: len(pairs), "passes": passes, "groups": groups}
+        print(json.dumps(found, indent=1))
     else:
-        print("\n\n".join(render(found["cutoff"], found["groups"]) for found in results))
+        print(render(passes, groups))
     return 0
 
 
