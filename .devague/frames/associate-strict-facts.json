@@ -4,7 +4,7 @@
   "schema_version": 6,
   "status": "drafting",
   "created": "2026-11-19T18:44:49Z",
-  "updated": "2026-11-19T18:49:06Z",
+  "updated": "2026-11-19T18:54:45Z",
   "claims": [
     {
       "id": "c1",
@@ -12,7 +12,14 @@
       "text": "associate hands back strict facts: every claim in the answer rests on a basis a reader can check, and a count comes with the command that produced it",
       "origin": "user",
       "status": "confirmed",
-      "honesty_conditions": [],
+      "honesty_conditions": [
+        {
+          "id": "h13",
+          "text": "in a recorded live worker run and a recorded live cortex run with the default contract, every item in the answer section of answer.md has a check kind, a cited call and a passed check, and no item appears there that check.json lists as failed",
+          "status": "proposed",
+          "instruction": ""
+        }
+      ],
       "hard_questions": [],
       "links": [],
       "instruction": "",
@@ -47,8 +54,15 @@
       "kind": "audience",
       "text": "The operator and mesh peers who read an associate answer and act on it, and a reviewer who wants to run the basis of any claim in it again",
       "origin": "user",
-      "status": "proposed",
-      "honesty_conditions": [],
+      "status": "confirmed",
+      "honesty_conditions": [
+        {
+          "id": "h14",
+          "text": "a reader who was not part of the run takes three items from a recorded answer, runs the printed command or read in the pinned checkout, and gets the printed result for all three",
+          "status": "proposed",
+          "instruction": ""
+        }
+      ],
       "hard_questions": [],
       "links": [],
       "instruction": "",
@@ -65,8 +79,15 @@
       "kind": "before_state",
       "text": "In the 36 measured broad runs of the decider plan (worker, six repositories, 1,657 statements graded by model graders), 65 of the 71 statements graded false were in the model's unchecked text and 6 rested on a quote-found fact; 39 of the 71 were counts. The attribution to facts is by text matching, a heuristic",
       "origin": "user",
-      "status": "proposed",
-      "honesty_conditions": [],
+      "status": "confirmed",
+      "honesty_conditions": [
+        {
+          "id": "h15",
+          "text": "the numbers are recomputed from the stored t12 results after grading is settled with an outside model's verdicts, and the spec is corrected if they change",
+          "status": "proposed",
+          "instruction": ""
+        }
+      ],
       "hard_questions": [],
       "links": [],
       "instruction": "",
@@ -83,12 +104,12 @@
       "kind": "after_state",
       "text": "Every fact in the rendered answer is shown with how to check it: the command, search or read of the call it cites, as the walk recorded it, and that call's result, so a reader can run it again",
       "origin": "llm",
-      "status": "proposed",
+      "status": "confirmed",
       "honesty_conditions": [
         {
           "id": "h1",
           "text": "a live worker run on a broad task hands back at least one count fact, and answer.md shows its command and result exactly as walk.jsonl and results/wN.txt hold them",
-          "status": "proposed",
+          "status": "confirmed",
           "instruction": ""
         }
       ],
@@ -108,12 +129,12 @@
       "kind": "after_state",
       "text": "The rendered answer is made only of items whose basis passed; an item that fails is dropped from the answer, the model is told which items were dropped and why and may answer again, and the model's unchecked text stays in the export and is not part of the answer",
       "origin": "llm",
-      "status": "proposed",
+      "status": "confirmed",
       "honesty_conditions": [
         {
           "id": "h2",
           "text": "in a live run, no sentence of the model's summary or final message appears in the answer section of answer.md, and the export still holds both",
-          "status": "proposed",
+          "status": "confirmed",
           "instruction": ""
         }
       ],
@@ -133,12 +154,12 @@
       "kind": "requirement",
       "text": "The harness takes the command from the walk entry the fact cites (arguments as used), never from text the model retypes",
       "origin": "llm",
-      "status": "proposed",
+      "status": "confirmed",
       "honesty_conditions": [
         {
           "id": "h3",
           "text": "a fact whose cited call ran a different command than the model describes renders the command from the walk; a node test covers it",
-          "status": "proposed",
+          "status": "confirmed",
           "instruction": ""
         }
       ],
@@ -152,12 +173,12 @@
       "kind": "requirement",
       "text": "For a fact that states a number, the harness checks that the number is in the saved result of the cited call, and reports or refuses the fact when it is not, by the model's check mode",
       "origin": "llm",
-      "status": "proposed",
+      "status": "confirmed",
       "honesty_conditions": [
         {
           "id": "h4",
           "text": "the '604 test files' fact from the measured colleague run, replayed from its stored export, is reported: 604 is in the cited result, but the cited command counts entries; the replay shows what the check can and cannot catch",
-          "status": "proposed",
+          "status": "confirmed",
           "instruction": ""
         }
       ],
@@ -171,12 +192,12 @@
       "kind": "requirement",
       "text": "A fact the decider answers part, little or none fails its check: it is dropped and returned to the model with that answer and the fix (narrow the value to what the quote shows, or cite a source that shows the rest), within the existing retry rounds",
       "origin": "llm",
-      "status": "proposed",
+      "status": "confirmed",
       "honesty_conditions": [
         {
           "id": "h5",
           "text": "in a live enforce-mode run, a fact answered part is returned once and the next finish either narrows the value or the run ends refused; the walk shows it",
-          "status": "proposed",
+          "status": "confirmed",
           "instruction": ""
         }
       ],
@@ -196,12 +217,12 @@
       "kind": "requirement",
       "text": "The broad report states, per run, how many graded statements rest on a passed basis and how many of those were graded false, with the matching done by the harness from item ids and not by text similarity",
       "origin": "llm",
-      "status": "proposed",
+      "status": "confirmed",
       "honesty_conditions": [
         {
           "id": "h6",
           "text": "for the stored t12 runs the harness attribution and my text-matching attribution are compared and the differences listed",
-          "status": "proposed",
+          "status": "confirmed",
           "instruction": ""
         }
       ],
@@ -215,12 +236,12 @@
       "kind": "success_signal",
       "text": "On the six broad tasks, 3 runs per arm, statements in the rendered answer graded false are 0 for counts whose command is shown, and the strict arm has fewer statements graded false than the present arm in at least 5 of 6 repositories under the committed broad rule",
       "origin": "llm",
-      "status": "proposed",
+      "status": "confirmed",
       "honesty_conditions": [
         {
           "id": "h7",
           "text": "the comparison is graded blind by graders that include at least one outside model or a person, since all three graders so far are Claude models",
-          "status": "proposed",
+          "status": "confirmed",
           "instruction": ""
         }
       ],
@@ -234,12 +255,12 @@
       "kind": "boundary",
       "text": "No change to lobes-cli or colleague; gate.json stays version 9; the quote-found count and the new counts are never called accuracy",
       "origin": "llm",
-      "status": "proposed",
+      "status": "confirmed",
       "honesty_conditions": [
         {
           "id": "h8",
           "text": "the wording test over docs finds no use of accuracy or score for these counts, and git diff shows no change under lobes-cli, colleague or gate.json",
-          "status": "proposed",
+          "status": "confirmed",
           "instruction": ""
         }
       ],
@@ -259,8 +280,15 @@
       "kind": "boundary",
       "text": "The harness does not run a model-chosen command a second time in this work; re-running is left to the reader or a later spec",
       "origin": "llm",
-      "status": "proposed",
-      "honesty_conditions": [],
+      "status": "confirmed",
+      "honesty_conditions": [
+        {
+          "id": "h16",
+          "text": "a node test shows that checking a hand-back starts no process and makes no tool call: it reads the walk and the saved results only",
+          "status": "proposed",
+          "instruction": ""
+        }
+      ],
       "hard_questions": [],
       "links": [],
       "instruction": "",
@@ -271,7 +299,7 @@
       "kind": "non_goal",
       "text": "Judging whether a source document is itself right: a quote from a stale docstring (the 'ten tools' case) still passes a quote check",
       "origin": "llm",
-      "status": "proposed",
+      "status": "confirmed",
       "honesty_conditions": [],
       "hard_questions": [],
       "links": [],
@@ -283,7 +311,7 @@
       "kind": "assumption",
       "text": "A model that must attach a command to each count will still state the counts it stated before, and will not move them into the summary; the measured runs show models already put about five in six statements into free text",
       "origin": "llm",
-      "status": "proposed",
+      "status": "confirmed",
       "honesty_conditions": [],
       "hard_questions": [],
       "links": [],
@@ -355,12 +383,12 @@
       "kind": "requirement",
       "text": "Each fact states its kind of check: 'direct' (the cited call's result shows it: a quote or a number), 'llm' (a judgement the decider or a model must make, named as such in the answer), or 'derived' (it follows from other facts)",
       "origin": "llm",
-      "status": "proposed",
+      "status": "confirmed",
       "honesty_conditions": [
         {
           "id": "h9",
           "text": "a node test and a live run each show a hand-back with the three kinds, rendered with the kind named on each item",
-          "status": "proposed",
+          "status": "confirmed",
           "instruction": ""
         }
       ],
@@ -374,12 +402,12 @@
       "kind": "requirement",
       "text": "A fact may name the facts it is based on (a based_on list of fact ids); the harness checks the ids exist, refuses a cycle, checks facts in dependency order, and when a fact fails it flags and drops every fact based on it, naming the failed fact as the reason",
       "origin": "llm",
-      "status": "proposed",
+      "status": "confirmed",
       "honesty_conditions": [
         {
           "id": "h10",
           "text": "a replay in which fact f1 fails and f2, f3 name f1 in based_on drops all three, and the message to the model names f1 as the reason for f2 and f3; a cycle f1->f2->f1 is refused with the fix",
-          "status": "proposed",
+          "status": "confirmed",
           "instruction": ""
         }
       ],
@@ -393,12 +421,12 @@
       "kind": "requirement",
       "text": "A fact whose check is 'llm' is sent to the decider with the value and the cited result; the answer shows the decider's option beside it, and it is never counted with the facts a direct check passed",
       "origin": "llm",
-      "status": "proposed",
+      "status": "confirmed",
       "honesty_conditions": [
         {
           "id": "h11",
           "text": "report.json counts direct-passed, llm-judged and derived facts separately, and the wording test finds none of them called accuracy",
-          "status": "proposed",
+          "status": "confirmed",
           "instruction": ""
         }
       ],
@@ -412,12 +440,12 @@
       "kind": "requirement",
       "text": "The strict behaviour is on for worker and cortex by default in the contract, with a per-run switch to turn it off for comparison arms",
       "origin": "llm",
-      "status": "proposed",
+      "status": "confirmed",
       "honesty_conditions": [
         {
           "id": "h12",
           "text": "one recorded live run each on worker and cortex with the default contract shows dropped items in the walk and in the message the model received",
-          "status": "proposed",
+          "status": "confirmed",
           "instruction": ""
         }
       ],
@@ -431,7 +459,43 @@
       "kind": "assumption",
       "text": "Switching the strict behaviour on before a recorded live run departs from the repo rule in CLAUDE.md (no enforce without a recorded report-mode run); the rule is updated in this work and the first live runs are recorded before the PR is marked ready",
       "origin": "llm",
-      "status": "proposed",
+      "status": "confirmed",
+      "honesty_conditions": [],
+      "hard_questions": [],
+      "links": [],
+      "instruction": "",
+      "revisions": []
+    },
+    {
+      "id": "c27",
+      "kind": "decision",
+      "text": "Operator, 2026-11-19 ('Confirmed all', on the proposal put to him): a derived fact is also judged by the decider, which is asked whether the conclusion follows from the facts it lists",
+      "origin": "user",
+      "status": "confirmed",
+      "honesty_conditions": [],
+      "hard_questions": [],
+      "links": [],
+      "instruction": "",
+      "revisions": []
+    },
+    {
+      "id": "c28",
+      "kind": "decision",
+      "text": "Operator, 2026-11-19 ('Confirmed all', on the proposal put to him): the two retry rounds stay; after the last round the answer goes out with the failing items dropped and the run is not refused",
+      "origin": "user",
+      "status": "confirmed",
+      "honesty_conditions": [],
+      "hard_questions": [],
+      "links": [],
+      "instruction": "",
+      "revisions": []
+    },
+    {
+      "id": "c29",
+      "kind": "decision",
+      "text": "Operator, 2026-11-19 ('Confirmed all', on the proposal put to him): senses is left out of 'switched on' until it has one recorded run with the accuracy method",
+      "origin": "user",
+      "status": "confirmed",
       "honesty_conditions": [],
       "hard_questions": [],
       "links": [],
