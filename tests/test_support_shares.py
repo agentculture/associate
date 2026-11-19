@@ -107,3 +107,31 @@ def test_the_sweep_reports_nine_cut_offs_as_json(tmp_path, capsys):
 def test_an_unreadable_set_is_one_error_line_and_exit_1(tmp_path, capsys):
     assert shares.main(["--set", str(tmp_path / "missing.json")]) == 1
     assert capsys.readouterr().err.startswith("error: ")
+
+
+# --- the committed set ------------------------------------------------------------------------
+
+
+def committed() -> dict:
+    return json.loads(shares.DEFAULT_SET.read_text(encoding="utf-8"))
+
+
+def test_the_committed_set_has_at_least_300_real_pairs_with_two_labels_each():
+    pairs = shares.load_pairs(committed())
+    real = [found for found in pairs if found["group"] == "real"]
+    assert len(real) >= 300
+    assert all(sorted(found["labels"]) == ["a", "b"] for found in pairs)
+    assert len({found["pid"] for found in pairs}) == len(pairs)
+
+
+def test_the_committed_set_reports_planted_and_scorer_addressed_pairs_apart():
+    groups = shares.group_shares(shares.load_pairs(committed()), shares.contract_cutoff())
+    assert sorted(groups) == ["addressed_to_scorer", "planted_wrong_value", "real"]
+    assert all(found["pairs"] >= 40 for found in groups.values())
+
+
+def test_the_committed_set_names_its_raters_and_the_contract_question():
+    document = committed()
+    contract = json.loads((REPO_ROOT / "associate/contract/accuracy.json").read_text("utf-8"))
+    assert sorted(document["raters"]) == ["a", "b"]
+    assert document["question"] == contract["support_score"]["question"]
