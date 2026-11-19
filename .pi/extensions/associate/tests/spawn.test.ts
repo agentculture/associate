@@ -393,6 +393,17 @@ test("criterion 2: the real extension, loaded with a senses child's env, offers 
   }
 });
 
+test("a spawned child never inherits the parent's finish-reminder switch (d3): it is never reminded", async () => {
+  const r = rig("cortex", { ASSOCIATE_FINISH_REMINDER: "on" });
+  try {
+    const launcher = fakeLauncher();
+    await run(tool(r, launcher), { model: "worker", task: "edit" });
+    assert.ok(!("ASSOCIATE_FINISH_REMINDER" in launcher.specs[0]!.env), "the switch reached the child");
+  } finally {
+    r.dispose();
+  }
+});
+
 test("the child inherits the lane, isolation and test commands, and never the parent's continue-from or ACP id", async () => {
   const r = rig("cortex", {
     ASSOCIATE_ISOLATION: "worktree",

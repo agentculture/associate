@@ -49,6 +49,7 @@ __all__ = [
     "walk_run_schema",
     "walk_gate_schema",
     "walk_child_schema",
+    "walk_reminder_schema",
 ]
 
 SCHEMA_NAMES: tuple[str, ...] = (
@@ -157,3 +158,8 @@ def walk_gate_schema() -> dict[str, Any]:
 def walk_child_schema() -> dict[str, Any]:
     """Schema for one walk.jsonl child-walk link line."""
     return _walk_def("child")
+
+
+def walk_reminder_schema() -> dict[str, Any]:
+    """Schema for one walk.jsonl finish-reminder line (deviation d3)."""
+    return _walk_def("reminder")

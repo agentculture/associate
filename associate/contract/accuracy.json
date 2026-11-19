@@ -24,6 +24,11 @@
       "super-vl": false
     }
   },
+  "finish_reminder": {
+    "$comment": "The finish reminder (deviation d3, issue #38): when a task run is about to settle and no finish was accepted, and the hand-back was not refused for its last round, the extension sends the model `text` once more and lets it answer. `max` is how many reminders one session may send. Both are first values, not measured: no run of associate with the reminder has been measured. It applies only to a run `associate run` started with it switched on (ASSOCIATE_FINISH_REMINDER=on); the mesh resident and spawned children are never reminded. A file without this section means no reminder.",
+    "max": 1,
+    "text": "You ended your turn without calling the finish tool. Nothing you wrote is handed back until you do. Call finish now with your hand-back: your facts (each with its value, the walk id it comes from, and a quote), your conclusions and open items, and a short summary. Do not repeat the work; do not reply in prose."
+  },
   "source_kinds": {
     "read": "file",
     "find": "tool",

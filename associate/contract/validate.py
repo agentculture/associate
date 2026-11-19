@@ -587,6 +587,26 @@ def _support_score_errors(section: Any, registry: set[str]) -> list[str]:
     return errors
 
 
+FINISH_REMINDER_KEY = "finish_reminder"
+
+
+def _finish_reminder_errors(section: Any) -> list[str]:
+    """Rules for the optional ``finish_reminder`` section; absent means no reminder."""
+    if section is None:
+        return []
+    field = FINISH_REMINDER_KEY
+    if not isinstance(section, dict):
+        return [f"{field} must be an object"]
+    errors: list[str] = []
+    most = section.get("max")
+    if not isinstance(most, int) or isinstance(most, bool) or most < 1:
+        errors.append(f"{field}.max must be a whole number of at least 1")
+    text = section.get("text")
+    if not isinstance(text, str) or not text.strip():
+        errors.append(f"{field}.text must be a non-blank string")
+    return errors
+
+
 def validate_accuracy(doc: dict[str, Any], models: dict[str, Any] | None = None) -> list[str]:
     """Cross-field rules for ``accuracy.json`` (the schema covers shape).
 
@@ -595,7 +615,8 @@ def validate_accuracy(doc: dict[str, Any], models: dict[str, Any] | None = None)
     check ids are unique with a non-blank ``motivating_failure``, every
     ``refusal_checks`` value names a listed check, and the optional
     ``support_score`` section has values in range and a switch for exactly the
-    registry's models.
+    registry's models, and the optional ``finish_reminder`` section has a
+    ``max`` of at least 1 and a non-blank ``text``.
     """
     if models is None:
         from associate import contract  # noqa: PLC0415 - avoid an import cycle
@@ -615,4 +636,5 @@ def validate_accuracy(doc: dict[str, Any], models: dict[str, Any] | None = None)
         if cid not in seen:
             errors.append(f"refusal_checks maps {reason!r} to unknown check {cid!r}")
     errors.extend(_support_score_errors(doc.get(SUPPORT_SCORE_KEY), registry))
+    errors.extend(_finish_reminder_errors(doc.get(FINISH_REMINDER_KEY)))
     return errors

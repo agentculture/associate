@@ -66,6 +66,7 @@ import { installPromptInjection } from "./lib/prompt.ts";
 import { registerAssociateProvider } from "./lib/provider.ts";
 import { countSentences, renderAnswer } from "./lib/render.ts";
 import { createAssociateContext, loadToolModules } from "./lib/runtime.ts";
+import { FinishReminder, resolveFinishReminder, type SettleEventLike } from "./lib/reminder.ts";
 import { createSupportCache, type SupportOptions } from "./lib/support.ts";
 import { supportScoreFor } from "./lib/supportswitch.ts";
 import { assistantMessageText, installStatementsRecorder, messageHasToolCalls } from "./lib/statements.ts";
@@ -305,6 +306,25 @@ export default async function (pi: ExtensionAPI) {
     }
   };
   const writeJson = (name: string, value: unknown): void => writeExport(name, `${JSON.stringify(value, null, 2)}\n`);
+
+  // ------------------------------------------------ finish reminder (d3)
+  // Issue #38: a run about to settle with no accepted finish is reminded,
+  // with accuracy.json's text, up to its `max` times per session. Only when
+  // `associate run` switched it on ($ASSOCIATE_FINISH_REMINDER=on, snapshotted
+  // at load); absent or off — the mesh resident, a spawned child — nothing is
+  // created and no settle handler is registered below. Each reminder is a
+  // walk line and updates reminder.json; with none sent the export is as it
+  // was without this.
+  const reminderSetting = resolveFinishReminder(accuracy, process.env);
+  if (reminderSetting.problem) console.error(reminderSetting.problem);
+  const finishReminder = reminderSetting.settings
+    ? new FinishReminder({
+        settings: reminderSetting.settings,
+        recordLine: (info) => walk.recordReminder(info),
+        writeJson,
+        warn: (line) => console.error(line),
+      })
+    : undefined;
   const writeReport = (report: HandbackReport, counts: UncheckedCounts, support?: FactSupport): void =>
     writeJson(REPORT_FILENAME, {
       ...withUncheckedCounts(report, counts),
@@ -378,6 +398,8 @@ export default async function (pi: ExtensionAPI) {
       writeRejected({ stage: rejectionStage(error), error, toolCallId });
     }
     if (toolCallId !== undefined) finishStartArgs.delete(toolCallId);
+    // Any finish that ended, accepted, refused or rejected, follows a reminder.
+    finishReminder?.noteFinish();
   });
 
   // ---------------------------------------------------------------- sentinel
@@ -835,6 +857,18 @@ export default async function (pi: ExtensionAPI) {
     capPinned = false;
     capPending = false;
   });
+  // The finish reminder (d3), at pi's last actionable boundary: after
+  // agent_end above (so a refusal-cap pin is already set) and only when no
+  // retry or queued message will run. pi skips this event for an aborted run;
+  // FinishReminder also refuses an outcome other than "completed". A
+  // continuation is not a new prompt (no before_agent_start), so `finished`
+  // and the enforce-mode round count carry over. The preflight never gets
+  // here: lib/preflight.ts exits at before_agent_start.
+  if (finishReminder) {
+    pi.on("agent_before_settle", (event) =>
+      finishReminder.atSettle(event as SettleEventLike, { finished, endedRefused: handbackEnded || capPinned }),
+    );
+  }
   pi.on("tool_call", async (event, eventCtx) => {
     if (finished) {
       // Not counted toward the refusal cap: the hand-back is already recorded,

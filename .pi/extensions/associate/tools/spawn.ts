@@ -84,6 +84,7 @@ import type { ModelEntry } from "../lib/contract.ts";
 import { extensionDir } from "../lib/paths.ts";
 import { ASSOCIATE_PROVIDER_ID } from "../lib/provider.ts";
 import { resolveSessionDirs, sanitizeSessionId } from "../lib/session.ts";
+import { FINISH_REMINDER_ENV } from "../lib/reminder.ts";
 import { PI_TRUST_ENV, PI_TRUSTED, isCheckoutTrusted } from "../lib/trust.ts";
 import { stripWalkIdStamp } from "../lib/walk.ts";
 import { resolveActiveModel, SPAWNED_BY_ENV } from "../lib/toolset.ts";
@@ -113,8 +114,12 @@ const PI_BINARY = "pi";
 /** Where children's session directories go, under the parent's session root. */
 const CHILDREN_DIR = "children";
 
-/** Parent variables a child must not inherit: another run's walk, the parent's ACP session. */
-const NOT_INHERITED = ["ASSOCIATE_CONTINUE_FROM", "PI_ACP_SESSION_ID", "ACP_SESSION_ID"] as const;
+/**
+ * Parent variables a child must not inherit: another run's walk, the parent's
+ * ACP session, and the finish-reminder switch (d3: a child is never reminded;
+ * its parent reads whatever it hands back).
+ */
+const NOT_INHERITED = ["ASSOCIATE_CONTINUE_FROM", "PI_ACP_SESSION_ID", "ACP_SESSION_ID", FINISH_REMINDER_ENV] as const;
 
 /** Chars of a failed child's stderr kept for the error (its end is where the reason is). */
 const STDERR_TAIL_CHARS = 4_000;
