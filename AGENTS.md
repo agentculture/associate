@@ -79,8 +79,9 @@ say what is uncertain rather than smoothing it over.
    from that result.
 4. A fact that an action happened cites the walk id of that call. The call must
    not have failed.
-5. Run `check_quote` on each quote before `finish`. Its `source` is a walk id,
-   or a labelled one such as `prior:w3` or `c1:w2`. Fix a refused quote.
+5. Run `check_quote` on each quote before `finish`, with the fact's value as
+   `value`. Fix a refused quote. If `support` says the quote does not show the
+   value, fix the fact before `finish`.
 6. List the alternatives to your answer before you conclude. Say what would
    show each one wrong.
 7. If the evidence does not decide, answer cannot tell and name the check that
