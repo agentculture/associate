@@ -646,7 +646,7 @@ export default async function (pi: ExtensionAPI) {
       // blocked below.
       finished = true;
       handbackCap?.note(undefined);
-      const answer = renderAnswer({ payload, check, summary });
+      const answer = renderAnswer({ payload, check, summary, support });
       const wouldRefuse = checkMode.mode === "report" ? refusals : [];
       const checkRecord = { ...base, outcome: "accepted", would_refuse: wouldRefuse };
       writeJson(CHECK_FILENAME, checkRecord);
@@ -727,7 +727,7 @@ export default async function (pi: ExtensionAPI) {
     if (!same) {
       writeExport(
         ANSWER_FILENAME,
-        renderAnswer({ payload: accepted.payload, check: accepted.check, summary: accepted.summary, finalMessage: said }),
+        renderAnswer({ payload: accepted.payload, check: accepted.check, summary: accepted.summary, finalMessage: said, support: accepted.support }),
       );
     }
   });

@@ -54,6 +54,7 @@ import {
   scenario,
   snapshot,
 } from "./support-scenario.ts";
+import { SUPPORT_LEGEND } from "../lib/render.ts";
 
 const GOLDEN = JSON.parse(readFileSync(join(import.meta.dirname, "fixtures", "support-off-golden.json"), "utf8"))
   .steps as Record<string, Record<string, string | null>>;
@@ -228,6 +229,29 @@ test("AC1: scoreCheckedFacts returns one result per checked fact, undefined for 
   }
 });
 
+/** The quote-found legend line; the support legend follows it, and each shown fact line ends with the quote-found marker. */
+const QUOTE_LEGEND = 'A fact marked "quote found" means its quote is in the saved result it cites; it does not mean the value is true.';
+const QUOTE_FOUND_END = "; quote found in the saved result)";
+
+/** The switch-off answer.md with the support legend and `mark` on every shown fact: the exact text expected with the score on. */
+function withSupportText(answer: string, mark: string): string {
+  return answer
+    .split("\n")
+    .flatMap((line) => {
+      if (line === QUOTE_LEGEND) return [line, "", SUPPORT_LEGEND];
+      if (line.startsWith("- f") && line.endsWith(QUOTE_FOUND_END)) return [`${line.slice(0, -1)}; ${mark})`];
+      return [line];
+    })
+    .join("\n");
+}
+
+/** answer.md with the support legend and every fact's support marker taken out again. */
+function withoutSupportText(answer: string): string {
+  return answer
+    .replace(`\n\n${SUPPORT_LEGEND}`, "")
+    .replace(/^(- f\d+: .*; quote found in the saved result); [^;()]*\)$/gm, "$1)");
+}
+
 // --- AC2: the score changes nothing the check decides ---------------------------
 
 test("AC2: with the switch off nothing is sent and every export file is byte-identical to the pre-score writer", async () => {
@@ -261,9 +285,16 @@ for (const [label, score] of [
       assert.ok(decider.calls.length > 0, "the score was asked");
       for (const [step, files] of Object.entries(steps)) {
         const golden = GOLDEN[step];
-        // facts.json and answer.md are not touched by the score at all.
+        // facts.json is not touched by the score at all; answer.md gains the
+        // support text (plan task t5) and is otherwise byte-identical.
         assert.equal(files["facts.json"], golden["facts.json"], `${step}/facts.json`);
-        assert.equal(files["answer.md"], golden["answer.md"], `${step}/answer.md`);
+        if (golden["answer.md"] === null) {
+          assert.equal(files["answer.md"], null, `${step}/answer.md`);
+        } else {
+          const mark = `${score === 1 ? "quote supports the value" : "quote may not support the value"}, support ${score.toFixed(2)}`;
+          assert.equal(files["answer.md"], withSupportText(golden["answer.md"], mark), `${step}/answer.md`);
+          assert.equal(withoutSupportText(files["answer.md"]!), golden["answer.md"], `${step}/answer.md without the support text`);
+        }
         const check = JSON.parse(files["check.json"]!);
         const off = JSON.parse(golden["check.json"]!);
         assert.equal(JSON.stringify(check.accepted), JSON.stringify(off.accepted), `${step}: accepted`);
@@ -351,6 +382,7 @@ for (const [label, reason, answer] of FAILURES) {
     const contract = contractCopy((a) => {
       a.support_score.timeout_ms = 40;
     });
+    const phrase = reason === "timeout" ? "the check timed out" : "the check was unavailable";
     const decider = installDecider(answer);
     const s = await openSession({ ...ON, ASSOCIATE_CONTRACT_DIR: contract.dir });
     try {
@@ -365,7 +397,9 @@ for (const [label, reason, answer] of FAILURES) {
       }
       assert.equal(readJson(join(s.exportDir, REPORT_FILENAME)).support_scored, 0);
       const files = snapshot(s.exportDir);
-      assert.equal(files["answer.md"], GOLDEN.report_finish["answer.md"]);
+      // Each shown fact says it was not scored; nothing else in answer.md moves.
+      assert.equal(files["answer.md"], withSupportText(GOLDEN.report_finish["answer.md"]!, `support not scored: ${phrase}`));
+      assert.equal(withoutSupportText(files["answer.md"]!), GOLDEN.report_finish["answer.md"]);
     } finally {
       decider.restore();
       s.dispose();
