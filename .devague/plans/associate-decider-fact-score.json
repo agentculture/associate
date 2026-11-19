@@ -5,7 +5,7 @@
   "schema_version": 5,
   "status": "exported",
   "created": "2026-11-19T04:36:30Z",
-  "updated": "2026-11-19T06:03:13Z",
+  "updated": "2026-11-19T09:43:04Z",
   "targets": [
     {
       "id": "c1",
@@ -700,8 +700,8 @@
       "text": "2 of 6 trial runs of the broad task (culture-rules, colleague; worker, score off) ended without calling finish: the model wrote its hand-back as its final message, so the result holds no answer and only the last 2000 characters of the reply; statements.json holds the full text. A measured run that ends this way has no facts to score at finish and its answer is cut",
       "kind": "unknown_blocking",
       "task_id": "t12",
-      "resolved": false,
-      "resolution": ""
+      "resolved": true,
+      "resolution": "Operator decision, deviation d1: a broad run that ends without finish is graded on its whole final message (final_message.md, else the uncut final reply, else statements.json); the report counts such runs per arm. Merged from decider/full. The finish reminder is issue 38, not decided."
     }
   ],
   "obligations": []

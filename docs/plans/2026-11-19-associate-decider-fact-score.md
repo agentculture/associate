@@ -155,3 +155,5 @@ slug: `associate-decider-fact-score` · status: `exported` · from frame: `assoc
 - [unknown_nonblocking] a broad explanation of a 200,000-line repository may hit the time limit or the model's context (task t12)
 - [unknown_nonblocking] 18 runs per arm in total, 3 per repository, can show only a large difference (task t12)
 - [unknown_nonblocking] the Python re-check lives in evidence-cli; if the score cannot be copied on associate's side, evidence-cli needs a release first (task t6)
+- [unknown_nonblocking] the support question is sent as type noul with the wording as instructions and the score read from answers.support.noul, copied from the gate's pattern; not yet checked against the live decider (t9 does) (task t2)
+- [unknown_blocking] 2 of 6 trial runs of the broad task (culture-rules, colleague; worker, score off) ended without calling finish: the model wrote its hand-back as its final message, so the result holds no answer and only the last 2000 characters of the reply; statements.json holds the full text. A measured run that ends this way has no facts to score at finish and its answer is cut (task t12)
