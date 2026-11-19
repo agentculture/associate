@@ -11,7 +11,10 @@
  * - open items the checker accepted, each with its deciding check;
  * - facts that were not refused: a passed fact (its quote was found in the
  *   saved result it cites, nothing more) and an unchecked fact, labelled as
- *   not checked with the reason.
+ *   not checked with the reason. A passed fact that was also asked whether its
+ *   quote supports its value carries a second, separate marker: the support
+ *   score, or that it was not scored and why (decider-score plan t5). Neither
+ *   marker says the value is true.
  *
  * Everything else the model wrote — the finish summary and the final message —
  * goes under one unchecked label ({@link UNCHECKED_HEADING}), with its
@@ -23,9 +26,18 @@
  */
 
 import type { FactCheck, HandbackCheck, ItemCheck } from "./facts.ts";
+import type { SupportResult } from "./support.ts";
 
 /** The heading every piece of unchecked model text sits under. */
 export const UNCHECKED_HEADING = "## Unchecked: the model's own words, not checked by the harness";
+
+/**
+ * The legend line for the support marker (decider-score plan t5), written
+ * under the quote-found legend when at least one shown fact carries one.
+ */
+export const SUPPORT_LEGEND =
+  'The support mark is a second, separate check: whether the quote, read on its own, shows the value, with a score from ' +
+  '0 (no) to 1 (yes), or "support not scored" when that check did not run. Neither mark means the value is true.';
 
 const ANSWER_HEADING = "# Answer (rendered by the harness from checked items)";
 
@@ -38,6 +50,13 @@ export interface RenderInput {
   readonly summary?: string;
   /** The model's final message after finish, unchecked. */
   readonly finalMessage?: string;
+  /**
+   * The support result per fact, aligned by position with `check.facts`
+   * (`FactSupport` in lib/handback.ts); absent, or undefined at a position,
+   * when the fact was not scored at all: that fact renders with the
+   * quote-found marker alone.
+   */
+  readonly support?: ReadonlyArray<SupportResult | undefined>;
 }
 
 /**
@@ -80,7 +99,37 @@ function blockQuote(text: string): string[] {
     .map((line) => (line.trim() ? `> ${line}` : ">"));
 }
 
-function factLine(raw: Record<string, unknown>, verdict: FactCheck): string {
+/** Why a fact has no support score, in words for a reader who does not know how the score is made. */
+const CHECK_UNAVAILABLE = "the check was unavailable";
+const NOT_SCORED_PHRASES: Readonly<Record<string, string>> = {
+  empty_value: "no value to check",
+  empty_quote: "no quote to check",
+  too_long: "value and quote too long to check",
+  over_cap: "more facts than are checked per answer",
+  out_of_time: "no time left for the check",
+  timeout: "the check timed out",
+  aborted: "the run was stopped before the check",
+};
+
+/**
+ * The support marker of one fact, or "" when it has none. It is a piece of
+ * text of its own beside the quote-found marker, and only a fact whose quote
+ * was found gets one. Which wording a scored fact gets is the result's own
+ * `at_or_above_cutoff`; no number is compared here. A result's `detail` is
+ * for check.json and is not shown.
+ */
+function supportMark(verdict: FactCheck, support: SupportResult | undefined): string {
+  if (!support || verdict.verdict !== "passed") return "";
+  if (support.status === "scored" && Number.isFinite(support.score)) {
+    const wording = support.at_or_above_cutoff ? "quote supports the value" : "quote may not support the value";
+    return `${wording}, support ${support.score.toFixed(2)}`;
+  }
+  const reason = support.status === "not_scored" ? support.reason : "";
+  const phrase = Object.hasOwn(NOT_SCORED_PHRASES, reason) ? NOT_SCORED_PHRASES[reason] : CHECK_UNAVAILABLE;
+  return `support not scored: ${phrase}`;
+}
+
+function factLine(raw: Record<string, unknown>, verdict: FactCheck, support?: SupportResult): string {
   const value = oneLine(str(raw.value));
   const where = verdict.source || str(raw.source);
   const state =
@@ -89,7 +138,8 @@ function factLine(raw: Record<string, unknown>, verdict: FactCheck): string {
       : `not checked: ${verdict.reason === "partial_result" ? "the saved result is partial" : "no saved result"}`;
   const kind = verdict.source_kind ? `, ${verdict.source_kind}` : "";
   const action = raw.action === true && typeof raw.tool === "string" ? ` (action: ${raw.tool})` : "";
-  return `- ${verdict.id}: ${value}${action} — ${quoted(str(raw.quote))} (${where}${kind}; ${state})`;
+  const mark = supportMark(verdict, support);
+  return `- ${verdict.id}: ${value}${action} — ${quoted(str(raw.quote))} (${where}${kind}; ${state}${mark ? `; ${mark}` : ""})`;
 }
 
 function alternativeLines(id: string, alternatives: Map<string, Record<string, unknown>>): string[] {
@@ -143,10 +193,13 @@ export function renderAnswer(input: RenderInput): string {
   });
 
   const facts: string[] = [];
+  let supportShown = false;
   rawFacts.forEach((raw, position) => {
     const verdict = check.facts[position];
     if (!verdict || verdict.verdict === "refused") return;
-    facts.push(factLine(raw, verdict));
+    const support = input.support?.[position];
+    if (supportMark(verdict, support)) supportShown = true;
+    facts.push(factLine(raw, verdict, support));
   });
 
   const refused =
@@ -166,6 +219,7 @@ export function renderAnswer(input: RenderInput): string {
       "",
       "A fact marked \"quote found\" means its quote is in the saved result it cites; it does not mean the value is true.",
       "",
+      ...(supportShown ? [SUPPORT_LEGEND, ""] : []),
       ...facts,
       "",
     );
