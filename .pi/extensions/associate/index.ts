@@ -34,7 +34,7 @@ import { mkdirSync, rmSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { Type } from "typebox";
 import { checkHandback, type HandbackCheck, type HandbackReport } from "./lib/facts.ts";
-import { createGate, type Gate } from "./lib/gate.ts";
+import { compileGate, createGate, type Gate, type GateConfig } from "./lib/gate.ts";
 import { decideToolCall, RefusalCap } from "./lib/guard.ts";
 import {
   ANSWER_FILENAME,
@@ -54,14 +54,20 @@ import {
   rejectedHandbackRecord,
   rejectionStage,
   resolveCheckMode,
+  scoreCheckedFacts,
+  supportScoredCount,
   unreferencedCount,
+  withSupport,
   withUncheckedCounts,
+  type FactSupport,
   type UncheckedCounts,
 } from "./lib/handback.ts";
 import { installPromptInjection } from "./lib/prompt.ts";
 import { registerAssociateProvider } from "./lib/provider.ts";
 import { countSentences, renderAnswer } from "./lib/render.ts";
 import { createAssociateContext, loadToolModules } from "./lib/runtime.ts";
+import { createSupportCache } from "./lib/support.ts";
+import { supportScoreFor } from "./lib/supportswitch.ts";
 import { assistantMessageText, installStatementsRecorder, messageHasToolCalls } from "./lib/statements.ts";
 import { installContinueFrom, resolveContinueFrom } from "./lib/torch.ts";
 import { activeToolSet, resolveActiveModel, toolsOutsideContract } from "./lib/toolset.ts";
@@ -198,6 +204,55 @@ export default async function (pi: ExtensionAPI) {
   }
   const continueFrom = resolveContinueFrom(process.env);
   const redaction = compileRedaction(contract.policy);
+  // ------------------------------------------------ support score (decider t3)
+  // Spec c1/c2: after the quote check, finish asks the decider whether each
+  // passed fact's quote supports its value and stores the answer beside the
+  // check (check.json `facts[i].support`, report.json `support_scored`). It is
+  // a report-only signal: it is asked after `accepted`, the refusals and the
+  // counts are fixed, and nothing reads it back into them. Off (the default
+  // for every model in accuracy.json) nothing is sent and no field is written.
+  // The switch, the environment (base URL and key) and the gate contract are
+  // snapshotted at load like the gate's; `fetch` is looked up per request, so
+  // a test's fake decider is `globalThis.fetch`. One cache per session (s7):
+  // a retry round and the message_end rewrite reuse every answer.
+  const supportSettings = supportScoreFor(accuracy, model.key, process.env, (line) => console.error(line));
+  const supportEnv = { ...process.env };
+  const supportCache = createSupportCache();
+  let supportConfig: GateConfig | undefined;
+  if (supportSettings) {
+    try {
+      supportConfig = compileGate(contract);
+    } catch (error) {
+      console.error(
+        `associate: the support score cannot reach the decider (${error instanceof Error ? error.message : String(error)}); ` +
+          "every fact will be recorded as not scored",
+      );
+    }
+  }
+  const scoreFacts = async (
+    check: HandbackCheck,
+    payload: Record<string, unknown>,
+    signal: AbortSignal | undefined,
+  ): Promise<FactSupport | undefined> => {
+    if (!supportSettings) return undefined;
+    if (!supportConfig) {
+      return check.facts.map((f) =>
+        f.verdict === "passed"
+          ? { status: "not_scored" as const, reason: "bad_url" as const, detail: "the decider's contract did not compile" }
+          : undefined,
+      );
+    }
+    return scoreCheckedFacts(check, payload, {
+      settings: supportSettings,
+      config: supportConfig,
+      env: supportEnv,
+      redaction,
+      fetch: ((...args: Parameters<typeof fetch>) => globalThis.fetch(...args)) as typeof fetch,
+      cache: supportCache,
+      signal,
+    });
+  };
+
   // Per prompt, reset by before_agent_start with `finished`.
   let handbackRefusals = 0;
   let handbackEnded = false;
@@ -216,6 +271,13 @@ export default async function (pi: ExtensionAPI) {
         checkRecord: Record<string, unknown>;
         summary: string;
         answer: string;
+        /**
+         * The support score per fact (decider t3), aligned with `check.facts`;
+         * undefined when the score is off. What check.json's `facts[i].support`
+         * and report.json's `support_scored` are written from, and rewritten
+         * from on message_end without asking again.
+         */
+        support: FactSupport | undefined;
       }
     | undefined;
 
@@ -230,8 +292,11 @@ export default async function (pi: ExtensionAPI) {
     }
   };
   const writeJson = (name: string, value: unknown): void => writeExport(name, `${JSON.stringify(value, null, 2)}\n`);
-  const writeReport = (report: HandbackReport, counts: UncheckedCounts): void =>
-    writeJson(REPORT_FILENAME, withUncheckedCounts(report, counts));
+  const writeReport = (report: HandbackReport, counts: UncheckedCounts, support?: FactSupport): void =>
+    writeJson(REPORT_FILENAME, {
+      ...withUncheckedCounts(report, counts),
+      ...(support !== undefined ? { support_scored: supportScoredCount(support) } : {}),
+    });
 
   // ------------------------------------------- the rejected hand-back (t3)
   // Every rejected finish payload — pi's argument validation, the quoted-list
@@ -474,7 +539,7 @@ export default async function (pi: ExtensionAPI) {
         ),
       ),
     }),
-    async execute(toolCallId, params) {
+    async execute(toolCallId, params, signal) {
       const raw = (params ?? {}) as Record<string, unknown>;
       // The list fields the model sent quoted, which prepareFinishArguments unquoted.
       const quoted = finishStartArgs.has(toolCallId) ? quotedListFields(finishStartArgs.get(toolCallId)) : [];
@@ -490,13 +555,15 @@ export default async function (pi: ExtensionAPI) {
         accuracy,
       );
       const refusals = refusalsOf(check, payload);
+      // Asked only now, after accepted and the refusals are fixed (decider t3).
+      const support = await scoreFacts(check, payload, signal as AbortSignal | undefined);
       const summary = typeof payload.summary === "string" ? payload.summary : "";
       const counts: UncheckedCounts = { summary_sentences: countSentences(summary), final_message_sentences: 0 };
       const base = {
         mode: checkMode.mode,
         mode_source: checkMode.source,
         accepted: check.accepted,
-        facts: check.facts,
+        facts: withSupport(check.facts, support),
         verdicts: check.verdicts,
         open_items: check.open_items,
         unchecked_text: { ...counts, final_message: "none" },
@@ -529,7 +596,7 @@ export default async function (pi: ExtensionAPI) {
           run_ended: last,
           refusals,
         });
-        writeReport(check.report, counts);
+        writeReport(check.report, counts, support);
         rmSync(join(session.exportDir, ANSWER_FILENAME), { force: true });
         accepted = undefined;
         writeRejected({
@@ -583,9 +650,9 @@ export default async function (pi: ExtensionAPI) {
       const wouldRefuse = checkMode.mode === "report" ? refusals : [];
       const checkRecord = { ...base, outcome: "accepted", would_refuse: wouldRefuse };
       writeJson(CHECK_FILENAME, checkRecord);
-      writeReport(check.report, counts);
+      writeReport(check.report, counts, support);
       writeExport(ANSWER_FILENAME, answer);
-      accepted = { payload, check, checkRecord, summary, answer };
+      accepted = { payload, check, checkRecord, summary, answer, support };
 
       const count = handback.statements.length;
       const f = check.report.facts;
@@ -656,7 +723,7 @@ export default async function (pi: ExtensionAPI) {
       unchecked_text: { ...counts, final_message: same ? "rendered_answer" : "unchecked" },
     };
     writeJson(CHECK_FILENAME, checkRecord);
-    writeReport(accepted.check.report, counts);
+    writeReport(accepted.check.report, counts, accepted.support);
     if (!same) {
       writeExport(
         ANSWER_FILENAME,
