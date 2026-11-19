@@ -2,7 +2,7 @@
   "plan_slug": "associate-decider-fact-score",
   "schema_version": 2,
   "created": "2026-11-19T06:30:45Z",
-  "updated": "2026-11-19T10:02:56Z",
+  "updated": "2026-11-19T11:56:26Z",
   "deviations": [
     {
       "id": "d1",
@@ -40,6 +40,24 @@
       "status": "approved",
       "classification": "risky",
       "seq": 3
+    },
+    {
+      "id": "d4",
+      "what": "The support check asks the decider a five-option question (all, mostly, part, little, none) with a background, in place of a yes/no probability cut at a number. A fact passes when the answer is all or mostly. The model is shown the option, not a number.",
+      "task_ref": "t9",
+      "reason": "Operator, 2026-11-19: approved after the labelled set showed the yes/no score at 0.5 passing about a third of unsupported real pairs; with the background and five options, 229 of 253 supported and 12 of 152 unsupported real pairs passed.",
+      "affects": [
+        "t2",
+        "t3",
+        "t4",
+        "t5",
+        "t6",
+        "t12"
+      ],
+      "origin": "user",
+      "status": "approved",
+      "classification": "risky",
+      "seq": 4
     }
   ],
   "evidence": [],
