@@ -234,13 +234,10 @@ def test_a_real_broad_run_is_refused_while_the_rule_file_is_a_draft(
     assert fake.calls == []
 
 
-def test_the_committed_rule_file_refuses_a_real_broad_run_today(
-    tmp_path, demo, current_harness, fake, capsys  # noqa: F811
-):
-    rc, err = error_of(capsys, pi_args(tmp_path, demo, current_harness, None))
-    assert rc == 1
-    assert "broad-difference-threshold.md" in err
-    assert fake.calls == []
+def test_the_committed_rule_file_is_a_confirmed_rule():
+    """The operator confirmed it on 2026-11-19; committed and unmodified, a real run may start."""
+    text = measure_broad.BROAD_NOTE.read_text(encoding="utf-8")
+    assert measure_broad._broad().draft_problem(text) is None
 
 
 def test_a_real_broad_run_starts_with_a_committed_confirmed_rule_file(
@@ -558,12 +555,16 @@ def test_report_prints_both_counts_per_run_once_every_run_is_graded(results, cap
     assert row["at_cap"] is False
 
 
-def test_report_says_the_rule_is_not_applied_while_the_rule_file_is_a_draft(results, capsys):
-    payload = run_json(capsys, ["measure", "report", str(results), "--json"])
+def test_report_says_the_rule_is_not_applied_while_the_rule_file_is_a_draft(
+    results, tmp_path, capsys
+):
+    note = str(note_repo(tmp_path, CONFIRMED.replace("confirmed", "draft")))
+    args = ["measure", "report", str(results), "--difference-note", note]
+    payload = run_json(capsys, [*args, "--json"])
     assert payload["rule"]["applied"] is False
     assert payload["rule"]["counts"] == {}
     capsys.readouterr()
-    assert main(["measure", "report", str(results)]) == 0
+    assert main(args) == 0
     assert "rule's verdict is not computed" in capsys.readouterr().out
 
 
