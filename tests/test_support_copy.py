@@ -187,7 +187,8 @@ def test_a_malformed_entry_is_not_available_and_never_a_score(name, tmp_path, ca
     result = check_json(capsys, export)
     shown = by_id(result)["f1"]["support"]
     assert shown["status"] == "not_available"
-    assert isinstance(shown["reason"], str) and shown["reason"]
+    assert isinstance(shown["reason"], str)
+    assert shown["reason"]
     assert set(shown) == {"status", "reason"}
     assert result["support_scored"] == 1  # f2 only; the extension's own number is kept apart
     assert result["support_scored_reported"] == 2
@@ -209,9 +210,11 @@ def test_a_long_detail_is_cut_and_keeps_to_one_line(tmp_path, capsys):
     noisy = {"status": "not_scored", "reason": "http_error", "detail": "a\nb\x1b[31m" + "z" * 900}
     export = export_with(tmp_path, {"f1": noisy})
     shown = by_id(check_json(capsys, export))["f1"]["support"]
-    assert shown["status"] == "not_scored" and shown["reason"] == "http_error"
+    assert shown["status"] == "not_scored"
+    assert shown["reason"] == "http_error"
     assert len(shown["detail"]) <= 200
-    assert "\n" not in shown["detail"] and "\x1b" not in shown["detail"]
+    assert "\n" not in shown["detail"]
+    assert "\x1b" not in shown["detail"]
 
 
 def test_an_id_the_re_check_does_not_know_is_named_and_attached_to_nothing(tmp_path, capsys):
@@ -222,7 +225,8 @@ def test_an_id_the_re_check_does_not_know_is_named_and_attached_to_nothing(tmp_p
     assert result["support_scored"] == 1
     assert set(by_id(result)) == {"f1", "f2", "f3", "f4"}
     text = check_text(capsys, export)
-    assert "f9" in text and "does not know" in text
+    assert "f9" in text
+    assert "does not know" in text
 
 
 def test_a_score_on_a_fact_whose_quote_the_re_check_did_not_find_is_not_shown(tmp_path, capsys):
@@ -365,7 +369,8 @@ def test_run_text_says_the_count_and_where_it_came_from(tmp_path, stubs, capsys)
 def test_run_text_of_a_run_without_the_score_has_no_support_line(tmp_path, capsys):
     assert run_cli(tmp_path, "stub") == 0
     out = capsys.readouterr().out
-    assert "support_scored" not in out and "support_facts" not in out
+    assert "support_scored" not in out
+    assert "support_facts" not in out
 
 
 def test_the_run_result_of_an_old_export_is_what_the_re_check_alone_gives(tmp_path):

@@ -95,7 +95,8 @@ def test_a_broad_file_with_a_bad_fact_is_refused_with_every_reason(tmp_path):
         broad.load_broad_tasks(path)
     text = "; ".join(caught.value.problems)
     assert "commit" in text
-    assert "f1" in text and "match" in text
+    assert "f1" in text
+    assert "match" in text
     assert "duplicate fact id" in text
     assert "f3" in text
 
@@ -173,7 +174,9 @@ def test_a_broad_run_stores_the_whole_answer_from_answer_md_and_the_marking(tmp_
     assert fields["broad"]["facts_total"] == 2
     assert fields["broad"]["marking"] == "first marking"
     # No whole-task grade: the counts are per fact and never pooled into one verdict.
-    assert fields["grade"] is None and fields["grades"] == [] and fields["graded"] is False
+    assert fields["grade"] is None
+    assert fields["grades"] == []
+    assert fields["graded"] is False
 
 
 def test_a_broad_run_from_a_final_reply_at_the_cap_says_so():
@@ -287,8 +290,9 @@ def test_a_rule_file_that_still_says_draft_anywhere_is_a_draft():
 def test_a_rule_file_without_readable_parameters_is_refused():
     with pytest.raises(broad.RuleError):
         broad.read_rule("# no parameters here\n")
+    no_runs = CONFIRMED.replace('"runs_per_arm": 3', '"runs_per_arm": 0')
     with pytest.raises(broad.RuleError):
-        broad.read_rule(CONFIRMED.replace('"runs_per_arm": 3', '"runs_per_arm": 0'))
+        broad.read_rule(no_runs)
     assert broad.draft_problem("# no parameters here\n") is not None
 
 

@@ -113,7 +113,9 @@ _K_REPLY_CAP = "final_reply_cap"
 _ABBREVIATIONS = frozenset({"e.g.", "i.e.", "etc.", "vs.", "cf."})
 _FENCE = re.compile(r"^\s*(```|~~~)")
 _HEADING = re.compile(r"^\s*#{1,6}\s+")
-_LIST_ITEM = re.compile(r"^\s*(?:[-*+]|\d{1,9}[.)])\s+(.*)$", re.ASCII)
+# One whitespace character after the marker, then the rest of the line: the caller
+# strips the rest, so nothing here repeats over the same characters twice.
+_LIST_ITEM = re.compile(r"^\s*(?:[-*+]|\d{1,9}[.)])\s(.*)$", re.ASCII)
 _RULE_MARKS = "-*_"
 _TABLE_ROW = re.compile(r"^\s*\|")
 _TABLE_SEPARATOR = re.compile(r"^[\s|:-]+$")

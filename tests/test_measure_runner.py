@@ -467,17 +467,9 @@ def _refused_before_any_launch(tmp_path, demo, harness_pair, arms, match, **kw):
     demo_repo, demo_head = demo
     harness_repo, _head = harness_pair
     launcher = Recorder()
+    tasks, results = [task("t", demo_head)], tmp_path / "res"
     with pytest.raises(RunnerError, match=match) as raised:
-        run(
-            arms,
-            [task("t", demo_head)],
-            1,
-            tmp_path / "res",
-            demo_repo,
-            harness_repo,
-            launcher,
-            **kw,
-        )
+        run(arms, tasks, 1, results, demo_repo, harness_repo, launcher, **kw)
     assert launcher.runs == []
     assert load_records(tmp_path / "res") == []
     return launcher, str(raised.value)
@@ -617,16 +609,9 @@ def test_a_stored_key_is_refused_when_the_arms_support_score_changed(
     stored = only(load_records(results))
     assert "support_score" not in stored["arm"], "an unset arm keeps the earlier identity"
     launcher = Recorder()
+    changed = [Arm("a", harness_head, "worker", support_score="on")]
     with pytest.raises(RunnerError, match="arm"):
-        run(
-            [Arm("a", harness_head, "worker", support_score="on")],
-            tasks,
-            1,
-            results,
-            demo_repo,
-            harness_repo,
-            launcher,
-        )
+        run(changed, tasks, 1, results, demo_repo, harness_repo, launcher)
     assert launcher.runs == []
     # the unchanged arm is skipped, not refused
     summary = run(

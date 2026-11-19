@@ -392,8 +392,9 @@ def test_report_reading_option_chooses_the_second_reading(stored, capsys):
 
 def test_report_refuses_an_unknown_reading(stored, capsys):
     capsys.readouterr()
+    argv = ["measure", "report", str(stored.out), "--reading", "bogus"]
     with pytest.raises(SystemExit) as exc:
-        main(["measure", "report", str(stored.out), "--reading", "bogus"])
+        main(argv)
     assert exc.value.code == 1
     assert "bogus" in capsys.readouterr().err
 
