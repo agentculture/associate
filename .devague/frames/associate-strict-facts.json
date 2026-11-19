@@ -1,0 +1,332 @@
+{
+  "slug": "associate-strict-facts",
+  "title": "associate strict facts",
+  "schema_version": 6,
+  "status": "drafting",
+  "created": "2026-11-19T18:44:49Z",
+  "updated": "2026-11-19T18:45:11Z",
+  "claims": [
+    {
+      "id": "c1",
+      "kind": "announcement",
+      "text": "associate hands back strict facts: every claim in the answer rests on a basis a reader can check, and a count comes with the command that produced it",
+      "origin": "user",
+      "status": "confirmed",
+      "honesty_conditions": [],
+      "hard_questions": [],
+      "links": [],
+      "instruction": "",
+      "revisions": []
+    },
+    {
+      "id": "c2",
+      "kind": "decision",
+      "text": "Operator, 2026-11-19: the aim is not just to improve performance, but to clean false claims and improve claim basis so they are of better quality; a source or a 'how to check' on each fact makes all facts strict (issue 39)",
+      "origin": "user",
+      "status": "confirmed",
+      "honesty_conditions": [],
+      "hard_questions": [],
+      "links": [],
+      "instruction": "",
+      "revisions": []
+    },
+    {
+      "id": "c3",
+      "kind": "decision",
+      "text": "Operator, 2026-11-19: for a count, the claim carries the command itself, not only more careful wording (his example: not just '604 entries in tests/' but also the bash command)",
+      "origin": "user",
+      "status": "confirmed",
+      "honesty_conditions": [],
+      "hard_questions": [],
+      "links": [],
+      "instruction": "",
+      "revisions": []
+    },
+    {
+      "id": "c4",
+      "kind": "audience",
+      "text": "The operator and mesh peers who read an associate answer and act on it, and a reviewer who wants to run the basis of any claim in it again",
+      "origin": "user",
+      "status": "proposed",
+      "honesty_conditions": [],
+      "hard_questions": [],
+      "links": [],
+      "instruction": "",
+      "revisions": [
+        {
+          "text": "The operator and mesh peers who read an associate answer and act on it, and a reviewer who wants to re-run the basis of any claim in it",
+          "kind": "audience",
+          "reason": "captured without --origin llm by mistake; it is my wording, so it goes back to proposed"
+        }
+      ]
+    },
+    {
+      "id": "c5",
+      "kind": "before_state",
+      "text": "In the 36 measured broad runs of the decider plan (worker, six repositories, 1,657 statements graded by model graders), 65 of the 71 statements graded false were in the model's unchecked text and 6 rested on a quote-found fact; 39 of the 71 were counts. The attribution to facts is by text matching, a heuristic",
+      "origin": "user",
+      "status": "proposed",
+      "honesty_conditions": [],
+      "hard_questions": [],
+      "links": [],
+      "instruction": "",
+      "revisions": [
+        {
+          "text": "In the 36 measured broad runs of the decider plan (worker, six repositories, 1,657 statements graded by model graders), 65 of the 71 statements graded false were in the model's unchecked text and 6 rested on a quote-found fact; 39 of the 71 were counts; the attribution to facts is by text matching, a heuristic",
+          "kind": "before_state",
+          "reason": "captured without --origin llm by mistake; my summary of the measurement, so it goes back to proposed"
+        }
+      ]
+    },
+    {
+      "id": "c6",
+      "kind": "after_state",
+      "text": "A fact whose value states a count, a total or an absence is shown in the rendered answer with the command (or search, or read) of the call it cites, as the walk recorded it, and that call's result, so a reader can run it again",
+      "origin": "llm",
+      "status": "proposed",
+      "honesty_conditions": [
+        {
+          "id": "h1",
+          "text": "a live worker run on a broad task hands back at least one count fact, and answer.md shows its command and result exactly as walk.jsonl and results/wN.txt hold them",
+          "status": "proposed",
+          "instruction": ""
+        }
+      ],
+      "hard_questions": [],
+      "links": [],
+      "instruction": "",
+      "revisions": []
+    },
+    {
+      "id": "c7",
+      "kind": "after_state",
+      "text": "The rendered answer is made only of items whose basis passed; the model's unchecked text stays in the export and is not part of the answer",
+      "origin": "llm",
+      "status": "proposed",
+      "honesty_conditions": [
+        {
+          "id": "h2",
+          "text": "in a live run, no sentence of the model's summary or final message appears in the answer section of answer.md, and the export still holds both",
+          "status": "proposed",
+          "instruction": ""
+        }
+      ],
+      "hard_questions": [],
+      "links": [],
+      "instruction": "",
+      "revisions": []
+    },
+    {
+      "id": "c8",
+      "kind": "requirement",
+      "text": "The harness takes the command from the walk entry the fact cites (arguments as used), never from text the model retypes",
+      "origin": "llm",
+      "status": "proposed",
+      "honesty_conditions": [
+        {
+          "id": "h3",
+          "text": "a fact whose cited call ran a different command than the model describes renders the command from the walk; a node test covers it",
+          "status": "proposed",
+          "instruction": ""
+        }
+      ],
+      "hard_questions": [],
+      "links": [],
+      "instruction": "",
+      "revisions": []
+    },
+    {
+      "id": "c9",
+      "kind": "requirement",
+      "text": "For a fact that states a number, the harness checks that the number is in the saved result of the cited call, and reports or refuses the fact when it is not, by the model's check mode",
+      "origin": "llm",
+      "status": "proposed",
+      "honesty_conditions": [
+        {
+          "id": "h4",
+          "text": "the '604 test files' fact from the measured colleague run, replayed from its stored export, is reported: 604 is in the cited result, but the cited command counts entries; the replay shows what the check can and cannot catch",
+          "status": "proposed",
+          "instruction": ""
+        }
+      ],
+      "hard_questions": [],
+      "links": [],
+      "instruction": "",
+      "revisions": []
+    },
+    {
+      "id": "c10",
+      "kind": "requirement",
+      "text": "A fact the decider answers part, little or none is returned to the model once with that answer and the fix (narrow the value to what the quote shows, or cite a source that shows the rest), within the existing retry rounds",
+      "origin": "llm",
+      "status": "proposed",
+      "honesty_conditions": [
+        {
+          "id": "h5",
+          "text": "in a live enforce-mode run, a fact answered part is returned once and the next finish either narrows the value or the run ends refused; the walk shows it",
+          "status": "proposed",
+          "instruction": ""
+        }
+      ],
+      "hard_questions": [],
+      "links": [],
+      "instruction": "",
+      "revisions": []
+    },
+    {
+      "id": "c11",
+      "kind": "requirement",
+      "text": "The broad report states, per run, how many graded statements rest on a passed basis and how many of those were graded false, with the matching done by the harness from item ids and not by text similarity",
+      "origin": "llm",
+      "status": "proposed",
+      "honesty_conditions": [
+        {
+          "id": "h6",
+          "text": "for the stored t12 runs the harness attribution and my text-matching attribution are compared and the differences listed",
+          "status": "proposed",
+          "instruction": ""
+        }
+      ],
+      "hard_questions": [],
+      "links": [],
+      "instruction": "",
+      "revisions": []
+    },
+    {
+      "id": "c12",
+      "kind": "success_signal",
+      "text": "On the six broad tasks, 3 runs per arm, statements in the rendered answer graded false are 0 for counts whose command is shown, and the strict arm has fewer statements graded false than the present arm in at least 5 of 6 repositories under the committed broad rule",
+      "origin": "llm",
+      "status": "proposed",
+      "honesty_conditions": [
+        {
+          "id": "h7",
+          "text": "the comparison is graded blind by graders that include at least one outside model or a person, since all three graders so far are Claude models",
+          "status": "proposed",
+          "instruction": ""
+        }
+      ],
+      "hard_questions": [],
+      "links": [],
+      "instruction": "",
+      "revisions": []
+    },
+    {
+      "id": "c13",
+      "kind": "boundary",
+      "text": "No change to lobes-cli or colleague; gate.json stays version 9; every model stays in report mode until a recorded live run; the quote-found count and the new counts are never called accuracy",
+      "origin": "llm",
+      "status": "proposed",
+      "honesty_conditions": [
+        {
+          "id": "h8",
+          "text": "the wording test over docs finds no use of accuracy or score for these counts, and git diff shows no change under lobes-cli, colleague or gate.json",
+          "status": "proposed",
+          "instruction": ""
+        }
+      ],
+      "hard_questions": [],
+      "links": [],
+      "instruction": "",
+      "revisions": []
+    },
+    {
+      "id": "c14",
+      "kind": "boundary",
+      "text": "The harness does not run a model-chosen command a second time in this work; re-running is left to the reader or a later spec",
+      "origin": "llm",
+      "status": "proposed",
+      "honesty_conditions": [],
+      "hard_questions": [],
+      "links": [],
+      "instruction": "",
+      "revisions": []
+    },
+    {
+      "id": "c15",
+      "kind": "non_goal",
+      "text": "Judging whether a source document is itself right: a quote from a stale docstring (the 'ten tools' case) still passes a quote check",
+      "origin": "llm",
+      "status": "proposed",
+      "honesty_conditions": [],
+      "hard_questions": [],
+      "links": [],
+      "instruction": "",
+      "revisions": []
+    },
+    {
+      "id": "c16",
+      "kind": "assumption",
+      "text": "A model that must attach a command to each count will still state the counts it stated before, and will not move them into the summary; the measured runs show models already put about five in six statements into free text",
+      "origin": "llm",
+      "status": "proposed",
+      "honesty_conditions": [],
+      "hard_questions": [],
+      "links": [],
+      "instruction": "",
+      "revisions": []
+    }
+  ],
+  "open_vagueness": [],
+  "scope_entries": [
+    {
+      "id": "s1",
+      "surface": "associate/contract/schemas/facts.schema.json",
+      "finding": "a fact requires id, value, source, quote; source is a walk id pattern; additionalProperties false, so a new field is a schema change",
+      "seeds": [
+        "c6"
+      ]
+    },
+    {
+      "id": "s2",
+      "surface": ".pi/extensions/associate/lib/walk.ts and tools/shell.ts",
+      "finding": "the walk entry already stores args_used (walk.ts:195) and shell.ts sets details.args_used (shell.ts:615); every result is saved as results/wN.txt, so the command and its output exist for any cited call",
+      "seeds": [
+        "c8"
+      ]
+    },
+    {
+      "id": "s3",
+      "surface": ".pi/extensions/associate/lib/render.ts",
+      "finding": "renderAnswer (render.ts:174) writes accepted items and then the model's summary and final message under UNCHECKED_HEADING (render.ts:33); strict answers change what this renders",
+      "seeds": [
+        "c7"
+      ]
+    },
+    {
+      "id": "s4",
+      "surface": ".pi/extensions/associate/lib/facts.ts and lib/matcher.ts",
+      "finding": "checkHandback (facts.ts:408) is where a number-in-result check would sit beside the quote matcher (matcher.ts:98); literalOf (facts.ts:366) already extracts a literal from a value",
+      "seeds": [
+        "c9"
+      ]
+    },
+    {
+      "id": "s5",
+      "surface": "associate/contract/accuracy.json",
+      "finding": "mode is report for every model, retry_rounds 2; source_kinds maps bash, grep, find, ls to 'tool' and read to 'file'; new checks need entries under checks with a motivating_failure",
+      "seeds": [
+        "c10",
+        "c13"
+      ]
+    },
+    {
+      "id": "s6",
+      "surface": "associate/measure/answer.py",
+      "finding": "broad_answer (answer.py:286) builds the graded text from accepted items plus the unchecked section; statements carry no item id today, so basis has to be attributed by text",
+      "seeds": [
+        "c11"
+      ]
+    },
+    {
+      "id": "s7",
+      "surface": "the 36 t12 runs and the graded sheet (scratchpad, not committed)",
+      "finding": "source of the before-state numbers; graded by two Claude graders and a third for 121 statements; no person and no outside model graded them",
+      "seeds": [
+        "c5"
+      ]
+    }
+  ],
+  "lapses": [],
+  "obligations": []
+}
