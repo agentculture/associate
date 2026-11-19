@@ -5,7 +5,7 @@
   "schema_version": 5,
   "status": "exported",
   "created": "2026-11-19T04:36:30Z",
-  "updated": "2026-11-19T09:43:04Z",
+  "updated": "2026-11-19T09:51:51Z",
   "targets": [
     {
       "id": "c1",
@@ -702,6 +702,14 @@
       "task_id": "t12",
       "resolved": true,
       "resolution": "Operator decision, deviation d1: a broad run that ends without finish is graded on its whole final message (final_message.md, else the uncut final reply, else statements.json); the report counts such runs per arm. Merged from decider/full. The finish reminder is issue 38, not decided."
+    },
+    {
+      "id": "r9",
+      "text": "The labelled set (554 pairs, two model raters) does not meet the spec target at any cut-off: at 0.5 the score passed 275 of 309 real pairs both raters call supported (89.0%) and 35 of 113 both call unsupported (31.0%); docs/notes/support-score-calibration.md. The switch stays off and the cut-off stays 0.5 until the operator decides whether to measure anyway (t12), change the question wording, or stop.",
+      "kind": "unknown_blocking",
+      "task_id": "t9",
+      "resolved": false,
+      "resolution": ""
     }
   ],
   "obligations": []
