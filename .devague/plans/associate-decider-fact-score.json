@@ -5,7 +5,7 @@
   "schema_version": 5,
   "status": "exported",
   "created": "2026-11-19T04:36:30Z",
-  "updated": "2026-11-19T05:10:03Z",
+  "updated": "2026-11-19T06:03:13Z",
   "targets": [
     {
       "id": "c1",
@@ -694,6 +694,14 @@
       "task_id": "t2",
       "resolved": true,
       "resolution": "probed live on 2026-11-19: four pairs in the client's exact request shape returned type noul scores (0.979 and 0.976 for matching pairs, 0.009 and 0.012 for a changed value), in about half a second each"
+    },
+    {
+      "id": "r8",
+      "text": "2 of 6 trial runs of the broad task (culture-rules, colleague; worker, score off) ended without calling finish: the model wrote its hand-back as its final message, so the result holds no answer and only the last 2000 characters of the reply; statements.json holds the full text. A measured run that ends this way has no facts to score at finish and its answer is cut",
+      "kind": "unknown_blocking",
+      "task_id": "t12",
+      "resolved": false,
+      "resolution": ""
     }
   ],
   "obligations": []
