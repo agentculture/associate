@@ -23,6 +23,11 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   - A run that read the answer key or whose answer was cut at the cap is left out of the rule; a run with no statement to grade is left out of the count of false statements.
 - **A labelled set for the support score**: `docs/accuracy/support-labelled-set.json` holds 554 value-and-quote pairs (454 real, 60 with a planted wrong value, 40 with text addressed to the scorer), each with two labels from two model subagents and the decider's score. `scripts/support_shares.py` computes the shares from it. The result, in `docs/notes/support-score-calibration.md`, **does not meet the target**: at the cut-off of 0.5 the score passed 275 of 309 real pairs both raters call supported and 35 of 113 both call unsupported, and no cut-off gives 90% and 10%. The switch stays off and the cut-off is unchanged.
 - The export holds `final_message.md`: the model's latest message that calls no tool, whole and redacted. It is built and unit-tested against a fake pi; no live run has written one yet.
+## [0.13.1] - 2026-11-19
+
+### Added
+
+- The delivery record for the measurement groundwork (`docs/deliveries/2026-11-18-associate-graded-measurement-groundwork.md`): what each of the 12 plan tasks delivered, the seven approved deviations, and one evidence record per obligation o1 to o14. The before/after comparison was not run (deviation d7), so obligation o15 is unmet and the hand-grading sample exists on test fixtures only. No code changed.
 
 ## [0.13.0] - 2026-11-18
 
