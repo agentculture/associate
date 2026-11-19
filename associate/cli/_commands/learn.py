@@ -57,6 +57,13 @@ Commands
   associate measure sample <dir>  The blank hand-grading sheet for a fixed-seed draw.
   associate measure agreement <dir> --sheet PATH  A filled sheet against the grader; the 48
                                hand-graded runs and 95% agreement conditions (read-only).
+  associate measure run --broad  The broad tasks: each run stores its whole answer and a
+                               first marking of the checklist facts; a real run needs the
+                               committed, confirmed rule file.
+  associate measure sheet <dir>  Broad tasks: the grading sheet (statements per run, arms
+                               hidden, shuffled) and, in a separate file, its key.
+  associate measure sheet-check <dir>  What a filled sheet lacks (a verdict per statement,
+                               a file and line per false); exit 1 until acceptable.
   associate measure overview   Describe the measure verbs.
   associate cli overview       Describe the CLI surface itself.
 
@@ -152,7 +159,8 @@ def _as_json_payload() -> dict[str, object]:
                     "Run a comparison of arms over tasks and store one graded result per task, "
                     "arm and repeat; --detach runs it in the background. An arm may set "
                     "support_score (on or off), named in each stored record. Refuses without the "
-                    "committed difference note except on the stub harness (plumbing only)."
+                    "committed difference note except on the stub harness (plumbing only). "
+                    "--broad runs the broad tasks and needs the committed, confirmed rule file."
                 ),
             },
             {
@@ -161,7 +169,11 @@ def _as_json_payload() -> dict[str, object]:
             },
             {
                 "path": ["measure", "report"],
-                "summary": "Print the table of the stored results (--reading, --json).",
+                "summary": (
+                    "Print the table of the stored results (--reading, --json); for a broad "
+                    "comparison, per run: checklist facts marked as stated (a first marking) "
+                    "and, once every run is graded, statements counted false."
+                ),
             },
             {
                 "path": ["measure", "sample"],
@@ -172,6 +184,21 @@ def _as_json_payload() -> dict[str, object]:
                 "summary": (
                     "Read a filled hand-grading sheet back and compare it with the grader: "
                     "agreement and the 48-run and 95% conditions, met or not met (read-only)."
+                ),
+            },
+            {
+                "path": ["measure", "sheet"],
+                "summary": (
+                    "Broad tasks: write the grading sheet (each run's statements, runs "
+                    "shuffled under ids that hide the arm) and, separately, the key."
+                ),
+            },
+            {
+                "path": ["measure", "sheet-check"],
+                "summary": (
+                    "Broad tasks: list what a filled grading sheet lacks (a verdict per "
+                    "statement, a file and positive line per false; --clone-root looks "
+                    "them up); exit 1 until acceptable."
                 ),
             },
             {"path": ["measure", "overview"], "summary": "Describe the measure verbs."},
