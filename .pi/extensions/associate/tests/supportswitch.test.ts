@@ -3,7 +3,7 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
 
-import { loadContract, supportScoreSettings } from "../lib/contract.ts";
+import { loadContract, supportScoreListing, supportScoreSettings } from "../lib/contract.ts";
 import {
   SUPPORT_SCORE_ENV,
   resolveSupportScore,
@@ -94,4 +94,39 @@ test("supportScoreFor returns the settings and reports each problem once", () =>
   assert.equal(supportScoreFor(workerOn, "worker", { [SUPPORT_SCORE_ENV]: "off" }, warn, seen), undefined);
   assert.equal(supportScoreFor(accuracy, "worker", {}, warn, seen), undefined);
   assert.equal(lines.length, 1);
+});
+
+test("the per-run switch and the contract switch list the same models: one helper in lib/contract.ts (review finding 3)", () => {
+  const on = { [SUPPORT_SCORE_ENV]: "on" };
+  const shapes: Array<[unknown, string | undefined]> = [];
+  const sections: unknown[] = [
+    undefined,
+    null,
+    { ...shipped, enabled: undefined },
+    { ...shipped, enabled: null },
+    { ...shipped, enabled: [] },
+    { ...shipped, enabled: ["worker"] },
+    { ...shipped, enabled: "worker" },
+    { ...shipped, enabled: { worker: false } },
+    { ...shipped, enabled: { worker: true } },
+    { ...shipped, enabled: { worker: "yes" } },
+    { ...shipped, enabled: Object.create({ worker: true }) },
+  ];
+  for (const section of sections) {
+    for (const model of ["worker", "toString", "0", undefined]) shapes.push([{ ...accuracy, support_score: section }, model]);
+  }
+  for (const [contract, model] of shapes) {
+    const listed = supportScoreListing(contract as never, model);
+    const where = `${JSON.stringify(contract && (contract as any).support_score?.enabled)} / ${model}`;
+    assert.equal(resolveSupportScore(contract as never, model, on).settings, listed, `on: ${where}`);
+    const fromContract = model === undefined ? undefined : supportScoreSettings(contract as never, model);
+    if (fromContract !== undefined) assert.equal(fromContract, listed, `contract: ${where}`);
+  }
+});
+
+test("lib/supportswitch.ts restates none of the listing checks", async () => {
+  const { readFileSync } = await import("node:fs");
+  const source = readFileSync(new URL("../lib/supportswitch.ts", import.meta.url), "utf8");
+  assert.doesNotMatch(source, /Object\.hasOwn/);
+  assert.match(source, /supportScoreListing/);
 });

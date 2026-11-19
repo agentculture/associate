@@ -368,12 +368,107 @@ test("two asks for the same pair at the same time share one request", async () =
   assert.equal(decider.calls.length, 1);
 });
 
-test("an answer the decider was asked for is not asked for again, even a failed one", async () => {
-  const decider = fakeDecider(() => jsonResponse(503, "busy"));
-  const opts = options(decider.fn, { cache: createSupportCache() });
+test("only a score is kept: a failed answer is asked for again on a later ask (review finding 2)", async () => {
+  let fail = true;
+  const decider = fakeDecider(() => (fail ? jsonResponse(503, "busy") : answer(0.7)));
+  const cache = createSupportCache();
+  const opts = options(decider.fn, { cache });
   notScored(await scoreSupport(PAIR, opts), "http_error");
-  notScored(await scoreSupport(PAIR, opts), "http_error");
-  assert.equal(decider.calls.length, 1);
+  assert.equal(cache.size, 0, "a not-scored result is not held");
+  fail = false;
+  const later = await scoreSupport(PAIR, opts);
+  assert.equal(later.status, "scored");
+  assert.equal(decider.calls.length, 2);
+  // Now scored, it is held: a third ask sends nothing.
+  await scoreSupport(PAIR, opts);
+  assert.equal(decider.calls.length, 2);
+  assert.equal(cache.size, 1);
+});
+
+for (const [label, reason, respond] of [
+  ["timeout", "timeout", () => new Promise<Response>(() => {})],
+  [
+    "unreachable",
+    "unreachable",
+    () => {
+      throw new TypeError("connect ECONNREFUSED");
+    },
+  ],
+  ["malformed", "malformed", () => jsonResponse(200, "not json")],
+] as const) {
+  test(`a ${label} answer is not kept for the session (review finding 2)`, async () => {
+    let failing = true;
+    const decider = fakeDecider(() => (failing ? (respond as () => Response | Promise<Response>)() : answer(0.6)));
+    const cache = createSupportCache();
+    const opts = options(decider.fn, { cache, settings: { ...SHIPPED, timeout_ms: 20 } });
+    notScored(await scoreSupport(PAIR, opts), reason);
+    failing = false;
+    assert.equal((await scoreSupport(PAIR, opts)).status, "scored");
+    assert.equal(decider.calls.length, 2);
+  });
+}
+
+test("out_of_time belongs to one batch's budget: the next batch asks again (review finding 2)", async () => {
+  let slow = true;
+  const decider = fakeDecider(() =>
+    slow ? new Promise<Response>((resolve) => setTimeout(() => resolve(answer(1)), 80)) : answer(0.5),
+  );
+  const cache = createSupportCache();
+  const tight = options(decider.fn, { cache, settings: { ...SHIPPED, timeout_ms: 500, total_timeout_ms: 20 } });
+  const first = await scoreSupportBatch([PAIR], tight);
+  notScored(first[0]!, "out_of_time");
+  slow = false;
+  const second = await scoreSupportBatch([PAIR], tight);
+  assert.equal(second[0]!.status, "scored");
+  assert.equal(decider.calls.length, 2);
+});
+
+for (const [label, reason, respond] of [
+  [
+    "unreachable",
+    "unreachable",
+    () => {
+      throw new TypeError("connect ECONNREFUSED");
+    },
+  ],
+  ["http_error", "http_error", () => jsonResponse(503, "busy")],
+  ["timeout", "timeout", () => new Promise<Response>(() => {})],
+] as const) {
+  test(`one batch stops sending after the first ${label}; the rest are skipped and a later batch tries again (review finding 2)`, async () => {
+    const decider = fakeDecider(respond as () => Response | Promise<Response>);
+    const cache = createSupportCache();
+    const opts = options(decider.fn, { cache, settings: { ...SHIPPED, timeout_ms: 20 } });
+    const results = await scoreSupportBatch(pairs(4), opts);
+    assert.equal(decider.calls.length, 1, "nothing more is sent to a decider that just failed");
+    notScored(results[0]!, reason);
+    for (const result of results.slice(1)) notScored(result, "skipped_after_failure");
+    assert.equal(cache.size, 0);
+    await scoreSupportBatch(pairs(4), opts);
+    assert.equal(decider.calls.length, 2, "the next batch tries again, once");
+  });
+}
+
+test("a skipped batch still answers its scored pairs from the cache", async () => {
+  let fail = false;
+  const decider = fakeDecider(() => (fail ? jsonResponse(503, "busy") : answer(0.9)));
+  const cache = createSupportCache();
+  const opts = options(decider.fn, { cache });
+  const [held] = pairs(1);
+  await scoreSupport(held!, opts);
+  fail = true;
+  const results = await scoreSupportBatch([...pairs(3).slice(1), held!], opts);
+  notScored(results[0]!, "http_error");
+  notScored(results[1]!, "skipped_after_failure");
+  assert.equal(results[2]!.status, "scored", "a held score is still returned after the failure");
+  assert.equal(decider.calls.length, 2);
+});
+
+test("a malformed answer does not stop the batch", async () => {
+  const decider = fakeDecider((_call, index) => (index === 0 ? jsonResponse(200, "not json") : answer(0.4)));
+  const results = await scoreSupportBatch(pairs(3), options(decider.fn, { cache: createSupportCache() }));
+  notScored(results[0]!, "malformed");
+  assert.deepEqual(results.slice(1).map((r) => r.status), ["scored", "scored"]);
+  assert.equal(decider.calls.length, 3);
 });
 
 test("a result reached without a request is not kept: a later key is used", async () => {

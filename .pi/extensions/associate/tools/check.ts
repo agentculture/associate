@@ -22,8 +22,9 @@
  * and the matcher found the quote, the result gains one key, `support`: the
  * answer of `lib/support.ts` `scoreSupport` for that value and quote, with a
  * `meaning` in plain words. It is asked with the session's own options
- * (`ctx.support()`), so the answer sits in the same cache `finish` reads and
- * a pair checked here and handed back later is one request. A quote the
+ * (`ctx.support()`), so a score sits in the same cache `finish` reads and a
+ * pair scored here and handed back later is one request. The cache keeps
+ * scores only: a pair that was not scored here is asked again by `finish`. A quote the
  * matcher did not find is not asked about and gets no key: the score is
  * defined for a found quote only, and the matcher's refusal already says what
  * to fix. The score changes no other key and refuses nothing.
@@ -93,6 +94,7 @@ const MEANING_NOT_SHOWN =
 const NOT_SCORED_WORDS: Record<SupportNotScoredReason, string> = {
   no_key: "scoring is not set up for this run",
   bad_url: "the address scoring is sent to is not usable",
+  contract_invalid: "the settings scoring needs could not be read",
   empty_value: "the value is empty",
   empty_quote: "the quote is empty",
   too_long: "the value and the quote together are too long to score",
@@ -103,6 +105,7 @@ const NOT_SCORED_WORDS: Record<SupportNotScoredReason, string> = {
   http_error: "scoring answered with an error",
   malformed: "the answer that came back could not be read",
   aborted: "the call was cancelled first",
+  skipped_after_failure: "it was not asked, because scoring had just failed for another fact",
 };
 
 /** A support result as `check_quote` returns it: the result's own fields and what they mean. */
@@ -140,7 +143,7 @@ async function supportFor(
   const optionsFor = ctx.support();
   if (value === undefined || !optionsFor) return undefined;
   const options = optionsFor(signal instanceof AbortSignal ? signal : undefined);
-  if (!options) return describeSupport({ status: "not_scored", reason: "bad_url" });
+  if (!options) return describeSupport({ status: "not_scored", reason: "contract_invalid" });
   try {
     const pair = { value: options.redaction.apply(value), quote: options.redaction.apply(quote) };
     return describeSupport(await scoreSupport(pair, options));

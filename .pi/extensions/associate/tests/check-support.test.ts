@@ -341,6 +341,7 @@ test("AC2: switched on but with nothing to ask with, a value is reported not sco
     const out = await r.tool.execute("a", { source: "w3", quote: FOUND, value: VALUE });
     assert.equal(out.details.verdict, "passed");
     assert.equal(out.details.support.status, "not_scored");
+    assert.equal(out.details.support.reason, "contract_invalid", "a contract that did not compile has its own reason (review finding 3)");
     assert.match(out.details.support.meaning, NOT_SCORED);
   } finally {
     r.dispose();
@@ -396,6 +397,7 @@ test("AC3: every text the key can hold is plain words, and names nothing of the 
   const reasons: SupportNotScoredReason[] = [
     "no_key",
     "bad_url",
+    "contract_invalid",
     "empty_value",
     "empty_quote",
     "too_long",
@@ -406,6 +408,7 @@ test("AC3: every text the key can hold is plain words, and names nothing of the 
     "http_error",
     "malformed",
     "aborted",
+    "skipped_after_failure",
   ];
   const texts = new Set<string>();
   for (const reason of reasons) {

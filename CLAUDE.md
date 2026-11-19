@@ -221,6 +221,31 @@ run live):
     `associate check <export-dir>` prints the same counts for any export.
   - **A passed fact means its quote was found** in the saved result it cites.
     It does not mean the value is true. Never call that count accuracy.
+- **The support score** (issue #31; settings in `accuracy.json`
+  `support_score`; `lib/support.ts`, `lib/supportswitch.ts`, `lib/handback.ts`
+  `scoreCheckedFacts`; Python copy in `associate/accuracy/support.py`). For each
+  fact whose quote was found, the extension can ask the lobes decider whether
+  the quote on its own states or directly shows the value. It is report-only:
+  it refuses nothing and never enters `accepted`, the refusals or the counts.
+  `finish` writes the quote-check files first and then, with the score on,
+  writes them again with `facts[i].support` in `check.json`, `support_scored`
+  in `report.json` and a second mark in `answer.md`. Only scores are kept for
+  the session; a pair that was not scored is asked again later, and one batch
+  stops sending after the first `unreachable`, `timeout` or `http_error`
+  (the rest are `skipped_after_failure`). `check_quote` takes an optional
+  `value` argument and, for a found quote with the score on, adds a `support`
+  key. `associate run --support-score on|off` overrides the switch for one
+  run. The switch is **off for every model**. Built and unit-tested against a
+  fake decider only; the decider was probed live once with four pairs in the
+  client's request shape (plan `.devague/plans/associate-decider-fact-score.json`),
+  and no run has been measured with the score on. Never call it accuracy.
+- **Broad measurement tasks and the measure sheet verbs** (0.14.0):
+  `docs/accuracy/broad-tasks.json` (six repositories, 71 checked facts),
+  `associate measure run --broad`, and `measure sheet`, `measure sheet-check`
+  and `measure report` for blind hand grading
+  (`associate/cli/_commands/measure_broad.py`, `associate/measure/broad.py`).
+  Built and tested on fixtures and the stub harness only; a real broad run is
+  refused while `docs/accuracy/broad-difference-threshold.md` is a draft.
 
 ### Measured vs. not measured
 
@@ -270,6 +295,12 @@ is one run.
   children or delegated runs, with a real `ledger` binary, or in enforce mode
   beyond two worker runs; the recording of calls pi rejects before the hook is
   tested against a fake pi only.
+- the support score in any run: the switch is off for every model, the only
+  live contact was one probe of four pairs, and `finish`, `check_quote` and
+  the per-run switch are tested against a fake decider only;
+- the broad tasks: no real broad run has been made (one is refused while the
+  rule file is a draft); the sheet verbs are tested on fixtures and the stub
+  harness only.
 
 Say "built and unit-tested", never "works", for these. Live findings that
 remain open: worker sometimes ends without `finish` (seen again in an
@@ -715,7 +746,7 @@ value is not inherited.
 | `ASSOCIATE_REQUIRE_WEB`, `ASSOCIATE_SKIP_WEB` | unset | `hatch_build.py` | At build time: `1` fails a build with no `web/dist`, or leaves the UI out of the wheel on purpose. |
 | `ASSOCIATE_API_URL` | `http://127.0.0.1:8794` | `web/vite.config.ts` | The API the UI's dev server (`npm run dev`) proxies `/api` to. |
 | `ASSOCIATE_DESIGN_SOURCE_REPO` | unset | `web/scripts/check-tokens.mjs` | A culture-rules checkout; when set, the tokens check also compares `tokens.css` with it at the pinned commit. |
-| `ASSOCIATE_SUPPORT_SCORE` | absent (the model's switch in `accuracy.json` `support_score.enabled`) | `lib/supportswitch.ts`; set by `associate run --support-score`, never inherited | `on` or `off` for this run's support score (a report-only signal; decider-score task t7). `on` applies only to a model the contract's settings list; any other value is ignored with one stderr line. Built and unit-tested: nothing calls the reader yet and no run has been measured with it. A `measure` arm sets it with `"support_score"`. |
+| `ASSOCIATE_SUPPORT_SCORE` | absent (the model's switch in `accuracy.json` `support_score.enabled`) | `lib/supportswitch.ts`; set by `associate run --support-score`, never inherited | `on` or `off` for this run's support score (a report-only signal; decider-score task t7). `on` applies only to a model the contract's settings list; any other value is ignored with one stderr line. `index.ts` reads it once at load (through `supportScoreFor`) and, when the score is on, wires it into `finish` and `check_quote`. Built and unit-tested against a fake decider; no run has been measured with it. A `measure` arm sets it with `"support_score"`. |
 | `ASSOCIATE_BENCH_SUITES` | `associate/bench/suites.json` | `associate/bench/public.py` | An alternative suites file for `associate bench`. |
 | `ASSOCIATE_PROVIDER`, `ASSOCIATE_REASONING_EFFORT`, `ASSOCIATE_REASONING` | — | `associate/bench/config.py` | Only labels in a bench row's configuration stamp (provider falls back to `ASSOCIATE_BASE_URL`); they change nothing on the wire. Reasoning is per model in `models.json`. |
 

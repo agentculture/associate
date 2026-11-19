@@ -5,7 +5,7 @@
 // (an operator's ambient value is never inherited). This module is the only
 // reader of that variable. Every setting stays in the contract: the functions
 // here hand back the contract's own settings object or nothing.
-import { supportScoreSettings, type SupportScoreSettings } from "./contract.ts";
+import { supportScoreListing, supportScoreSettings, type SupportScoreSettings } from "./contract.ts";
 
 /** The per-run override of accuracy.json's per-model switch: `on` or `off`. */
 export const SUPPORT_SCORE_ENV = "ASSOCIATE_SUPPORT_SCORE";
@@ -47,14 +47,6 @@ export function supportScoreOverride(env: Record<string, string | undefined>): {
   };
 }
 
-/** The settings section, when the contract has one that lists `model` among its switches. */
-function settingsListing(accuracy: Accuracy | undefined, model: string | undefined): SupportScoreSettings | undefined {
-  const settings = accuracy?.support_score;
-  const enabled: unknown = settings?.enabled;
-  if (!settings || !enabled || typeof enabled !== "object" || model === undefined) return undefined;
-  return Object.hasOwn(enabled, model) ? settings : undefined;
-}
-
 /**
  * Whether the support score is on for one model in this run, and by what.
  *
@@ -73,7 +65,7 @@ export function resolveSupportScore(
   const override = supportScoreOverride(env);
   if (override.value === "off") return { settings: undefined, source: "env" };
   if (override.value === "on") {
-    const settings = settingsListing(accuracy, modelKey);
+    const settings = supportScoreListing(accuracy, modelKey);
     if (settings) return { settings, source: "env" };
     return {
       settings: undefined,

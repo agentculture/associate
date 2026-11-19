@@ -263,6 +263,23 @@ export function policySection(policy: ContractPolicy, name: string): Record<stri
 }
 
 /**
+ * The support-score settings section when it lists `model` among its
+ * switches, whatever that switch says; `undefined` when the section is absent,
+ * its `enabled` is not an object, or `model` is not an own key of it. The one
+ * place both the contract switch (`supportScoreSettings`) and the per-run
+ * switch (`lib/supportswitch.ts`) decide which models are listed.
+ */
+export function supportScoreListing(
+  accuracy: { readonly support_score?: SupportScoreSettings } | undefined,
+  model: string | undefined,
+): SupportScoreSettings | undefined {
+  const settings = accuracy?.support_score;
+  const enabled: unknown = settings?.enabled;
+  if (!settings || !enabled || typeof enabled !== "object" || model === undefined) return undefined;
+  return Object.hasOwn(enabled, model) ? settings : undefined;
+}
+
+/**
  * The support-score settings for one registry model, or `undefined` when the
  * score is off for it: the section is absent, the model has no switch, or its
  * switch is anything but exactly `true`.
@@ -271,11 +288,9 @@ export function supportScoreSettings(
   accuracy: { readonly support_score?: SupportScoreSettings },
   model: string,
 ): SupportScoreSettings | undefined {
-  const settings = accuracy.support_score;
-  const enabled: unknown = settings?.enabled;
-  if (!settings || !enabled || typeof enabled !== "object") return undefined;
-  if (!Object.hasOwn(enabled, model)) return undefined;
-  return (enabled as Record<string, unknown>)[model] === true ? settings : undefined;
+  const settings = supportScoreListing(accuracy, model);
+  if (!settings) return undefined;
+  return (settings.enabled as Record<string, unknown>)[model] === true ? settings : undefined;
 }
 
 /**
