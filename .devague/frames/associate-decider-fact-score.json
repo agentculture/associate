@@ -4,7 +4,7 @@
   "schema_version": 6,
   "status": "exported",
   "created": "2026-11-18T08:35:48Z",
-  "updated": "2026-11-18T21:47:56Z",
+  "updated": "2026-11-19T04:35:49Z",
   "claims": [
     {
       "id": "c1",
@@ -335,9 +335,9 @@
     {
       "id": "c20",
       "kind": "success_signal",
-      "text": "on one broad explanation task per big repository (culture, culture-rules, colleague, each pinned to a commit), run at least 3 times per repository on worker with the score switched off and at least 3 times with it on, each run is reported with two counts: how many of that repository's checked facts it states correctly (from a checklist of at least 8 facts per repository, each checked twice independently before the first run), and how many of its statements are false by hand-grading against the repository; counts are reported per run and not pooled into one percentage, the rule for what difference is called a change is committed before the first run, and the result is stated whichever way it comes out",
+      "text": "on one broad explanation task per repository, on six repositories (culture, culture-rules, colleague, associate, coherence-cli, workledger-cli, each pinned to a commit), run at least 3 times per repository on worker with the score switched off and at least 3 times with it on, each run is reported with two counts: how many of that repository's checked facts it states correctly (from a checklist of at least 8 facts per repository, each checked twice independently before the first run), and how many of its statements are false by hand-grading against the repository; counts are reported per run and not pooled into one percentage, the rule for what difference is called a change is committed before the first run, and the result is stated whichever way it comes out",
       "origin": "llm",
-      "status": "proposed",
+      "status": "confirmed",
       "honesty_conditions": [
         {
           "id": "h6",
@@ -348,7 +348,7 @@
         {
           "id": "h25",
           "text": "the person counting false statements does not see which arm a run came from until all runs are graded, and every statement counted as false is recorded with the file and line that contradicts it",
-          "status": "proposed",
+          "status": "confirmed",
           "instruction": ""
         }
       ],
@@ -365,6 +365,11 @@
           "text": "on one broad explanation task per pinned repository (associate, workledger-cli, coherence-cli), run at least 3 times per repository on worker with the score switched off and at least 3 times with it on, each run is reported with two counts: how many of that repository's 8 checked facts it states correctly, and how many of its statements are false by hand-grading against the repository; counts are reported per run and not pooled into one percentage, the rule for what difference is called a change is committed before the first run, and the result is stated whichever way it comes out",
           "kind": "success_signal",
           "reason": "Operator, 2026-11-18: 'make sure we test big repositories, so ../culture, ../culture-rules, ../colleague'."
+        },
+        {
+          "text": "on one broad explanation task per big repository (culture, culture-rules, colleague, each pinned to a commit), run at least 3 times per repository on worker with the score switched off and at least 3 times with it on, each run is reported with two counts: how many of that repository's checked facts it states correctly (from a checklist of at least 8 facts per repository, each checked twice independently before the first run), and how many of its statements are false by hand-grading against the repository; counts are reported per run and not pooled into one percentage, the rule for what difference is called a change is committed before the first run, and the result is stated whichever way it comes out",
+          "kind": "success_signal",
+          "reason": "operator, 2026-11-19: run on the 6 repos approved"
         }
       ]
     },
@@ -542,9 +547,9 @@
     {
       "id": "c30",
       "kind": "decision",
-      "text": "the score is measured on a few big asks, not on the 24 short questions: one broad explanation task per big repository (culture, culture-rules, colleague, each pinned to a commit), each run graded on two counts, how many of that repository's checked facts it states correctly and how many of its statements are false by hand-grading; a checklist of checked facts is written for each of the three repositories, each fact checked twice independently as the 24 short tasks were (operator, 2026-11-18)",
+      "text": "the score is measured on a few big asks, not on the 24 short questions: one broad explanation task per repository on six repositories (culture, culture-rules, colleague, associate, coherence-cli, workledger-cli, each pinned to a commit), each run graded on two counts, how many of that repository's checked facts it states correctly and how many of its statements are false by hand-grading; a checklist of checked facts is written for each of the six repositories, each fact checked twice independently as the 24 short tasks were; the facts already checked for associate, coherence-cli and workledger-cli may be reused where they fit a broad explanation (operator, 2026-11-18 and 2026-11-19)",
       "origin": "user",
-      "status": "proposed",
+      "status": "confirmed",
       "honesty_conditions": [],
       "hard_questions": [],
       "links": [],
@@ -554,6 +559,11 @@
           "text": "the score is measured on a few big asks, not on the 24 short questions: one broad explanation task per pinned repository (associate, workledger-cli, coherence-cli), each run graded on two counts, how many of that repository's 8 checked facts it states correctly and how many of its statements are false by hand-grading; the 24 checked answers are kept as the checklist (operator, 2026-11-18)",
           "kind": "decision",
           "reason": "Operator, 2026-11-18: 'make sure we test big repositories, so ../culture, ../culture-rules, ../colleague'."
+        },
+        {
+          "text": "the score is measured on a few big asks, not on the 24 short questions: one broad explanation task per big repository (culture, culture-rules, colleague, each pinned to a commit), each run graded on two counts, how many of that repository's checked facts it states correctly and how many of its statements are false by hand-grading; a checklist of checked facts is written for each of the three repositories, each fact checked twice independently as the 24 short tasks were (operator, 2026-11-18)",
+          "kind": "decision",
+          "reason": "operator, 2026-11-19: run on the 6 repos approved"
         }
       ]
     }

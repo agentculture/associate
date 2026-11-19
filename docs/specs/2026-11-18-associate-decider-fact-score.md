@@ -65,6 +65,7 @@
 - the measurement in the last success signal reports whether answers were more often correct with the score than without it
 - the two percentages are computed by a committed script from the committed labels and scores
 - the arm is run with the same tasks, models, reasoning setting and repeats as the arm it is compared with
+- the person counting false statements does not see which arm a run came from until all runs are graded, and every statement counted as false is recorded with the file and line that contradicts it
 - no user-facing string or document produced by this work describes the score or its count as accuracy
 - no commit of this work touches the lobes-cli repository, and each need found is an issue there
 
@@ -72,7 +73,7 @@
 
 - on a labelled set of at least 300 real value-and-quote pairs, labelled by two raters, the decider score at the contract cut-off passes at least 90% of the pairs both raters call supported and at most 10% of the pairs both call unsupported; the set and the labels are committed
   - instruction: The replay had 85 facts and one rater. Build the set from stored exports of the groundwork comparison; planted errors are reported separately from real ones.
-- the groundwork comparison gains an arm with the score switched on, and its table reports correct answers out of 72 runs per model beside the arm without it; the result is stated whichever way it comes out
+- on one broad explanation task per repository, on six repositories (culture, culture-rules, colleague, associate, coherence-cli, workledger-cli, each pinned to a commit), run at least 3 times per repository on worker with the score switched off and at least 3 times with it on, each run is reported with two counts: how many of that repository's checked facts it states correctly (from a checklist of at least 8 facts per repository, each checked twice independently before the first run), and how many of its statements are false by hand-grading against the repository; counts are reported per run and not pooled into one percentage, the rule for what difference is called a change is committed before the first run, and the result is stated whichever way it comes out
   - instruction: Depends on the groundwork spec being built first.
 
 ## Scope / boundaries
@@ -114,6 +115,7 @@
 
 - the work is two specs: the measurement groundwork and grader first (issues #30, #22, #32), then the decider score (#31) (operator, 2026-11-18, resolves q3)
 - the decider scores only facts whose quote was found in the cited result (operator, 2026-11-18, resolves q4)
+- the score is measured on a few big asks, not on the 24 short questions: one broad explanation task per repository on six repositories (culture, culture-rules, colleague, associate, coherence-cli, workledger-cli, each pinned to a commit), each run graded on two counts, how many of that repository's checked facts it states correctly and how many of its statements are false by hand-grading; a checklist of checked facts is written for each of the six repositories, each fact checked twice independently as the 24 short tasks were; the facts already checked for associate, coherence-cli and workledger-cli may be reused where they fit a broad explanation (operator, 2026-11-18 and 2026-11-19)
 
 ## Open parks
 

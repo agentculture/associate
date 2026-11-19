@@ -2,7 +2,7 @@
   "plan_slug": "associate-graded-measurement-groundwork",
   "schema_version": 2,
   "created": "2026-11-18T17:08:42Z",
-  "updated": "2026-11-18T21:47:27Z",
+  "updated": "2026-11-19T04:35:31Z",
   "deviations": [
     {
       "id": "d1",
@@ -81,7 +81,7 @@
       "reason": "My reading of the operator's messages of 2026-11-18 ('if we skip this test and move to the decider first', then 'Confirmed' on the big-ask design); not stated outright.",
       "affects": [],
       "origin": "llm",
-      "status": "proposed",
+      "status": "approved",
       "classification": "needs-follow-up",
       "seq": 7
     }

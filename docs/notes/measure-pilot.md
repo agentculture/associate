@@ -141,3 +141,13 @@ The other 14 answers were read by hand and the reader agreed with their marks.
 - **The two grade readings** gave the same grade on every run that has both.
 
 Each item is one or two runs, not a rate.
+
+## The comparison was not run
+
+After the second pilot the operator decided not to run the before/after
+comparison (plan deviation d7, approved 2026-11-19). In the pilots both arms
+answered about 15 of 16 short questions correctly, so the 24 short tasks leave
+little room to show a difference. Whether the accuracy method changed how often
+answers are right is still not measured. The decider score is to be measured
+on one broad explanation task per repository instead; see
+`docs/specs/2026-11-18-associate-decider-fact-score.md`.
