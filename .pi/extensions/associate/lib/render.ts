@@ -13,8 +13,9 @@
  *   saved result it cites, nothing more) and an unchecked fact, labelled as
  *   not checked with the reason. A passed fact that was also asked whether its
  *   quote supports its value carries a second, separate marker: the support
- *   score, or that it was not scored and why (decider-score plan t5). Neither
- *   marker says the value is true.
+ *   answer in words (how much of the value the quote shows, never a number),
+ *   or that it was not scored and why (decider-score plan t5, deviation d4).
+ *   Neither marker says the value is true.
  *
  * Everything else the model wrote — the finish summary and the final message —
  * goes under one unchecked label ({@link UNCHECKED_HEADING}), with its
@@ -36,8 +37,8 @@ export const UNCHECKED_HEADING = "## Unchecked: the model's own words, not check
  * under the quote-found legend when at least one shown fact carries one.
  */
 export const SUPPORT_LEGEND =
-  'The support mark is a second, separate check: whether the quote, read on its own, shows the value, with a score from ' +
-  '0 (no) to 1 (yes), or "support not scored" when that check did not run. Neither mark means the value is true.';
+  'The support mark is a second, separate check: how much of the value the quote, read on its own, shows, ' +
+  'or "support not scored" when that check did not run. Neither mark means the value is true.';
 
 const ANSWER_HEADING = "# Answer (rendered by the harness from checked items)";
 
@@ -112,17 +113,30 @@ const NOT_SCORED_PHRASES: Readonly<Record<string, string>> = {
 };
 
 /**
+ * The words for each support answer, keyed by the shipped contract's option
+ * keys (deviation d4). An answer with no words here (a contract with other
+ * options) is shown by its key.
+ */
+const ANSWER_WORDS: Readonly<Record<string, string>> = {
+  all: "quote supports the value",
+  mostly: "quote supports the main claim; a detail of the value is not in the quote",
+  part: "quote shows only part of the value",
+  little: "quote shows little of the value",
+  none: "quote does not show the value",
+};
+
+/**
  * The support marker of one fact, or "" when it has none. It is a piece of
  * text of its own beside the quote-found marker, and only a fact whose quote
- * was found gets one. Which wording a scored fact gets is the result's own
- * `at_or_above_cutoff`; no number is compared here. A result's `detail` is
- * for check.json and is not shown.
+ * was found gets one. A scored fact shows its answer in words, never the
+ * decider's probability. A result's `detail` is for check.json and is not
+ * shown.
  */
 function supportMark(verdict: FactCheck, support: SupportResult | undefined): string {
   if (!support || verdict.verdict !== "passed") return "";
-  if (support.status === "scored" && Number.isFinite(support.score)) {
-    const wording = support.at_or_above_cutoff ? "quote supports the value" : "quote may not support the value";
-    return `${wording}, support ${support.score.toFixed(2)}`;
+  if (support.status === "scored" && typeof support.answer === "string" && support.answer.trim() !== "") {
+    const { answer } = support;
+    return Object.hasOwn(ANSWER_WORDS, answer) ? ANSWER_WORDS[answer]! : `support answer: ${answer}`;
   }
   const reason = support.status === "not_scored" ? support.reason : "";
   const phrase = Object.hasOwn(NOT_SCORED_PHRASES, reason) ? NOT_SCORED_PHRASES[reason] : CHECK_UNAVAILABLE;

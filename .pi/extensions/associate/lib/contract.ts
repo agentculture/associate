@@ -95,17 +95,19 @@ export interface AccuracyCheck {
 
 /**
  * The support-score settings of `accuracy.json`: the decider is asked, for a
- * fact whose quote was found, whether the quote on its own states or directly
- * shows the value. Report-only. Field names are the contract's; no value is
- * restated here.
+ * fact whose quote was found, one choice question, how much of the value the
+ * quote on its own shows (plan deviation d4). Report-only. Field names are
+ * the contract's; no value is restated here.
  */
 export interface SupportScoreSettings {
-  /** The yes/no question, sent as written. */
+  /** The choice question, sent as written. */
   readonly question: string;
   /** What the decider is told before each pair, sent as written; optional. */
   readonly background?: string;
-  /** Score at or above which the quote is reported as supporting the value. */
-  readonly cutoff: number;
+  /** The question's answers, in order: option key -> the criterion the decider is given. */
+  readonly options: Readonly<Record<string, string>>;
+  /** The option keys reported as the quote supporting the value. */
+  readonly passes: readonly string[];
   /** Time allowed for one fact's request. */
   readonly timeout_ms: number;
   /** Most facts scored for one hand-back. */
@@ -292,7 +294,54 @@ export function supportScoreListing(
   const settings = accuracy?.support_score;
   const enabled: unknown = settings?.enabled;
   if (!settings || !enabled || typeof enabled !== "object" || model === undefined) return undefined;
-  return Object.hasOwn(enabled, model) ? settings : undefined;
+  if (!Object.hasOwn(enabled, model)) return undefined;
+  // A section whose question cannot be asked lists no model: the score stays off.
+  return supportChoiceProblem(settings) === undefined ? settings : undefined;
+}
+
+function isText(value: unknown): value is string {
+  return typeof value === "string" && value.trim() !== "";
+}
+
+/** What is wrong with the section's `options`, or undefined; mirrors validate.py `_support_options_errors`. */
+function supportOptionsProblem(options: unknown): string | undefined {
+  const where = "support_score.options";
+  if (!options || typeof options !== "object" || Array.isArray(options) || Object.keys(options).length < 2) {
+    return `${where} must be an object with at least two options`;
+  }
+  const entries = Object.entries(options as Record<string, unknown>);
+  if (!entries.every(([key, criterion]) => isText(key) && isText(criterion))) {
+    return `${where} keys and criteria must be non-blank strings`;
+  }
+  return undefined;
+}
+
+/** What is wrong with the section's pass list, or undefined; mirrors validate.py `_support_passes_errors`. */
+function supportPassesProblem(passes: unknown, options: Record<string, unknown>): string | undefined {
+  const where = "support_score.passes";
+  if (!Array.isArray(passes) || passes.length === 0) return `${where} must be a non-empty list of option keys`;
+  if (!passes.every((key) => typeof key === "string" && Object.hasOwn(options, key))) {
+    return `${where} must name only keys of support_score.options`;
+  }
+  const distinct = new Set(passes);
+  if (distinct.size !== passes.length) return `${where} must not name an option twice`;
+  if (distinct.size === Object.keys(options).length) return `${where} must not name every option`;
+  return undefined;
+}
+
+/**
+ * What makes the support-score section's choice question unaskable, or
+ * undefined when it can be asked (plan deviation d4). The same rules as
+ * validate.py: `options` at least two entries, every key and criterion a
+ * non-blank string; the pass list a non-empty list of distinct option keys
+ * that does not name every option. A section with a problem scores nothing.
+ */
+export function supportChoiceProblem(settings: unknown): string | undefined {
+  if (!settings || typeof settings !== "object" || Array.isArray(settings)) return "support_score must be an object";
+  const section = settings as { options?: unknown; passes?: unknown };
+  const optionsProblem = supportOptionsProblem(section.options);
+  if (optionsProblem) return optionsProblem;
+  return supportPassesProblem(section.passes, section.options as Record<string, unknown>);
 }
 
 /**

@@ -49,10 +49,15 @@ const FOUND = "return computeTheAnswer(42);";
 const ABSENT = "return computeTheQuestion(42);";
 const VALUE = "alpha returns the answer computed from 42";
 
-const AT_OR_ABOVE = "the quote, on its own, states or directly shows this value";
-const BELOW =
-  "the quote does not, on its own, show this value: check the value against the quote, " +
-  "quote the line that states it, or say you cannot tell";
+/** What `support.meaning` says for each shipped option (deviation d4): what to do, in words. */
+const MEANINGS: Record<string, string> = {
+  all: "the quote shows the value",
+  mostly: "the quote shows the main claim; a detail of the value is not in it; quote that detail too or leave it out",
+  part: "the quote shows only part of the value; quote more of the source or claim less",
+  little: "the quote shows little of the value; quote more of the source or claim less",
+  none: "the quote does not show the value; cite the text that does, or drop the fact",
+};
+const SHOWN = MEANINGS.all!;
 const NOT_SCORED = /^not scored \((.+)\); this is not a judgement on the claim$/;
 /** Words a reader would have to know the machinery to understand. */
 const INSIDE_WORDS = /decider|clef|systemone|noul|gateway|lobes|cut-?off|threshold/i;
@@ -75,8 +80,10 @@ class FakePi {
   }
 }
 
-function scoreResponse(score: number): Response {
-  return new Response(JSON.stringify({ model: "clef", answers: { [SUPPORT_QUESTION_KEY]: { type: "noul", noul: score } } }), {
+/** A choice answer from the decider for `choice`, with `confidence` its probability. */
+function scoreResponse(choice: string, confidence = 0.9): Response {
+  const answer = { type: "choice", choice, confidence, probabilities: { [choice]: confidence } };
+  return new Response(JSON.stringify({ model: "clef", answers: { [SUPPORT_QUESTION_KEY]: answer } }), {
     status: 200,
     headers: { "content-type": "application/json" },
   });
@@ -172,7 +179,7 @@ function withoutSupport(out: { content: Array<{ text: string }>; details: any })
 
 test("AC1: a found quote with a value returns the old keys unchanged plus one key, support, holding the score", async () => {
   const plain = await rig();
-  const fake = decider(() => scoreResponse(0.9));
+  const fake = decider(() => scoreResponse("all"));
   const scored = await rig({ decider: fake });
   try {
     const before = await plain.tool.execute("a", { source: "w3", quote: FOUND, value: VALUE });
@@ -184,9 +191,10 @@ test("AC1: a found quote with a value returns the old keys unchanged plus one ke
     );
     assert.deepEqual(after.details.support, {
       status: "scored",
-      score: 0.9,
-      at_or_above_cutoff: true,
-      meaning: AT_OR_ABOVE,
+      answer: "all",
+      supports: true,
+      confidence: 0.9,
+      meaning: SHOWN,
     });
     assert.deepEqual(JSON.parse(after.content[0]!.text).support, after.details.support);
     assert.equal(after.details.verdict, "passed");
@@ -197,32 +205,40 @@ test("AC1: a found quote with a value returns the old keys unchanged plus one ke
   }
 });
 
-test("AC1: a score below the contract's cut-off is reported as below, with the fix in words", async () => {
-  const fake = decider(() => scoreResponse(0.2));
-  const r = await rig({ decider: fake });
-  try {
-    const out = await r.tool.execute("a", { source: "w3", quote: FOUND, value: VALUE });
-    assert.equal(out.details.verdict, "passed", "the score never changes the matcher's verdict");
-    assert.deepEqual(out.details.support, { status: "scored", score: 0.2, at_or_above_cutoff: false, meaning: BELOW });
-  } finally {
-    r.dispose();
+test("AC1: each answer is reported in words, with what to do about it", async () => {
+  for (const [choice, meaning] of Object.entries(MEANINGS)) {
+    const fake = decider(() => scoreResponse(choice, 0.4));
+    const r = await rig({ decider: fake });
+    try {
+      const out = await r.tool.execute("a", { source: "w3", quote: FOUND, value: VALUE });
+      assert.equal(out.details.verdict, "passed", "the answer never changes the matcher's verdict");
+      assert.deepEqual(out.details.support, {
+        status: "scored",
+        answer: choice,
+        supports: SETTINGS.passes.includes(choice),
+        confidence: 0.4,
+        meaning,
+      });
+    } finally {
+      r.dispose();
+    }
   }
 });
 
-test("AC1: the comparison uses the cut-off from the settings it was handed, not a number of its own", async () => {
-  const fake = decider(() => scoreResponse(0.9));
-  const r = await rig({ decider: fake, settings: { ...SETTINGS, cutoff: 0.95 } });
+test("AC1: supports follows the pass list of the settings it was handed, not a list of its own", async () => {
+  const fake = decider(() => scoreResponse("mostly"));
+  const r = await rig({ decider: fake, settings: { ...SETTINGS, passes: ["all"] } });
   try {
     const out = await r.tool.execute("a", { source: "w3", quote: FOUND, value: VALUE });
-    assert.equal(out.details.support.at_or_above_cutoff, false);
-    assert.equal(out.details.support.meaning, BELOW);
+    assert.equal(out.details.support.supports, false);
+    assert.equal(out.details.support.meaning, MEANINGS.mostly);
   } finally {
     r.dispose();
   }
 });
 
 test("AC1: a labelled source is scored like a current-run one", async () => {
-  const fake = decider(() => scoreResponse(0.8));
+  const fake = decider(() => scoreResponse("mostly"));
   const r = await rig({ decider: fake, prior: "1\tthe prior run read this line only\n" });
   try {
     const out = await r.tool.execute("a", {
@@ -233,7 +249,7 @@ test("AC1: a labelled source is scored like a current-run one", async () => {
     assert.equal(out.details.verdict, "passed");
     assert.equal(out.details.source, "prior:w3");
     assert.equal(out.details.support.status, "scored");
-    assert.equal(out.details.support.score, 0.8);
+    assert.equal(out.details.support.answer, "mostly");
     assert.equal(fake.calls.length, 1);
   } finally {
     r.dispose();
@@ -244,7 +260,7 @@ test("AC1: a labelled source is scored like a current-run one", async () => {
 
 test("AC2: without a value nothing is asked and the result is exactly what it was", async () => {
   const plain = await rig();
-  const fake = decider(() => scoreResponse(0.9));
+  const fake = decider(() => scoreResponse("all"));
   const scored = await rig({ decider: fake });
   try {
     for (const params of [
@@ -280,7 +296,7 @@ test("AC2: with the score off for the session a value adds no key", async () => 
 
 test("AC2: a quote the matcher did not find is not asked about and gets no key", async () => {
   const plain = await rig();
-  const fake = decider(() => scoreResponse(0.9));
+  const fake = decider(() => scoreResponse("all"));
   const scored = await rig({ decider: fake });
   try {
     for (const params of [
@@ -315,7 +331,7 @@ test("AC2: with the decider failing in each way the key reports not scored and t
     ["timeout", { decider: decider(hang), settings: { ...SETTINGS, timeout_ms: 20 } }],
     ["http_error", { decider: decider(() => new Response("no", { status: 503 })) }],
     ["malformed", { decider: decider(() => new Response("not json", { status: 200 })) }],
-    ["no_key", { decider: decider(() => scoreResponse(0.9)), env: {} }],
+    ["no_key", { decider: decider(() => scoreResponse("all")), env: {} }],
   ];
   for (const [reason, options] of cases) {
     const r = await rig(options);
@@ -326,8 +342,7 @@ test("AC2: with the decider failing in each way the key reports not scored and t
       assert.equal(out.details.support.status, "not_scored", reason);
       assert.equal(out.details.support.reason, reason);
       assert.match(out.details.support.meaning, NOT_SCORED, reason);
-      assert.ok(!("score" in out.details.support), reason);
-      assert.ok(!("at_or_above_cutoff" in out.details.support), reason);
+      for (const key of ["answer", "supports", "confidence", "score"]) assert.ok(!(key in out.details.support), `${reason}: ${key}`);
       assert.deepEqual(JSON.parse(out.content[0]!.text).support, out.details.support, reason);
     } finally {
       r.dispose();
@@ -349,7 +364,7 @@ test("AC2: switched on but with nothing to ask with, a value is reported not sco
 });
 
 test("AC2: an empty value is given, so the key is present and says why there is no score", async () => {
-  const fake = decider(() => scoreResponse(0.9));
+  const fake = decider(() => scoreResponse("all"));
   const r = await rig({ decider: fake });
   try {
     const out = await r.tool.execute("a", { source: "w3", quote: FOUND, value: "   " });
@@ -378,7 +393,7 @@ test("AC2: the caller's own cancellation is handed on and reported as not scored
 });
 
 test("AC2: a value is redacted before it is sent, as finish redacts a fact", async () => {
-  const fake = decider(() => scoreResponse(0.9));
+  const fake = decider(() => scoreResponse("all"));
   const r = await rig({ decider: fake });
   try {
     const secret = "sk-abcdefghijklmnop1234";
@@ -423,9 +438,16 @@ test("AC3: every text the key can hold is plain words, and names nothing of the 
   assert.equal(texts.size, reasons.length, "each reason has words of its own");
   // A reason this tool does not know still reads as not scored.
   assert.match(supportMeaning({ status: "not_scored", reason: "something_new" as SupportNotScoredReason }), NOT_SCORED);
-  assert.equal(supportMeaning({ status: "scored", score: 1, at_or_above_cutoff: true }), AT_OR_ABOVE);
-  assert.equal(supportMeaning({ status: "scored", score: 0, at_or_above_cutoff: false }), BELOW);
-  for (const text of [AT_OR_ABOVE, BELOW]) assert.doesNotMatch(text, INSIDE_WORDS);
+  for (const [choice, meaning] of Object.entries(MEANINGS)) {
+    assert.equal(supportMeaning({ status: "scored", answer: choice, supports: false, confidence: 0.5 }), meaning);
+    assert.doesNotMatch(meaning, INSIDE_WORDS);
+    assert.doesNotMatch(meaning, /\d/, "no number in the words");
+  }
+  assert.equal(new Set(Object.values(MEANINGS)).size, Object.keys(MEANINGS).length, "each answer has words of its own");
+  // An answer this tool has no words for is named, with what to do.
+  const odd = supportMeaning({ status: "scored", answer: "partly", supports: false, confidence: 0.5 });
+  assert.match(odd, /partly/);
+  assert.doesNotMatch(odd, INSIDE_WORDS);
 });
 
 test("AC3: nothing the model is shown carries the detail note or names the machinery", async () => {
@@ -462,7 +484,7 @@ test("AC3: the description and the schema tell the model the optional value exis
 // --- AC4: one session cache, shared with finish --------------------------------
 
 test("AC4: the same pair asked twice through the tool is one request", async () => {
-  const fake = decider(() => scoreResponse(0.7));
+  const fake = decider(() => scoreResponse("part"));
   const r = await rig({ decider: fake });
   try {
     const first = await r.tool.execute("a", { source: "w3", quote: FOUND, value: VALUE });
@@ -475,9 +497,9 @@ test("AC4: the same pair asked twice through the tool is one request", async () 
   }
 });
 
-function installGlobalDecider(score: number): { calls: Array<{ value: string; quote: string }>; restore(): void } {
+function installGlobalDecider(choice: string): { calls: Array<{ value: string; quote: string }>; restore(): void } {
   const original = globalThis.fetch;
-  const fake = decider(() => scoreResponse(score));
+  const fake = decider(() => scoreResponse(choice));
   globalThis.fetch = fake.fetch;
   return { calls: fake.calls, restore: () => (globalThis.fetch = original) };
 }
@@ -485,7 +507,7 @@ function installGlobalDecider(score: number): { calls: Array<{ value: string; qu
 const ON = { [SUPPORT_SCORE_ENV]: "on", ASSOCIATE_API_KEY: "test-key" };
 
 test("AC4: a pair checked with check_quote and later handed back at finish costs one decider request in total", async () => {
-  const global = installGlobalDecider(0.9);
+  const global = installGlobalDecider("all");
   const s = await openSession(ON);
   try {
     assert.ok(READ_TEXT.includes(GOOD_FACT.quote));
@@ -496,13 +518,13 @@ test("AC4: a pair checked with check_quote and later handed back at finish costs
       purpose: "check the fact before handing it back",
     })) as any;
     assert.equal(out.details.verdict, "passed");
-    assert.deepEqual(out.details.support, { status: "scored", score: 0.9, at_or_above_cutoff: true, meaning: AT_OR_ABOVE });
+    assert.deepEqual(out.details.support, { status: "scored", answer: "all", supports: true, confidence: 0.9, meaning: SHOWN });
     assert.equal(global.calls.length, 1);
 
     await callFinish(s.pi, "fin-1", GOOD_PAYLOAD);
     assert.equal(global.calls.length, 1, "finish reused the answer check_quote was given");
     const check = JSON.parse(readFileSync(join(s.exportDir, CHECK_FILENAME), "utf8"));
-    assert.deepEqual(check.facts[0].support, { status: "scored", score: 0.9, at_or_above_cutoff: true });
+    assert.deepEqual(check.facts[0].support, { status: "scored", answer: "all", supports: true, confidence: 0.9 });
   } finally {
     global.restore();
     s.dispose();
@@ -510,7 +532,7 @@ test("AC4: a pair checked with check_quote and later handed back at finish costs
 });
 
 test("AC4: a pair with text the redaction filter rewrites is still one request across check_quote and finish", async () => {
-  const global = installGlobalDecider(0.9);
+  const global = installGlobalDecider("all");
   const s = await openSession(ON);
   try {
     const value = "ROLE_RESPONSIBILITIES, guarded by sk-abcdefghijklmnop1234";
@@ -525,7 +547,7 @@ test("AC4: a pair with text the redaction filter rewrites is still one request a
 });
 
 test("AC4: in a session with the score off, check_quote with a value asks nothing and adds no key", async () => {
-  const global = installGlobalDecider(0.9);
+  const global = installGlobalDecider("all");
   const s = await openSession({ ASSOCIATE_API_KEY: "test-key" });
   try {
     const out = (await s.pi.tool(CHECK_TOOL_NAME).execute("cq-1", {

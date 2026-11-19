@@ -105,6 +105,11 @@ _FIXED_LINES = frozenset(
         "## Unchecked: the model's own words, not checked by the harness",
         'A fact marked "quote found" means its quote is in the saved result it cites; '
         "it does not mean the value is true.",
+        # The support legend since the five-option question (deviation d4) ...
+        "The support mark is a second, separate check: how much of the value the quote, read "
+        'on its own, shows, or "support not scored" when that check did not run. Neither mark '
+        "means the value is true.",
+        # ... and the one older exports carry (the yes/no score), so they are still filtered.
         "The support mark is a second, separate check: whether the quote, read on its own, "
         'shows the value, with a score from 0 (no) to 1 (yes), or "support not scored" when '
         "that check did not run. Neither mark means the value is true.",

@@ -124,6 +124,17 @@ test("the per-run switch and the contract switch list the same models: one helpe
   }
 });
 
+test("a section whose options cannot be asked stays off, and says why once", () => {
+  const broken = { ...workerOn, support_score: { ...workerOn.support_score, passes: ["no-such-option"] } };
+  for (const env of [{}, { [SUPPORT_SCORE_ENV]: "on" }]) {
+    const resolution = resolveSupportScore(broken as never, "worker", env);
+    assert.equal(resolution.settings, undefined);
+    assert.match(resolution.problem ?? "", /support_score\.passes/);
+    assert.match(resolution.problem ?? "", /stays off/);
+  }
+  assert.equal(resolveSupportScore(broken as never, "worker", { [SUPPORT_SCORE_ENV]: "off" }).problem, undefined);
+});
+
 test("lib/supportswitch.ts restates none of the listing checks", async () => {
   const { readFileSync } = await import("node:fs");
   const source = readFileSync(new URL("../lib/supportswitch.ts", import.meta.url), "utf8");

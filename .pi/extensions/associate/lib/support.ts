@@ -1,12 +1,13 @@
 /**
  * The support-score client (decider-score spec c3/h12, c22/h8, c25/h20,
- * c28/h23).
+ * c28/h23; plan deviation d4).
  *
- * Asks the lobes decider one yes/no question about one fact: does the quote,
- * on its own, state or directly show the value. The answer is a number in
- * [0, 1], reported with whether it is at or above the contract's cut-off, or
- * the fact is `not_scored` with a machine reason. It is a signal for a report
- * and refuses nothing.
+ * Asks the lobes decider one choice question about one fact: how much of the
+ * value the quote, on its own, shows. The answer is one of the contract's
+ * options, reported with whether the contract's pass list names it
+ * (`supports`) and the decider's probability for it (`confidence`), or the
+ * fact is `not_scored` with a machine reason. It is a signal for a report and
+ * refuses nothing.
  *
  * This is a client of its own, not the safety gate. It shares only the
  * decider's address and headers with `lib/gate.ts` (`buildClefRequest`). It
@@ -16,8 +17,8 @@
  * walk line, no gate id, no file. What a caller does with a result is the
  * caller's business.
  *
- * Every setting is an argument. The question wording, the cut-off, the
- * per-fact timeout, the cap on scored facts and the total time come from
+ * Every setting is an argument. The question wording, the options and their
+ * criteria, the pass list, the per-fact timeout, the cap on scored facts and the total time come from
  * `accuracy.json` as a `SupportScoreSettings`; the decider's input limit and
  * address come from the compiled `gate.json` (`GateConfig`); the redaction
  * filter is the policy's. Whether the score is switched on at all is decided
@@ -67,7 +68,10 @@ export type SupportNotScoredReason =
   | "unreachable"
   /** The decider answered with a non-2xx status. */
   | "http_error"
-  /** The answer was not JSON, or held no yes/no probability in [0, 1] for the question. */
+  /**
+   * The answer was not JSON, held no choice for the question, a choice that
+   * is not one of the contract's options, or no probability in [0, 1] for it.
+   */
   | "malformed"
   /** The caller's own signal ended the request. */
   | "aborted"
@@ -80,10 +84,12 @@ export type SupportNotScoredReason =
 
 export interface SupportScored {
   readonly status: "scored";
-  /** The decider's probability of yes, in [0, 1]. */
-  readonly score: number;
-  /** Whether `score` is at or above the contract's cut-off. */
-  readonly at_or_above_cutoff: boolean;
+  /** The option the decider picked: a key of the contract's options. */
+  readonly answer: string;
+  /** Whether the contract's pass list names `answer`. */
+  readonly supports: boolean;
+  /** The decider's probability for `answer`, in [0, 1]. */
+  readonly confidence: number;
 }
 
 export interface SupportNotScored {
@@ -141,7 +147,10 @@ export interface SupportRequest {
   readonly body: {
     readonly model: string;
     readonly state: string;
-    readonly questions: Record<string, { readonly type: "noul"; readonly instructions: string }>;
+    readonly questions: Record<
+      string,
+      { readonly type: "choice"; readonly instructions: string; readonly criteria: Readonly<Record<string, string>> }
+    >;
   };
 }
 
@@ -214,7 +223,7 @@ export function buildSupportState(redaction: RedactionFilter, pair: SupportPair,
 }
 
 function supportQuestions(settings: SupportScoreSettings): SupportRequest["body"]["questions"] {
-  return { [SUPPORT_QUESTION_KEY]: { type: "noul", instructions: settings.question } };
+  return { [SUPPORT_QUESTION_KEY]: { type: "choice", instructions: settings.question, criteria: settings.options } };
 }
 
 /**
@@ -248,12 +257,25 @@ function stateBytesOver(config: GateConfig, settings: SupportScoreSettings, stat
   return byteLength(state) - budget;
 }
 
-/** Read the score from a response body, or `undefined` when it is not there in the right shape. */
-function readScore(body: unknown): number | undefined {
-  if (!isRecord(body) || !isRecord(body.answers)) return undefined;
+/**
+ * The scored result from a response body, or a reason it cannot be read: no
+ * choice answer, a choice that is not one of the contract's options, or no
+ * probability in [0, 1] for it. The probability is the decider's
+ * `probabilities[choice]`, else its `confidence` (the same number when both
+ * are given).
+ */
+function readChoice(body: unknown, settings: SupportScoreSettings): SupportScored | string {
+  if (!isRecord(body) || !isRecord(body.answers)) return "the answer holds no choice";
   const answer = body.answers[SUPPORT_QUESTION_KEY];
-  if (!isRecord(answer) || answer.type !== "noul" || !isUnit(answer.noul)) return undefined;
-  return answer.noul;
+  if (!isRecord(answer) || answer.type !== "choice") return "the answer holds no choice";
+  const choice = answer.choice;
+  if (typeof choice !== "string" || !Object.hasOwn(settings.options, choice)) {
+    return "the choice is not one of the options";
+  }
+  const picked = isRecord(answer.probabilities) ? answer.probabilities[choice] : undefined;
+  const confidence = isUnit(picked) ? picked : answer.confidence;
+  if (!isUnit(confidence)) return "the choice has no probability from 0 to 1";
+  return { status: "scored", answer: choice, supports: settings.passes.includes(choice), confidence };
 }
 
 /** Why a request was stopped; set once, by whichever stop comes first. */
@@ -369,9 +391,8 @@ async function ask(state: string, options: SupportOptions, deadline?: number): P
     } catch {
       return notScored("malformed", "the answer is not JSON");
     }
-    const score = readScore(body);
-    if (score === undefined) return notScored("malformed", "the answer holds no yes/no probability");
-    return { status: "scored", score, at_or_above_cutoff: score >= settings.cutoff };
+    const read = readChoice(body, settings);
+    return typeof read === "string" ? notScored("malformed", read) : read;
   } finally {
     timer.done();
   }

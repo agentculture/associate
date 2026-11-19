@@ -70,12 +70,18 @@ interface FakeDecider {
   restore(): void;
 }
 
-function scoreResponse(score: number): Response {
-  return new Response(JSON.stringify({ model: "clef", answers: { [SUPPORT_QUESTION_KEY]: { type: "noul", noul: score } } }), {
+/** A choice answer from the decider for `choice`, with `confidence` its probability. */
+function scoreResponse(choice: string, confidence = 0.9): Response {
+  const answer = { type: "choice", choice, confidence, probabilities: { [choice]: confidence } };
+  return new Response(JSON.stringify({ model: "clef", answers: { [SUPPORT_QUESTION_KEY]: answer } }), {
     status: 200,
     headers: { "content-type": "application/json" },
   });
 }
+
+/** The shipped contract's options, in order, and the per-option counts with every count zero. */
+const OPTION_KEYS = Object.keys(loadContract({}).accuracy.support_score!.options);
+const zeroCounts = (): Record<string, number> => Object.fromEntries(OPTION_KEYS.map((key) => [key, 0]));
 
 /** Read the value and quote back out of the two labelled state lines. */
 function pairOf(state: string): { value: string; quote: string } {
@@ -86,7 +92,7 @@ function pairOf(state: string): { value: string; quote: string } {
   return { value: line("value"), quote: line("quote") };
 }
 
-function installDecider(answer: Answer = () => scoreResponse(0.9)): FakeDecider {
+function installDecider(answer: Answer = () => scoreResponse("all")): FakeDecider {
   const original = globalThis.fetch;
   const calls: FakeDecider["calls"] = [];
   globalThis.fetch = (async (url: string | URL | Request, init?: RequestInit) => {
@@ -102,7 +108,7 @@ function readJson(path: string): any {
   return JSON.parse(readFileSync(path, "utf8"));
 }
 
-/** check.json without any `support` field, report.json without `support_scored`. */
+/** check.json without any `support` field, report.json without `support_scored` and `support_answers`. */
 function withoutScore(name: string, text: string | null): unknown {
   if (text === null) return null;
   if (name === "check.json") {
@@ -111,7 +117,7 @@ function withoutScore(name: string, text: string | null): unknown {
     return check;
   }
   if (name === "report.json") {
-    const { support_scored: _n, ...rest } = JSON.parse(text);
+    const { support_scored: _n, support_answers: _a, ...rest } = JSON.parse(text);
     return rest;
   }
   return text;
@@ -120,21 +126,24 @@ function withoutScore(name: string, text: string | null): unknown {
 // --- AC1: the score per fact and the count -------------------------------------
 
 test("AC1: each fact that passed the quote check gets a support field in check.json; a refused fact gets none", async () => {
-  const decider = installDecider((pair) => scoreResponse(pair.value === GOOD_FACT.value ? 0.9 : 0.2));
+  const decider = installDecider((pair) => (pair.value === GOOD_FACT.value ? scoreResponse("all", 0.9) : scoreResponse("part", 0.6)));
   const s = await openSession(ON);
   try {
     await callFinish(s.pi, "fin-1", BAD_PAYLOAD);
     const check = readJson(join(s.exportDir, CHECK_FILENAME));
     const byId = Object.fromEntries(check.facts.map((f: any) => [f.id, f]));
     assert.equal(byId.f1.verdict, "passed");
-    assert.deepEqual(byId.f1.support, { status: "scored", score: 0.9, at_or_above_cutoff: true });
+    assert.deepEqual(byId.f1.support, { status: "scored", answer: "all", supports: true, confidence: 0.9 });
     assert.equal(byId.f3.verdict, "passed");
-    assert.deepEqual(byId.f3.support, { status: "scored", score: 0.2, at_or_above_cutoff: false });
+    assert.deepEqual(byId.f3.support, { status: "scored", answer: "part", supports: false, confidence: 0.6 });
     assert.equal(byId.f2.verdict, "refused");
     assert.ok(!("support" in byId.f2), "a fact the quote check refused is not scored and carries no field");
 
     const report = readJson(join(s.exportDir, REPORT_FILENAME));
     assert.equal(report.support_scored, 2);
+    // One count per contract option, in contract order, zeros included.
+    assert.deepEqual(report.support_answers, { ...zeroCounts(), all: 1, part: 1 });
+    assert.deepEqual(Object.keys(report.support_answers), OPTION_KEYS);
     const schema = readJson(join(CONTRACT_DIR, "schemas", "report.schema.json"));
     for (const key of Object.keys(report)) assert.ok(key in schema.properties, `report has a key the schema forbids: ${key}`);
     // The quote-check counts are untouched by the score.
@@ -159,7 +168,7 @@ test("AC1: each fact that passed the quote check gets a support field in check.j
 
 test("AC1: a fact with no score carries a not-scored mark with its reason, and is not counted", async () => {
   const decider = installDecider((pair) =>
-    pair.value === GOOD_FACT.value ? scoreResponse(0.7) : new Response("not json", { status: 200 }),
+    pair.value === GOOD_FACT.value ? scoreResponse("mostly", 0.7) : new Response("not json", { status: 200 }),
   );
   const s = await openSession(ON);
   try {
@@ -168,7 +177,9 @@ test("AC1: a fact with no score carries a not-scored mark with its reason, and i
     const f3 = check.facts.find((f: any) => f.id === "f3");
     assert.equal(f3.support.status, "not_scored");
     assert.equal(f3.support.reason, "malformed");
-    assert.equal(readJson(join(s.exportDir, REPORT_FILENAME)).support_scored, 1);
+    const report = readJson(join(s.exportDir, REPORT_FILENAME));
+    assert.equal(report.support_scored, 1);
+    assert.deepEqual(report.support_answers, { ...zeroCounts(), mostly: 1 }, "a fact not scored is in no count");
   } finally {
     decider.restore();
     s.dispose();
@@ -255,7 +266,7 @@ function withSupportText(answer: string, mark: string | readonly string[]): stri
 function withoutSupportText(answer: string): string {
   return answer
     .replace(`\n\n${SUPPORT_LEGEND}`, "")
-    .replace(/^(- f\d+: .*; quote found in the saved result); [^;()]*\)$/gm, "$1)");
+    .replace(/^(- f\d+: .*; quote found in the saved result); [^()]*\)$/gm, "$1)");
 }
 
 // --- AC2: the score changes nothing the check decides ---------------------------
@@ -273,6 +284,7 @@ test("AC2: with the switch off nothing is sent and every export file is byte-ide
         }
         assert.doesNotMatch(String(files["check.json"]), /"support"/);
         assert.doesNotMatch(String(files["report.json"]), /support_scored/);
+        assert.doesNotMatch(String(files["report.json"]), /support_answers/);
       }
     } finally {
       decider.restore();
@@ -280,12 +292,18 @@ test("AC2: with the switch off nothing is sent and every export file is byte-ide
   }
 });
 
-for (const [label, score] of [
-  ["low", 0],
-  ["high", 1],
-] as const) {
-  test(`AC2/AC6: with every score ${label}, accepted, the refusals and the counts match the switch-off hand-back byte for byte`, async () => {
-    const decider = installDecider(() => scoreResponse(score));
+/** The answer.md mark for each shipped option (deviation d4): the option in words, never a number. */
+const MARKS: Record<string, string> = {
+  all: "quote supports the value",
+  mostly: "quote supports the main claim; a detail of the value is not in the quote",
+  part: "quote shows only part of the value",
+  little: "quote shows little of the value",
+  none: "quote does not show the value",
+};
+
+for (const choice of Object.keys(MARKS)) {
+  test(`AC2/AC6: with every answer ${choice}, accepted, the refusals and the counts match the switch-off hand-back byte for byte`, async () => {
+    const decider = installDecider(() => scoreResponse(choice));
     try {
       const steps = await scenario(ON);
       assert.ok(decider.calls.length > 0, "the score was asked");
@@ -297,7 +315,8 @@ for (const [label, score] of [
         if (golden["answer.md"] === null) {
           assert.equal(files["answer.md"], null, `${step}/answer.md`);
         } else {
-          const mark = `${score === 1 ? "quote supports the value" : "quote may not support the value"}, support ${score.toFixed(2)}`;
+          const mark = MARKS[choice]!;
+          assert.doesNotMatch(files["answer.md"]!, /support \d/, "no number is shown");
           assert.equal(files["answer.md"], withSupportText(golden["answer.md"], mark), `${step}/answer.md`);
           assert.equal(withoutSupportText(files["answer.md"]!), golden["answer.md"], `${step}/answer.md without the support text`);
         }
@@ -320,6 +339,7 @@ for (const [label, score] of [
           );
         }
         assert.equal(typeof report.support_scored, "number", `${step}: the count is written`);
+        assert.equal(report.support_answers[choice], report.support_scored, `${step}: every answer counted under ${choice}`);
       }
     } finally {
       decider.restore();
@@ -371,7 +391,7 @@ test("AC3: a hand-back refused and answered again with the same fact produces on
 // --- review finding 1: the quote-check files come before the score -----------
 
 /** A decider whose answers wait until `release` is called; `asked` resolves on the first request. */
-function heldDecider(score = 0.9) {
+function heldDecider(choice = "all") {
   let release!: () => void;
   const gate = new Promise<void>((resolve) => (release = resolve));
   let asked!: () => void;
@@ -379,7 +399,7 @@ function heldDecider(score = 0.9) {
   const decider = installDecider(async () => {
     asked();
     await gate;
-    return scoreResponse(score);
+    return scoreResponse(choice);
   });
   return { decider, release, firstAsk };
 }
@@ -600,8 +620,8 @@ test("AC5: the import scan catches a module that performs a network call", () =>
 
 // --- AC6: no refusal or retry from a score ---------------------------------------
 
-test("AC6: in enforce mode a passing hand-back whose every score is 0 is accepted and finishes", async () => {
-  const decider = installDecider(() => scoreResponse(0));
+test("AC6: in enforce mode a passing hand-back whose every answer is none is accepted and finishes", async () => {
+  const decider = installDecider(() => scoreResponse("none"));
   const s = await openSession({ ...ON, ASSOCIATE_CHECK_MODE: "enforce" });
   try {
     const result = await callFinish(s.pi, "fin-1", GOOD_PAYLOAD);
@@ -610,7 +630,8 @@ test("AC6: in enforce mode a passing hand-back whose every score is 0 is accepte
     const check = readJson(join(s.exportDir, CHECK_FILENAME));
     assert.equal(check.accepted, true);
     assert.deepEqual(check.would_refuse, []);
-    assert.equal(check.facts[0].support.at_or_above_cutoff, false);
+    assert.equal(check.facts[0].support.answer, "none");
+    assert.equal(check.facts[0].support.supports, false);
     assert.ok(!existsSync(join(s.exportDir, "rejected_handback.json")), "nothing was rejected");
   } finally {
     decider.restore();

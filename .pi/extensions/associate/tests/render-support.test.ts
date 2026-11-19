@@ -4,8 +4,8 @@
  *
  * One group per acceptance criterion:
  *   1. for a scored fact, answer.md shows the quote-found marker and the
- *      support marker with its score as separate text; a fact that was not
- *      scored says so with a plain reason;
+ *      support marker, the decider's answer in words (never a number), as
+ *      separate text; a fact that was not scored says so with a plain reason;
  *   2. the text never contains the word accuracy and reads without knowledge
  *      of the mechanism behind the score;
  *   3. with no support results the answer is byte-identical to today's.
@@ -63,9 +63,18 @@ function fixture(facts: readonly Record<string, unknown>[] = [GOOD_FACT, BAD_FAC
   return { payload, check, summary: payload.summary };
 }
 
-function scored(score: number, atOrAbove: boolean): SupportResult {
-  return { status: "scored", score, at_or_above_cutoff: atOrAbove };
+function scored(answer: string, supports = answer === "all" || answer === "mostly", confidence = 0.9): SupportResult {
+  return { status: "scored", answer, supports, confidence };
 }
+
+/** The mark for each shipped option (deviation d4). */
+const MARKS: ReadonlyArray<readonly [string, string]> = [
+  ["all", "quote supports the value"],
+  ["mostly", "quote supports the main claim; a detail of the value is not in the quote"],
+  ["part", "quote shows only part of the value"],
+  ["little", "quote shows little of the value"],
+  ["none", "quote does not show the value"],
+];
 
 function notScored(reason: string, detail?: string): SupportResult {
   return { status: "not_scored", reason, ...(detail ? { detail } : {}) } as SupportResult;
@@ -82,35 +91,40 @@ const PYTHON_FACT_LINE = /^- [fvoa]\d+: .*\([^()]*; [^()]*\)$/;
 
 // --- AC1: both markers, as separate text ----------------------------------------
 
-test("AC1: a fact scored at or above the cut-off shows quote found and, separately, the support marker with its score", () => {
+test("AC1: a scored fact shows quote found and, separately, the support marker: the answer in words", () => {
   const base = fixture();
   assert.deepEqual(base.check.facts.map((f) => f.verdict), ["passed", "refused", "passed"]);
-  const answer = renderAnswer({ ...base, support: [scored(0.97, true), undefined, scored(0.034, false)] });
-  assert.equal(lineOf(answer, "f1"), `${F1_HEAD}${QUOTE_FOUND}; quote supports the value, support 0.97)`);
+  const answer = renderAnswer({ ...base, support: [scored("all", true, 0.97), undefined, scored("part", false, 0.4)] });
+  assert.equal(lineOf(answer, "f1"), `${F1_HEAD}${QUOTE_FOUND}; quote supports the value)`);
   assert.equal(
     lineOf(answer, "f3"),
-    `- f3: worker — ""worker": ["execution"" (w1, file; ${QUOTE_FOUND}; quote may not support the value, support 0.03)`,
+    `- f3: worker — ""worker": ["execution"" (w1, file; ${QUOTE_FOUND}; quote shows only part of the value)`,
   );
 });
 
-test("AC1: which wording a scored fact gets follows at_or_above_cutoff, never the number", () => {
+test("AC1: each option has its own words, and no number is ever shown", () => {
   const base = fixture();
-  const answer = renderAnswer({ ...base, support: [scored(0.99, false), undefined, scored(0.01, true)] });
-  assert.ok(lineOf(answer, "f1").endsWith("; quote may not support the value, support 0.99)"));
-  assert.ok(lineOf(answer, "f3").endsWith("; quote supports the value, support 0.01)"));
+  for (const [answer, words] of MARKS) {
+    for (const confidence of [0, 0.126, 0.5, 1]) {
+      const text = renderAnswer({ ...base, support: [scored(answer, answer === "none", confidence), undefined, undefined] });
+      assert.equal(lineOf(text, "f1"), `${F1_HEAD}${QUOTE_FOUND}; ${words})`, `${answer} ${confidence}`);
+      assert.doesNotMatch(lineOf(text, "f1"), /\d\.\d|support \d/);
+    }
+  }
 });
 
-test("AC1: the score is written with two decimals", () => {
+test("AC1: which words a scored fact gets follow its answer, not its supports flag", () => {
   const base = fixture();
-  for (const [score, text] of [
-    [0, "0.00"],
-    [1, "1.00"],
-    [0.5, "0.50"],
-    [0.126, "0.13"],
-  ] as const) {
-    const answer = renderAnswer({ ...base, support: [scored(score, true), undefined, undefined] });
-    assert.ok(lineOf(answer, "f1").endsWith(`, support ${text})`), lineOf(answer, "f1"));
-  }
+  const answer = renderAnswer({ ...base, support: [scored("none", true), undefined, scored("all", false)] });
+  assert.ok(lineOf(answer, "f1").endsWith("; quote does not show the value)"));
+  assert.ok(lineOf(answer, "f3").endsWith("; quote supports the value)"));
+});
+
+test("AC1: an answer the renderer has no words for is shown by its key", () => {
+  const base = fixture();
+  const answer = renderAnswer({ ...base, support: [scored("partly", false), undefined, scored("toString", false)] });
+  assert.ok(lineOf(answer, "f1").endsWith("; support answer: partly)"), lineOf(answer, "f1"));
+  assert.ok(lineOf(answer, "f3").endsWith("; support answer: toString)"), lineOf(answer, "f3"));
 });
 
 test("AC1: a fact that was not scored says so with a plain reason, after the quote-found marker", () => {
@@ -122,15 +136,17 @@ test("AC1: a fact that was not scored says so with a plain reason, after the quo
   }
   const odd = renderAnswer({ ...base, support: [notScored("some_new_reason"), undefined, undefined] });
   assert.equal(lineOf(odd, "f1"), `${F1_HEAD}${QUOTE_FOUND}; support not scored: the check was unavailable)`);
-  const nan = renderAnswer({ ...base, support: [scored(Number.NaN, true), undefined, undefined] });
-  assert.equal(lineOf(nan, "f1"), `${F1_HEAD}${QUOTE_FOUND}; support not scored: the check was unavailable)`);
+  for (const odd of [7, "", "  ", undefined]) {
+    const shown = renderAnswer({ ...base, support: [scored(odd as never), undefined, undefined] });
+    assert.equal(lineOf(shown, "f1"), `${F1_HEAD}${QUOTE_FOUND}; support not scored: the check was unavailable)`, String(odd));
+  }
 });
 
 test("AC1: the two markers are separate pieces of text on the fact's line", () => {
   const base = fixture();
-  const line = lineOf(renderAnswer({ ...base, support: [scored(0.97, true), undefined, undefined] }), "f1");
+  const line = lineOf(renderAnswer({ ...base, support: [scored("part"), undefined, undefined] }), "f1");
   const pieces = line.slice(line.lastIndexOf("(") + 1, -1).split("; ");
-  assert.deepEqual(pieces, ["w1, file", QUOTE_FOUND, "quote supports the value, support 0.97"]);
+  assert.deepEqual(pieces, ["w1, file", QUOTE_FOUND, "quote shows only part of the value"]);
 });
 
 test("AC1: a fact with no support result, and a fact the check did not pass, render as today", () => {
@@ -138,7 +154,7 @@ test("AC1: a fact with no support result, and a fact the check did not pass, ren
   assert.deepEqual(base.check.facts.map((f) => f.verdict), ["passed", "unchecked", "passed"]);
   const plain = renderAnswer(base);
   // A result offered for a fact whose quote was not checked is not shown: there is no quote-found marker beside it.
-  const answer = renderAnswer({ ...base, support: [scored(0.97, true), scored(0.9, true), undefined] });
+  const answer = renderAnswer({ ...base, support: [scored("all"), scored("all"), undefined] });
   assert.equal(lineOf(answer, "f4"), lineOf(plain, "f4"));
   assert.equal(lineOf(answer, "f3"), lineOf(plain, "f3"));
   assert.notEqual(lineOf(answer, "f1"), lineOf(plain, "f1"));
@@ -146,7 +162,11 @@ test("AC1: a fact with no support result, and a fact the check did not pass, ren
 
 test("AC1: every fact line keeps the shape the Python answer reader drops as a harness line", () => {
   const base = fixture();
-  const results = [scored(0.97, true), scored(0.03, false), ...NOT_SCORED_PHRASES.map(([reason]) => notScored(reason))];
+  const results = [
+    ...MARKS.map(([answer]) => scored(answer)),
+    scored("partly"),
+    ...NOT_SCORED_PHRASES.map(([reason]) => notScored(reason)),
+  ];
   for (const result of results) {
     const answer = renderAnswer({ ...base, support: [result, undefined, result] });
     for (const id of ["f1", "f3"]) assert.match(lineOf(answer, id), PYTHON_FACT_LINE);
@@ -160,7 +180,7 @@ test("the legend gains one line on the support marker when at least one shown fa
   const plain = renderAnswer(base);
   assert.ok(!plain.includes(SUPPORT_LEGEND));
   for (const support of [
-    [scored(0.97, true), undefined, undefined],
+    [scored("all"), undefined, undefined],
     [undefined, undefined, notScored("timeout")],
   ]) {
     const lines = renderAnswer({ ...base, support }).split("\n");
@@ -173,17 +193,21 @@ test("the legend gains one line on the support marker when at least one shown fa
   }
   assert.ok(!SUPPORT_LEGEND.includes("\n"));
   assert.match(SUPPORT_LEGEND, /separate/);
-  assert.match(SUPPORT_LEGEND, /quote, read on its own, shows the value/);
+  assert.equal(
+    SUPPORT_LEGEND,
+    'The support mark is a second, separate check: how much of the value the quote, read on its own, shows, ' +
+      'or "support not scored" when that check did not run. Neither mark means the value is true.',
+  );
   assert.match(SUPPORT_LEGEND, /Neither .* means the value is true\.$/);
   // A result only for a fact that is not shown (refused) adds no legend.
-  assert.equal(renderAnswer({ ...base, support: [undefined, scored(0.9, true), undefined] }), plain);
+  assert.equal(renderAnswer({ ...base, support: [undefined, scored("all"), undefined] }), plain);
 });
 
 // --- AC2: the wording -------------------------------------------------------------
 
 test("AC2: the text never says accuracy and names nothing of the mechanism behind the score", () => {
   const base = fixture();
-  const results = [scored(0.97, true), scored(0.03, false), ...NOT_SCORED_PHRASES.map(([reason]) => notScored(reason, "detail"))];
+  const results = [...MARKS.map(([answer]) => scored(answer)), ...NOT_SCORED_PHRASES.map(([reason]) => notScored(reason, "detail"))];
   for (const result of results) {
     const answer = renderAnswer({ ...base, support: [result, undefined, result], finalMessage: "Done." });
     assert.doesNotMatch(answer, /accura/i, answer);
