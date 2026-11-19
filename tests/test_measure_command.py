@@ -765,6 +765,42 @@ def test_arms_file_values_reach_the_runner(setup, fake, capsys):
     assert fake.calls[0]["repeats"] == 2
 
 
+def test_an_arm_can_set_the_support_score(setup, fake, capsys):
+    head = setup.harness_head
+    base = {"harness_commit": head, "model": "worker"}
+    arms = [
+        {"name": "s-on", **base, "support_score": "on"},
+        {"name": "s-off", **base, "support_score": "off"},
+        {"name": "s-default", **base},
+    ]
+    setup.arms = arms_file(setup.tmp, arms)
+    capsys.readouterr()
+    assert main(setup.run_args()) == 0
+    got = {a.name: a.support_score for a in fake.calls[0]["arms"]}
+    assert got == {"s-on": "on", "s-off": "off", "s-default": None}
+
+
+@pytest.mark.parametrize("value", ["yes", True, 1, None, "ON"])
+def test_an_arm_with_another_support_score_value_is_refused(setup, fake, capsys, value):
+    arms = two_arms(setup.harness_head)
+    arms[0]["support_score"] = value
+    rc, err = run_with_arms(setup, capsys, arms)
+    assert rc == 1
+    assert "support_score must be one of on, off" in err
+    assert fake.calls == []
+
+
+def test_explain_and_learn_name_the_support_score_arm_key(capsys):
+    assert main(["explain", "measure"]) == 0
+    out = capsys.readouterr().out
+    for needle in ("support_score", "contract default", "--support-score"):
+        assert needle in out, needle
+    assert main(["learn"]) == 0
+    out = capsys.readouterr().out
+    assert "--support-score" in out
+    assert "support_score" in out
+
+
 def test_tasks_filter_runs_only_the_named_tasks(setup, fake, capsys):
     capsys.readouterr()
     assert main(setup.run_args("--tasks-filter", "t-two")) == 0

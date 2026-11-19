@@ -715,6 +715,7 @@ value is not inherited.
 | `ASSOCIATE_REQUIRE_WEB`, `ASSOCIATE_SKIP_WEB` | unset | `hatch_build.py` | At build time: `1` fails a build with no `web/dist`, or leaves the UI out of the wheel on purpose. |
 | `ASSOCIATE_API_URL` | `http://127.0.0.1:8794` | `web/vite.config.ts` | The API the UI's dev server (`npm run dev`) proxies `/api` to. |
 | `ASSOCIATE_DESIGN_SOURCE_REPO` | unset | `web/scripts/check-tokens.mjs` | A culture-rules checkout; when set, the tokens check also compares `tokens.css` with it at the pinned commit. |
+| `ASSOCIATE_SUPPORT_SCORE` | absent (the model's switch in `accuracy.json` `support_score.enabled`) | `lib/supportswitch.ts`; set by `associate run --support-score`, never inherited | `on` or `off` for this run's support score (a report-only signal; decider-score task t7). `on` applies only to a model the contract's settings list; any other value is ignored with one stderr line. Built and unit-tested: nothing calls the reader yet and no run has been measured with it. A `measure` arm sets it with `"support_score"`. |
 | `ASSOCIATE_BENCH_SUITES` | `associate/bench/suites.json` | `associate/bench/public.py` | An alternative suites file for `associate bench`. |
 | `ASSOCIATE_PROVIDER`, `ASSOCIATE_REASONING_EFFORT`, `ASSOCIATE_REASONING` | — | `associate/bench/config.py` | Only labels in a bench row's configuration stamp (provider falls back to `ASSOCIATE_BASE_URL`); they change nothing on the wire. Reasoning is per model in `models.json`. |
 

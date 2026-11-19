@@ -214,6 +214,28 @@ def test_check_mode_flag_is_recorded_in_the_result(
     assert out["accuracy"]["check_mode_used"] == "enforce"
 
 
+def test_support_score_is_null_in_the_result_without_the_flag(
+    checkout: Path, tmp_path: Path, capsys: pytest.CaptureFixture[str]
+):
+    assert _cli(checkout, tmp_path, "stub") == 0
+    assert _json(capsys)["support_score"] is None
+
+
+@pytest.mark.parametrize("setting", ["on", "off"])
+def test_support_score_flag_is_recorded_in_the_result(
+    checkout: Path, tmp_path: Path, capsys: pytest.CaptureFixture[str], setting: str
+):
+    assert _cli(checkout, tmp_path, "stub", "--support-score", setting) == 0
+    assert _json(capsys)["support_score"] == setting
+
+
+@pytest.mark.parametrize("value", ["yes", "ON", "true", ""])
+def test_a_bad_support_score_exits_1(checkout: Path, tmp_path: Path, value: str):
+    with pytest.raises(SystemExit) as raised:
+        _cli(checkout, tmp_path, "stub", "--support-score", value)
+    assert raised.value.code == EXIT_USER_ERROR
+
+
 def test_a_bad_check_mode_exits_1(checkout: Path, tmp_path: Path):
     with pytest.raises(SystemExit) as raised:
         _cli(checkout, tmp_path, "stub", "--check-mode", "strict")
@@ -323,7 +345,8 @@ root = Path(os.environ["ASSOCIATE_EXPORT_ROOT"])
 export = root / os.environ["ASSOCIATE_SESSION_ID"] / "export"
 export.mkdir(parents=True, exist_ok=True)
 (root / "env-seen.json").write_text(
-    json.dumps({{"mode": os.environ.get("ASSOCIATE_CHECK_MODE")}}), encoding="utf-8"
+    json.dumps({{"mode": os.environ.get("ASSOCIATE_CHECK_MODE"),
+                "support": os.environ.get("ASSOCIATE_SUPPORT_SCORE")}}), encoding="utf-8"
 )
 ready = {{
     "ok": True, "extension_version": "0.1.0", "contract_version": 1,
@@ -464,6 +487,34 @@ def test_check_mode_reaches_the_extension_as_an_environment_variable(tmp_path: P
 def test_an_operators_ambient_check_mode_is_not_inherited(tmp_path: Path):
     _, root = _pi(tmp_path, refused=False, env={"ASSOCIATE_CHECK_MODE": "enforce"})
     assert json.loads((root / "env-seen.json").read_text())["mode"] is None
+
+
+@pytest.mark.parametrize("setting", ["on", "off"])
+def test_support_score_reaches_the_extension_as_an_environment_variable(
+    tmp_path: Path, setting: str
+):
+    _, root = _pi(tmp_path, refused=False, support_score=setting)
+    assert json.loads((root / "env-seen.json").read_text())["support"] == setting
+
+
+@pytest.mark.parametrize("ambient", ["on", "off"])
+def test_an_operators_ambient_support_score_is_not_inherited(tmp_path: Path, ambient: str):
+    _, root = _pi(tmp_path, refused=False, env={"ASSOCIATE_SUPPORT_SCORE": ambient})
+    assert json.loads((root / "env-seen.json").read_text())["support"] is None
+
+
+def test_the_run_flag_wins_over_an_ambient_support_score(tmp_path: Path):
+    _, root = _pi(
+        tmp_path, refused=False, env={"ASSOCIATE_SUPPORT_SCORE": "on"}, support_score="off"
+    )
+    assert json.loads((root / "env-seen.json").read_text())["support"] == "off"
+
+
+def test_the_pi_adapter_refuses_any_other_support_score_value():
+    from associate.harness.base import HarnessError
+
+    with pytest.raises(HarnessError, match="support-score"):
+        PiHarness(support_score="maybe")
 
 
 def test_an_export_with_no_facts_is_not_applicable_not_an_error(tmp_path: Path):

@@ -31,7 +31,8 @@ Commands
   associate overview           Descriptive snapshot of the agent.
   associate doctor             Check the agent-identity invariants.
   associate run [prompt]       Run one task on a harness adapter (--model,
-                               --test-command), or fail closed.
+                               --test-command, --check-mode, --support-score on|off),
+                               or fail closed.
   associate bench              Run a public suite (--suite NAME --model KEY) or list suites.
   associate runs start         Start a detached run on a checkout (--checkout, --model,
                                --test-command, instruction); prints a run id at once.
@@ -49,7 +50,8 @@ Commands
   associate check <export-dir> Re-check an export's hand-back facts; print counts.
   associate measure run        Run a comparison of arms over tasks (--arms, --repeats,
                                --output-dir, --detach); needs the committed difference note
-                               unless --harness stub (plumbing only).
+                               unless --harness stub (plumbing only). An arm may set
+                               support_score (on or off); each stored record names it.
   associate measure status <dir>  Runs stored, failed and not yet stored; the lock; the log.
   associate measure report <dir>  The table of the stored results (--reading, --json).
   associate measure sample <dir>  The blank hand-grading sheet for a fixed-seed draw.
@@ -98,7 +100,9 @@ def _as_json_payload() -> dict[str, object]:
                 "path": ["run"],
                 "summary": (
                     "Run one task on a harness adapter (--model picks a registry model; "
-                    "--test-command names checks the harness runs before merging); "
+                    "--test-command names checks the harness runs before merging; "
+                    "--support-score on|off overrides the model's support-score switch "
+                    "for one run); "
                     "exits 2 without serving when the adapter cannot prove its "
                     "extension loaded."
                 ),
@@ -146,7 +150,8 @@ def _as_json_payload() -> dict[str, object]:
                 "path": ["measure", "run"],
                 "summary": (
                     "Run a comparison of arms over tasks and store one graded result per task, "
-                    "arm and repeat; --detach runs it in the background. Refuses without the "
+                    "arm and repeat; --detach runs it in the background. An arm may set "
+                    "support_score (on or off), named in each stored record. Refuses without the "
                     "committed difference note except on the stub harness (plumbing only)."
                 ),
             },
