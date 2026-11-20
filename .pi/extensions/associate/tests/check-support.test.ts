@@ -468,7 +468,7 @@ test("AC3: the description and the schema tell the model the optional value exis
     const schema = r.tool.parameters;
     assert.equal(schema.properties.value.type, "string");
     assert.match(schema.properties.value.description, /optional/i);
-    assert.deepEqual([...schema.required].sort(), ["quote", "source"]);
+    assert.deepEqual([...schema.required].sort(), ["source"]);
     assert.match(r.tool.description, /value/);
     assert.match(r.tool.description, /support/);
     assert.match(r.tool.description, /not .*(true|correct)/i, "the description does not let the key read as truth");

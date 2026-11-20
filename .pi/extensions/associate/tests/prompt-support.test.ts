@@ -184,9 +184,21 @@ for (const [label, re] of BANNED) {
   });
 }
 
-test("t8: the check_quote passages are the same in all four model prompts", () => {
-  const passages = MODEL_PROMPTS.map(([, text]) => checkQuotePassages(text));
-  for (const [i, passage] of passages.entries()) {
-    assert.equal(passage, passages[0], `${MODEL_PROMPTS[i]![0]} differs from ${MODEL_PROMPTS[0]![0]}`);
+// Strict facts (plan t8): worker and cortex also describe the pointer form of
+// check_quote; senses and super-vl keep the quote form. Each group is the same.
+for (const group of [/(worker|cortex)\.md$/, /(senses|super-vl)\.md$/]) {
+  test(`t8: the check_quote passages are the same in the prompts matching ${group}`, () => {
+    const members = MODEL_PROMPTS.filter(([name]) => group.test(name));
+    assert.ok(members.length >= 2);
+    const passages = members.map(([, text]) => checkQuotePassages(text));
+    for (const [i, passage] of passages.entries()) {
+      assert.equal(passage, passages[0], `${members[i]![0]} differs from ${members[0]![0]}`);
+    }
+  });
+}
+
+test("t8: worker and cortex tell the model that check_quote takes a pointer", () => {
+  for (const [name, text] of MODEL_PROMPTS.filter(([n]) => /(worker|cortex)\.md$/.test(n))) {
+    assert.match(checkQuotePassages(text), /give\s+a\s+walk\s+id\s+and\s+`at`/, name);
   }
 });
