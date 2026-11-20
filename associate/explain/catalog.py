@@ -272,8 +272,11 @@ fact whose quote was found, the decider is asked one choice question: how much o
 the value the quote, on its own, shows, answered `all`, `mostly`, `part`, `little`
 or `none`, the options in accuracy.json `support_score.options`). The switch, the
 question and their readers in the extension are built and unit-tested against a
-fake decider; the option wording was measured offline on a labelled set; no
-associate run has used it, and it is not a measure of accuracy.
+fake decider; the option wording was measured offline on a labelled set. One
+measurement had it on in 18 `worker` runs and off in 18, in report mode, and showed
+no difference in what the model handed back
+(docs/notes/support-score-broad-measurement.md). The switch is off for every model,
+and the score is not a measure of accuracy.
 
 When the export holds a support score, the result carries it beside `accuracy`,
 copied from the extension's `check.json` and never recomputed (the Python side

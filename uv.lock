@@ -41,7 +41,7 @@ wheels = [
 
 [[package]]
 name = "associate"
-version = "0.14.1"
+version = "0.14.2"
 source = { editable = "." }
 dependencies = [
     { name = "evidence-cli" },

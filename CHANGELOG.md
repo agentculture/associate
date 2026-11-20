@@ -5,6 +5,22 @@ All notable changes to this project will be documented in this file.
 Format follows [Keep a Changelog](https://keepachangelog.com/). This project
 adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.14.2] - 2026-11-20
+
+The closing task of the support-score plan (t13;
+`docs/plans/2026-11-19-associate-decider-fact-score.md`). No behaviour changed.
+
+### Added
+
+- **A wording test** (`tests/test_support_wording.py`): it fails when a sentence in a text of the support-score work calls the support score, the count of passed or scored facts, or the quote-found count accuracy, accurate, or a score of correctness or truth. It reads the `support_score` texts in `accuracy.json`, the strings and comments of the extension and Python files that render or print the score, the model prompts, the four support-score documents, the spec and plan, `CLAUDE.md`, `AGENTS.md`, `README.md`, `docs/notes/accuracy-checks.md`, and every changelog entry from 0.14.0 on. A sentence that denies the claim is allowed, and so are proper names; the allowed patterns are a short list in the test. The rule is by sentence and by word: it does not see a claim made through a pronoun alone in a file that is not only about the score.
+- `docs/notes/accuracy-checks.md` describes the support score: what it asks, that it is report-only, off for every model and not an entry of `checks` (the spec records no motivating failure for it), what was measured on the labelled set and on the six broad tasks, and what was not measured.
+- lobes-cli follow-up issues: TO BE FILLED BY THE MAIN SESSION
+
+### Changed
+
+- `CLAUDE.md` and `associate explain associate run` no longer say that no run has used the support score: the 18 `check-on` `worker` runs of the broad measurement did, in report mode. The list of what is not measured now names what remains: no recorded run with the score on for `senses` or `cortex`, with reasoning off, in enforce mode, on the mesh path, in a spawned child or in a delegated run, and no grading by a person.
+- Two sentences the wording test found, both from 0.12.0: the description in `report.schema.json` put the method's name straight before the word counts and now reads "the counts the harness writes for one run of the accuracy method"; a docstring in `associate/harness/pi.py` now names the `accuracy` key in quotes. Neither changes what a schema accepts or what the code does.
+
 ## [0.14.1] - 2026-11-19
 
 ### Added

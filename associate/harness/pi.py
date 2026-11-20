@@ -890,7 +890,7 @@ class PiHarness(Harness):
     ) -> dict[str, Any]:
         """The result dict handed back by ``collect()``.
 
-        The accuracy fields come from the Python re-check run now, after the
+        The ``accuracy`` fields come from the Python re-check run now, after the
         model stopped (``associate.accuracy``); its counts are the ones
         reported, the extension's ``report.json`` supplying only ``unchecked_text``.
         """
