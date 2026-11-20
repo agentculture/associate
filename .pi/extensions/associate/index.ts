@@ -475,16 +475,19 @@ export default async function (pi: ExtensionAPI) {
     name: "finish",
     label: "Finish",
     description:
-      "End the task and hand the result back. The payload IS the deliverable: the facts you found " +
-      "(each a value, the walk id it came from, and a word-for-word quote of that entry's result), " +
+      "End the task and hand the result back. The payload IS the deliverable: the facts you found, " +
       "the alternatives you weighed, your verdicts with the facts they rest on, and what is still " +
-      "open with the check that would decide it. The harness checks every quote against the saved " +
+      "open with the check that would decide it. Each fact points at its evidence: give the walk id " +
+      "it came from (source), where in that result the evidence is (at: {lines: [first, last]} or " +
+      "{search: \"term\"}), its kind (direct, llm or derived) and, for a derived fact, based_on. " +
+      "Do not retype evidence: the harness copies the quoted text and the command from the saved " +
       "result and renders the answer from what passes; the summary is never a checked answer. " +
+      "Try a pointer with check_quote first. " +
       "associate never writes its result into the checkout — call finish instead.",
     promptSnippet: "Hand the finished result back as the payload; associate never writes it to disk",
     promptGuidelines: [
       "End every task with finish: its payload is the hand-back, and a result left only in chat is not delivered.",
-      "Give each fact the walk id shown on the tool result it came from and a quote copied word for word from that result.",
+      "Give each fact the walk id shown on the tool result it came from, at (where in that result the evidence is), its kind, and based_on when it is derived. Point; do not retype evidence.",
       "Give each statement passed to finish the walk entry ids that evidence it; a statement with none is reported as unreferenced.",
     ],
     // Plan t3 (c38): a list field sent as a string holding a JSON list is
@@ -501,12 +504,18 @@ export default async function (pi: ExtensionAPI) {
         Type.Array(
           Type.Object({
             id: text("Fact id: f1, f2, …"),
-            value: text("The value found, written as text: a number, an identifier, a path, or a short phrase."),
+            value: text(
+              "The value found, written as text: a number, an identifier, a path, or a short phrase. " +
+                "A direct fact may leave it out (the harness uses the copied text); an llm or derived fact needs it.",
+            ),
             source: text(
               "The walk id the fact came from, exactly as the harness line on that tool result showed it " +
                 "(w3), or a run label and a walk id for a prior or child run (prior:w3, c1:w2). Never a path.",
             ),
-            quote: text("Text copied word for word from that entry's result; it must contain a literal value."),
+            quote: text(
+              "Do not copy text from results into quote: point with at instead, and the harness copies the evidence. " +
+                "Older form: text copied word for word from that entry's result; it must contain a literal value.",
+            ),
             action: Type.Optional(
               Type.Boolean({
                 description:
@@ -517,21 +526,31 @@ export default async function (pi: ExtensionAPI) {
             // Strict facts (t1): contract fields only. Nothing reads them yet, and
             // value/quote stay required here until the strict hand-back task.
             kind: Type.Optional(
-              Type.String({ enum: ["direct", "llm", "derived"], description: "direct (default), llm, or derived." }),
+              Type.String({
+                enum: ["direct", "llm", "derived"],
+                description:
+                  "direct (default): the cited result itself shows it. llm: your judgement on what the evidence means; " +
+                  "say so, and give value. derived: follows from other facts; list them in based_on, and give value.",
+              }),
             ),
             at: Type.Optional(
               Type.Object(
                 {
                   lines: Type.Optional(
-                    Type.Array(Type.Number(), { minItems: 2, description: "First and last line, 1-based, inclusive." }),
+                    Type.Array(Type.Number(), {
+                      minItems: 2,
+                      description:
+                        "First and last line, from 1 at the first line below the walk id line; for a read result, " +
+                        "the line numbers shown at the start of each line.",
+                    }),
                   ),
-                  search: Type.Optional(text("A search term to find in the cited result.")),
+                  search: Type.Optional(text("A term; the first line of the cited result that contains it exactly is the evidence.")),
                 },
                 { description: "Where in the cited result the fact is read: exactly one of lines or search." },
               ),
             ),
             based_on: Type.Optional(
-              Type.Array(text("A fact id of this hand-back, e.g. f1."), { description: "For a derived fact: the facts it is drawn from." }),
+              Type.Array(text("A fact id of this hand-back, e.g. f1."), { description: "For a derived fact: the ids of the facts it follows from." }),
             ),
           }),
           { description: "What you found, each tied to one walk entry by a quote." },
