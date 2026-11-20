@@ -1,0 +1,34 @@
+{
+  "plan_slug": "associate-strict-facts",
+  "schema_version": 2,
+  "created": "2026-11-20T14:34:55Z",
+  "updated": "2026-11-20T14:34:55Z",
+  "deviations": [
+    {
+      "id": "d1",
+      "what": "The reviewer of every code task is associate on worker, not cortex, until this plan is done",
+      "task_ref": "t1",
+      "reason": "Operator, 2026-11-20: 'let's use only worker henceforth until this work / session / spec is done'. On task t1 a worker review with the ordered instructions handed back in 29 minutes with a finding that held; the cortex review with the first instructions made about 160 calls over two runs and did not hand back, and its second attempt with the ordered instructions was stopped unfinished when the operator decided",
+      "affects": [
+        "plan risk r4",
+        "t2",
+        "t3",
+        "t4",
+        "t5",
+        "t6",
+        "t7",
+        "t8",
+        "t9",
+        "t10",
+        "t14"
+      ],
+      "origin": "user",
+      "status": "approved",
+      "classification": "acceptable",
+      "seq": 1
+    }
+  ],
+  "evidence": [],
+  "deltas": [],
+  "supersessions": []
+}
