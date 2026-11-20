@@ -63,7 +63,11 @@
               "none"
             ],
             "mark_text": "evidence shows part of the value",
-            "derived_decides_drops": false
+            "derived_decides_drops": false,
+            "derived_passes": [
+              "yes",
+              "mostly"
+            ]
           },
           "support_passes": [
             "all",
@@ -206,7 +210,11 @@
               "none"
             ],
             "mark_text": "evidence shows part of the value",
-            "derived_decides_drops": false
+            "derived_decides_drops": false,
+            "derived_passes": [
+              "yes",
+              "mostly"
+            ]
           },
           "support_passes": [
             "all",
@@ -348,7 +356,11 @@
               "none"
             ],
             "mark_text": "evidence shows part of the value",
-            "derived_decides_drops": false
+            "derived_decides_drops": false,
+            "derived_passes": [
+              "yes",
+              "mostly"
+            ]
           },
           "support_passes": [
             "all",
@@ -491,7 +503,11 @@
               "none"
             ],
             "mark_text": "evidence shows part of the value",
-            "derived_decides_drops": false
+            "derived_decides_drops": false,
+            "derived_passes": [
+              "yes",
+              "mostly"
+            ]
           },
           "support_passes": [
             "all",
@@ -651,7 +667,11 @@
               "none"
             ],
             "mark_text": "evidence shows part of the value",
-            "derived_decides_drops": false
+            "derived_decides_drops": false,
+            "derived_passes": [
+              "yes",
+              "mostly"
+            ]
           },
           "support_passes": [
             "all",
@@ -810,7 +830,11 @@
               "none"
             ],
             "mark_text": "evidence shows part of the value",
-            "derived_decides_drops": false
+            "derived_decides_drops": false,
+            "derived_passes": [
+              "yes",
+              "mostly"
+            ]
           },
           "support_passes": [
             "all",
@@ -955,7 +979,11 @@
               "none"
             ],
             "mark_text": "evidence shows part of the value",
-            "derived_decides_drops": false
+            "derived_decides_drops": false,
+            "derived_passes": [
+              "yes",
+              "mostly"
+            ]
           },
           "support_passes": [
             "all",
@@ -1113,7 +1141,11 @@
               "none"
             ],
             "mark_text": "evidence shows part of the value",
-            "derived_decides_drops": false
+            "derived_decides_drops": false,
+            "derived_passes": [
+              "yes",
+              "mostly"
+            ]
           },
           "support_passes": [
             "all",
@@ -1278,7 +1310,11 @@
               "none"
             ],
             "mark_text": "evidence shows part of the value",
-            "derived_decides_drops": false
+            "derived_decides_drops": false,
+            "derived_passes": [
+              "yes",
+              "mostly"
+            ]
           },
           "support_passes": [
             "all",
@@ -1443,7 +1479,11 @@
               "none"
             ],
             "mark_text": "evidence shows part of the value",
-            "derived_decides_drops": false
+            "derived_decides_drops": false,
+            "derived_passes": [
+              "yes",
+              "mostly"
+            ]
           },
           "support_passes": [
             "all",
@@ -1610,7 +1650,11 @@
               "none"
             ],
             "mark_text": "evidence shows part of the value",
-            "derived_decides_drops": false
+            "derived_decides_drops": false,
+            "derived_passes": [
+              "yes",
+              "mostly"
+            ]
           },
           "support_passes": [
             "all",
@@ -1775,7 +1819,11 @@
               "none"
             ],
             "mark_text": "evidence shows part of the value",
-            "derived_decides_drops": false
+            "derived_decides_drops": false,
+            "derived_passes": [
+              "yes",
+              "mostly"
+            ]
           },
           "support_passes": [
             "all",
@@ -1940,7 +1988,11 @@
               "none"
             ],
             "mark_text": "evidence shows part of the value",
-            "derived_decides_drops": false
+            "derived_decides_drops": false,
+            "derived_passes": [
+              "yes",
+              "mostly"
+            ]
           },
           "support_passes": [
             "all",
@@ -2109,7 +2161,11 @@
               "none"
             ],
             "mark_text": "evidence shows part of the value",
-            "derived_decides_drops": false
+            "derived_decides_drops": false,
+            "derived_passes": [
+              "yes",
+              "mostly"
+            ]
           },
           "support_passes": [
             "all",
@@ -2261,7 +2317,11 @@
               "none"
             ],
             "mark_text": "evidence shows part of the value",
-            "derived_decides_drops": false
+            "derived_decides_drops": false,
+            "derived_passes": [
+              "yes",
+              "mostly"
+            ]
           },
           "support_passes": [
             "all",
@@ -2409,7 +2469,11 @@
               "none"
             ],
             "mark_text": "evidence shows part of the value",
-            "derived_decides_drops": false
+            "derived_decides_drops": false,
+            "derived_passes": [
+              "yes",
+              "mostly"
+            ]
           },
           "support_passes": [
             "all",
@@ -2568,7 +2632,11 @@
               "none"
             ],
             "mark_text": "evidence shows part of the value",
-            "derived_decides_drops": false
+            "derived_decides_drops": false,
+            "derived_passes": [
+              "yes",
+              "mostly"
+            ]
           },
           "support_passes": [
             "all",
@@ -2703,7 +2771,11 @@
               "none"
             ],
             "mark_text": "evidence shows part of the value",
-            "derived_decides_drops": false
+            "derived_decides_drops": false,
+            "derived_passes": [
+              "yes",
+              "mostly"
+            ]
           },
           "support_passes": [
             "all",
@@ -2875,7 +2947,11 @@
               "none"
             ],
             "mark_text": "evidence shows part of the value",
-            "derived_decides_drops": false
+            "derived_decides_drops": false,
+            "derived_passes": [
+              "yes",
+              "mostly"
+            ]
           },
           "support_passes": [
             "all",
@@ -3087,7 +3163,11 @@
               "none"
             ],
             "mark_text": "evidence shows part of the value",
-            "derived_decides_drops": false
+            "derived_decides_drops": false,
+            "derived_passes": [
+              "yes",
+              "mostly"
+            ]
           },
           "support_passes": [
             "all",
@@ -3294,7 +3374,11 @@
               "none"
             ],
             "mark_text": "evidence shows part of the value",
-            "derived_decides_drops": false
+            "derived_decides_drops": false,
+            "derived_passes": [
+              "yes",
+              "mostly"
+            ]
           },
           "support_passes": [
             "all",
@@ -3440,7 +3524,11 @@
               "none"
             ],
             "mark_text": "evidence shows part of the value",
-            "derived_decides_drops": false
+            "derived_decides_drops": false,
+            "derived_passes": [
+              "yes",
+              "mostly"
+            ]
           },
           "support_passes": [
             "all",
@@ -3596,7 +3684,11 @@
               "none"
             ],
             "mark_text": "evidence shows part of the value",
-            "derived_decides_drops": false
+            "derived_decides_drops": false,
+            "derived_passes": [
+              "yes",
+              "mostly"
+            ]
           },
           "support_passes": [
             "all",
@@ -3759,7 +3851,11 @@
               "none"
             ],
             "mark_text": "evidence shows part of the value",
-            "derived_decides_drops": false
+            "derived_decides_drops": false,
+            "derived_passes": [
+              "yes",
+              "mostly"
+            ]
           },
           "support_passes": [
             "all",
@@ -3908,7 +4004,11 @@
               "none"
             ],
             "mark_text": "evidence shows part of the value",
-            "derived_decides_drops": false
+            "derived_decides_drops": false,
+            "derived_passes": [
+              "yes",
+              "mostly"
+            ]
           },
           "support_passes": [
             "all",
@@ -4059,7 +4159,11 @@
               "none"
             ],
             "mark_text": "evidence shows part of the value",
-            "derived_decides_drops": false
+            "derived_decides_drops": false,
+            "derived_passes": [
+              "yes",
+              "mostly"
+            ]
           },
           "support_passes": [
             "all",
@@ -4193,7 +4297,11 @@
               "none"
             ],
             "mark_text": "evidence shows part of the value",
-            "derived_decides_drops": false
+            "derived_decides_drops": false,
+            "derived_passes": [
+              "yes",
+              "mostly"
+            ]
           },
           "support_passes": [
             "all",
@@ -4324,7 +4432,11 @@
               "none"
             ],
             "mark_text": "evidence shows part of the value",
-            "derived_decides_drops": false
+            "derived_decides_drops": false,
+            "derived_passes": [
+              "yes",
+              "mostly"
+            ]
           },
           "support_passes": [
             "all",
@@ -4468,7 +4580,11 @@
               "none"
             ],
             "mark_text": "evidence shows part of the value",
-            "derived_decides_drops": false
+            "derived_decides_drops": false,
+            "derived_passes": [
+              "yes",
+              "mostly"
+            ]
           },
           "support_passes": [
             "all",
@@ -4605,7 +4721,11 @@
               "none"
             ],
             "mark_text": "evidence shows part of the value",
-            "derived_decides_drops": false
+            "derived_decides_drops": false,
+            "derived_passes": [
+              "yes",
+              "mostly"
+            ]
           },
           "support_passes": [
             "all",
@@ -4742,7 +4862,11 @@
               "none"
             ],
             "mark_text": "evidence shows part of the value",
-            "derived_decides_drops": false
+            "derived_decides_drops": false,
+            "derived_passes": [
+              "yes",
+              "mostly"
+            ]
           },
           "support_passes": [
             "all",
@@ -4875,7 +4999,11 @@
               "none"
             ],
             "mark_text": "evidence shows part of the value",
-            "derived_decides_drops": false
+            "derived_decides_drops": false,
+            "derived_passes": [
+              "yes",
+              "mostly"
+            ]
           },
           "support_passes": [
             "all",
@@ -5014,7 +5142,11 @@
               "none"
             ],
             "mark_text": "evidence shows part of the value",
-            "derived_decides_drops": false
+            "derived_decides_drops": false,
+            "derived_passes": [
+              "yes",
+              "mostly"
+            ]
           },
           "support_passes": [
             "all",
@@ -5153,7 +5285,11 @@
               "none"
             ],
             "mark_text": "evidence shows part of the value",
-            "derived_decides_drops": false
+            "derived_decides_drops": false,
+            "derived_passes": [
+              "yes",
+              "mostly"
+            ]
           },
           "support_passes": [
             "all",
@@ -5293,7 +5429,11 @@
               "none"
             ],
             "mark_text": "evidence shows part of the value",
-            "derived_decides_drops": false
+            "derived_decides_drops": false,
+            "derived_passes": [
+              "yes",
+              "mostly"
+            ]
           },
           "support_passes": [
             "all",
@@ -5462,7 +5602,11 @@
               "none"
             ],
             "mark_text": "evidence shows part of the value",
-            "derived_decides_drops": false
+            "derived_decides_drops": false,
+            "derived_passes": [
+              "yes",
+              "mostly"
+            ]
           },
           "support_passes": [
             "all",
@@ -5703,7 +5847,11 @@
               "none"
             ],
             "mark_text": "evidence shows part of the value",
-            "derived_decides_drops": false
+            "derived_decides_drops": false,
+            "derived_passes": [
+              "yes",
+              "mostly"
+            ]
           },
           "support_passes": [
             "all",
@@ -5940,7 +6088,11 @@
               "none"
             ],
             "mark_text": "evidence shows part of the value",
-            "derived_decides_drops": false
+            "derived_decides_drops": false,
+            "derived_passes": [
+              "yes",
+              "mostly"
+            ]
           },
           "support_passes": [
             "all",
@@ -6080,7 +6232,7 @@
     },
     {
       "name": "derived_each_answer",
-      "note": "Derived facts answered yes, partly and no: each is shown with its answer and none is dropped (derived_decides_drops false).",
+      "note": "Derived facts answered yes, mostly, partly, little and no: each is shown with its answer and none is dropped (derived_decides_drops false).",
       "input": {
         "checkout_root": "/home/someone/git/proj",
         "walk": [
@@ -6164,6 +6316,36 @@
               "based_on": [
                 "f1"
               ]
+            },
+            {
+              "id": "f5",
+              "kind": "derived",
+              "source": "w1",
+              "at": {
+                "lines": [
+                  1,
+                  1
+                ]
+              },
+              "value": "the tests directory holds hundreds of entries",
+              "based_on": [
+                "f1"
+              ]
+            },
+            {
+              "id": "f6",
+              "kind": "derived",
+              "source": "w1",
+              "at": {
+                "lines": [
+                  1,
+                  1
+                ]
+              },
+              "value": "the project is tested well",
+              "based_on": [
+                "f1"
+              ]
             }
           ],
           "verdicts": [],
@@ -6179,7 +6361,11 @@
               "none"
             ],
             "mark_text": "evidence shows part of the value",
-            "derived_decides_drops": false
+            "derived_decides_drops": false,
+            "derived_passes": [
+              "yes",
+              "mostly"
+            ]
           },
           "support_passes": [
             "all",
@@ -6203,6 +6389,14 @@
           "f4": {
             "question": "derived",
             "option": "no"
+          },
+          "f5": {
+            "question": "derived",
+            "option": "mostly"
+          },
+          "f6": {
+            "question": "derived",
+            "option": "little"
           }
         },
         "returned_before": [],
@@ -6325,6 +6519,68 @@
               "value": "there are no tests",
               "evidence": "f1: (no value given; its copied quote) 604"
             }
+          },
+          {
+            "id": "f5",
+            "kind_stated": "derived",
+            "kind_checked": "derived",
+            "worded": true,
+            "status": "judged",
+            "strict_outcome": "pass",
+            "drop_reason": null,
+            "dropped_by": null,
+            "evidence": {
+              "quote": "604",
+              "command": "ls tests",
+              "command_from": "args_used",
+              "result_file": "results/w1.txt",
+              "lines": [
+                1,
+                1
+              ],
+              "run": null
+            },
+            "judge": {
+              "question": "derived",
+              "option": "mostly",
+              "reason": null
+            },
+            "sent": {
+              "question": "derived",
+              "value": "the tests directory holds hundreds of entries",
+              "evidence": "f1: (no value given; its copied quote) 604"
+            }
+          },
+          {
+            "id": "f6",
+            "kind_stated": "derived",
+            "kind_checked": "derived",
+            "worded": true,
+            "status": "judged",
+            "strict_outcome": "pass",
+            "drop_reason": null,
+            "dropped_by": null,
+            "evidence": {
+              "quote": "604",
+              "command": "ls tests",
+              "command_from": "args_used",
+              "result_file": "results/w1.txt",
+              "lines": [
+                1,
+                1
+              ],
+              "run": null
+            },
+            "judge": {
+              "question": "derived",
+              "option": "little",
+              "reason": null
+            },
+            "sent": {
+              "question": "derived",
+              "value": "the project is tested well",
+              "evidence": "f1: (no value given; its copied quote) 604"
+            }
           }
         ],
         "graph": {
@@ -6332,14 +6588,16 @@
             "f1",
             "f2",
             "f3",
-            "f4"
+            "f4",
+            "f5",
+            "f6"
           ],
           "refusals": []
         },
         "verdicts": [],
         "open_items": [],
         "counts": {
-          "pass": 4,
+          "pass": 6,
           "keep_marked": 0,
           "returned": 0,
           "dropped": 0,
@@ -6349,13 +6607,13 @@
         "judge_counts": {
           "direct_passed": 1,
           "llm_judged": 0,
-          "derived_judged": 3,
+          "derived_judged": 5,
           "not_judged": 0
         },
         "report": {
           "direct_passed": 1,
           "llm_judged": 0,
-          "derived": 3,
+          "derived": 5,
           "kept_with_mark": 0,
           "returned": 0,
           "not_judged": 0,
@@ -6373,12 +6631,12 @@
               "checked_as_direct": 0
             },
             "derived": {
-              "stated": 3,
+              "stated": 5,
               "checked_as_direct": 0
             }
           },
-          "worded": 3,
-          "judged": 3
+          "worded": 5,
+          "judged": 5
         }
       }
     },
@@ -6455,7 +6713,11 @@
               "none"
             ],
             "mark_text": "evidence shows part of the value",
-            "derived_decides_drops": false
+            "derived_decides_drops": false,
+            "derived_passes": [
+              "yes",
+              "mostly"
+            ]
           },
           "support_passes": [
             "all",
@@ -6663,7 +6925,11 @@
               "none"
             ],
             "mark_text": "evidence shows part of the value",
-            "derived_decides_drops": false
+            "derived_decides_drops": false,
+            "derived_passes": [
+              "yes",
+              "mostly"
+            ]
           },
           "support_passes": [
             "all",
@@ -6865,7 +7131,11 @@
               "none"
             ],
             "mark_text": "evidence shows part of the value",
-            "derived_decides_drops": false
+            "derived_decides_drops": false,
+            "derived_passes": [
+              "yes",
+              "mostly"
+            ]
           },
           "support_passes": [
             "all",
@@ -7070,7 +7340,11 @@
               "none"
             ],
             "mark_text": "evidence shows part of the value",
-            "derived_decides_drops": false
+            "derived_decides_drops": false,
+            "derived_passes": [
+              "yes",
+              "mostly"
+            ]
           },
           "support_passes": [
             "all",
@@ -7382,7 +7656,11 @@
               "none"
             ],
             "mark_text": "evidence shows part of the value",
-            "derived_decides_drops": false
+            "derived_decides_drops": false,
+            "derived_passes": [
+              "yes",
+              "mostly"
+            ]
           },
           "support_passes": [
             "all",
@@ -7691,7 +7969,11 @@
               "none"
             ],
             "mark_text": "evidence shows part of the value",
-            "derived_decides_drops": false
+            "derived_decides_drops": false,
+            "derived_passes": [
+              "yes",
+              "mostly"
+            ]
           },
           "support_passes": [
             "all",

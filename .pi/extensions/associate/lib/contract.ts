@@ -153,6 +153,7 @@ export interface ContractAccuracy {
     readonly mark_text: string;
     readonly derived_decides_drops: boolean;
     readonly derived_question: { readonly question: string; readonly options: Readonly<Record<string, string>> };
+    readonly derived_passes: readonly string[];
   };
   /** Tool name -> source kind. */
   readonly source_kinds: Readonly<Record<string, SourceKind>>;

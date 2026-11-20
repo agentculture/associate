@@ -656,7 +656,8 @@ def validate_accuracy(doc: dict[str, Any], models: dict[str, Any] | None = None)
     ``max`` of at least 1 and a non-blank ``text``, and the optional ``strict``
     section has a switch for exactly the registry's models, ``keep_marked`` and
     ``drop`` naming distinct, non-overlapping answers, and a
-    ``derived_question`` with at least two options.
+    ``derived_question`` with at least two options, and ``derived_passes`` naming
+    keys of those options.
     """
     if models is None:
         from associate import contract  # noqa: PLC0415 - avoid an import cycle
@@ -708,7 +709,24 @@ def _strict_derived_errors(section: dict[str, Any]) -> list[str]:
         e.replace(f"{SUPPORT_SCORE_KEY}.options", f"{field}.options", 1)
         for e in _support_options_errors(asked.get("options"))
     )
+    errors.extend(
+        _strict_derived_passes_errors(section.get("derived_passes"), asked.get("options"))
+    )
     return errors
+
+
+def _strict_derived_passes_errors(passes: Any, options: Any) -> list[str]:
+    """``derived_passes``: a non-empty list of distinct keys of ``derived_question.options``."""
+    field = f"{STRICT_KEY}.derived_passes"
+    if not isinstance(passes, list) or not passes or not all(_is_text(p) for p in passes):
+        return [f"{field} must be a non-empty list of derived_question answers"]
+    if len(set(passes)) != len(passes):
+        return [f"{field} must not name an answer twice"]
+    keys = set(options) if isinstance(options, dict) else set()
+    unknown = [p for p in passes if p not in keys]
+    if unknown:
+        return [f"{field} names {', '.join(unknown)}, which derived_question.options does not have"]
+    return []
 
 
 def _strict_errors(section: Any, registry: set[str]) -> list[str]:

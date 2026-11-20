@@ -107,7 +107,14 @@ def test_accuracy_is_version_2_with_the_strict_block(acc):
     assert strict["mark_text"] == "evidence shows part of the value"
     assert strict["derived_decides_drops"] is False
     assert strict["derived_question"]["question"].strip()
-    assert len(strict["derived_question"]["options"]) >= 2
+    assert list(strict["derived_question"]["options"]) == [
+        "yes",
+        "mostly",
+        "partly",
+        "little",
+        "no",
+    ]
+    assert strict["derived_passes"] == ["yes", "mostly"]
     assert "Version 2" in acc["$comment"]
     assert validate.validate(acc, contract.load_schema("accuracy")) == []
     assert validate.validate_accuracy(acc) == []
@@ -135,4 +142,8 @@ def test_strict_rules_refuse_bad_values(acc):
     assert errors(lambda s: s.update(mark_text=" "))
     assert errors(lambda s: s["derived_question"].update(options={"yes": "x"}))
     assert errors(lambda s: s["derived_question"].update(question=""))
+    assert errors(lambda s: s.update(derived_passes=[]))
+    assert errors(lambda s: s.update(derived_passes=["yes", "yes"]))
+    assert errors(lambda s: s.update(derived_passes=["all"]))
+    assert errors(lambda s: s.pop("derived_passes"))
     assert not errors(lambda s: None)

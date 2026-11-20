@@ -49,9 +49,9 @@
     },
     "strict": {
       "type": "object",
-      "description": "Settings for strict facts (spec docs/specs/2026-11-19-associate-strict-facts.md). Optional: a file without it has strict off for every model. Registry coverage of `enabled`, that `keep_marked` and `drop` are distinct non-blank answers that do not overlap, and the shape of `derived_question.options` live in validate.validate_accuracy.",
+      "description": "Settings for strict facts (spec docs/specs/2026-11-19-associate-strict-facts.md). Optional: a file without it has strict off for every model. Registry coverage of `enabled`, that `keep_marked` and `drop` are distinct non-blank answers that do not overlap, the shape of `derived_question.options` and that `derived_passes` names its keys live in validate.validate_accuracy.",
       "additionalProperties": false,
-      "required": ["enabled", "keep_marked", "drop", "mark_text", "derived_decides_drops", "derived_question"],
+      "required": ["enabled", "keep_marked", "drop", "mark_text", "derived_decides_drops", "derived_question", "derived_passes"],
       "properties": {
         "$comment": {"type": "string"},
         "enabled": {
@@ -84,6 +84,11 @@
               "additionalProperties": {"type": "string", "pattern": "\\S"}
             }
           }
+        },
+        "derived_passes": {
+          "type": "array",
+          "description": "Keys of derived_question.options that would pass a derived fact if derived_decides_drops were true; any other answer would drop it. Non-empty, distinct, each a key of the options (validate.validate_accuracy).",
+          "items": {"type": "string", "pattern": "\\S"}
         }
       }
     },

@@ -80,6 +80,7 @@ not read. An entry without `saved_result`, or whose file is missing from
 | `strict.drop` | Support answers that drop a fact. |
 | `strict.mark_text` | The mark written beside a kept fact. |
 | `strict.derived_decides_drops` | Whether a derived answer can drop a fact. `false` in every case. |
+| `strict.derived_passes` | Derived answers that would pass a fact if `derived_decides_drops` were true (`yes`, `mostly`). |
 | `support_passes` | Support answers that pass a fact. |
 | `min_quote_length` | The matcher's shortest quote, for old-shape facts. |
 | `retry_rounds` | Rounds a hand-back may be sent back. |
@@ -299,7 +300,10 @@ drops it, its `judge` still shows its answer.
   quote (`command: ls tests` and `604` in the 604 cases). For an
   old-shape fact it is the quote alone. Sending the command is new and has not
   been measured on a labelled set.
-- The derived question: `value` is the conclusion. `evidence` is one line per
+- The derived question has five answers, like the support question: `yes`,
+  `mostly`, `partly`, `little`, `no` (the criteria are in `accuracy.json`
+  `strict.derived_question`). `derived_each_answer` walks through all five.
+  `value` is the conclusion. `evidence` is one line per
   id in `based_on`, in that order. A listed fact with a value that is not blank
   is `id: value`. One without is `id: (no value given; its copied quote)
   quote`, using its copied quote or its own quote. One with neither is
@@ -322,7 +326,7 @@ After the last cascade, each fact gets one outcome.
 | Answered with a `support_passes` option | `judged` | `pass` | null |
 | Support answer in none of the three lists | `judged` | `pass` | null |
 | Derived answer, `derived_decides_drops` false | `judged` | `pass` | null |
-| Derived answer, `derived_decides_drops` true: `yes` / other | `judged` | `pass` / `dropped` (`decider_drop`) | |
+| Derived answer, `derived_decides_drops` true: named in `derived_passes` / other | `judged` | `pass` / `dropped` (`decider_drop`) | |
 | No answer | `not_judged` | `not_judged` | null |
 
 A round is left when `rounds_left > 0`. Lists are checked in this order:

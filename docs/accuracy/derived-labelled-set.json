@@ -5,8 +5,10 @@
  "question": "Does the conclusion follow from the listed facts, taken together?",
  "options": {
   "yes": "the conclusion follows from the listed facts; nothing in it goes beyond them",
-  "partly": "the listed facts support part of the conclusion, and the conclusion also claims something they do not show",
-  "no": "the conclusion does not follow from the listed facts, or contradicts them"
+  "mostly": "the conclusion follows from the listed facts; only a minor detail of it is not shown by them",
+  "partly": "the listed facts support part of the conclusion, and the conclusion also makes a real claim they do not show",
+  "little": "the listed facts are on the same subject but support little of what the conclusion claims",
+  "no": "the conclusion does not follow from the listed facts, is about something else, or contradicts them"
  },
  "items": [
   {

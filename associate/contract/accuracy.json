@@ -33,7 +33,7 @@
     }
   },
   "strict": {
-    "$comment": "Strict facts (docs/specs/2026-11-19-associate-strict-facts.md, claims c22, c25, c29, c39). `enabled` is the switch per registry model: on for worker and cortex, off for senses (spec c29) and super-vl; only the value true switches strict on. `keep_marked` and `drop` name answers of support_score.options: a fact the decider answers with a `keep_marked` key is kept with `mark_text` written beside it, a fact answered with a `drop` key is dropped, and an answer named in neither is handled as support_score.passes says. `derived_decides_drops` false means a derived fact (one that cites other facts through based_on) is never dropped on the decider's word alone; `derived_question` is what the decider is asked about a derived fact, whether its conclusion follows from the listed facts, answered with one key of `options`. The extension's finish reads it (.pi/extensions/associate/lib/strict.ts); ASSOCIATE_STRICT on|off overrides `enabled` for one run, and with strict on, `mode` does not apply. The decider is asked with the support_score question and bounds whatever support_score.enabled says. TENTATIVE like the support-score options.",
+    "$comment": "Strict facts (docs/specs/2026-11-19-associate-strict-facts.md, claims c22, c25, c29, c39). `enabled` is the switch per registry model: on for worker and cortex, off for senses (spec c29) and super-vl; only the value true switches strict on. `keep_marked` and `drop` name answers of support_score.options: a fact the decider answers with a `keep_marked` key is kept with `mark_text` written beside it, a fact answered with a `drop` key is dropped, and an answer named in neither is handled as support_score.passes says. `derived_decides_drops` false means a derived fact (one that cites other facts through based_on) is never dropped on the decider's word alone; `derived_question` is what the decider is asked about a derived fact, whether its conclusion follows from the listed facts, answered with one key of `options` (five steps, like support_score.options); `derived_passes` names the answers that would pass a derived fact if `derived_decides_drops` were true (any other answer would drop it). While it is false, every derived answer is only shown. The extension's finish reads it (.pi/extensions/associate/lib/strict.ts); ASSOCIATE_STRICT on|off overrides `enabled` for one run, and with strict on, `mode` does not apply. The decider is asked with the support_score question and bounds whatever support_score.enabled says. TENTATIVE like the support-score options.",
     "enabled": {
       "worker": true,
       "senses": false,
@@ -48,10 +48,13 @@
       "question": "Does the conclusion follow from the listed facts, taken together?",
       "options": {
         "yes": "the conclusion follows from the listed facts; nothing in it goes beyond them",
-        "partly": "the listed facts support part of the conclusion, and the conclusion also claims something they do not show",
-        "no": "the conclusion does not follow from the listed facts, or contradicts them"
+        "mostly": "the conclusion follows from the listed facts; only a minor detail of it is not shown by them",
+        "partly": "the listed facts support part of the conclusion, and the conclusion also makes a real claim they do not show",
+        "little": "the listed facts are on the same subject but support little of what the conclusion claims",
+        "no": "the conclusion does not follow from the listed facts, is about something else, or contradicts them"
       }
-    }
+    },
+    "derived_passes": ["yes", "mostly"]
   },
   "finish_reminder": {
     "$comment": "The finish reminder (deviation d3, issue #38): when a task run is about to settle and no finish was accepted, and the hand-back was not refused for its last round, the extension sends the model `text` once more and lets it answer. `max` is how many reminders one session may send. Both are first values, not measured: no run of associate with the reminder has been measured. It applies only to a run `associate run` started with it switched on (ASSOCIATE_FINISH_REMINDER=on); the mesh resident and spawned children are never reminded. A file without this section means no reminder.",

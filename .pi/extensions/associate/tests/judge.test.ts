@@ -309,8 +309,16 @@ test("policyFor applies the contract's lists to a support option", () => {
   assert.equal(policyFor("none", "support", STRICT, SUPPORT.passes), "drop");
   assert.equal(policyFor("other", "support", STRICT, SUPPORT.passes), "show_only");
   const open = { ...STRICT, derived_decides_drops: true };
-  assert.equal(policyFor("yes", "derived", open, SUPPORT.passes), "pass");
-  assert.equal(policyFor("no", "derived", open, SUPPORT.passes), "drop");
+  assert.deepEqual(STRICT.derived_passes, ["yes", "mostly"]);
+  const derivedPolicy = Object.fromEntries(Object.keys(STRICT.derived_question.options).map((o) => [o, policyFor(o, "derived", open, SUPPORT.passes)]));
+  assert.deepEqual(derivedPolicy, { yes: "pass", mostly: "pass", partly: "drop", little: "drop", no: "drop" });
+  const { derived_passes: _passes, ...noList } = open;
+  assert.equal(policyFor("yes", "derived", noList, SUPPORT.passes), "drop", "no derived_passes: fails closed");
+});
+
+test("the derived question has the same five steps as the support question", () => {
+  assert.deepEqual(Object.keys(STRICT.derived_question.options), ["yes", "mostly", "partly", "little", "no"]);
+  assert.equal(Object.keys(STRICT.derived_question.options).length, Object.keys(SUPPORT.options).length);
 });
 
 test("a shared budget carries the request cap and the first failure across two judgeFacts calls", async () => {

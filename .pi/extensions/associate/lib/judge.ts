@@ -59,6 +59,8 @@ export interface StrictSettings {
     readonly question: string;
     readonly options: Readonly<Record<string, string>>;
   };
+  /** Derived answers that would pass a derived fact if `derived_decides_drops` were true. */
+  readonly derived_passes?: readonly string[];
 }
 
 export type JudgeQuestion = "support" | "derived";
@@ -206,8 +208,10 @@ function derivedSettings(deps: JudgeDeps): SupportOptions["settings"] | undefine
   if (!q || typeof q.question !== "string" || !q.question.trim()) return undefined;
   const keys = Object.keys(q.options ?? {});
   if (keys.length < 2) return undefined;
-  // The question's own pass list is "yes" when it has that key, else its first option; policyFor never reads it.
-  const passes = keys.includes("yes") ? ["yes"] : [keys[0]!];
+  // The question's own pass list (the support client wants one): the contract's derived_passes that are
+  // options, else "yes" when it is a key, else the first option. What is done with an answer is policyFor's.
+  const named = (deps.strict.derived_passes ?? []).filter((k) => keys.includes(k));
+  const passes = named.length > 0 ? named : keys.includes("yes") ? ["yes"] : [keys[0]!];
   return { ...deps.settings, question: q.question, options: q.options, passes, background: undefined };
 }
 
@@ -306,8 +310,9 @@ export type JudgePolicy = "pass" | "keep_marked" | "drop" | "show_only";
  * What the contract says to do with a stored option, for t5's hand-back flow.
  *
  * - `derived`: always `show_only` while `derived_decides_drops` is false (the
- *   answer is shown, the fact stays). When it is true: `yes` is `pass`, any
- *   other option `drop`.
+ *   answer is shown, the fact stays). When it is true: an option named in
+ *   `derived_passes` is `pass`, any other option `drop` (a contract without
+ *   `derived_passes` passes none: it fails closed).
  * - `support`: an option in `keep_marked` is `keep_marked`, one in `drop` is
  *   `drop`, else `pass` when `passes` (the support_score pass list) names it.
  *   An option in none of the three lists is `show_only`: shown, nothing applied.
@@ -315,12 +320,12 @@ export type JudgePolicy = "pass" | "keep_marked" | "drop" | "show_only";
 export function policyFor(
   option: string,
   question: JudgeQuestion,
-  strict: Pick<StrictSettings, "keep_marked" | "drop" | "derived_decides_drops">,
+  strict: Pick<StrictSettings, "keep_marked" | "drop" | "derived_decides_drops" | "derived_passes">,
   passes: readonly string[],
 ): JudgePolicy {
   if (question === "derived") {
     if (strict.derived_decides_drops !== true) return "show_only";
-    return option === "yes" ? "pass" : "drop";
+    return (strict.derived_passes ?? []).includes(option) ? "pass" : "drop";
   }
   if (strict.keep_marked.includes(option)) return "keep_marked";
   if (strict.drop.includes(option)) return "drop";

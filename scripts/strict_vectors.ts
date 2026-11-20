@@ -416,7 +416,7 @@ const CASES: CaseDef[] = [
   },
   {
     name: "derived_each_answer",
-    note: "Derived facts answered yes, partly and no: each is shown with its answer and none is dropped (derived_decides_drops false).",
+    note: "Derived facts answered yes, mostly, partly, little and no: each is shown with its answer and none is dropped (derived_decides_drops false).",
     run: COUNT,
     finish: {
       facts: [
@@ -424,9 +424,11 @@ const CASES: CaseDef[] = [
         { id: "f2", kind: "derived", source: "w1", at: at(1), value: "the tests directory is large", based_on: ["f1"] },
         { id: "f3", kind: "derived", source: "w1", at: at(1), value: "every test passes", based_on: ["f1"] },
         { id: "f4", kind: "derived", source: "w1", at: at(1), value: "there are no tests", based_on: ["f1"] },
+        { id: "f5", kind: "derived", source: "w1", at: at(1), value: "the tests directory holds hundreds of entries", based_on: ["f1"] },
+        { id: "f6", kind: "derived", source: "w1", at: at(1), value: "the project is tested well", based_on: ["f1"] },
       ],
     },
-    decider: { f2: derived("yes"), f3: derived("partly"), f4: derived("no") },
+    decider: { f2: derived("yes"), f3: derived("partly"), f4: derived("no"), f5: derived("mostly"), f6: derived("little") },
   },
   {
     name: "derived_on_decider_dropped_fact",
@@ -562,6 +564,7 @@ async function buildCase(def: CaseDef, base: ContractAccuracy, redact: (t: strin
       drop: strictBase.drop,
       mark_text: strictBase.mark_text,
       derived_decides_drops: strictBase.derived_decides_drops,
+      derived_passes: strictBase.derived_passes,
     },
     support_passes: base.support_score!.passes,
     min_quote_length: minQuote,
