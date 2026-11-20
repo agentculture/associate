@@ -126,7 +126,7 @@ function ChangedPaths({ run }: Readonly<{ run: RunDetail }>) {
 }
 
 function Reply({ run }: Readonly<{ run: RunDetail }>) {
-  const paragraphs = (run.final_reply ?? "")
+  const paragraphs = (run.unchecked_final_reply ?? "")
     .split(/\n\s*\n/)
     .map((p) => p.trim())
     .filter(Boolean);
@@ -138,7 +138,7 @@ function Reply({ run }: Readonly<{ run: RunDetail }>) {
     return { key: `${nth}:${text}`, text };
   });
   return (
-    <Section id="reply" title="What the agent said">
+    <Section id="reply" title="The model's unchecked final reply">
       {paragraphs.length ? (
         <div className="reply">
           {keyed.map((paragraph) => (
@@ -147,13 +147,26 @@ function Reply({ run }: Readonly<{ run: RunDetail }>) {
         </div>
       ) : (
         <p className="muted">
-          {run.final_reply_dropped
+          {run.unchecked_final_reply_dropped
             ? "The reply was left out to keep the answer small."
             : "The agent left no final reply."}
         </p>
       )}
       <p className="muted small">
-        The agent's own words, shortened when long. They are not checked: the tests above are.
+        The model's own last message, shortened when long. The harness did not check it: the tests above and the checked answer are the harness's.
+      </p>
+    </Section>
+  );
+}
+
+function CheckedAnswer({ run }: Readonly<{ run: RunDetail }>) {
+  if (!run.answer?.trim()) return null;
+  return (
+    <Section id="answer" title="Checked answer">
+      <pre className="reply">{run.answer}</pre>
+      <p className="muted small">
+        Rendered by the harness from the items it checked, shortened when long. A checked item
+        was found in a saved result; that does not make its value true.
       </p>
     </Section>
   );
@@ -219,6 +232,7 @@ function RunView({ run }: Readonly<{ run: RunDetail }>) {
         ) : null}
       </Section>
 
+      {finished ? <CheckedAnswer run={run} /> : null}
       {finished ? <Reply run={run} /> : null}
     </>
   );

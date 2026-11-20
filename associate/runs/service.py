@@ -668,7 +668,8 @@ def _finished(reply: dict[str, Any], result: dict[str, Any]) -> None:
             "base_commit": result.get("base_commit"),
             "changed_paths_total": result.get("changed_paths_total", 0),
             "changed_paths_error": _cut(result.get("changed_paths_error"), SHOWN_TEXT_CHARS),
-            "final_reply": _cut(_reply_of(run_result), SHOWN_REPLY_CHARS),
+            "unchecked_final_reply": _cut(_reply_of(run_result), SHOWN_REPLY_CHARS),
+            "answer": _cut(run_result.get("answer"), SHOWN_REPLY_CHARS),
             "error": _cut(result.get("error"), SHOWN_TEXT_CHARS),
         }
     )
@@ -732,8 +733,10 @@ def _bound_paths(reply: dict[str, Any], stored: Any) -> None:
         reply["changed_paths"] = reply["changed_paths"][: len(reply["changed_paths"]) // 2]
         reply["changed_paths_truncated"] = True
     if _size(reply) >= _REPLY_BUDGET:
-        reply["final_reply"] = None
-        reply["final_reply_dropped"] = True
+        reply["unchecked_final_reply"] = None
+        reply["unchecked_final_reply_dropped"] = True
+    if _size(reply) >= _REPLY_BUDGET:
+        reply["answer"] = None
     tests = reply.get("tests") if isinstance(reply.get("tests"), dict) else {}
     if _size(reply) >= _REPLY_BUDGET and tests.get("results"):
         tests["results"] = [{**r, "command": _cut(r["command"], 80)} for r in tests["results"]]
