@@ -103,6 +103,8 @@ The first six entries are the approved deviation records, with their reason and 
   - `e3` (o3, claim c6) — `.pi/extensions/associate/tests/check-support.test.ts`, 19 tests against a fake decider — pass
   - `e4` (o4, claim c7) — `.pi/extensions/associate/tests/render-support.test.ts`, 11 tests — pass
   - `e5` (o5, claim c23) — `tests/test_support_wording.py`, 72 cases at `a4d6ccc`; shown to fail on planted bad sentences — pass. Superseded by `e8`: the test was rewritten in `6ecc877` after a code review found it too loose (24 bad and 22 good sentences, 115 cases)
+  - `e8` (o5, claim c23) — `tests/test_support_wording.py`, 115 cases at `6ecc877`; proposed — pass
+  - `e9` (o1, t12 first criterion) — `tests/test_support_cortex_run.py` on the committed export of the one `cortex` run; an observation of one run; proposed — pass
   - `e6` (o6, claim c19) — `scripts/support_shares.py` on the committed set — **fail**
   - `e7` (o7, claim c20) — the measurement note and the graded statements, read and not re-run — pass, with the limits of d5 and l3
 - proposed behaviour deltas, also not yet confirmed: `b1` (amended: the five-option question, from d4), `b2` (added: the finish reminder, from d3; it names no evidence), `b3` (amended: model graders, from d5)
