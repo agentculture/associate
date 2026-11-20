@@ -19,7 +19,7 @@
 - For a fact that states a number, the harness checks that the number is in the saved result of the cited call, and reports or refuses the fact when it is not, by the model's check mode
   - honesty: the '604 test files' fact from the measured colleague run, replayed from its stored export, is reported: 604 is in the cited result, but the cited command counts entries; the replay shows what the check can and cannot catch
 - A fact the decider answers part or little is returned to the model once with that answer and the fix (narrow the value to what the evidence shows, or point at a source that shows the rest). If it comes back unchanged or is still answered part or little, it stays in the answer marked 'evidence shows part of the value', with the decider's answer beside it. A fact answered none is dropped and the model is told why. All within the existing retry rounds
-  - honesty: in a live enforce-mode run, a fact answered part is returned once and the next finish either narrows the value or the run ends refused; the walk shows it
+  - honesty: a fact answered part is returned once, and the next finish either narrows the value or the fact is kept with the mark; the walk shows it
 - The broad report states, per run, how many graded statements rest on a passed basis and how many of those were graded false, with the matching done by the harness from item ids and not by text similarity
   - honesty: for the stored t12 runs the harness attribution and my text-matching attribution are compared and the differences listed
 - Each fact states its kind of check: 'direct' (the cited call's result shows it: a quote or a number), 'llm' (a judgement the decider or a model must make, named as such in the answer), or 'derived' (it follows from other facts)

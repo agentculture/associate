@@ -5,7 +5,7 @@
   "schema_version": 5,
   "status": "drafting",
   "created": "2026-11-20T12:33:37Z",
-  "updated": "2026-11-20T12:35:05Z",
+  "updated": "2026-11-20T12:37:12Z",
   "targets": [
     {
       "id": "c1",
@@ -113,9 +113,9 @@
       "deferred_reason": ""
     },
     {
-      "id": "h5",
+      "id": "h28",
       "kind": "honesty",
-      "text": "in a live enforce-mode run, a fact answered part is returned once and the next finish either narrows the value or the run ends refused; the walk shows it",
+      "text": "a fact answered part is returned once, and the next finish either narrows the value or the fact is kept with the mark; the walk shows it",
       "deferred": false,
       "deferred_reason": ""
     },
@@ -660,7 +660,8 @@
         "h9",
         "h5",
         "h18",
-        "h27"
+        "h27",
+        "h28"
       ],
       "instruction": "Main-session task, sequential runs (the lane serves one request at a time). Note: docs/notes/strict-facts-live-acceptance.md. Each item is one run, not a rate. If a kind or a drop never occurs in the runs, say so; do not stage it."
     },
@@ -715,8 +716,8 @@
       "text": "Honesty condition h5 still says a returned fact 'narrows the value or the run ends refused'; c10 and c28 as amended say the fact is kept with a mark and the run is not refused. The plan follows c10 and c28; h5 should be reworded in the spec",
       "kind": "follow_up",
       "task_id": null,
-      "resolved": false,
-      "resolution": ""
+      "resolved": true,
+      "resolution": "Operator 2026-11-20 approved the rewording; h5 rejected and replaced by h28, covered by t12"
     },
     {
       "id": "r2",
@@ -730,6 +731,14 @@
       "id": "r3",
       "text": "The final_reply field in associate run --json and delegate_status is renamed to an unchecked-labelled field; colleague reads delegate output. No change is made in colleague; an issue is filed there if it reads the old key",
       "kind": "follow_up",
+      "task_id": null,
+      "resolved": false,
+      "resolution": ""
+    },
+    {
+      "id": "r4",
+      "text": "associate itself reviews each code task before merge (operator, 2026-11-20, dogfooding): a cortex run from the released 0.14.x tree reads the task diff and hands back findings with facts. Only one review run by cortex has been measured before; its findings are a second opinion the main session checks, and each review run is recorded as one run, not a rate",
+      "kind": "unknown_nonblocking",
       "task_id": null,
       "resolved": false,
       "resolution": ""
