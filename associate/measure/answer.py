@@ -141,6 +141,9 @@ class ModelAnswer:
     text: str
     source: str
     empty_reason: str | None
+    #: The answer in the structure the export gives it (see :func:`broad_answer`): a
+    #: list of ``{"text", "origin", ...}`` dicts, empty when none is known.
+    parts: tuple[dict[str, Any], ...] = ()
 
 
 def load_result(path: Path | str) -> dict[str, Any] | None:
@@ -282,8 +285,8 @@ def _from_line(item_id: str, rest: str) -> str:
     return _HARNESS_TAIL.sub("", rest)
 
 
-def _accepted_items(answer_md: str, export_dir: Path) -> list[str]:
-    """The words of each accepted fact, conclusion and open item, in the order rendered."""
+def accepted_item_words(answer_md: str, export_dir: Path) -> list[tuple[str, str]]:
+    """Each accepted fact, conclusion and open item as (id, its words), in the order rendered."""
     words = _handed_back(export_dir)
     items = []
     for line in answer_md.splitlines():
@@ -294,8 +297,131 @@ def _accepted_items(answer_md: str, export_dir: Path) -> list[str]:
             continue
         own = words.get(found["id"]) or _from_line(found["id"], found["rest"])
         if own.strip():
-            items.append(" ".join(own.split()))
+            items.append((found["id"], " ".join(own.split())))
     return items
+
+
+def _accepted_items(answer_md: str, export_dir: Path) -> list[str]:
+    """The words of each accepted fact, conclusion and open item, in the order rendered."""
+    return [text for _item_id, text in accepted_item_words(answer_md, export_dir)]
+
+
+ORIGIN_ANSWER = "answer"
+ORIGIN_FINAL_REPLY = "final_reply"
+ORIGIN_SUMMARY = "summary"
+STRICT_MODE = "strict"
+CHECK_FILE = "check.json"
+_STRICT_FACT = re.compile(r"^\*\*(?P<id>f\d+):\*\* (?P<text>.*)$", re.ASCII)
+_UNCHECKED_LABEL = re.compile(r"^(?P<label>Finish summary|Final message) \(\d+ sentences?\):$")
+_CHECK_SUFFIX = " (deciding check: "
+_LABEL_ORIGIN = {"Finish summary": ORIGIN_SUMMARY, "Final message": ORIGIN_FINAL_REPLY}
+
+
+def read_check(export_dir: Path | None) -> dict[str, Any] | None:
+    """The export's ``check.json`` as a dict, or None when it is missing or unreadable."""
+    raw = _read(export_dir / CHECK_FILE) if export_dir is not None else None
+    try:
+        parsed = json.loads(raw) if raw else None
+    except ValueError:
+        return None
+    return parsed if isinstance(parsed, dict) else None
+
+
+def is_strict_check(check: Mapping[str, Any] | None) -> bool:
+    """Whether a parsed ``check.json`` was written by the strict flow."""
+    return isinstance(check, Mapping) and check.get("mode") == STRICT_MODE
+
+
+def strict_summary(check: Mapping[str, Any] | None) -> dict[str, Any] | None:
+    """What a strict ``check.json`` says about the run: rounds, counts per outcome, drops.
+
+    None when *check* is not a strict check. Copied from the file, never computed.
+    """
+    if check is None or not is_strict_check(check):
+        return None
+    held = check.get("strict") if isinstance(check.get("strict"), dict) else {}
+    counts = held.get("counts") if isinstance(held.get("counts"), dict) else {}
+    return {
+        "rounds_used": held.get("rounds_used"),
+        "retry_rounds": held.get("retry_rounds"),
+        "counts": dict(counts),
+        "dropped": counts.get("dropped"),
+    }
+
+
+def _entries(check: Mapping[str, Any]) -> dict[str, Mapping[str, Any]]:
+    """Item id to its entry in ``check.json`` (facts, verdicts and open items)."""
+    found: dict[str, Mapping[str, Any]] = {}
+    for section in ("facts", "verdicts", "open_items"):
+        items = check.get(section)
+        for item in items if isinstance(items, list) else []:
+            if isinstance(item, dict) and isinstance(item.get("id"), str):
+                found[item["id"]] = item
+    return found
+
+
+def _tags(item_id: str, entry: Mapping[str, Any] | None) -> dict[str, Any]:
+    """The tags of a statement that is one answer item, from its ``check.json`` entry."""
+    judge = (entry or {}).get("judge")
+    option = judge.get("option") if isinstance(judge, dict) else None
+    return {
+        "origin": ORIGIN_ANSWER,
+        "item": item_id,
+        "strict_outcome": (entry or {}).get("strict_outcome"),
+        "kind_checked": (entry or {}).get("kind_checked"),
+        "option": option if isinstance(option, str) else None,
+    }
+
+
+def _item_words(item_id: str, rest: str) -> str:
+    """A conclusion's or open item's own words cut out of its rendered line."""
+    if item_id.startswith("o") and _CHECK_SUFFIX in rest:
+        return rest.rpartition(_CHECK_SUFFIX)[0]
+    return _from_line(item_id, rest)
+
+
+def _strict_items(answer_md: str, check: Mapping[str, Any]) -> list[dict[str, Any]]:
+    """One part per item of a strict ``answer.md``: each fact, conclusion and open item."""
+    entries = _entries(check)
+    parts = []
+    for line in answer_md.splitlines():
+        if line.strip() == _UNCHECKED_HEADING:
+            break
+        fact = _STRICT_FACT.match(line)
+        other = None if fact is not None else _ITEM_LINE.match(line)
+        if fact is not None:
+            item_id, text = fact["id"], fact["text"]
+        elif other is not None and not other["id"].startswith("f"):
+            item_id, text = other["id"], _item_words(other["id"], other["rest"])
+        else:
+            continue
+        if text.strip():
+            parts.append({"text": " ".join(text.split()), **_tags(item_id, entries.get(item_id))})
+    return parts
+
+
+def unchecked_parts(answer_md: str) -> list[dict[str, Any]]:
+    """The summary and the final message of ``answer.md`` as parts, harness lines removed."""
+    lines = answer_md.splitlines()
+    try:
+        start = next(i for i, line in enumerate(lines) if line.strip() == _UNCHECKED_HEADING)
+    except StopIteration:
+        return []
+    grouped: list[tuple[str, list[str]]] = []
+    for line in lines[start + 1 :]:
+        label = _UNCHECKED_LABEL.match(line.strip())
+        if label is not None:
+            grouped.append((_LABEL_ORIGIN[label["label"]], []))
+        elif line.lstrip().startswith(">"):
+            if not grouped:
+                grouped.append((ORIGIN_FINAL_REPLY, []))
+            grouped[-1][1].append(line)
+    parts = []
+    for origin, quoted in grouped:
+        text = _without_harness_lines("\n".join(quoted))
+        if text:
+            parts.append({"text": text, "origin": origin})
+    return parts
 
 
 def broad_answer(
@@ -307,18 +433,43 @@ def broad_answer(
     unchecked text of :func:`model_answer`. Without it the text is the fullest
     of ``final_message.md``, an uncut ``final_reply``, the statements of
     ``statements.json`` and the capped ``final_reply``, with no line removed.
+
+    ``parts`` says where each piece came from. For an export whose
+    ``check.json`` is strict, each fact (``**fN:**``), conclusion and open item
+    of the rendered answer is one part tagged ``origin: "answer"``, ``item``
+    (its id), ``strict_outcome``, ``kind_checked`` and ``option`` (the
+    decider's), all read from the structure of the export and never matched on
+    text; the finish summary and the final message are parts tagged
+    ``origin: "summary"`` and ``"final_reply"`` with no item. For any other
+    export the accepted items are parts tagged ``origin: "answer"`` only, then
+    the same two unchecked parts. A run with no ``answer.md`` has one part,
+    tagged ``final_reply``. A part with an ``item`` is one statement; a part
+    without one is split into sentences by the sheet.
     """
     directory = Path(export_dir) if export_dir is not None else None
     rendered = _read(directory / ANSWER_FILE) if directory is not None else None
     if directory is not None and rendered is not None:
         own = model_answer(result, directory)
-        parts = _accepted_items(rendered, directory) + ([own.text] if own.text else [])
-        if not parts:
+        unchecked = unchecked_parts(rendered)
+        if not unchecked and own.text:
+            unchecked = [{"text": own.text, "origin": ORIGIN_FINAL_REPLY}]
+        check = read_check(directory)
+        if is_strict_check(check):
+            items = _strict_items(rendered, check or {})
+            texts = [part["text"] for part in [*items, *unchecked]]
+            if not texts:
+                return own
+            return ModelAnswer("\n\n".join(texts), SOURCE_ANSWER_MD, None, tuple(items + unchecked))
+        items = [
+            {"text": text, "origin": ORIGIN_ANSWER} for text in _accepted_items(rendered, directory)
+        ]
+        pieces = [part["text"] for part in items] + ([own.text] if own.text else [])
+        if not pieces:
             return own
-        return ModelAnswer("\n\n".join(parts), SOURCE_ANSWER_MD, None)
+        return ModelAnswer("\n\n".join(pieces), SOURCE_ANSWER_MD, None, tuple(items + unchecked))
     text, source = _full_message(result, directory)
     if text:
-        return ModelAnswer(text, source, None)
+        return ModelAnswer(text, source, None, ({"text": text, "origin": ORIGIN_FINAL_REPLY},))
     nothing = not result and (directory is None or not directory.is_dir())
     return ModelAnswer("", SOURCE_NONE, REASON_NOTHING_TO_READ if nothing else REASON_NO_TEXT)
 

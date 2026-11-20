@@ -30,6 +30,18 @@ The **key** maps each id to its run and arm and holds the seed of the shuffle
 
 The same records and seed always give the same two documents.
 
+Where a statement came from
+---------------------------
+A record written from the structure of its export (``answer.parts``) lets the
+key say, per statement and in order, what it came from: ``tags`` in the key's run
+entry, a list the length of the run's statements. Each tag has ``origin``
+(``answer``, ``summary`` or ``final_reply``); for an item of a strict answer also
+``item`` (``f1``, ``v1``, ``o1``), ``strict_outcome``, ``kind_checked`` and
+``option`` (the decider's). The tags are the harness's own record and are never
+matched on text. They go in the key, never on the sheet, so a grader does not see
+them. A record with no parts has no ``tags`` in its key entry and is split as it
+always was.
+
 Statements
 ----------
 Nothing in an answer is dropped except blank lines, horizontal rules and the
@@ -117,6 +129,16 @@ _K_WITHOUT_FINISH = "without_finish"
 _K_NOT_RECORDED = "finish_not_recorded"
 _K_REMINDED = "reminded"
 _K_REMINDER_NOT_RECORDED = "reminder_not_recorded"
+_K_TAGS = "tags"
+_K_ORIGIN = "origin"
+_K_ITEM = "item"
+_K_OUTCOME = "strict_outcome"
+_K_ANSWER_FALSE = "answer_false"
+ORIGIN_ANSWER = "answer"
+#: The origins that are the model's words outside the checked items; counted as the final reply.
+REPLY_ORIGINS = ("final_reply", "summary")
+OUTCOME_PASS = "pass"  # nosec B105 - a strict outcome name, not a password
+OUTCOME_KEEP_MARKED = "keep_marked"
 REMINDED_WORDS = "reminded to finish"
 NO_CHECKED_FACTS_LINE = (
     "A run that ended without finish is graded like the others (first marking, sheet, "
@@ -253,9 +275,40 @@ def broad_runs(records: Sequence[Mapping[str, Any]]) -> list[Mapping[str, Any]]:
     return sorted(runs, key=run_key)
 
 
-def _answer_statements(record: Mapping[str, Any]) -> list[str]:
-    text = (record.get("answer") or {}).get("text")
-    return split_statements(text if isinstance(text, str) else "")
+def _answer_statements(record: Mapping[str, Any]) -> list[dict[str, Any]]:
+    """The statements of a stored answer, each ``{"text", ...tags}``.
+
+    A record that stored the answer's parts (``answer.parts``, written from the
+    structure of the export) is read part by part: a part that is one answer item
+    (it has an ``item``) is one statement, any other part is split into sentences,
+    and every statement carries its part's tags. A record without parts, or whose
+    parts do not make its text, is split as before and carries no tags.
+    """
+    answer = record.get("answer") or {}
+    text = answer.get("text")
+    parts = answer.get("parts")
+    if isinstance(parts, list) and parts and all(_is_part(part) for part in parts):
+        found: list[dict[str, Any]] = []
+        for part in parts:
+            tags = {key: value for key, value in part.items() if key != "text"}
+            pieces = [part["text"]] if part.get(_K_ITEM) else split_statements(part["text"])
+            found.extend({"text": piece, **tags} for piece in pieces)
+        return found
+    return [{"text": piece} for piece in split_statements(text if isinstance(text, str) else "")]
+
+
+def _is_part(part: Any) -> bool:
+    return isinstance(part, dict) and isinstance(part.get("text"), str)
+
+
+def _texts(statements: Sequence[Mapping[str, Any]]) -> list[str]:
+    return [statement["text"] for statement in statements]
+
+
+def _tag_list(statements: Sequence[Mapping[str, Any]]) -> list[dict[str, Any]] | None:
+    """What each statement came from, in order; None when no statement carries a tag."""
+    tags = [{key: value for key, value in s.items() if key != "text"} for s in statements]
+    return tags if any(tags) else None
 
 
 # ------------------------------------------------------------------ building
@@ -272,7 +325,9 @@ def build(records: Sequence[Mapping[str, Any]], seed: int) -> tuple[dict[str, An
     for index, record in enumerate(runs, start=1):
         run_id = f"s{index:0{width}d}"
         task, arm, repeat = run_key(record)
-        statements = _answer_statements(record)
+        found = _answer_statements(record)
+        statements = _texts(found)
+        tags = _tag_list(found)
         sheet_runs.append(
             {
                 "id": run_id,
@@ -292,6 +347,7 @@ def build(records: Sequence[Mapping[str, Any]], seed: int) -> tuple[dict[str, An
             _K_SUPPORT: record.get(_K_SUPPORT),
             _K_STATEMENTS: len(statements),
             _K_DIGEST: _digest(statements),
+            **({_K_TAGS: tags} if tags is not None else {}),
         }
     sheet = {
         "format": SHEET_FORMAT,
@@ -521,7 +577,7 @@ def _key_against_records(
             problems.append(f"{run_id} in the key is not a stored finished broad run")
             continue
         in_key[named] = run_id
-        if _digest(_answer_statements(record)) != entry.get(_K_DIGEST):
+        if _digest(_texts(_answer_statements(record))) != entry.get(_K_DIGEST):
             problems.append(
                 f"the stored answer of {run_id} changed since the sheet was written; "
                 "write a new sheet"
@@ -557,13 +613,47 @@ def join(
     joined = {}
     for run in sheet[_K_RUNS]:
         verdicts = [statement[_K_VERDICT] for statement in run[_K_STATEMENTS]]
-        named = _key_entry_key(key_runs[run["id"]])
+        entry = key_runs[run["id"]]
+        named = _key_entry_key(entry)
         assert named is not None  # nosec B101
         joined[named] = {
             _K_STATEMENTS: len(verdicts),
             **{verdict: verdicts.count(verdict) for verdict in VERDICTS},
+            **_by_origin(verdicts, entry.get(_K_TAGS)),
         }
     return joined
+
+
+def _tally(verdicts: Sequence[str]) -> dict[str, int]:
+    return {_K_STATEMENTS: len(verdicts), **{v: verdicts.count(v) for v in VERDICTS}}
+
+
+def _by_origin(verdicts: Sequence[str], tags: Any) -> dict[str, Any]:
+    """The verdicts of one run split by what each statement came from, from the key's tags.
+
+    Empty when the key entry has no tags (or they do not match the statements).
+    ``answer`` and ``final_reply`` (the summary counts with it) are tallies of
+    verdicts; ``answer_pass`` and ``answer_keep_marked`` tally the answer
+    statements whose item has that ``strict_outcome``.
+    """
+    if not isinstance(tags, list) or len(tags) != len(verdicts):
+        return {}
+    pairs = [
+        (verdict, tag if isinstance(tag, dict) else {}) for verdict, tag in zip(verdicts, tags)
+    ]
+    answer = [(v, t) for v, t in pairs if t.get(_K_ORIGIN) == ORIGIN_ANSWER]
+    reply = [v for v, t in pairs if t.get(_K_ORIGIN) in REPLY_ORIGINS]
+    by_outcome = {
+        name: _tally([v for v, t in answer if t.get(_K_OUTCOME) == name])
+        for name in (OUTCOME_PASS, OUTCOME_KEEP_MARKED)
+    }
+    return {
+        ORIGIN_ANSWER: _tally([v for v, _t in answer]),
+        "final_reply": _tally(reply),
+        "answer_pass": by_outcome[OUTCOME_PASS],
+        "answer_keep_marked": by_outcome[OUTCOME_KEEP_MARKED],
+        "items_tagged": sum(1 for _v, t in pairs if t.get(_K_ITEM)),
+    }
 
 
 # ------------------------------------------------------------------ the report
@@ -600,9 +690,74 @@ def run_rows(
                 _K_BROAD_FINISHED: _finished(broad),
                 _K_REMINDED: _reminded(broad),
                 _K_CONTAMINATED: (record.get("contamination") or {}).get(_K_CONTAMINATED) is True,
+                **_strict_row(record, counts),
             }
         )
     return rows
+
+
+def is_strict_comparison(records: Sequence[Mapping[str, Any]]) -> bool:
+    """Whether any stored broad run was launched with the strict switch set on its arm."""
+    return any(
+        (record.get("arm") or {}).get(_K_STRICT) is not None for record in broad_runs(records)
+    )
+
+
+_K_STRICT = "strict"
+#: The row keys a strict-pair run adds; all None while a count is not joined or not known.
+_STRICT_ROW_KEYS = (
+    "answer_statements",
+    "answer_true",
+    _K_ANSWER_FALSE,
+    "answer_not_checkable",
+    "reply_statements",
+    "reply_true",
+    "reply_false",
+    "reply_not_checkable",
+    "answer_pass",
+    "answer_pass_false",
+    "answer_keep_marked",
+    "answer_keep_marked_false",
+)
+
+
+def _strict_row(record: Mapping[str, Any], counts: Mapping[str, Any] | None) -> dict[str, Any]:
+    """The extra row keys of a run whose arm sets strict (none for any other run).
+
+    The statement counts come from the key's tags through the join; the run time
+    is the launch's, the rounds and drops are copied from the export's
+    ``check.json`` as stored in the record.
+    """
+    arm = record.get("arm") or {}
+    if arm.get(_K_STRICT) is None:
+        return {}
+    held = record[_K_BROAD].get(_K_STRICT)
+    held = held if isinstance(held, dict) else {}
+    row: dict[str, Any] = {
+        _K_STRICT: arm[_K_STRICT],
+        "duration_s": (record.get("launch") or {}).get("duration_s"),
+        "rounds_used": held.get("rounds_used"),
+        "items_dropped": held.get("dropped"),
+        **dict.fromkeys(_STRICT_ROW_KEYS),
+    }
+    if counts and ORIGIN_ANSWER in counts:
+        answer, reply = counts[ORIGIN_ANSWER], counts["final_reply"]
+        passed, kept = counts["answer_pass"], counts["answer_keep_marked"]
+        row.update(
+            answer_statements=answer[_K_STATEMENTS],
+            answer_true=answer[VERDICT_TRUE],
+            answer_false=answer[VERDICT_FALSE],
+            answer_not_checkable=answer[VERDICT_NOT_CHECKABLE],
+            reply_statements=reply[_K_STATEMENTS],
+            reply_true=reply[VERDICT_TRUE],
+            reply_false=reply[VERDICT_FALSE],
+            reply_not_checkable=reply[VERDICT_NOT_CHECKABLE],
+            answer_pass=passed[_K_STATEMENTS],
+            answer_pass_false=passed[VERDICT_FALSE],
+            answer_keep_marked=kept[_K_STATEMENTS],
+            answer_keep_marked_false=kept[VERDICT_FALSE],
+        )
+    return row
 
 
 def _finished(broad: Mapping[str, Any]) -> bool | None:
@@ -686,6 +841,8 @@ def left_out(row: Mapping[str, Any], count: str) -> str | None:
         return "the answer was cut at the cap"
     if count == _K_FALSE and row[_K_STATEMENTS] == 0:
         return "no statement to grade"
+    if count == _K_ANSWER_FALSE and row.get("answer_statements") == 0:
+        return "no statement in the answer to grade"
     return None
 
 
@@ -693,7 +850,7 @@ def rule_counts(rows: Sequence[Mapping[str, Any]], count: str) -> dict[str, dict
     """Task, then arm, then one value of *count* per run that :func:`left_out` does not name."""
     counts: dict[str, dict[str, list[int]]] = {}
     for row in rows:
-        if row[count] is not None and left_out(row, count) is None:
+        if row.get(count) is not None and left_out(row, count) is None:
             counts.setdefault(row["task"], {}).setdefault(row["arm"], []).append(row[count])
     return counts
 
@@ -701,6 +858,13 @@ def rule_counts(rows: Sequence[Mapping[str, Any]], count: str) -> dict[str, dict
 MIDDLE_COUNTS = (
     (_K_FACTS_STATED, "facts marked as stated"),
     (_K_FALSE, "statements counted false"),
+)
+
+
+#: The counts a strict pair's middle values are printed for.
+STRICT_MIDDLE_COUNTS = (
+    (_K_FACTS_STATED, "facts marked as stated"),
+    (_K_ANSWER_FALSE, "answer statements graded false"),
 )
 
 
@@ -716,13 +880,15 @@ def middle_values(rows: Sequence[Mapping[str, Any]], count: str) -> dict[str, di
     }
 
 
-def render_middles(rows: Sequence[Mapping[str, Any]]) -> str:
+def render_middles(
+    rows: Sequence[Mapping[str, Any]], counts: Sequence[tuple[str, str]] = MIDDLE_COUNTS
+) -> str:
     """The middle values as text: one line per repository and count."""
     lines = [
         "Middle value of each arm's runs, per repository (for reading beside the rule; "
         "no verdict is drawn from it):"
     ]
-    for count, label in MIDDLE_COUNTS:
+    for count, label in counts:
         for task, by_arm in middle_values(rows, count).items():
             shown = ", ".join(f"{arm} {value:g}" for arm, value in by_arm.items())
             lines.append(f"  {task}: {label}: {shown}")
@@ -779,3 +945,74 @@ def render_rows(rows: Sequence[Mapping[str, Any]]) -> str:
             lines.append(f"  arm {row['arm']} (support_score {row[_K_SUPPORT]})")
         lines.append(_run_line(row))
     return "\n".join(lines + _finish_lines(rows))
+
+
+# ------------------------------------------------------------------ the strict pair
+
+
+def _opt(value: Any) -> str:
+    return (
+        "not recorded"
+        if value is None
+        else f"{value:g}" if isinstance(value, float) else str(value)
+    )
+
+
+def _strict_run_line(row: Mapping[str, Any]) -> str:
+    if row["answer_statements"] is None:
+        graded = "statements: not joined (no fully graded sheet)"
+    else:
+        graded = (
+            f"answer statements: true {row['answer_true']}, false {row['answer_false']}, "
+            f"not checkable {row['answer_not_checkable']}; "
+            f"final reply statements: true {row['reply_true']}, false {row['reply_false']}, "
+            f"not checkable {row['reply_not_checkable']}; "
+            f"of the answer statements {row['answer_pass']} rest on a passed item, "
+            f"{row['answer_pass_false']} of those graded false; "
+            f"kept-with-mark items graded false {row['answer_keep_marked_false']} "
+            f"of {row['answer_keep_marked']}"
+        )
+    parts = [
+        f"checklist facts stated {row[_K_FACTS_STATED]} of {row[_K_FACTS_TOTAL]} ({FIRST_MARKING})",
+        graded,
+        f"run time {_opt(row['duration_s'])} s",
+        f"retry rounds {_opt(row['rounds_used'])}",
+        f"items dropped {_opt(row['items_dropped'])}",
+    ]
+    whole = left_out(row, _K_FACTS_STATED)
+    if whole is not None:
+        parts.append(f"{whole} (left out of the rule)")
+    elif row["answer_statements"] is not None and left_out(row, _K_ANSWER_FALSE) is not None:
+        parts.append(
+            f"{left_out(row, _K_ANSWER_FALSE)} (left out of the rule on answer statements)"
+        )
+    return f"    r{row[_K_REPEAT]}: " + "; ".join(parts)
+
+
+def render_strict_rows(rows: Sequence[Mapping[str, Any]]) -> str:
+    """The strict pair's per-run text: counts of one run, none added up over runs.
+
+    The final reply here is the model's finish summary and final message, the
+    words the harness does not check. A statement of the answer is one item the
+    export lists (a fact, a conclusion or an open item).
+    """
+    lines = [
+        "Strict pair, per run. Each number is a count for one run; none is added up over runs.",
+        "Answer statements are the items the export lists; final reply statements are the "
+        "model's own words (finish summary and final message), which the harness does not check.",
+        "Run time is the launch's wall clock. Retry rounds and items dropped are copied from the "
+        "export's check.json; an arm with strict off has none.",
+        INTERNAL_LINE,
+    ]
+    seen_task, seen_arm = None, None
+    for row in rows:
+        if _K_STRICT not in row:
+            continue
+        if row["task"] != seen_task:
+            seen_task, seen_arm = row["task"], None
+            lines += ["", f"{row['task']} ({row[_K_REPOSITORY]})"]
+        if row["arm"] != seen_arm:
+            seen_arm = row["arm"]
+            lines.append(f"  arm {row['arm']} (strict {row[_K_STRICT]})")
+        lines.append(_strict_run_line(row))
+    return "\n".join(lines)
