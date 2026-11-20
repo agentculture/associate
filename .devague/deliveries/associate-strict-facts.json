@@ -2,7 +2,7 @@
   "plan_slug": "associate-strict-facts",
   "schema_version": 2,
   "created": "2026-11-20T14:34:55Z",
-  "updated": "2026-11-20T16:26:46Z",
+  "updated": "2026-11-20T17:20:21Z",
   "deviations": [
     {
       "id": "d1",
@@ -73,6 +73,17 @@
       "status": "approved",
       "classification": "acceptable",
       "seq": 4
+    },
+    {
+      "id": "d5",
+      "what": "Reviews by associate use cortex from here on, with no time limit ('as long as it takes'), on the strict build (dogfooding), over the evidence-cli changes and the associate changes. This replaces d1 (worker only until the plan is done).",
+      "task_ref": "t12",
+      "reason": "Operator instruction of 2026-11-20 after the first live strict hand-back by worker: review with dogfooding, evidence and associate changes, with cortex, as long as it takes.",
+      "affects": [],
+      "origin": "user",
+      "status": "approved",
+      "classification": "acceptable",
+      "seq": 5
     }
   ],
   "evidence": [],
