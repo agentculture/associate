@@ -43,8 +43,8 @@ def test_the_shipped_file_is_valid_with_the_section():
     assert validate.validate_accuracy(shipped) == []
 
 
-def test_the_accuracy_file_stays_version_1():
-    assert contract.load_accuracy()["version"] == 1
+def test_the_accuracy_file_is_version_2():
+    assert contract.load_accuracy()["version"] == 2
 
 
 def test_every_setting_is_declared_in_the_schema():

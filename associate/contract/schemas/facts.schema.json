@@ -7,6 +7,7 @@
   "additionalProperties": false,
   "required": ["facts"],
   "properties": {
+    "schema_version": {"type": "integer", "description": "The facts schema version the payload is written for. Version 2 adds kind, at and based_on to a fact and makes quote optional. Optional: a payload without it is read as written in the old shape."},
     "summary": {"type": "string", "description": "Free text; never a checked answer."},
     "facts": {"type": "array", "items": {"$ref": "#/$defs/fact"}},
     "alternatives": {"type": "array", "items": {"$ref": "#/$defs/alternative"}},
@@ -17,12 +18,23 @@
     "fact": {
       "type": "object",
       "additionalProperties": false,
-      "required": ["id", "value", "source", "quote"],
+      "required": ["id", "source"],
       "properties": {
         "id": {"type": "string", "pattern": "^f[1-9][0-9]*$"},
-        "value": {"type": "string"},
+        "kind": {"type": "string", "enum": ["direct", "llm", "derived"], "description": "direct: read from the cited call's saved result. llm: a statement made by a model whose call the source names. derived: a conclusion drawn from other facts (based_on). Absent reads as direct. Cross-field rules (a fact has `at` or `quote`; llm and derived have a value; derived has a non-empty based_on) live in validate.validate_facts."},
+        "value": {"type": "string", "description": "What the fact says. Optional for a direct fact, which may be given by `at` alone; required for llm and derived."},
         "source": {"type": "string", "pattern": "^([A-Za-z0-9_-]+:)?w[1-9][0-9]*$"},
-        "quote": {"type": "string"},
+        "quote": {"type": "string", "description": "Optional when `at` is given."},
+        "at": {
+          "type": "object",
+          "description": "Where in the cited call's saved result the fact is read: exactly one of `lines` or `search` (validate.validate_facts).",
+          "additionalProperties": false,
+          "properties": {
+            "lines": {"type": "array", "minItems": 2, "items": {"type": "integer"}, "description": "First and last line, 1-based, inclusive."},
+            "search": {"type": "string", "pattern": "\\S", "description": "A search term to find in the saved result."}
+          }
+        },
+        "based_on": {"type": "array", "items": {"type": "string", "pattern": "^f[1-9][0-9]*$"}, "description": "Ids of the facts a derived fact is drawn from."},
         "action": {"type": "boolean", "description": "True when the fact states that an action happened (a tool ran, a file changed, a test passed, a record was stored)."},
         "tool": {"type": "string", "description": "For an action fact: the tool whose call the fact says happened. The cited entry must be a call of this tool that did not end in an error or refusal."}
       }

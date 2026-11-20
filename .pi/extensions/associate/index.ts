@@ -491,6 +491,9 @@ export default async function (pi: ExtensionAPI) {
     // unquoted before pi validates; any other string there is refused with a fix.
     prepareArguments: prepareFinishArguments,
     parameters: Type.Object({
+      schema_version: Type.Optional(
+        Type.Number({ description: "The facts schema version this payload is written for (2 adds kind, at and based_on)." }),
+      ),
       summary: Type.Optional(
         text("Free text. Delivered under an unchecked label, never as the checked answer."),
       ),
@@ -511,6 +514,25 @@ export default async function (pi: ExtensionAPI) {
               }),
             ),
             tool: Type.Optional(text("For an action fact: the tool whose call the fact says happened.")),
+            // Strict facts (t1): contract fields only. Nothing reads them yet, and
+            // value/quote stay required here until the strict hand-back task.
+            kind: Type.Optional(
+              Type.String({ enum: ["direct", "llm", "derived"], description: "direct (default), llm, or derived." }),
+            ),
+            at: Type.Optional(
+              Type.Object(
+                {
+                  lines: Type.Optional(
+                    Type.Array(Type.Number(), { minItems: 2, description: "First and last line, 1-based, inclusive." }),
+                  ),
+                  search: Type.Optional(text("A search term to find in the cited result.")),
+                },
+                { description: "Where in the cited result the fact is read: exactly one of lines or search." },
+              ),
+            ),
+            based_on: Type.Optional(
+              Type.Array(text("A fact id of this hand-back, e.g. f1."), { description: "For a derived fact: the facts it is drawn from." }),
+            ),
           }),
           { description: "What you found, each tied to one walk entry by a quote." },
         ),

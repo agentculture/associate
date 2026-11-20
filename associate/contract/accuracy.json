@@ -1,6 +1,6 @@
 {
-  "$comment": "The accuracy method's settings (issue #20). Every threshold, retry count, mode and table the harness and the extension use lives here and nowhere in code. Version 1.",
-  "version": 1,
+  "$comment": "The accuracy method's settings (issue #20). Every threshold, retry count, mode and table the harness and the extension use lives here and nowhere in code. Version 2 (adds the strict block: strict facts, spec docs/specs/2026-11-19-associate-strict-facts.md).",
+  "version": 2,
   "mode": {
     "worker": "report",
     "senses": "report",
@@ -30,6 +30,27 @@
       "senses": false,
       "cortex": false,
       "super-vl": false
+    }
+  },
+  "strict": {
+    "$comment": "Strict facts (docs/specs/2026-11-19-associate-strict-facts.md, claims c22, c25, c29, c39). `enabled` is the switch per registry model: on for worker and cortex, off for senses (spec c29) and super-vl; only the value true switches strict on. `keep_marked` and `drop` name answers of support_score.options: a fact the decider answers with a `keep_marked` key is kept with `mark_text` written beside it, a fact answered with a `drop` key is dropped, and an answer named in neither is handled as support_score.passes says. `derived_decides_drops` false means a derived fact (one that cites other facts through based_on) is never dropped on the decider's word alone; `derived_question` is what the decider is asked about a derived fact, whether its conclusion follows from the listed facts, answered with one key of `options`. Settings only: this block changes nothing until a later task reads it. TENTATIVE like the support-score options.",
+    "enabled": {
+      "worker": true,
+      "senses": false,
+      "cortex": true,
+      "super-vl": false
+    },
+    "keep_marked": ["part", "little"],
+    "drop": ["none"],
+    "mark_text": "evidence shows part of the value",
+    "derived_decides_drops": false,
+    "derived_question": {
+      "question": "Does the conclusion follow from the listed facts, taken together?",
+      "options": {
+        "yes": "the conclusion follows from the listed facts; nothing in it goes beyond them",
+        "partly": "the listed facts support part of the conclusion, and the conclusion also claims something they do not show",
+        "no": "the conclusion does not follow from the listed facts, or contradicts them"
+      }
     }
   },
   "finish_reminder": {
