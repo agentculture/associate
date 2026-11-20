@@ -210,7 +210,7 @@ def changed_number(
 def negated(
     real: list[dict[str, Any]], rng: random.Random, avoid: set[str]
 ) -> list[dict[str, Any]]:
-    """A real item whose conclusion has exactly one flippable word, flipped."""
+    """A real item negated in exactly one place: `not` is added or removed."""
     order = [r for r in real if r["id"] not in avoid]
     rng.shuffle(order)
     out: list[dict[str, Any]] = []

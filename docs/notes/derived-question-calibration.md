@@ -25,7 +25,7 @@ are never added together.
 | `real` | 252 | A conclusion a model handed back, with the values of the facts it named as its basis, from stored exports |
 | `planted_swapped_basis` | 40 | A real conclusion beside the listed facts of an item from another run |
 | `planted_changed_number` | 30 | A real item with one whole number changed in the conclusion only |
-| `planted_negated` | 20 | A real item with one word of the conclusion flipped by a script |
+| `planted_negated` | 20 | A real item whose conclusion a script negated in one place: `not` added in 18, removed in 2 |
 
 The real items come from eleven families of stored runs; 88 are from the 36
 broad runs of 2026-11-19 and 80 from one batch of harvest runs. 52 exact
