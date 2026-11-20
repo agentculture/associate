@@ -2,7 +2,7 @@
   "plan_slug": "associate-strict-facts",
   "schema_version": 2,
   "created": "2026-11-20T14:34:55Z",
-  "updated": "2026-11-20T17:20:21Z",
+  "updated": "2026-11-20T18:26:38Z",
   "deviations": [
     {
       "id": "d1",
@@ -84,6 +84,17 @@
       "status": "approved",
       "classification": "acceptable",
       "seq": 5
+    },
+    {
+      "id": "d6",
+      "what": "Reviews by associate are no longer run by the main session: the operator runs associate reviews independently. The queued worker reviews (t7, t10, the resume of t3) and the cortex reviews (evidence-cli, the strict build, the decider plan) were stopped; the running cortex review of evidence-cli was stopped at about 100 calls without a hand-back, its export kept.",
+      "task_ref": "t12",
+      "reason": "Operator instruction of 2026-11-20: 'No need to run associate review. I run it independently.'",
+      "affects": [],
+      "origin": "user",
+      "status": "approved",
+      "classification": "acceptable",
+      "seq": 6
     }
   ],
   "evidence": [],
