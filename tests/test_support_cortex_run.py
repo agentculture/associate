@@ -45,4 +45,5 @@ def test_the_fixture_names_no_machine_path() -> None:
     for path in EXPORT.rglob("*"):
         if path.is_file():
             text = path.read_text(encoding="utf-8")
-            assert "/home/" not in text and "/tmp/" not in text, path.name
+            assert "/home/" not in text, path.name
+            assert "/tmp/" not in text, path.name
