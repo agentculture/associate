@@ -4,7 +4,7 @@
   "schema_version": 6,
   "status": "exported",
   "created": "2026-11-19T18:44:49Z",
-  "updated": "2026-11-20T12:29:51Z",
+  "updated": "2026-11-20T12:33:25Z",
   "claims": [
     {
       "id": "c1",
@@ -730,7 +730,7 @@
         {
           "id": "h27",
           "text": "In a recorded run, every quote and command shown in the answer is byte-for-byte what the saved result and the walk entry hold, and a fact whose pointer names lines past the end of the result is dropped with that reason; a test feeds a wrong pointer and sees the drop",
-          "status": "proposed",
+          "status": "confirmed",
           "instruction": ""
         }
       ],

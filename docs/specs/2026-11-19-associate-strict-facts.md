@@ -8,7 +8,7 @@
 
 ## Before → After
 
-- Before: In the 36 measured broad runs of the decider plan (worker, six repositories, 1,657 statements graded by model graders), 65 of the 71 statements graded false were in the model's unchecked text and 6 rested on a quote-found fact; 39 of the 71 were counts. The attribution to facts is by text matching, a heuristic
+- Before: In the 36 measured broad runs of the decider plan (worker, six repositories, 1,657 statements), an outside grader (Gemini, the main reading) graded 150 statements false: 133 in the model's unchecked text, 16 resting on a quote-found fact and 1 on a fact whose quote was refused. Two Claude graders with a third for disputes graded 71 false: 65 in unchecked text and 6 on a quote-found fact. The count depends on how strictly a list given as complete and a claim copied from a stale document are judged. No person graded. The attribution of a statement to a fact is by text matching, a heuristic
 - After: Every fact in the rendered answer is shown with how to check it: the command, search or read of the call it cites, as the walk recorded it, and that call's result, so a reader can run it again
 - After: The rendered answer is made only of items whose basis passed; an item that fails is dropped from the answer, the model is told which items were dropped and why and may answer again, and the model's unchecked text stays in the export and is not part of the answer
 
@@ -18,7 +18,7 @@
   - honesty: a fact whose cited call ran a different command than the model describes renders the command from the walk; a node test covers it
 - For a fact that states a number, the harness checks that the number is in the saved result of the cited call, and reports or refuses the fact when it is not, by the model's check mode
   - honesty: the '604 test files' fact from the measured colleague run, replayed from its stored export, is reported: 604 is in the cited result, but the cited command counts entries; the replay shows what the check can and cannot catch
-- A fact the decider answers part, little or none fails its check: it is dropped and returned to the model with that answer and the fix (narrow the value to what the quote shows, or cite a source that shows the rest), within the existing retry rounds
+- A fact the decider answers part or little is returned to the model once with that answer and the fix (narrow the value to what the evidence shows, or point at a source that shows the rest). If it comes back unchanged or is still answered part or little, it stays in the answer marked 'evidence shows part of the value', with the decider's answer beside it. A fact answered none is dropped and the model is told why. All within the existing retry rounds
   - honesty: in a live enforce-mode run, a fact answered part is returned once and the next finish either narrows the value or the run ends refused; the walk shows it
 - The broad report states, per run, how many graded statements rest on a passed basis and how many of those were graded false, with the matching done by the harness from item ids and not by text similarity
   - honesty: for the stored t12 runs the harness attribution and my text-matching attribution are compared and the differences listed
@@ -30,6 +30,28 @@
   - honesty: report.json counts direct-passed, llm-judged and derived facts separately, and the wording test finds none of them called accuracy
 - The strict behaviour is on for worker and cortex by default in the contract, with a per-run switch to turn it off for comparison arms
   - honesty: one recorded live run each on worker and cortex with the default contract shows dropped items in the walk and in the message the model received
+- The model's final reply, which associate run --json returns as `final_reply` and `delegate_status` passes to a peer (tools/delegate.ts:541), is labelled unchecked in every place it is returned, and the checked answer is returned beside it; the strict answer is not the only output a caller sees, so the label travels with the text
+  - honesty: a test over associate run --json and `delegate_status` output finds `final_reply` only under a field or label that says unchecked, with the checked answer beside it
+- When the decider cannot be reached or gives a malformed answer, an llm or derived fact is not dropped as failed: it is kept out of the answer under its own label (not judged, with the reason) and the model is told; a run never loses items silently because of an outage
+  - honesty: a fault-injected run with the decider unreachable keeps every llm and derived fact in the export under 'not judged', drops none as failed, and the message to the model names the outage
+- The number check and the printed result read the saved result file; when that file was cut at the contract cap (lib/results.ts:18) and the number or quote is not in the kept part, the fact is reported as not checkable from the saved result, with the fix to cite a narrower call
+  - honesty: a replay with a saved result cut at the cap and a number beyond the cut reports the fact as not checkable from the saved result, with the fix
+- A fact that cites a prior run or a child (prior:wN, cN:wN) shows that run's command and result when the labelled export is available, and is otherwise marked as resting on a labelled run whose result was not read here; it is never shown as directly checked
+  - honesty: a continued run citing prior:wN renders the prior call's command and result when the prior export is present, and the labelled-run wording when it is not; both are tests
+- The command printed in an answer is the recorded arguments with absolute paths under the checkout shown relative to it, and nothing from the environment; a test shows no home-directory path and no bearer value can appear in a rendered answer
+  - honesty: a test renders an answer from a walk whose arguments hold an absolute worktree path and an environment-looking token, and the output holds neither
+- Every dropped item is kept in the export with its reason, the answer states how many items were dropped and for which reasons, and the run result carries those counts, so an answer that lost most of its items is visible as such
+  - honesty: the measured colleague run in which no fact passed, replayed, renders an answer that states how many items were dropped and why, and the run result carries the same counts
+- The derived-fact question to the decider (does the conclusion follow from the listed facts) is tried on a labelled set before it decides drops, as the support question was; until then a derived fact is shown with the decider's answer and is dropped only when one of its inputs fails
+  - honesty: a committed labelled set of derived facts with two raters, at least one not a Claude model, and the decider's answers on it, exists before the derived answer decides a drop
+- The measurement arm for strict facts grades what a caller receives: the rendered answer and, separately, the final reply; and it reports run time and the number of retry rounds per run
+  - honesty: the broad report for the strict arm prints, per run, graded statements of the answer and of the final reply separately, the run time and the retry rounds used
+- The change is a contract event: accuracy.json and facts.schema.json get a version bump, exports written before it still load in associate check, and the Python re-check implements the same kinds, order and drops as the extension, with a parity test over shared fixtures
+  - honesty: associate check loads a stored export written before the bump and one written after, and the parity test gives the same kinds, order and drops from the extension and the Python re-check on the shared fixtures
+- A model cannot lower the bar by its choice of kind: a fact whose cited call's result contains its quote or number is checked directly whatever kind it states, and the report counts how many facts of each kind a run used
+  - honesty: a replay where a fact states kind llm and its quote is in the cited result is checked by the matcher and counted as direct, and report.json lists facts per kind
+- The model does not retype evidence. A fact names the call it rests on (walk id) and where in that call's saved result the evidence is (line range or search term); the harness copies the quoted text, the command as used and the result file into the fact by code. For a direct fact whose value is itself in the result (a count, a line, a match), the harness also takes the value from the result. The model writes only the claim wording for llm and derived facts, and those are judged against the evidence the harness copied. A fact whose pointer resolves to nothing is dropped with that reason.
+  - honesty: In a recorded run, every quote and command shown in the answer is byte-for-byte what the saved result and the walk entry hold, and a fact whose pointer names lines past the end of the result is dropped with that reason; a test feeds a wrong pointer and sees the drop
 
 ## Honesty conditions
 
@@ -59,6 +81,7 @@
 
 - A model that must attach a command to each count will still state the counts it stated before, and will not move them into the summary; the measured runs show models already put about five in six statements into free text
 - Switching the strict behaviour on before a recorded live run departs from the repo rule in CLAUDE.md (no enforce without a recorded report-mode run); the rule is updated in this work and the first live runs are recorded before the PR is marked ready
+- Dropping on part or little would remove true facts: on the measured runs 63 of 69 facts with those answers were graded true by the stricter grader. So those facts are returned once and then kept with a mark, not dropped (c10); only none drops. The measurement reports checklist facts stated beside false statements, and how many marked facts were graded false, so the cost of keeping them is seen
 
 ## Scope exploration
 
@@ -76,6 +99,28 @@
   - seeds: `c11`
 - `s7` — `the 36 t12 runs and the graded sheet (scratchpad, not committed)`: source of the before-state numbers; graded by two Claude graders and a third for 121 statements; no person and no outside model graded them
   - seeds: `c5`
+- `s8` — `challenge pass / adjacent-systems lens: associate/harness/pi.py:450 and tools/delegate.ts:541,937`: `final_reply` (the model's own words, last 2,000 characters) is returned to the operator and to a delegating peer; dropping unchecked text from answer.md does not remove it from these paths
+  - seeds: `c30`
+- `s9` — `challenge pass / failure-mode lens: lib/support.ts:68-96,378`: the support check already returns `not_scored` with reasons unreachable, `skipped_after_failure`, malformed; with dropping switched on, an outage would otherwise empty the answer
+  - seeds: `c31`
+- `s10` — `challenge pass / data-flow lens: lib/results.ts:18-67`: saved results are cut at caps.`max_raw_chars`; a count at the end of a long listing may not be in the saved file
+  - seeds: `c32`
+- `s11` — `challenge pass / lifecycle lens: lib/facts.ts:19-22,420-422`: labelled references resolve inside `prior_runs`; whether the other run's saved results are available to print a command and result from is not settled by the code read
+  - seeds: `c33`
+- `s12` — `challenge pass / security lens: lib/walk.ts:195 args_used; CLAUDE.md portability invariant`: walk arguments hold absolute checkout paths under a per-run worktree; printing them verbatim puts machine paths into answers and committed notes (this happened once in the labelled set)
+  - seeds: `c34`
+- `s13` — `challenge pass / observability lens: lib/render.ts:174, report.json`: today a refused item is counted in the answer header ('7 items were refused'); with dropping on by default an answer can become nearly empty, as in one measured colleague run where no fact passed
+  - seeds: `c35`
+- `s14` — `challenge pass / counter-evidence lens: docs/notes/support-score-calibration.md`: the support question passed 229 of 253 supported and 12 of 152 unsupported pairs on model-labelled pairs; in the 36 runs, on Gemini's grading, 5 of 59 facts answered all or mostly and 6 of 69 answered part or little were graded false; no derived-fact question has been tried at all
+  - seeds: `c36`
+- `s15` — `challenge pass / operations lens: associate/measure/answer.py:286 and the t12 run times`: `broad_answer` grades accepted items plus the unchecked section; under strict answers the graded text changes shape, so arms are not comparable unless both outputs are graded; runs took about 10 minutes each and each retry round adds model turns
+  - seeds: `c38`
+- `s16` — `challenge pass / migration lens: associate/contract/schemas/facts.schema.json (additionalProperties false), associate/accuracy/`: new fact fields are rejected by the present schema; CLAUDE.md calls a contract-version bump a compatibility event; two implementations (TypeScript and Python) must agree
+  - seeds: `c39`
+- `s17` — `challenge pass / unstated-assumptions lens: the kind field (c22)`: the kind is stated by the model; nothing in the frame stopped a model from marking every fact llm or derived to avoid the direct check
+  - seeds: `c40`
+- `s18` — `challenge pass / concurrency lens: lib/handback.ts, lib/support.ts`: hand-back checking is one process per run reading its own export; dependency order is computed inside one check; no shared state found. Clean on what was read; residual: the one-writer rule for spawned children was not re-read
+- `s19` — `challenge pass / reversibility lens: accuracy.json per-model settings and associate run switches`: the support check has a contract switch and a per-run flag (--support-score); c25 gives strict facts the same, so turning it off is one flag or one contract line; dropped items stay in the export (c35), so nothing is lost on disk
 
 ## Decisions
 
@@ -89,3 +134,9 @@
 - Operator, 2026-11-19 ('Confirmed all', on the proposal put to him): a derived fact is also judged by the decider, which is asked whether the conclusion follows from the facts it lists
 - Operator, 2026-11-19 ('Confirmed all', on the proposal put to him): the two retry rounds stay; after the last round the answer goes out with the failing items dropped and the run is not refused
 - Operator, 2026-11-19 ('Confirmed all', on the proposal put to him): senses is left out of 'switched on' until it has one recorded run with the accuracy method
+
+## Open parks
+
+- [unknown_nonblocking] whether a model, told that failing items are dropped, hands back fewer facts or moves claims into its final reply (assumption c16); only a live measurement shows it
+- [unknown_nonblocking] whether spawned children and delegated runs run with strict facts on, and how a parent treats a child's dropped items; the accuracy method is not measured in children or delegated runs at all
+- [unknown_nonblocking] retry rounds add model turns to runs that already take about ten minutes; the time cost of strict facts is unknown until measured
