@@ -4,7 +4,7 @@
   "schema_version": 6,
   "status": "exported",
   "created": "2026-11-19T18:44:49Z",
-  "updated": "2026-11-20T12:37:12Z",
+  "updated": "2026-11-20T15:08:05Z",
   "claims": [
     {
       "id": "c1",
@@ -926,6 +926,19 @@
       "seeds": []
     }
   ],
-  "lapses": [],
+  "lapses": [
+    {
+      "id": "l1",
+      "code": "provenance-missing",
+      "what": "The strict-facts plan (task t7, and spec claim c39's 'the Python re-check implements the same kinds') was written as if the Python re-check lives in associate/accuracy. It moved to the evidence-cli package at commit 266dad3; associate only imports it. I scoped from the surfaces I had read earlier and from a CLAUDE.md of an older checkout, and did not re-read associate/accuracy on main before writing the plan. Found when starting t7.",
+      "skipped_check": "re-reading associate/accuracy on the branch base during the challenge pass and before spec-to-plan",
+      "refs": [
+        "t7",
+        "c39"
+      ],
+      "origin": "llm",
+      "status": "proposed"
+    }
+  ],
   "obligations": []
 }
