@@ -2,7 +2,7 @@
   "plan_slug": "associate-strict-facts",
   "schema_version": 2,
   "created": "2026-11-20T14:34:55Z",
-  "updated": "2026-11-20T15:27:03Z",
+  "updated": "2026-11-20T16:26:46Z",
   "deviations": [
     {
       "id": "d1",
@@ -58,6 +58,21 @@
       "status": "approved",
       "classification": "acceptable",
       "seq": 3
+    },
+    {
+      "id": "d4",
+      "what": "The derived-fact question to the decider has five options (yes, mostly, partly, little, no), not the three (yes, partly, no) the builder of task t1 wrote; yes and mostly are its passing answers, and it still decides no drop",
+      "task_ref": "t1",
+      "reason": "Operator, 2026-11-20: asked why three options when five were agreed for the decider, then 'Names confirmed: yes, mostly, partly, little, no'. Three options were tried for the support question and not adopted (docs/notes/support-score-calibration.md)",
+      "affects": [
+        "t4",
+        "t11",
+        "c36"
+      ],
+      "origin": "user",
+      "status": "approved",
+      "classification": "acceptable",
+      "seq": 4
     }
   ],
   "evidence": [],
