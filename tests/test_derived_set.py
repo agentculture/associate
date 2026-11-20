@@ -47,14 +47,29 @@ def test_no_machine_path_or_key_in_any_text():
         assert all(derived_set.machine_text(t) is None for t in texts), item["id"]
 
 
-def test_set_carries_no_labels_or_answers_yet_and_copies_the_contract():
+def test_set_copies_the_contract_and_carries_two_raters_and_both_decider_runs():
     contract = json.loads(
         (ROOT / "associate" / "contract" / "accuracy.json").read_text(encoding="utf-8")
     )
     derived = contract["strict"]["derived_question"]
     assert DOCUMENT["question"] == derived["question"] and DOCUMENT["options"] == derived["options"]
     assert DOCUMENT["contract_version"] == contract["version"]
-    assert all(item["raters"] == {} and item["decider"] is None for item in ITEMS)
+    labels = {"yes", "partly", "no"}
+    for item in ITEMS:
+        assert set(item["raters"]) == {"a", "b"}
+        assert item["raters"]["a"]["label"] in labels
+        assert item["raters"]["b"]["label"] in labels
+        assert item["decider"]["five_options"]["option"] in derived["options"]
+        assert item["decider"]["three_options"]["option"] in labels
+
+
+def test_shares_are_counted_on_items_both_raters_agree_on():
+    shares = derived_set.shares(DOCUMENT)
+    real = shares["real"]
+    assert sum(row["agreed"] for row in real.values()) <= shares["items"]["real"]
+    for row in real.values():
+        assert sum(row["five_options"].values()) == row["agreed"]
+        assert sum(row["three_options"].values()) == row["agreed"]
 
 
 def test_counts_cover_every_group():

@@ -281,6 +281,34 @@ def counts(document: dict[str, Any]) -> dict[str, Any]:
     }
 
 
+def shares(document: dict[str, Any]) -> dict[str, Any]:
+    """The decider's answers on the items both raters gave the same label.
+
+    Per group and per agreed label: how many items, and how the decider's
+    answers fall under five options and under three. Counts only: none of
+    them is accuracy.
+    """
+    items = document["items"]
+    out: dict[str, Any] = {"items": dict(Counter(i["group"] for i in items))}
+    for item in items:
+        a, b = item["raters"]["a"]["label"], item["raters"]["b"]["label"]
+        if a != b:
+            continue
+        row = out.setdefault(item["group"], {}).setdefault(
+            a, {"agreed": 0, "five_options": Counter(), "three_options": Counter()}
+        )
+        row["agreed"] += 1
+        row["five_options"][item["decider"]["five_options"]["option"]] += 1
+        row["three_options"][item["decider"]["three_options"]["option"]] += 1
+    for group, rows in out.items():
+        if group == "items":
+            continue
+        for row in rows.values():
+            row["five_options"] = dict(row["five_options"])
+            row["three_options"] = dict(row["three_options"])
+    return out
+
+
 def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(description=__doc__.split("\n")[0])
     sub = parser.add_subparsers(dest="command", required=True)
@@ -290,7 +318,13 @@ def main(argv: list[str] | None = None) -> int:
     b.add_argument("--out", type=Path, default=DEFAULT_SET)
     c = sub.add_parser("counts", help="print counts from a set file")
     c.add_argument("file", type=Path, nargs="?", default=DEFAULT_SET)
+    s = sub.add_parser("shares", help="print the decider's answers on rater-agreed items")
+    s.add_argument("file", type=Path, nargs="?", default=DEFAULT_SET)
     args = parser.parse_args(argv)
+    if args.command == "shares":
+        document = json.loads(args.file.read_text(encoding="utf-8"))
+        print(json.dumps(shares(document), indent=1))
+        return 0
     if args.command == "build":
         document, skipped = build(args.exports, frozenset(args.skip))
         args.out.write_text(
