@@ -84,8 +84,9 @@ export interface RunDetail {
   changed_paths_total?: number;
   changed_paths_truncated?: boolean;
   changed_paths_error?: string | null;
-  final_reply?: string | null;
-  final_reply_dropped?: boolean;
+  unchecked_final_reply?: string | null;
+  unchecked_final_reply_dropped?: boolean;
+  answer?: string | null;
   details_dropped?: boolean;
   error?: string | null;
 }

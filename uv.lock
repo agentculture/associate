@@ -76,7 +76,7 @@ dev = [
 
 [package.metadata]
 requires-dist = [
-    { name = "evidence-cli", specifier = ">=0.7.0" },
+    { name = "evidence-cli", specifier = ">=0.9.0" },
     { name = "fastapi", marker = "extra == 'server'", specifier = ">=0.115" },
     { name = "mcp", marker = "extra == 'mcp'", specifier = ">=1.2,<2" },
     { name = "uvicorn", marker = "extra == 'server'", specifier = ">=0.30" },
@@ -421,11 +421,11 @@ wheels = [
 
 [[package]]
 name = "evidence-cli"
-version = "0.7.1"
+version = "0.9.0"
 source = { registry = "https://pypi.org/simple" }
-sdist = { url = "https://files.pythonhosted.org/packages/49/8e/14dad75d0e4fb42f23614a18e5073a0adbba9d02fafe985a8c067f293ed8/evidence_cli-0.7.1.tar.gz", hash = "sha256:944ab59a67fb0b24319fb07dc878c0ea83c79d3669f849680401916f83c59e85", size = 262910, upload-time = "2026-11-18T16:04:08.103Z" }
+sdist = { url = "https://files.pythonhosted.org/packages/17/48/7c1818de74e1a824dd03734351c65a2264f638d7fcc4b8ae6bc64666dbf6/evidence_cli-0.9.0.tar.gz", hash = "sha256:cb7251a8a2c9e25ffe035e1c90f5952c983ef30665b949d67bef4afb407b55c6", size = 338966, upload-time = "2026-11-20T21:06:18.803Z" }
 wheels = [
-    { url = "https://files.pythonhosted.org/packages/c9/30/39e42a17854bf43ca37252f6d853c45fe728d6383a82fbb6bcb80973f272/evidence_cli-0.7.1-py3-none-any.whl", hash = "sha256:0793e287d05219663274e02dcf0c9dc5eef5217ddc70f0d37b067d2f9c2fa940", size = 61993, upload-time = "2026-11-18T16:04:06.937Z" },
+    { url = "https://files.pythonhosted.org/packages/3e/d5/ed57801f3a51d0e4b8460c275d0a9fe710758d7316c4e1cf1c0e64135c80/evidence_cli-0.9.0-py3-none-any.whl", hash = "sha256:131ab6605d5678edfbf0156c98392e8496176556eb1a21f49f614c015a1b23d8", size = 113080, upload-time = "2026-11-20T21:06:17.877Z" },
 ]
 
 [[package]]

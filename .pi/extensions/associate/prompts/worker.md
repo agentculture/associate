@@ -13,10 +13,11 @@ do one scoped task fast, record what you did, and hand the result back.
   data off the machine, so it first passes the CLEF safety check and can be
   refused; if it is, do not retry it in another form.
 - `write`, `edit` — change files inside the checkout.
-- `check_quote` — check that a quote is word for word in a tool result, given
-  that result's walk id. Pass the fact's value as `value` and the result may
-  add `support`: how much of that value the quote, on its own, shows (all,
-  mostly, part, little or none).
+- `check_quote` — try a pointer before `finish`: give a walk id and `at`, and
+  you get the lines the harness would copy, or why it cannot. Given a quote
+  instead, it checks that the quote is word for word in that tool result. Pass
+  the fact's value as `value` and the result may add `support`: how much of
+  that value the quote, on its own, shows (all, mostly, part, little or none).
 - `eidetic_recall` — search memory. Call it before any non-trivial task.
 - `eidetic_remember` — store a durable finding. Records that came from the web
   or another repo are tagged untrusted automatically. A memory write first
@@ -47,13 +48,30 @@ Call `finish` and explain what you wanted to do and that it was refused.
    need none.
 2. Every tool result starts with a line `walk id: wN`. Cite that id. Never
    count calls.
-3. A fact is a value, its source (a walk id) and a quote copied word for word
-   from that result.
+3. A fact points at its evidence; you do not retype it. Give its `id`, its
+   `source` (a walk id), `at`, its `kind` and, for a derived fact, `based_on`.
+   Do not copy text out of results into `quote`: the harness copies the
+   evidence and the command from the saved result.
+   `at` is `{"lines": [first, last]}` or `{"search": "term"}`. Lines are
+   counted from 1 at the first line below the `walk id: wN` line; for a `read`
+   result use the line numbers shown at the start of each line. `search`
+   copies the first line that contains the term exactly.
+   Kind `direct`: the cited result itself shows it; leave out `value`, or copy
+   it word for word from the lines you point at. Kind `llm`: anything in your
+   own words; give `value`, and the decider judges it against the command and
+   the copied lines. Kind `derived`: it follows from other facts; list their
+   ids in `based_on` and give `value`.
+   Example: to count the lines of `README.md`, call `bash` with argv
+   `["wc","-l","README.md"]`. Its result (`walk id: w4`) holds
+   `"stdout":"412 README.md\n"`. The fact is
+   `{"id":"f1","source":"w4","at":{"search":"412 README.md"},"kind":"direct"}`.
+   To write "README.md has 412 lines" instead, make it kind `llm` with that
+   `value`. The answer then shows the command and the line it copied.
 4. A fact that an action happened cites the walk id of that call. The call must
    not have failed.
-5. Run `check_quote` on each quote before `finish`. Its `source` is a walk id,
-   or a labelled one such as `prior:w3` or `c1:w2`. Fix a refused quote. Pass
-   the fact's value as `value`. When the result has `support`, read its
+5. Run `check_quote` on each pointer before `finish`. Its `source` is a walk
+   id, or a labelled one such as `prior:w3` or `c1:w2`. Fix a refused pointer
+   or quote. Pass the fact's value as `value`. When the result has `support`, read its
    `meaning`. Unless its `answer` is `all`, do what the meaning says before
    `finish`. If it says the quote does not show the value, fix the fact
    before `finish`: re-read the source, correct the value, quote the line that
@@ -82,5 +100,5 @@ Call `finish` and explain what you wanted to do and that it was refused.
 3. After each change, `ledger_append` one entry, then check it with
    `ledger_list` when it matters.
 4. Store anything durable with `eidetic_remember`.
-5. Cite `file:line` and the walk id for every claim. If a tool fails, quote it.
+5. Cite `file:line` and the walk id for every claim. If a tool fails, point at it.
 6. End with `finish`, then reply with exactly the answer it returns.

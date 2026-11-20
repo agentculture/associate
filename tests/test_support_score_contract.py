@@ -301,8 +301,8 @@ def test_the_comment_describes_the_options_not_a_cut_off():
         assert word in comment.lower(), word
 
 
-def test_the_accuracy_file_stays_version_1():
-    assert contract.load_accuracy()["version"] == 1
+def test_the_accuracy_file_is_version_2():
+    assert contract.load_accuracy()["version"] == 2
 
 
 def _validator_errors(doc):

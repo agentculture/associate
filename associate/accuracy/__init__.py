@@ -2,9 +2,11 @@
 
 The checker, the export loader, the counts and the quote matcher moved from
 this directory (commit ``266dad3``) into the first-party package evidence-cli
-(import name ``evidence``). associate imports the eight public names its
-``docs/library.md`` lists for associate, plus ``ExportError``; everything else
-in that package is internal to it.
+(import name ``evidence``). associate imports the public names its
+``docs/library.md`` lists for associate (eight for the quote check, four for
+the strict re-check: ``strict_recheck``, ``load_strict_vectors``,
+``is_strict_export`` and ``recheck_strict_export``), plus ``ExportError``;
+everything else in that package is internal to it.
 
 evidence-cli is the one runtime dependency on associate's named first-party
 list (``CLAUDE.md``, "What not to invent"). Importing this package when
@@ -13,8 +15,9 @@ evidence-cli is missing, or older than :data:`EVIDENCE_FLOOR`, raises a
 install command. Every importer imports it inside a verb's handler, so the verb
 exits through the CLI's error contract with no traceback.
 
-A passed fact means its quote was found in the saved result it cites. It does
-not mean the value is true.
+A passed fact means its quote was found in the saved result it cites (for a
+strict fact: its evidence was copied from a saved result, or its quote found in
+one). It does not mean the value is true.
 """
 
 from __future__ import annotations
@@ -28,7 +31,7 @@ from associate.cli._errors import EXIT_ENV_ERROR, CliError
 
 #: The distribution, its oldest usable version, and how to install it.
 EVIDENCE_PACKAGE = "evidence-cli"
-EVIDENCE_FLOOR = "0.7.0"
+EVIDENCE_FLOOR = "0.9.0"
 INSTALL_COMMAND = f'pip install "{EVIDENCE_PACKAGE}>={EVIDENCE_FLOOR}"'
 
 #: associate's own export file names (the harness writes them; evidence-cli reads them).
@@ -53,10 +56,14 @@ __all__ = [
     "check_quote",
     "fact_counts",
     "inspect_export",
+    "is_strict_export",
     "load_export",
     "load_handback_input",
+    "load_strict_vectors",
     "parse_source_ref",
+    "recheck_strict_export",
     "require_evidence",
+    "strict_recheck",
 ]
 
 
@@ -104,7 +111,14 @@ from evidence.accuracy.check import (  # noqa: E402 - only after the version che
 )
 from evidence.accuracy.counts import fact_counts  # noqa: E402
 from evidence.accuracy.matcher import check_quote  # noqa: E402
+from evidence.accuracy.strict import strict_recheck  # noqa: E402
+from evidence.accuracy.strict_export import (  # noqa: E402 - only after the version check
+    is_strict_export,
+    recheck_strict_export,
+)
+from evidence.accuracy.vectors import load_strict_vectors  # noqa: E402
 
+from associate.accuracy import strict as _strict  # noqa: E402
 from associate.accuracy import support as _support  # noqa: E402
 
 
@@ -136,11 +150,46 @@ def accuracy_result(
     and ``support_unmatched``. They sit beside ``accuracy``, not in it: the
     score is copied from the extension's files, never recomputed, and is not
     part of the re-check. An export with no score gets no such key.
+
+    A strict export (``check.json`` mode ``strict``) is re-checked by
+    evidence-cli's strict re-check, once. Its ``accuracy`` object then also
+    carries ``python_recheck_agrees`` (true: no compared value differs from the
+    export's own ``check.json`` and every fact was compared with a record;
+    false: a value differs; None: neither, because the facts were not compared,
+    with ``python_recheck_agrees_reason`` saying what was not),
+    ``python_recheck_incomplete`` (a part of the record was not compared, or a
+    fact has no record), ``python_recheck_compared`` and
+    ``python_recheck_not_compared`` (the parts of the record),
+    ``python_recheck_not_compared_reasons`` (why, per part),
+    ``python_recheck_facts_without_record`` (fact ids),
+    ``python_recheck_disagreements`` (each value that differs, with both values)
+    and ``python_recheck_returned_before_source`` (``check.json`` when the
+    re-check read the facts returned in earlier rounds from the record, else
+    ``inferred from keep_marked``). All of them are None when the re-check did
+    not run (facts do not apply, or the export cannot be read), and
+    ``not_applicable_reason`` then says why. The result keeps ``strict``, the
+    extension's own counts copied from the export, whose ``recheck`` says
+    whether the re-check ran and its verdict. No other export gains these keys.
     """
     export_dir = Path(export_dir)
     result = _recheck_result(
-        export_dir, accuracy, continue_from=continue_from, check_mode=check_mode
+        export_dir, accuracy, continue_from=continue_from, check_mode=check_mode, with_strict=True
     )
+    # evidence-cli's whole strict re-check (None unless the export is strict),
+    # from the one re-check that call ran. It is not passed on under this name:
+    # here ``strict`` is the extension's own counts.
+    recheck = result.pop(_strict.RESULT_KEY, None)
+    strict = _strict.read_strict(export_dir)
+    if strict is not None:
+        held_accuracy = result["accuracy"]
+        summary = _strict.summary_of(recheck, held_accuracy.get("not_applicable_reason"))
+        # No support copy: a strict fact carries the decider's stored answer
+        # (judge), not the support score's result.
+        return {
+            **result,
+            "accuracy": _strict.checked_accuracy(held_accuracy, summary),
+            _strict.RESULT_KEY: _strict.with_recheck(strict, summary),
+        }
     # The two score files are read once. evidence-cli's accuracy_result runs
     # inspect_export inside itself and does not hand its facts back, so the
     # facts for the support copy need one more run, and only when the export

@@ -55,11 +55,12 @@
  * cited entry's tool (else the entry's harness-written `source_kind`). Agent
  * and memory kinds are second-hand: they are another model's words or a
  * remembered claim. One exception, `delegate_status`: its result is the
- * harness's own JSON, where `final_reply` is the delegated model's account and
- * every other field (outcome, merge, merge_reason, tests) was measured by the
- * harness. A fact quoting it is first-hand when its quote is still found in the
- * saved text with the `final_reply` string emptied; a quote reaching into
- * `final_reply`, or a result that is not such JSON, is second-hand.
+ * harness's own JSON, where `unchecked_final_reply` (`final_reply` in a result
+ * saved before the rename) is the delegated model's account and every other
+ * field (outcome, merge, merge_reason, tests) was measured by the harness. A
+ * fact quoting it is first-hand when its quote is still found in the saved text
+ * with that string emptied; a quote reaching into it, or a result that is not
+ * such JSON, is second-hand.
  *
  * Verdicts (first failing rule wins): a basis id naming no fact of the payload
  * (`unknown_fact`); a basis fact that was refused (`basis_refused`); supported
@@ -69,6 +70,68 @@
  * `closing`, else the last), supported or refuted with no first-hand basis
  * fact (`closing_second_hand`). An open item without a check is refused
  * (`open_without_check`). "cannot_tell" with a named check is accepted.
+ *
+ * Strict facts (plan t3; spec claims c22, c23, c36, c40, h10, h26). Every fact
+ * gets, beside the verdict above, the fields below; an old-shape fact (a quote
+ * and no kind) is a `direct` fact with no `based_on`, and its verdict, the
+ * counts and `accepted` are exactly what they were before.
+ *   - `kind_stated`: the fact's `kind`, `direct` when absent (any other string
+ *     is read as `direct`, the strictest).
+ *   - The direct check: the quote matcher for a fact with a quote; for a fact
+ *     with a pointer (`at`), the injected `resolveEvidence`, then the fact's
+ *     literal value must be inside the quote the resolver copied. With no
+ *     resolver a pointer-only fact is unchecked (`pointer_unresolved`); a
+ *     resolver answering not ok refuses it (`pointer_unresolved`, the
+ *     resolver's own reason as `drop_reason` and its fix).
+ *   - With strict OFF (no `strict` option), the kind floor (c40) applies: a
+ *     fact whose direct check passes is `passed` and `kind_checked: direct`,
+ *     whatever kind it stated. An llm or derived fact whose matcher check does
+ *     not pass is not refused: it is unchecked (`to_judge`), `kind_checked` its
+ *     stated kind, `status: to_judge`. A source, action or contract failure
+ *     fails any kind. These fields are only recorded there; nothing acts on them.
+ *   - With strict ON (`options.strict`, plan deviation d3, replacing the kind
+ *     floor), first the evidence must be had: a pointer must resolve and every
+ *     number in the value be in the copied evidence (the resolver's checks), or
+ *     an old-shape quote must be found by the matcher and every number in the
+ *     value be in that quote (`number_absent`). Any failure there fails the
+ *     fact whatever kind it states, and so does a fact the harness could not
+ *     check at all (no saved text, a partial result: `status: unchecked`).
+ *     Then the value is classified by where its words come from (`worded`):
+ *       * no value given (absent, not a string, or only whitespace: the harness
+ *         takes the copied text), or a value that, with its leading and trailing
+ *         whitespace trimmed, is an exact substring of the evidence (the
+ *         copied lines, or the old-shape quote as the model gave it): the
+ *         comparison is JavaScript `evidence.includes(value.trim())`, code unit
+ *         for code unit, case-sensitive, with no other normalisation (inner
+ *         whitespace must match exactly). `worded: false`, `passed`,
+ *         `kind_checked: direct`, never sent to the decider;
+ *       * any other value is the model's own wording: `worded: true`,
+ *         `status: to_judge`, `kind_checked: llm`, whatever kind it stated
+ *         (`direct` or `llm`), for the decider's support question;
+ *       * a fact stating `derived` is always `to_judge` with
+ *         `kind_checked: derived` (the derived question), its `worded` set by
+ *         the same comparison.
+ *     A fact that failed before it could be classified has `worded: null`.
+ *     The literal-in-quote rule is not applied under strict: the
+ *     classification above takes its place.
+ *   - `status`: passed, failed (verdict refused, or a graph refusal), to_judge,
+ *     unchecked, or dropped (an input failed).
+ *   - The graph (c23): `based_on` names facts of this hand-back. An id naming
+ *     none fails the fact (`based_on_unknown`, with the fix); a cycle fails
+ *     every fact in it (`based_on_cycle`, the fix lists the ids). Both are also
+ *     listed in `graph.refusals`. These reasons have no contract check id yet
+ *     (`check` stays as the verdict left it), are never report flags, and leave
+ *     `verdict` and `accepted` alone: whether a failure is removed from the
+ *     answer or refused is the hand-back flow's decision, by mode.
+ *   - Order and cascade (c36, h10): facts are taken in a topological order of
+ *     `based_on` (`graph.order`), stable by the model's order; a cycle's facts
+ *     sit together in the model's order. When a fact failed, every fact
+ *     reachable from it through `based_on` is `dropped`, `drop_reason:
+ *     based_on_failed`, `dropped_by` the root failed fact's id (never an
+ *     intermediate), and `drop_message` naming it. Any kind cascades; a fact
+ *     left to judge does not (it has not failed). `cascadeDrops` redoes the
+ *     cascade after a later step changes a status.
+ *   `facts` stays in the model's order.
  *
  * Counts (`report.schema.json`): facts made, checked (passed + refused),
  * passed, refused, unchecked, the same per source kind (a fact whose source did
@@ -126,7 +189,66 @@ export const CHECKER_REASONS = [
 ] as const;
 
 export type CheckerReason = (typeof CHECKER_REASONS)[number];
-export type UncheckedReason = "no_saved_text" | "partial_result";
+export type UncheckedReason = "no_saved_text" | "partial_result" | "pointer_unresolved" | "to_judge";
+/** Strict only: an old-shape fact whose value states a number its quote does not show. No check id of its own. */
+export type StrictCheckReason = "number_absent";
+
+/** The kinds of check a fact may state (`facts.schema.json` `kind`); absent is `direct`. */
+export const FACT_KINDS = ["direct", "llm", "derived"] as const;
+export type FactKind = (typeof FACT_KINDS)[number];
+
+/** A fact's strict outcome: its own check, a graph refusal, or a drop because an input failed. */
+export type FactStatus = "passed" | "failed" | "to_judge" | "unchecked" | "dropped";
+
+/** Graph refusals. No contract check id maps them yet, so they are never report flags. */
+export type GraphReason = "based_on_unknown" | "based_on_cycle";
+/** `drop_reason` of a fact dropped because a fact it is based on failed. */
+export const BASED_ON_FAILED = "based_on_failed";
+
+export interface GraphRefusal {
+  readonly reason: GraphReason;
+  /** The fact naming unknown ids, or null for a cycle. */
+  readonly fact: string | null;
+  /** The unknown ids, or the ids in the cycle (model order). */
+  readonly ids: string[];
+  readonly fix: string;
+}
+
+/** What the evidence resolver copied for a pointer (`at`). */
+export interface ResolvedEvidence {
+  readonly ok: true;
+  readonly quote: string;
+  readonly command: string;
+  readonly result_file: string;
+  readonly value: unknown;
+  readonly source_kind: unknown;
+}
+
+export interface UnresolvedEvidence {
+  readonly ok: false;
+  readonly reason: string;
+  readonly fix: string;
+}
+
+/** The walk entry a fact's source resolved to, and that entry's saved text. */
+export interface LocatedSource {
+  readonly entry: { readonly id: string; readonly tool: string };
+  readonly text: string | null;
+  /** The run label of the reference, or null for the current run. */
+  readonly run: string | null;
+}
+
+/** Resolves a fact's pointer to copied evidence (wired by a later task to `lib/evidence.ts`). */
+export type EvidenceResolver = (
+  fact: Readonly<Record<string, unknown>>,
+  located: LocatedSource,
+) => ResolvedEvidence | UnresolvedEvidence;
+
+export interface CheckOptions {
+  readonly resolveEvidence?: EvidenceResolver;
+  /** Strict facts on: the direct-or-worded rule replaces the kind floor (module header). */
+  readonly strict?: boolean;
+}
 
 export interface FactCheck {
   readonly id: string;
@@ -134,7 +256,7 @@ export interface FactCheck {
   /** The run label the reference named, or null for the current run. */
   readonly run: string | null;
   readonly verdict: FactVerdict;
-  readonly reason: CheckerReason | UncheckedReason | null;
+  readonly reason: CheckerReason | UncheckedReason | StrictCheckReason | null;
   /** The contract check id of a refusal, else null. */
   readonly check: string | null;
   /** How to fix a refusal, else null. */
@@ -142,6 +264,31 @@ export interface FactCheck {
   readonly nearest: NearestSpan | null;
   readonly source_kind: SourceKind | null;
   readonly first_hand: boolean | null;
+  /** The kind the fact stated (`direct` when absent). */
+  readonly kind_stated: FactKind;
+  /**
+   * Strict off: `direct` when the direct check found the evidence (the kind
+   * floor), else the stated kind. Strict on: `direct` for a fact with no value
+   * or a value word for word in its evidence, `derived` for a stated derived
+   * fact, `llm` for a value in the model's own wording (module header).
+   */
+  readonly kind_checked: FactKind;
+  /**
+   * Strict only (absent with strict off): true when the value is in the
+   * model's own wording (not word for word in the evidence), false when it is
+   * word for word or no value was given, null when the fact failed before it
+   * could be classified.
+   */
+  readonly worded?: boolean | null;
+  /** The fact ids it names in `based_on`, as given. */
+  readonly based_on: string[];
+  readonly status: FactStatus;
+  /** Why the fact is out of the answer (its own reason, a graph reason, or `based_on_failed`), else null. */
+  readonly drop_reason: string | null;
+  /** For a cascade drop: the root failed fact's id, else null. */
+  readonly dropped_by: string | null;
+  /** For a cascade drop: the message to the model, naming the root failed fact, else null. */
+  readonly drop_message: string | null;
 }
 
 export interface ItemCheck {
@@ -183,6 +330,8 @@ export interface HandbackCheck {
   readonly verdicts: ItemCheck[];
   readonly open_items: ItemCheck[];
   readonly report: HandbackReport;
+  /** The `based_on` graph: the check order (fact ids) and its refusals. */
+  readonly graph: { readonly order: string[]; readonly refusals: GraphRefusal[] };
 }
 
 const SOURCE_KINDS: readonly SourceKind[] = ["file", "tool", "web", "memory", "agent", "harness"];
@@ -192,9 +341,11 @@ const SECOND_HAND_KINDS: ReadonlySet<SourceKind> = new Set<SourceKind>(["agent",
 const DELEGATE_STATUS_TOOL = "delegate_status";
 /**
  * The result fields that hold the child's own words: its final message, and the
- * rendered answer (which carries its finish summary and that message).
+ * rendered answer (which carries its finish summary and that message). The
+ * final message is `unchecked_final_reply` since the rename; `final_reply`
+ * stays listed so a result saved before it still has that field emptied.
  */
-const CHILD_ACCOUNT_KEYS: readonly string[] = ["final_reply", "answer"];
+const CHILD_ACCOUNT_KEYS: readonly string[] = ["unchecked_final_reply", "final_reply", "answer"];
 
 const REFERENCE = /^(?:([A-Za-z0-9_-]+):)?(w[1-9][0-9]*)$/;
 const LABEL = /^[A-Za-z0-9_-]+$/;
@@ -404,8 +555,297 @@ function countFact(counts: FactCounts, verdict: FactVerdict): void {
   if (verdict !== "unchecked") counts.checked += 1;
 }
 
+// --- strict facts: kinds, the based_on graph, the cascade --------------------
+
+type StrictField = "kind_stated" | "kind_checked" | "based_on" | "status" | "drop_reason" | "dropped_by" | "drop_message";
+/** A fact as its own check leaves it, before kinds and the graph are applied. */
+type CoreFact = Omit<FactCheck, StrictField>;
+
+const NUMBER_TOKEN = /\d{1,3}(?:,\d{3})+(?:\.\d+)?|\d+(?:\.\d+)?/g;
+
+/** The number tokens of `text`, thousands separators removed, in order (the number rule, lib/evidence.ts header). */
+export function numberTokens(text: string): string[] {
+  return (text.match(NUMBER_TOKEN) ?? []).map((token) => token.replace(/,/g, ""));
+}
+
+/** The number tokens of `value` that are not number tokens of `evidence`, each once, in order. */
+export function missingNumbers(value: string, evidence: string): string[] {
+  const present = new Set(numberTokens(evidence));
+  const missing: string[] = [];
+  for (const token of numberTokens(value)) if (!present.has(token) && !missing.includes(token)) missing.push(token);
+  return missing;
+}
+
+/** The value a strict fact gives, trimmed, or null when it gives none (absent, not a string, only whitespace). */
+export function givenValue(value: unknown): string | null {
+  if (typeof value !== "string") return null;
+  const trimmed = value.trim();
+  return trimmed === "" ? null : trimmed;
+}
+
+/**
+ * Strict: whether a value is in the model's own wording. False when no value
+ * is given or when the trimmed value is an exact substring of the evidence:
+ * `evidence.includes(value.trim())`, case-sensitive, no other normalisation
+ * (a value differing from the evidence only in letter case, or in the
+ * whitespace inside it, is worded). See the module header.
+ */
+export function isWorded(value: unknown, evidence: string): boolean {
+  const given = givenValue(value);
+  return given !== null && !evidence.includes(given);
+}
+
+/** The fix for an old-shape strict fact whose value states a number its quote does not show. */
+const NUMBER_IN_QUOTE_FIX =
+  "write only numbers that appear in the quote, or point with at at the lines that show the number";
+
+/** The kind a fact states: `direct` when absent or not one of the kinds. */
+function kindOfFact(fact: Record<string, unknown>): FactKind {
+  const kind = fact.kind;
+  return typeof kind === "string" && (FACT_KINDS as readonly string[]).includes(kind) ? (kind as FactKind) : "direct";
+}
+
+interface Graph {
+  /** Positions in check order. */
+  readonly order: number[];
+  /** By position: the based_on ids that name no fact. */
+  readonly unknown: string[][];
+  /** Each cycle as positions in model order. */
+  readonly cycles: number[][];
+  /** By position: the positions its based_on ids name (first occurrence of each id), in based_on order. */
+  readonly deps: number[][];
+}
+
+/**
+ * The based_on graph over facts by position. An id resolves to the first fact
+ * with that id. Strongly connected components (Tarjan) give the cycles: a
+ * component of two or more facts, or one fact naming itself. The order is a
+ * topological order of the components, each time taking the ready component
+ * whose first fact comes earliest in the model's order.
+ */
+function buildGraph(ids: readonly string[], basedOn: readonly (readonly string[])[]): Graph {
+  const n = ids.length;
+  const first = new Map<string, number>();
+  ids.forEach((id, i) => {
+    if (!first.has(id)) first.set(id, i);
+  });
+  const deps: number[][] = [];
+  const unknown: string[][] = [];
+  for (let i = 0; i < n; i++) {
+    const own: number[] = [];
+    const missing: string[] = [];
+    for (const ref of basedOn[i]) {
+      const at = first.get(ref);
+      if (at === undefined) {
+        if (!missing.includes(ref)) missing.push(ref);
+      } else if (!own.includes(at)) {
+        own.push(at);
+      }
+    }
+    deps.push(own);
+    unknown.push(missing);
+  }
+
+  // Tarjan, iterative so a long chain cannot overflow the stack.
+  const indexOf = new Array<number>(n).fill(-1);
+  const low = new Array<number>(n).fill(0);
+  const onStack = new Array<boolean>(n).fill(false);
+  const comp = new Array<number>(n).fill(-1);
+  const stack: number[] = [];
+  const components: number[][] = [];
+  let counter = 0;
+  for (let root = 0; root < n; root++) {
+    if (indexOf[root] !== -1) continue;
+    const work: Array<[number, number]> = [[root, 0]];
+    indexOf[root] = counter;
+    low[root] = counter;
+    counter += 1;
+    stack.push(root);
+    onStack[root] = true;
+    while (work.length > 0) {
+      const top = work[work.length - 1];
+      const [v, next] = top;
+      if (next < deps[v].length) {
+        top[1] += 1;
+        const w = deps[v][next];
+        if (indexOf[w] === -1) {
+          indexOf[w] = counter;
+          low[w] = counter;
+          counter += 1;
+          stack.push(w);
+          onStack[w] = true;
+          work.push([w, 0]);
+        } else if (onStack[w]) {
+          low[v] = Math.min(low[v], indexOf[w]);
+        }
+        continue;
+      }
+      work.pop();
+      if (work.length > 0) {
+        const parent = work[work.length - 1][0];
+        low[parent] = Math.min(low[parent], low[v]);
+      }
+      if (low[v] === indexOf[v]) {
+        const members: number[] = [];
+        let w: number;
+        do {
+          w = stack.pop() as number;
+          onStack[w] = false;
+          comp[w] = components.length;
+          members.push(w);
+        } while (w !== v);
+        components.push(members.sort((a, b) => a - b));
+      }
+    }
+  }
+
+  const cycles = components.filter((members) => members.length > 1 || deps[members[0]].includes(members[0]));
+
+  // Kahn over components, stable by each component's first position.
+  const needs = components.map((members, c) => {
+    const out = new Set<number>();
+    for (const v of members) for (const w of deps[v]) if (comp[w] !== c) out.add(comp[w]);
+    return out;
+  });
+  const done = new Set<number>();
+  const order: number[] = [];
+  while (done.size < components.length) {
+    let pick = -1;
+    for (let c = 0; c < components.length; c++) {
+      if (done.has(c) || [...needs[c]].some((d) => !done.has(d))) continue;
+      if (pick === -1 || components[c][0] < components[pick][0]) pick = c;
+    }
+    done.add(pick);
+    order.push(...components[pick]);
+  }
+  cycles.sort((a, b) => a[0] - b[0]);
+  return { order, unknown, cycles, deps };
+}
+
+function cascadeMessage(id: string, root: string, rootReason: string | null): string {
+  const why = rootReason === null ? "" : ` (${rootReason})`;
+  return (
+    `${id} is dropped because it is based on ${root}, which failed${why}; ` +
+    `fix ${root} or remove it from ${id}'s based_on, then restate ${id}`
+  );
+}
+
+/** Mark every fact reachable from a failed fact as dropped, naming the root failed fact. */
+function cascade(facts: FactCheck[], graph: Graph): FactCheck[] {
+  const out = facts.slice();
+  for (const i of graph.order) {
+    const fact = out[i];
+    if (fact.status === "failed") continue;
+    let root: FactCheck | null = null;
+    for (const d of graph.deps[i]) {
+      const dep = out[d];
+      if (dep.status === "failed") root = dep;
+      else if (dep.status === "dropped" && dep.dropped_by !== null) {
+        root = out.find((f) => f.id === dep.dropped_by) ?? null;
+      }
+      if (root !== null) break;
+    }
+    if (root === null) continue;
+    out[i] = {
+      ...fact,
+      status: "dropped",
+      drop_reason: BASED_ON_FAILED,
+      dropped_by: root.id,
+      drop_message: cascadeMessage(fact.id, root.id, root.drop_reason),
+    };
+  }
+  return out;
+}
+
+/**
+ * Redo the cascade over checked facts after a later step changed a status (the
+ * decider failing an llm fact): every fact reachable from a failed fact through
+ * `based_on` is dropped with the root failed fact's id. A failed fact keeps its
+ * own reason. Facts stay in their order; the input is not changed.
+ */
+export function cascadeDrops(facts: readonly FactCheck[]): FactCheck[] {
+  const graph = buildGraph(
+    facts.map((f) => f.id),
+    facts.map((f) => (Array.isArray(f.based_on) ? f.based_on : [])),
+  );
+  return cascade(facts.slice(), graph);
+}
+
+/** Apply kinds, the graph refusals and the cascade to the facts as their own checks left them. */
+function strictPass(
+  rawFacts: readonly Record<string, unknown>[],
+  core: readonly CoreFact[],
+  ownDropReason: ReadonlyArray<string | undefined>,
+  strict: boolean,
+): { facts: FactCheck[]; graph: { order: string[]; refusals: GraphRefusal[] } } {
+  const basedOn = rawFacts.map((raw) => asArray(raw.based_on).map(str));
+  const graph = buildGraph(
+    core.map((f) => f.id),
+    basedOn,
+  );
+
+  const facts: FactCheck[] = core.map((fact, i): FactCheck => {
+    const kindStated = kindOfFact(rawFacts[i]);
+    // `worded` is written only under strict, so a strict-off check.json is byte for byte what it was.
+    const common = {
+      kind_stated: kindStated,
+      based_on: basedOn[i],
+      dropped_by: null,
+      drop_message: null,
+      ...(strict ? { worded: fact.worded ?? null } : {}),
+    };
+    if (fact.verdict === "passed") {
+      return { ...fact, ...common, kind_checked: "direct", status: "passed", drop_reason: null };
+    }
+    if (fact.verdict === "refused") {
+      const reason = ownDropReason[i] ?? fact.reason;
+      return { ...fact, ...common, kind_checked: kindStated, status: "failed", drop_reason: reason };
+    }
+    if (fact.reason === "to_judge") {
+      // Strict: a worded value is judged as llm whatever kind it stated; derived keeps its own question.
+      const checked: FactKind = kindStated === "derived" ? "derived" : strict ? "llm" : kindStated;
+      return { ...fact, ...common, kind_checked: checked, status: "to_judge", drop_reason: null };
+    }
+    // Strict: a fact the harness could not check is unchecked whatever kind it stated (the flow drops it).
+    const status: FactStatus = strict || kindStated === "direct" ? "unchecked" : "to_judge";
+    return { ...fact, ...common, kind_checked: kindStated, status, drop_reason: null };
+  });
+
+  const refusals: GraphRefusal[] = [];
+  const failGraph = (i: number, reason: GraphReason, fix: string) => {
+    const fact = facts[i];
+    if (fact.status === "failed") return;
+    facts[i] = { ...fact, status: "failed", drop_reason: reason, fix: fact.fix ?? fix };
+  };
+  graph.unknown.forEach((missing, i) => {
+    if (missing.length === 0) return;
+    const id = facts[i].id;
+    const fix =
+      `${id}'s based_on names ${missing.join(", ")}, which no fact of this hand-back has; ` +
+      "list only ids of facts given in this hand-back, or add the fact it rests on";
+    refusals.push({ reason: "based_on_unknown", fact: id, ids: missing, fix });
+    failGraph(i, "based_on_unknown", fix);
+  });
+  for (const cycle of graph.cycles) {
+    const ids = cycle.map((i) => facts[i].id);
+    const loop = [...ids, ids[0]].join(" -> ");
+    const fix =
+      `the based_on lists form a cycle (${loop}); a fact cannot rest on itself, even through other facts: ` +
+      "remove one of these ids from a based_on list so the facts can be checked in order";
+    refusals.push({ reason: "based_on_cycle", fact: null, ids, fix });
+    for (const i of cycle) failGraph(i, "based_on_cycle", fix);
+  }
+
+  const cascaded = cascade(facts, graph);
+  return { facts: cascaded, graph: { order: graph.order.map((i) => cascaded[i].id), refusals } };
+}
+
 /** Check one hand-back against its walk and saved results. */
-export function checkHandback(input: HandbackInput, accuracy: ContractAccuracy): HandbackCheck {
+export function checkHandback(
+  input: HandbackInput,
+  accuracy: ContractAccuracy,
+  options: CheckOptions = {},
+): HandbackCheck {
   const mapping = accuracy.refusal_checks ?? {};
   const checkFor = (reason: CheckerReason): string | null =>
     Object.hasOwn(mapping, reason) ? mapping[reason] : null;
@@ -413,6 +853,7 @@ export function checkHandback(input: HandbackInput, accuracy: ContractAccuracy):
   const contractBroken = !isPositiveInteger(rawMinimum);
   const minQuoteLength = isPositiveInteger(rawMinimum) ? rawMinimum : 0;
   const contractText = contractBroken ? contractValueText(rawMinimum) : undefined;
+  const strict = options.strict === true;
 
   const current: RunData = { entries: input.entries, results: input.results };
   const currentIndex = indexEntries(current.entries);
@@ -444,19 +885,22 @@ export function checkHandback(input: HandbackInput, accuracy: ContractAccuracy):
   };
 
   // --- facts ---------------------------------------------------------------
-  const facts: FactCheck[] = [];
-  for (const raw of asArray(payload.facts)) {
-    const fact = asRecord(raw);
+  const rawFacts = asArray(payload.facts).map(asRecord);
+  const facts: CoreFact[] = [];
+  // A drop reason other than the verdict's reason (a resolver's own reason), by position.
+  const ownDropReason: Array<string | undefined> = [];
+  for (const fact of rawFacts) {
     const id = str(fact.id);
     const source = str(fact.source);
     const quote = str(fact.quote);
+    const kindStated = kindOfFact(fact);
     const base = { id, source, run: null as string | null, nearest: null, source_kind: null, first_hand: null };
     const refuse = (
       reason: CheckerReason,
-      extra: Partial<FactCheck> = {},
+      extra: Partial<CoreFact> = {},
       ctx: FixContext = {},
       note?: string,
-    ): FactCheck => {
+    ): CoreFact => {
       flag(reason, id, source, note);
       return { ...base, verdict: "refused", reason, check: checkFor(reason), fix: FIXES[reason](ctx), ...extra };
     };
@@ -517,22 +961,93 @@ export function checkHandback(input: HandbackInput, accuracy: ContractAccuracy):
       }
     }
 
-    const match = checkQuote(quote, literalOf(fact.value), text, minQuoteLength);
+    const unchecked = (reason: UncheckedReason, extra: Partial<CoreFact> = {}): CoreFact => ({
+      ...base,
+      ...located,
+      verdict: "unchecked",
+      reason,
+      check: null,
+      fix: null,
+      ...extra,
+    });
+    // Strict off: an llm or derived fact the direct check does not find is left to judge, never refused
+    // (the kind floor). Strict on: a failed direct check fails every kind.
+    const matcherRefused = (reason: CheckerReason, nearest: NearestSpan | null): CoreFact =>
+      kindStated === "direct" || strict ? refuse(reason, { ...located, nearest }) : unchecked("to_judge", { nearest });
+    // Strict: the evidence is had; classify the value by where its words come from (module header).
+    const classified = (evidence: string, firstHand: boolean | null): CoreFact => {
+      const worded = isWorded(fact.value, evidence);
+      if (kindStated === "derived" || worded) return unchecked("to_judge", { first_hand: firstHand, worded });
+      return { ...base, ...located, first_hand: firstHand, verdict: "passed", reason: null, check: null, fix: null, worded };
+    };
+
+    const pointer = fact.at !== null && typeof fact.at === "object" && !Array.isArray(fact.at);
+    const resolver = options.resolveEvidence;
+    if (pointer && (resolver !== undefined || quote === "")) {
+      if (resolver === undefined) {
+        facts.push(unchecked("pointer_unresolved"));
+        continue;
+      }
+      let resolved: ResolvedEvidence | UnresolvedEvidence | null;
+      try {
+        resolved = resolver(fact, { entry: { id: entry.id, tool: entry.tool }, text, run: parsed.label });
+      } catch {
+        resolved = null;
+      }
+      if (resolved === null || typeof resolved !== "object") {
+        facts.push(unchecked("pointer_unresolved"));
+        continue;
+      }
+      if (!resolved.ok) {
+        ownDropReason[facts.length] = str(resolved.reason) || "pointer_unresolved";
+        facts.push({ ...base, ...located, verdict: "refused", reason: "pointer_unresolved", check: null, fix: str(resolved.fix) });
+        continue;
+      }
+      // The harness copied the quote, so it is in the result by construction: only the value is checked.
+      const copied = str(resolved.quote);
+      const firstHand = isFirstHand(kind, entry, copied, text, 1);
+      if (strict) {
+        facts.push(classified(copied, firstHand));
+        continue;
+      }
+      const onCopy = checkQuote(copied, literalOf(fact.value), copied, 1);
+      if (onCopy.verdict === "passed") {
+        facts.push({ ...base, ...located, first_hand: firstHand, verdict: "passed", reason: null, check: null, fix: null });
+      } else {
+        facts.push(matcherRefused(onCopy.reason as CheckerReason, null));
+      }
+      continue;
+    }
+
+    // Strict: the quote alone is matched; the value is then classified against it (no literal rule).
+    const match = checkQuote(quote, strict ? null : literalOf(fact.value), text, minQuoteLength);
     const textIndependent = match.reason === "quote_short" || match.reason === "literal_not_in_quote";
     if (match.verdict === "unchecked") {
-      facts.push({ ...base, ...located, verdict: "unchecked", reason: "no_saved_text", check: null, fix: null });
+      facts.push(unchecked("no_saved_text"));
     } else if (entry.partial === true && !textIndependent) {
-      facts.push({ ...base, ...located, verdict: "unchecked", reason: "partial_result", check: null, fix: null });
+      facts.push(unchecked("partial_result"));
     } else if (match.verdict === "refused") {
-      facts.push(refuse(match.reason as CheckerReason, { ...located, nearest: match.nearest }));
+      facts.push(matcherRefused(match.reason as CheckerReason, match.nearest));
+    } else if (strict) {
+      const given = givenValue(fact.value);
+      const missing = given === null ? [] : missingNumbers(given, quote);
+      if (missing.length > 0) {
+        ownDropReason[facts.length] = "number_absent";
+        facts.push({ ...base, ...located, verdict: "refused", reason: "number_absent", check: null, fix: NUMBER_IN_QUOTE_FIX });
+      } else {
+        facts.push(classified(quote, located.first_hand));
+      }
     } else {
       facts.push({ ...base, ...located, verdict: "passed", reason: null, check: null, fix: null });
     }
   }
 
+  const graphed = strictPass(rawFacts, facts, ownDropReason, strict);
+  const checkedFacts = graphed.facts;
+
   // --- verdicts and open items ---------------------------------------------
   const factById = new Map<string, FactCheck>();
-  for (const f of facts) if (!factById.has(f.id)) factById.set(f.id, f);
+  for (const f of checkedFacts) if (!factById.has(f.id)) factById.set(f.id, f);
 
   const verdictItems = asArray(payload.verdicts).map(asRecord);
   const markedClosing = verdictItems.findIndex((v) => v.closing === true);
@@ -583,7 +1098,7 @@ export function checkHandback(input: HandbackInput, accuracy: ContractAccuracy):
     SourceKind,
     FactCounts
   >;
-  for (const f of facts) {
+  for (const f of checkedFacts) {
     countFact(totals, f.verdict);
     if (f.source_kind !== null) countFact(bySourceKind[f.source_kind], f.verdict);
   }
@@ -595,13 +1110,13 @@ export function checkHandback(input: HandbackInput, accuracy: ContractAccuracy):
     by_source_kind: bySourceKind,
     flags,
     python_recheck_ran: false,
-    children: children.map((child) => ({ label: child.label, report: checkHandback(child, accuracy).report })),
+    children: children.map((child) => ({ label: child.label, report: checkHandback(child, accuracy, options).report })),
   };
 
   const accepted =
-    facts.every((f) => f.verdict !== "refused") &&
+    checkedFacts.every((f) => f.verdict !== "refused") &&
     verdicts.every((v) => v.outcome !== "refused") &&
     open_items.every((v) => v.outcome !== "refused");
 
-  return { accepted, facts, verdicts, open_items, report };
+  return { accepted, facts: checkedFacts, verdicts, open_items, report, graph: graphed.graph };
 }

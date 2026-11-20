@@ -1,0 +1,3 @@
+116	mock = "colleague.engines.mock:MockEngine"
+117	vllm-openai = "colleague.engines.vllm_openai:VllmOpenAIEngine"
+118	

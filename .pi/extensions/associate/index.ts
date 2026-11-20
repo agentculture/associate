@@ -12,8 +12,10 @@
  * 3. registers `associate_ready` — the sentinel a launcher uses to prove the
  *    extension actually loaded rather than trusting that the config file is on
  *    disk (spec c34) — and `finish`, whose payload is the hand-back, checked
- *    by `lib/facts.ts` in report or enforce mode (issue #20, t11) with
- *    facts.json, check.json, report.json and answer.md written to the export;
+ *    by `lib/facts.ts` in report or enforce mode (issue #20, t11), or, with
+ *    strict facts on, by the strict flow (`lib/strict.ts`: drop, return once,
+ *    never refuse), with facts.json, check.json, report.json and answer.md
+ *    written to the export;
  * 4. registers the `tool_call` guard: the active model's tool set (plan t12),
  *    senses' no-mutation rule, and the safety gate (`lib/gate.ts`) in front of
  *    every mutating call of a model that may mutate, each decision appended to
@@ -33,7 +35,7 @@ import type { ExtensionAPI } from "@earendil-works/pi-coding-agent";
 import { mkdirSync, rmSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { Type } from "typebox";
-import { checkHandback, type HandbackCheck, type HandbackReport } from "./lib/facts.ts";
+import { checkHandback, type FactCheck, type HandbackCheck, type HandbackReport } from "./lib/facts.ts";
 import { compileGate, createGate, type Gate, type GateConfig } from "./lib/gate.ts";
 import { decideToolCall, RefusalCap } from "./lib/guard.ts";
 import {
@@ -65,10 +67,26 @@ import {
 } from "./lib/handback.ts";
 import { installPromptInjection } from "./lib/prompt.ts";
 import { registerAssociateProvider } from "./lib/provider.ts";
-import { countSentences, renderAnswer } from "./lib/render.ts";
+import { countSentences, renderAnswer, renderStrictAnswer } from "./lib/render.ts";
+import { parseSourceRef } from "./lib/facts.ts";
+import { renderCommand } from "./lib/evidence.ts";
 import { createAssociateContext, loadToolModules } from "./lib/runtime.ts";
 import { FinishReminder, resolveFinishReminder, type SettleEventLike } from "./lib/reminder.ts";
 import { createSupportCache, type SupportOptions } from "./lib/support.ts";
+import { supportChoiceProblem } from "./lib/contract.ts";
+import { createJudgeBudget, judgeFacts, type FactMaterial, type JudgeBudget, type JudgedFact } from "./lib/judge.ts";
+import {
+  evidenceContextFor,
+  formatStrictMessage,
+  DROPPED_FILENAME,
+  droppedRecord,
+  resolveStrict,
+  runStrict,
+  strictFlags,
+  strictOffShapeProblem,
+  strictOverride,
+  strictReport,
+} from "./lib/strict.ts";
 import { supportScoreFor } from "./lib/supportswitch.ts";
 import { assistantMessageText, installStatementsRecorder, messageHasToolCalls } from "./lib/statements.ts";
 import { installFinalMessageRecorder } from "./lib/finalmessage.ts";
@@ -269,6 +287,74 @@ export default async function (pi: ExtensionAPI) {
     ctx.attachSupport((signal) => (supportConfig ? supportOptions(supportSettings, supportConfig, signal) : null));
   }
 
+  // ------------------------------------------------ strict facts (strict t5)
+  // Spec c7, c10, c25, c28: with strict on for the run (accuracy.json
+  // `strict.enabled` for the model, overridden by $ASSOCIATE_STRICT on|off,
+  // snapshotted at load like $ASSOCIATE_CHECK_MODE), finish runs
+  // lib/strict.ts instead of the report/enforce decision: what fails is
+  // dropped, a fact the decider answers part or little is returned once,
+  // the model is told each and may answer again for `retry_rounds`, and
+  // the hand-back is accepted, never refused. `mode` and
+  // $ASSOCIATE_CHECK_MODE apply only with strict off. The decider is asked
+  // with the support-score question and bounds (whatever the support
+  // score's own switch says), through the same session cache.
+  const strictSwitch = strictOverride(process.env);
+  if (strictSwitch.problem) console.error(strictSwitch.problem);
+  const strict = resolveStrict(accuracy, model.key, strictSwitch.value);
+  if (strict.problem) console.error(strict.problem);
+  const judgeSettings =
+    accuracy?.support_score && supportChoiceProblem(accuracy.support_score) === undefined ? accuracy.support_score : undefined;
+  let judgeConfig: GateConfig | undefined;
+  if (strict.enabled) {
+    try {
+      judgeConfig = supportConfig ?? compileGate(contract);
+    } catch (error) {
+      console.error(
+        `associate: strict facts cannot reach the decider (${error instanceof Error ? error.message : String(error)}); ` +
+          "every llm and derived fact left to judge will be recorded as not judged",
+      );
+    }
+  }
+  /** Ask the decider about every fact left to judge; with no settings or no address, each is not judged, never failed. */
+  const judgeStrict = async (
+    facts: readonly FactCheck[],
+    material: (id: string) => FactMaterial | undefined,
+    signal: AbortSignal | undefined,
+    budget?: JudgeBudget,
+  ): Promise<JudgedFact[]> => {
+    const unusable = !judgeSettings ? "no_settings" : !judgeConfig || !strict.settings ? "contract_invalid" : undefined;
+    if (unusable) {
+      return facts.map((f): JudgedFact =>
+        f.status === "to_judge"
+          ? {
+              ...f,
+              status: "not_judged",
+              judge: { question: f.kind_stated === "derived" ? "derived" : "support", option: null, judged: false, reason: unusable, confidence: null },
+            }
+          : { ...f, judge: null },
+      );
+    }
+    return judgeFacts(facts, {
+      settings: judgeSettings!,
+      strict: strict.settings!,
+      config: judgeConfig!,
+      env: supportEnv,
+      redaction,
+      fetch: ((...args: Parameters<typeof fetch>) => globalThis.fetch(...args)) as typeof fetch,
+      material,
+      budget,
+      cache: supportCache,
+      signal,
+    });
+  };
+  // Per prompt (one task), reset by before_agent_start: rounds sent back,
+  // the fact ids returned once (keyed by id, whatever their text), and
+  // whether a round is open (sent back; its answer is recorded and goes out
+  // if the model stops).
+  let strictRounds = 0;
+  const strictReturned = new Set<string>();
+  let strictOpen = false;
+
   // Per prompt, reset by before_agent_start with `finished`.
   let handbackRefusals = 0;
   let handbackEnded = false;
@@ -294,6 +380,8 @@ export default async function (pi: ExtensionAPI) {
          * from on message_end without asking again.
          */
         support: FactSupport | undefined;
+        /** Strict: the answer again with the model's final message (the strict rendering has no support marker). */
+        rerender?: (finalMessage: string) => string;
       }
     | undefined;
 
@@ -470,27 +558,202 @@ export default async function (pi: ExtensionAPI) {
   // in plain JSON Schema (pi 1.5.2 validates arguments with pi-schema). Every
   // one is optional, so a hand-back with only a summary is still valid input;
   // the checker, not the schema, enforces the cross-field rules.
+  // ------------------------------------------------ the strict hand-back (t5)
+  // One finish call with strict on. Never refuses (c28): a round with
+  // dropped or returned items and a round left is answered with what was
+  // dropped or returned and why (lib/strict.ts formatStrictMessage), and its
+  // answer is recorded at once (outcome accepted, `strict.round_open`) so a
+  // model that stops there still hands back; otherwise the hand-back is
+  // accepted as it stands, without the dropped items. The pre-check refusals
+  // (pi's validation, the quoted-list refusal) are untouched: they happen
+  // before execute.
+  const strictFinish = async (options: {
+    payload: Record<string, unknown>;
+    handback: ReturnType<typeof normalizeHandback>;
+    unreferenced: number;
+    quoted: string[];
+    signal: AbortSignal | undefined;
+  }) => {
+    const { payload, handback, unreferenced, quoted, signal } = options;
+    const handbackInput = buildHandbackInput({ payload, exportDir: session.exportDir, walkPath: walk.walkPath, continueFrom });
+    const allowed = retryRounds ?? 0;
+    const canReturn = strictRounds < allowed;
+    const round = strictRounds + 1;
+    const evidence = evidenceContextFor(handbackInput, {
+      checkoutRoot: ctx.checkoutRoot,
+      redact: redaction.apply,
+      sourceKinds: accuracy.source_kinds,
+    });
+    const judgeBudget = createJudgeBudget(judgeSettings);
+    // The ids returned in earlier rounds of this prompt, as runStrict is given them (this round's are added below).
+    const returnedBefore = [...strictReturned].sort();
+    const { check, decision } = await runStrict({
+      handbackInput,
+      accuracy,
+      settings: strict.settings!,
+      passes: accuracy.support_score?.passes ?? [],
+      evidence,
+      // One budget for the hand-back: the strict flow judges in two steps.
+      judge: (facts, material) => judgeStrict(facts, material, signal, judgeBudget),
+      returnedBefore: strictReturned,
+      canReturn,
+      round,
+    });
+    const sendBack = canReturn && (decision.dropped.length > 0 || decision.returned.length > 0);
+    if (sendBack) {
+      strictRounds = round;
+      for (const r of decision.returned) strictReturned.add(r.id);
+    }
+    strictOpen = sendBack;
+    if (!sendBack) {
+      finished = true;
+      handbackCap?.note(undefined);
+    }
+
+    const summary = typeof payload.summary === "string" ? payload.summary : "";
+    const counts: UncheckedCounts = { summary_sentences: countSentences(summary), final_message_sentences: 0 };
+    const report = {
+      ...check.report,
+      flags: [...check.report.flags, ...strictFlags(decision, accuracy.refusal_checks ?? {})],
+      strict: strictReport(decision),
+    };
+    const strictRecord = {
+      enabled: true,
+      source: strict.source,
+      retry_rounds: allowed,
+      rounds_used: strictRounds,
+      round_open: sendBack,
+      // Why a keep_marked fact was not returned: its id is here (returned before), or no round was left.
+      returned_before: returnedBefore,
+      counts: decision.counts,
+      drop_reasons: decision.drop_reasons,
+      judge_counts: decision.judge_counts,
+      dropped: decision.dropped,
+      returned: decision.returned,
+      not_judged_message: decision.not_judged_message,
+    };
+    const recordFor = (support: FactSupport | undefined) => ({
+      mode: "strict",
+      mode_source: strict.source,
+      accepted: check.accepted,
+      facts: support === undefined ? decision.facts : decision.facts.map((f, i) => (support[i] ? { ...f, support: support[i] } : f)),
+      verdicts: decision.items.verdicts,
+      open_items: decision.items.open_items,
+      graph: check.graph,
+      unchecked_text: { ...counts, final_message: "none" },
+      ...(quoted.length > 0 ? { quoted_lists: quoted } : {}),
+      outcome: "accepted",
+      would_refuse: [],
+      strict: strictRecord,
+    });
+    // The answer is rendered from the strict result directly (lib/render.ts).
+    // An old-shape fact (a quote, no pointer) shows the command of the call it cites.
+    const legacy = (source: string) => {
+      const parsed = parseSourceRef(source);
+      if (!parsed.ok || parsed.label !== null) return undefined;
+      const entry = evidence.entry(parsed.id) as { saved_result?: unknown } | undefined;
+      if (!entry) return undefined;
+      return {
+        command: renderCommand(entry, evidence).command,
+        ...(typeof entry.saved_result === "string" ? { result_file: entry.saved_result } : {}),
+      };
+    };
+    const rerender = (finalMessage: string | undefined) =>
+      renderStrictAnswer({ payload, decision, markText: strict.settings!.mark_text, summary, finalMessage, legacy });
+    const viewCheck: HandbackCheck = { ...check, report };
+    let checkRecord: Record<string, unknown> = recordFor(undefined);
+    const answer = rerender(undefined);
+    writeJson(CHECK_FILENAME, checkRecord);
+    writeJson(DROPPED_FILENAME, droppedRecord(payload, decision));
+    writeReport(report, counts);
+    writeExport(ANSWER_FILENAME, answer);
+    const recorded = {
+      payload,
+      check: viewCheck,
+      checkRecord,
+      summary,
+      answer,
+      support: undefined as FactSupport | undefined,
+      rerender: (finalMessage: string) => rerender(finalMessage),
+    };
+    accepted = recorded;
+    // The report-only support score (its own switch), as with strict off.
+    const support = await scoreFacts(check, payload, signal);
+    if (support !== undefined) {
+      checkRecord = recordFor(support);
+      writeJson(CHECK_FILENAME, checkRecord);
+      writeReport(report, counts, support);
+      if (accepted === recorded) accepted = { ...recorded, checkRecord, support };
+    }
+
+    const message = formatStrictMessage(decision, { round, retryRounds: allowed, final: !sendBack });
+    const lines = [message];
+    if (!sendBack) {
+      lines.push(
+        "Now reply to the requester with exactly the answer below as your final message, then stop — a hand-back " +
+          "alone does not reach a mesh requester, and no further tool call is allowed.",
+      );
+    }
+    for (const field of quoted) {
+      lines.push(
+        `\`${field}\` arrived as a string holding a JSON list; it was parsed and checked as that list. ` +
+          `Next time pass \`${field}\` as a list, not as a string.`,
+      );
+    }
+    const f = check.report.facts;
+    const outcome = sendBack ? "returned" : "accepted";
+    const strictHead = {
+      round,
+      rounds_used: strictRounds,
+      rounds_left: sendBack ? allowed - strictRounds + 1 : 0,
+      counts: decision.counts,
+      drop_reasons: decision.drop_reasons,
+      judge_counts: decision.judge_counts,
+    };
+    const where = { export_dir: session.exportDir, session_id: session.sessionId };
+    return {
+      content: [
+        // First block as JSON, as with strict off: the walk saves it (the
+        // finish entry's result carries the strict counts) and a parent reads it.
+        { type: "text" as const, text: JSON.stringify({ ...handback, outcome, mode: "strict", facts_checked: f, strict: strictHead }) },
+        { type: "text" as const, text: lines.join("\n") },
+        ...(sendBack ? [] : [{ type: "text" as const, text: answer }]),
+      ],
+      // Only an accepted hand-back reaches the statements recorder (details.handback), once.
+      details: sendBack
+        ? { outcome, mode: "strict", facts_checked: f, strict: strictHead, ...where }
+        : { handback, unreferenced, outcome, mode: "strict", facts_checked: f, strict: strictHead, ...where },
+    };
+  };
+
   const text = (description: string) => Type.String({ description });
   host.registerTool({
     name: "finish",
     label: "Finish",
     description:
-      "End the task and hand the result back. The payload IS the deliverable: the facts you found " +
-      "(each a value, the walk id it came from, and a word-for-word quote of that entry's result), " +
+      "End the task and hand the result back. The payload IS the deliverable: the facts you found, " +
       "the alternatives you weighed, your verdicts with the facts they rest on, and what is still " +
-      "open with the check that would decide it. The harness checks every quote against the saved " +
+      "open with the check that would decide it. Each fact points at its evidence: give the walk id " +
+      "it came from (source), where in that result the evidence is (at: {lines: [first, last]} or " +
+      "{search: \"term\"}), its kind (direct, llm or derived) and, for a derived fact, based_on. " +
+      "A direct fact gives no value or copies it word for word; anything in your own words is llm and is judged. " +
+      "Do not retype evidence: the harness copies the quoted text and the command from the saved " +
       "result and renders the answer from what passes; the summary is never a checked answer. " +
+      "Try a pointer with check_quote first. " +
       "associate never writes its result into the checkout — call finish instead.",
     promptSnippet: "Hand the finished result back as the payload; associate never writes it to disk",
     promptGuidelines: [
       "End every task with finish: its payload is the hand-back, and a result left only in chat is not delivered.",
-      "Give each fact the walk id shown on the tool result it came from and a quote copied word for word from that result.",
+      "Give each fact the walk id shown on the tool result it came from, at (where in that result the evidence is), its kind, and based_on when it is derived. Point; do not retype evidence.",
       "Give each statement passed to finish the walk entry ids that evidence it; a statement with none is reported as unreferenced.",
     ],
     // Plan t3 (c38): a list field sent as a string holding a JSON list is
     // unquoted before pi validates; any other string there is refused with a fix.
     prepareArguments: prepareFinishArguments,
     parameters: Type.Object({
+      schema_version: Type.Optional(
+        Type.Number({ description: "The facts schema version this payload is written for (2 adds kind, at and based_on)." }),
+      ),
       summary: Type.Optional(
         text("Free text. Delivered under an unchecked label, never as the checked answer."),
       ),
@@ -498,12 +761,23 @@ export default async function (pi: ExtensionAPI) {
         Type.Array(
           Type.Object({
             id: text("Fact id: f1, f2, …"),
-            value: text("The value found, written as text: a number, an identifier, a path, or a short phrase."),
+            value: Type.Optional(
+              text(
+                "The value found, written as text: a number, an identifier, a path, or a short phrase. " +
+                  "A direct fact leaves it out (the harness uses the copied text) or copies it word for word from the " +
+                  "lines pointed at; a value in your own words is judged by the decider; an llm or derived fact needs it.",
+              ),
+            ),
             source: text(
               "The walk id the fact came from, exactly as the harness line on that tool result showed it " +
                 "(w3), or a run label and a walk id for a prior or child run (prior:w3, c1:w2). Never a path.",
             ),
-            quote: text("Text copied word for word from that entry's result; it must contain a literal value."),
+            quote: Type.Optional(
+              text(
+                "Do not copy text from results into quote: point with at instead, and the harness copies the evidence. " +
+                  "Older form: text copied word for word from that entry's result; it must contain a literal value.",
+              ),
+            ),
             action: Type.Optional(
               Type.Boolean({
                 description:
@@ -511,6 +785,36 @@ export default async function (pi: ExtensionAPI) {
               }),
             ),
             tool: Type.Optional(text("For an action fact: the tool whose call the fact says happened.")),
+            // Strict facts (t1, t5): value and quote are optional in the schema;
+            // with strict off a fact without at still needs both (execute).
+            kind: Type.Optional(
+              Type.String({
+                enum: ["direct", "llm", "derived"],
+                description:
+                  "direct (default): the cited result itself shows it; give no value, or copy it word for word. " +
+                  "llm: anything in your own words; give value, and the decider judges it against the command and " +
+                  "the copied lines. derived: follows from other facts; list them in based_on, and give value.",
+              }),
+            ),
+            at: Type.Optional(
+              Type.Object(
+                {
+                  lines: Type.Optional(
+                    Type.Array(Type.Number(), {
+                      minItems: 2,
+                      description:
+                        "First and last line, from 1 at the first line below the walk id line; for a read result, " +
+                        "the line numbers shown at the start of each line.",
+                    }),
+                  ),
+                  search: Type.Optional(text("A term; the first line of the cited result that contains it exactly is the evidence.")),
+                },
+                { description: "Where in the cited result the fact is read: exactly one of lines or search." },
+              ),
+            ),
+            based_on: Type.Optional(
+              Type.Array(text("A fact id of this hand-back, e.g. f1."), { description: "For a derived fact: the ids of the facts it follows from." }),
+            ),
           }),
           { description: "What you found, each tied to one walk entry by a quote." },
         ),
@@ -583,6 +887,12 @@ export default async function (pi: ExtensionAPI) {
     }),
     async execute(toolCallId, params, signal) {
       const raw = (params ?? {}) as Record<string, unknown>;
+      // Strict off (t5): the schema no longer requires value and quote, so a
+      // fact without a pointer is held to them here, as pi's validation did.
+      if (!strict.enabled) {
+        const problem = strictOffShapeProblem(raw);
+        if (problem) throw new Error(problem);
+      }
       // The list fields the model sent quoted, which prepareFinishArguments unquoted.
       const quoted = finishStartArgs.has(toolCallId) ? quotedListFields(finishStartArgs.get(toolCallId)) : [];
       // The walk's own ids are the only evidence that exists: a claim citing
@@ -591,6 +901,9 @@ export default async function (pi: ExtensionAPI) {
       const unreferenced = unreferencedCount(handback);
       const payload = factsPayload(raw, redaction);
       writeJson(FACTS_FILENAME, payload);
+      if (strict.enabled) {
+        return strictFinish({ payload, handback, unreferenced, quoted, signal: signal as AbortSignal | undefined });
+      }
 
       const check = checkHandback(
         buildHandbackInput({ payload, exportDir: session.exportDir, walkPath: walk.walkPath, continueFrom }),
@@ -776,7 +1089,9 @@ export default async function (pi: ExtensionAPI) {
   // nothing. Registered after the statements recorder, which this handler
   // never touches: only the extension's own report files are rewritten.
   pi.on("message_end", (event) => {
-    if (!finished || !accepted) return;
+    // Strict (t5): a round sent back already recorded its answer; a text
+    // reply that ends the turn there is the final message of that answer.
+    if (!(finished || strictOpen) || !accepted) return;
     const message = (event as { message?: unknown }).message;
     if (!message || typeof message !== "object") return;
     if ((message as { role?: unknown }).role !== "assistant") return;
@@ -797,7 +1112,9 @@ export default async function (pi: ExtensionAPI) {
     if (!same) {
       writeExport(
         ANSWER_FILENAME,
-        renderAnswer({ payload: accepted.payload, check: accepted.check, summary: accepted.summary, finalMessage: said, support: accepted.support }),
+        accepted.rerender
+          ? accepted.rerender(said)
+          : renderAnswer({ payload: accepted.payload, check: accepted.check, summary: accepted.summary, finalMessage: said, support: accepted.support }),
       );
     }
   });
@@ -873,7 +1190,7 @@ export default async function (pi: ExtensionAPI) {
   // here: lib/preflight.ts exits at before_agent_start.
   if (finishReminder) {
     pi.on("agent_before_settle", (event) =>
-      finishReminder.atSettle(event as SettleEventLike, { finished, endedRefused: handbackEnded || capPinned }),
+      finishReminder.atSettle(event as SettleEventLike, { finished: finished || strictOpen, endedRefused: handbackEnded || capPinned }),
     );
   }
   pi.on("tool_call", async (event, eventCtx) => {
@@ -1056,6 +1373,9 @@ export default async function (pi: ExtensionAPI) {
     handbackEnded = false;
     handbackCap?.reset();
     accepted = undefined;
+    strictRounds = 0;
+    strictReturned.clear();
+    strictOpen = false;
     applyModelToolSet();
   });
 }

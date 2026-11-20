@@ -259,6 +259,62 @@ refused and the model may answer again for accuracy.json `retry_rounds` more
 rounds; a hand-back still failing ends the run with outcome `refused`, and the verb
 exits `3`. `report` mode records what would have been refused and refuses nothing.
 
+## The strict switch
+
+`--strict on|off` overrides accuracy.json `strict.enabled` for the model for this
+run only, by setting `ASSOCIATE_STRICT`; an ambient value in the operator's
+environment is not inherited (it is cleared when the flag is absent). The result's
+`strict_switch` is the flag's value, or null when the contract's switch applies:
+what was asked for, not that strict ran.
+
+A strict run's facts point at lines of a saved result (`at`) and carry no quote.
+The Python re-check of them is evidence-cli's strict re-check (associate requires
+evidence-cli 0.9.0 or later), a second implementation run once over the export's
+saved files and compared with the export's own `check.json`. `accuracy` then says
+`python_recheck_ran` true, `python_recheck_verdict`, `check` (`strict`), `report`
+(the re-check's strict counts) and these keys:
+
+- `python_recheck_agrees`, one of three values. `true`: no compared value differs
+  from `check.json` and every fact was compared with a record. `false`: a value
+  differs. `null`: neither, because the facts were not compared; it is not
+  agreement and not disagreement;
+- `python_recheck_agrees_reason`: what was not compared, when the verdict is
+  `null`;
+- `python_recheck_incomplete`: true when a part of the record was not compared or
+  a fact has no record of its own, whatever the verdict;
+- `python_recheck_compared` and `python_recheck_not_compared`: the parts of the
+  record that were and were not compared (`facts`, `verdicts`, `open_items`,
+  `accepted`, `counts`, `drop_reasons`, `judge_counts`); a part `check.json` does
+  not hold is not compared, never counted as agreeing;
+- `python_recheck_not_compared_reasons`: why, per part not compared;
+- `python_recheck_facts_without_record`: the ids of facts with no record in
+  `check.json`;
+- `python_recheck_disagreements`: one `{id, field, recorded, recheck}` per value
+  that differs; the `facts` row also names `without_record` and `not_in_payload`;
+- `python_recheck_returned_before_source`: `check.json` when the re-check read the
+  facts returned in earlier rounds from the record (`strict.returned_before`) and
+  decided `keep_marked` against `returned` itself; `inferred from keep_marked` for
+  an export without that key, where it cannot disagree on that point.
+
+When facts do not apply (no `facts.json`, a walk format that is not supported, in
+which case `unsupported` is true) or the re-check cannot read the export, the run
+is not re-checked: `python_recheck_ran` is false, `not_applicable_reason` says why
+and every key in the list is null. The re-check asks no decider: the decider's
+answers stored in `check.json` are an input, so it cannot disagree with them. A
+fact with outcome `pass` had its evidence copied from a saved result or its quote
+found in one; that is not a statement that it is true.
+
+The result also carries `strict`, the extension's own counts copied from the
+export's `report.json` and `check.json` and never recomputed: `source`
+(`extension`), `rounds_used`, `retry_rounds`, `returned_before` (the fact ids
+returned to the model in earlier rounds of the same prompt; null for an export
+written before the field), `counts` (facts per outcome: pass,
+keep_marked, returned, dropped, not_judged), `dropped` (`total` and `by_reason`),
+`returned`, `not_judged`, `report` and `recheck` (`ran`, `reason`, and `agrees`:
+true, false or null as above). The
+counts are the same code's count of what it did; the second check is the one in
+`accuracy`.
+
 ## The support-score switch
 
 `--support-score on|off` overrides the model's switch in accuracy.json
@@ -334,7 +390,7 @@ and `walk_path` to read. The `accuracy` block carries the Python re-check counts
 when the export holds facts, and says `python_recheck_ran` false with a
 `not_applicable_reason` when it holds none (a killed run usually holds none). The
 verb exits `4`. A *preflight* that does not finish proved nothing: it exits `2`
-and prints no result. The task turn's `final_reply`, `stop_reason` and
+and prints no result. The task turn's `unchecked_final_reply`, `stop_reason` and
 `lane_error` are absent from a timeout result, because pi never reported them.
 
 ## Reasoning for one run
@@ -355,11 +411,15 @@ A harness that does not apply it (`--harness stub`) still records it, without
 
 ## How the turn ended
 
-With `--json`, the result also says how the task turn ended: `final_reply`
-is the model's last assistant reply (text only, redacted, at most 2000
-characters); `stop_reason` is pi's stop reason for that reply (for example
-`stop` or `length`), or null when no assistant reply arrived; and
-`lane_error` is present only when pi reported an error from the model lane.
+With `--json`, the result also says how the task turn ended:
+`unchecked_final_reply` is the model's last assistant reply (text only,
+redacted, at most 2000 characters), named for what it is: the model's own
+words, not checked by the harness. The checked answer is `answer`, beside it.
+The key was `final_reply` before; the old key is absent from the result, not
+duplicated, and a reader of stored results reads both. `stop_reason` is pi's
+stop reason for that reply (for example `stop` or `length`), or null when no
+assistant reply arrived; and `lane_error` is present only when pi reported an
+error from the model lane.
 A run that ended without `finish` is visible here: the reply says why, or
 is empty.
 
@@ -371,6 +431,7 @@ is empty.
     associate run --harness stub
     associate run "Summarize the gate" --check-mode enforce --json
     associate run "Summarize the gate" --support-score on --json
+    associate run "Summarize the gate" --strict on --json
     associate run "Summarize the gate" --finish-reminder off --json
     associate run --continue-from <prior export dir>
     associate run "Summarize the gate" --reasoning off --timeout 1500 --json
@@ -449,6 +510,54 @@ a statement that the fact is true. A fact that could not be checked (no saved te
 or only part of it) is `unchecked` and is never counted as passed. An export written
 before the walk format marker has no facts: they are reported as not applicable, and
 the calls are still listed.
+
+## A strict export
+
+An export written by a strict run (`check.json` mode `strict`; its facts point at
+lines with `at` and carry no quote) is re-checked by evidence-cli's strict re-check
+(associate requires evidence-cli 0.9.0 or later) and compared with the export's own
+`check.json`. The output lists the calls, the re-check's counts per outcome and
+each fact (kind checked, status, the decider's stored answer, outcome and drop
+reason), and then the comparison. Its verdict is one of three lines:
+
+- `agrees: yes`: no compared value differs and every fact was compared with a
+  record;
+- `agrees: no, the rows below differ`: each disagreement follows with both values;
+- `agrees: neither yes nor no (...)`: the facts were not compared, and the reason
+  is in the brackets. This is not agreement and not disagreement.
+
+It then names the parts compared and not compared. When the record is incomplete
+a `record incomplete:` line names the parts not compared and the facts with no
+record in `check.json`, and the line under it says why. A `returned before:` line
+says whether the facts returned in earlier rounds were read from `check.json`
+(`strict.returned_before`), so that `keep_marked` against `returned` was decided
+again by the re-check, or inferred from the facts recorded as `keep_marked`, where
+the re-check cannot disagree.
+
+In `--json`: `check` (`strict`), `facts`, `verdicts`, `open_items`, `report` and
+`accepted` from the re-check, `python_recheck_ran`, `python_recheck_agrees`
+(`true`, `false` or `null`), `python_recheck_agrees_reason`,
+`python_recheck_incomplete`, `python_recheck_compared`,
+`python_recheck_not_compared`, `python_recheck_not_compared_reasons`,
+`python_recheck_facts_without_record`, `python_recheck_disagreements`,
+`python_recheck_returned_before_source`, and `strict_recheck` (evidence-cli's whole
+result). A disagreement or an incomplete record does not change the exit code,
+which is `0`.
+
+The re-check asks no decider: the decider's answers stored in `check.json` are an
+input, so it cannot disagree with them. `pass` means a fact's evidence was copied
+from a saved result or its quote was found in one, not that the fact is true.
+
+A strict export where facts do not apply (no `facts.json`, or a walk format that is
+not supported) is not re-checked: the output says `strict facts: not re-checked`
+(with `(unsupported)` for the walk format) and the reason, `python_recheck_ran` is
+false, the `python_recheck_*` keys are null and the exit code is `0`. One the
+re-check cannot read (a damaged `facts.json`, a malformed fact record in
+`check.json`) exits `1` with the reason.
+
+The extension's own strict counts are still printed under `strict`, labelled
+`source: extension`. Those are read from `report.json` and `check.json`, never
+recomputed; `strict.recheck` says whether the re-check ran and its verdict.
 
 ## The support score, copied
 
@@ -764,8 +873,8 @@ Every sub-verb takes `--json`.
 
 - `--arms FILE`: a JSON list of arms, each `{"name", "harness_commit", "model"}` and
   optionally `"check_mode"` (`report` or `enforce`), `"reasoning"` (`model-default`,
-  `on` or `off`), `"support_score"` (`on` or `off`) and `"finish_reminder"` (`on` or
-  `off`). An unknown key or a duplicate
+  `on` or `off`), `"support_score"` (`on` or `off`), `"finish_reminder"` (`on` or
+  `off`) and `"strict"` (`on` or `off`). An unknown key or a duplicate
   name is refused with the reason. `harness_commit` is a commit id of 7 to 64
   hexadecimal characters; a branch or tag name is refused.
 - `"support_score"` is passed to every run of the arm as `associate run
@@ -778,6 +887,13 @@ Every sub-verb takes `--json`.
   run` default applies. Each stored record names it under `finish_reminder`: `on`,
   `off` or `contract default`. An arm that sets it on a harness commit whose
   `associate run` has no `--finish-reminder` is refused before any run.
+- `"strict"` is passed to every run of the arm as `associate run --strict`; an arm
+  without it passes nothing and the switch in its harness commit's accuracy.json
+  applies. The strict pair for `run --broad` is two arms, for example `strict-on` and
+  `strict-off`, that differ only in this key: the support-score switch is left at the
+  contract default in both. Each stored record of such an arm names it under `strict`.
+  An arm that sets it on a harness commit whose `associate run` has no `--strict` is
+  refused before any run. An arms file without the key works as before.
 - Before the first run the arms are checked. When they carry more than one
   support-score setting (an arm without one counts as a setting), each arm that sets
   it must have another arm with a different setting and the same model, reasoning,
@@ -896,6 +1012,22 @@ repository, a pinned commit and the facts).
   not checkable and the number of statements. Otherwise it refuses (exit 1) and prints
   nothing. Counts are per run; they are never added up over runs and never printed as
   a percentage.
+- A record written from a run's export keeps the answer in parts, and the key (never
+  the sheet) says per statement where it came from: `origin` (`answer`, `summary` or
+  `final_reply`) and, for an item of a strict answer, `item` (`f1`, `v1`, `o1`),
+  `strict_outcome`, `kind_checked` and the decider's `option`. They are read from the
+  export's structure (`answer.md` and `check.json`), never matched on text. A
+  non-strict export has `origin` only. Older records have none and are split as before.
+- When any stored run's arm sets `strict`, `report` adds a per-run section for the
+  strict pair: statements of the answer graded true, false and not checkable;
+  statements of the final reply (the summary and the final message) likewise; of the
+  answer statements, how many rest on an item whose outcome is `pass` and how many of
+  those were graded false; items kept with a mark that were graded false; the run time
+  in seconds; the retry rounds used and the items dropped, copied from `check.json`;
+  and the checklist facts marked as stated, so a loss of stated facts shows. The rule
+  file is then applied to the facts marked as stated and to the answer statements
+  graded false (not to the final reply's), with the middle values beside them and no
+  verdict drawn from those. These are counts, never a score and never accuracy.
 - The report applies the rule file to each count on its own when that file is
   committed, unmodified and confirmed: per repository an arm is better when every one
   of its runs is at least as good as every run of the other arm and one is strictly

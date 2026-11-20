@@ -1,0 +1,128 @@
+{
+  "mode": "strict",
+  "mode_source": "contract",
+  "accepted": true,
+  "facts": [
+    {
+      "id": "f1",
+      "source": "w1",
+      "run": null,
+      "nearest": null,
+      "source_kind": "file",
+      "first_hand": true,
+      "verdict": "passed",
+      "reason": null,
+      "check": null,
+      "fix": null,
+      "kind_stated": "direct",
+      "based_on": [],
+      "dropped_by": null,
+      "drop_message": null,
+      "kind_checked": "direct",
+      "status": "passed",
+      "drop_reason": null,
+      "judge": null,
+      "evidence": {
+        "quote": "1\tROLE_RESPONSIBILITIES = {",
+        "command": "read roles.py",
+        "command_from": "args",
+        "result_file": "results/w1.txt",
+        "lines": [
+          1,
+          1
+        ],
+        "run": null
+      },
+      "strict_outcome": "pass"
+    },
+    {
+      "id": "f2",
+      "source": "w1",
+      "run": null,
+      "nearest": null,
+      "source_kind": "file",
+      "first_hand": true,
+      "verdict": "unchecked",
+      "reason": "to_judge",
+      "check": null,
+      "fix": "the decider answered 'none': the evidence does not show the value; point at the lines that show it, or leave the fact out",
+      "kind_stated": "llm",
+      "based_on": [],
+      "dropped_by": null,
+      "drop_message": null,
+      "kind_checked": "llm",
+      "status": "judged",
+      "drop_reason": "decider_drop",
+      "judge": {
+        "question": "support",
+        "option": "none",
+        "judged": true,
+        "reason": null,
+        "confidence": 0.9
+      },
+      "evidence": {
+        "quote": "2\t    \"worker\": [\"execution\", \"tool_use\", \"repo_inspection\"],",
+        "command": "read roles.py",
+        "command_from": "args",
+        "result_file": "results/w1.txt",
+        "lines": [
+          2,
+          2
+        ],
+        "run": null
+      },
+      "strict_outcome": "dropped"
+    }
+  ],
+  "verdicts": [],
+  "open_items": [],
+  "graph": {
+    "order": [
+      "f1",
+      "f2"
+    ],
+    "refusals": []
+  },
+  "unchecked_text": {
+    "summary_sentences": 1,
+    "final_message_sentences": 0,
+    "final_message": "none"
+  },
+  "outcome": "accepted",
+  "would_refuse": [],
+  "strict": {
+    "enabled": true,
+    "source": "contract",
+    "retry_rounds": 2,
+    "rounds_used": 2,
+    "round_open": false,
+    "counts": {
+      "pass": 1,
+      "keep_marked": 0,
+      "returned": 0,
+      "dropped": 1,
+      "not_judged": 0
+    },
+    "drop_reasons": {
+      "decider_drop": 1
+    },
+    "judge_counts": {
+      "direct_passed": 1,
+      "llm_judged": 1,
+      "derived_judged": 0,
+      "not_judged": 0
+    },
+    "dropped": [
+      {
+        "id": "f2",
+        "item": "fact",
+        "value": "senses",
+        "reason": "decider_drop",
+        "fix": "the decider answered 'none': the evidence does not show the value; point at the lines that show it, or leave the fact out",
+        "source": "w1"
+      }
+    ],
+    "returned": [],
+    "not_judged_message": null
+  }
+}

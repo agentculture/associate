@@ -85,16 +85,16 @@ describe("one finished run that was not merged", () => {
     expect(paths).toHaveTextContent("2 paths, all shown.");
   });
 
-  it("shows the full instruction and what the agent said, as paragraphs", async () => {
+  it("shows the full instruction and the model's unchecked reply, as paragraphs", async () => {
     await openRun(ids.testsfail);
     expect(panel("Instruction")).toHaveTextContent(
       "Read the last ten merged pull requests' accepted and rejected suggestions.",
     );
-    const said = panel("What the agent said");
+    const said = panel("The model's unchecked final reply");
     const paragraphs = within(said).getAllByText(/./, { selector: ".reply p" });
     expect(paragraphs).toHaveLength(3);
     expect(paragraphs[2]).toHaveTextContent("The configuration validates. I did not run the Markdown check.");
-    expect(said).toHaveTextContent("They are not checked: the tests above are.");
+    expect(said).toHaveTextContent("The harness did not check it");
   });
 });
 
@@ -137,22 +137,29 @@ describe("other finished runs", () => {
     const run = {
       ...show[ids.merged],
       changed_paths_error: "the merge commit for this run was not found on main",
-      final_reply: null,
-      final_reply_dropped: true,
+      unchecked_final_reply: null,
+      unchecked_final_reply_dropped: true,
       instruction_truncated: true,
     };
     await openRun(ids.merged, { [`GET /runs/${ids.merged}`]: { body: run } });
     expect(panel("Changed paths")).toHaveTextContent("the merge commit for this run was not found on main");
-    expect(panel("What the agent said")).toHaveTextContent(
+    expect(panel("The model's unchecked final reply")).toHaveTextContent(
       "The reply was left out to keep the answer small.",
     );
     expect(panel("Instruction")).toHaveTextContent("The instruction is shortened here.");
   });
 
   it("says when the agent left no final reply", async () => {
-    const run = { ...show[ids.merged], final_reply: null };
+    const run = { ...show[ids.merged], unchecked_final_reply: null };
     await openRun(ids.merged, { [`GET /runs/${ids.merged}`]: { body: run } });
-    expect(panel("What the agent said")).toHaveTextContent("The agent left no final reply.");
+    expect(panel("The model's unchecked final reply")).toHaveTextContent("The agent left no final reply.");
+  });
+
+  it("shows the checked answer beside the unchecked reply, each labelled", async () => {
+    const run = { ...show[ids.merged], answer: "# Answer\n\nchecked fact one" };
+    await openRun(ids.merged, { [`GET /runs/${ids.merged}`]: { body: run } });
+    expect(panel("Checked answer")).toHaveTextContent("checked fact one");
+    expect(panel("The model's unchecked final reply")).toBeInTheDocument();
   });
 
   it("shows only the counts when the per-command results were left out", async () => {

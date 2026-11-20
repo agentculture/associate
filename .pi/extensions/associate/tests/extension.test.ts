@@ -165,7 +165,8 @@ test("associate_ready reports no active writer under defaultTools: []", async ()
 test("finish returns the hand-back as its payload and leaves one text reply (d9)", async () => {
   const s = scratch();
   try {
-    await withExtension(s.env, async ({ pi }) => {
+    // Strict facts pinned off (t5): this test is the report-mode finish.
+    await withExtension({ ...s.env, ASSOCIATE_STRICT: "off" }, async ({ pi }) => {
       // One recorded tool result, so the walk has an entry to cite: `w1` is
       // evidence only because this call happened. `w7` never did.
       await pi.fireToolResult({

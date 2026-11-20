@@ -1,0 +1,27 @@
+2	
+3	> Colleague is a swappable coder-agent harness that turns different model
+4	> backends into repo workers behind one shared task runtime.
+5	>
+28	
+29	# Open the interactive cockpit (the session palette) at a terminal:
+30	uv run colleague
+54	
+55	Colleague is **not** a chat assistant and **not** an IDE plugin — it is a
+56	headless task runtime. For an interactive pair-programmer, use Claude Code or
+63	|---------|--------------|
+64	| `colleague work "<goal>" --repo .` | Run a task autonomously through a backend. |
+65	| `colleague` (no args, at a terminal) | Open the interactive cockpit / session palette. |
+66	| `colleague doctor --probe` | Check the install **and** ping the model endpoint. |
+67	| `colleague learn` | Print a prompt that teaches an **agent** how to drive colleague. |
+68	| `colleague learn-from claude` | **Absorb** another agent's skills into colleague's own (writes files; add `--dry-run` to preview). |
+69	
+100	  confined to the target repo, until it finishes or hits the step budget.
+101	- **Two backends**, both registered through the same `colleague.engines`
+102	  entry-point group an out-of-tree plugin would use:
+103	  - `mock` — deterministic and networkless; the CI workhorse.
+104	  - `vllm-openai` — drives any **OpenAI-compatible** `/v1/chat/completions`
+105	    endpoint with tool calling. The built-in default model is
+106	    `unsloth/Qwen3.8-27B-NVFP4` (an NVFP4 Qwen3 checkpoint on a
+305	Configuration resolves in the order: explicit flag → `COLLEAGUE_*` env →
+306	`OPENAI_*` env → default. The built-in default `--model` is
+307	`unsloth/Qwen3.8-27B-NVFP4`; the example above overrides it with

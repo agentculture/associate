@@ -653,7 +653,11 @@ def validate_accuracy(doc: dict[str, Any], models: dict[str, Any] | None = None)
     ``refusal_checks`` value names a listed check, and the optional
     ``support_score`` section has values in range and a switch for exactly the
     registry's models, and the optional ``finish_reminder`` section has a
-    ``max`` of at least 1 and a non-blank ``text``.
+    ``max`` of at least 1 and a non-blank ``text``, and the optional ``strict``
+    section has a switch for exactly the registry's models, ``keep_marked`` and
+    ``drop`` naming distinct, non-overlapping answers, and a
+    ``derived_question`` with at least two options, and ``derived_passes`` naming
+    keys of those options.
     """
     if models is None:
         from associate import contract  # noqa: PLC0415 - avoid an import cycle
@@ -674,4 +678,125 @@ def validate_accuracy(doc: dict[str, Any], models: dict[str, Any] | None = None)
             errors.append(f"refusal_checks maps {reason!r} to unknown check {cid!r}")
     errors.extend(_support_score_errors(doc.get(SUPPORT_SCORE_KEY), registry))
     errors.extend(_finish_reminder_errors(doc.get(FINISH_REMINDER_KEY)))
+    errors.extend(_strict_errors(doc.get(STRICT_KEY), registry))
+    return errors
+
+
+STRICT_KEY = "strict"
+
+#: The kinds of a fact (``facts.schema.json`` ``kind``); absent reads as direct.
+FACT_KINDS = ("direct", "llm", "derived")
+
+
+def _strict_names_errors(field: str, names: Any) -> list[str]:
+    """``keep_marked`` / ``drop``: a list of distinct, non-blank support-score answers."""
+    if not isinstance(names, list) or not all(_is_text(name) for name in names):
+        return [f"{STRICT_KEY}.{field} must be a list of non-blank support_score answers"]
+    if len(set(names)) != len(names):
+        return [f"{STRICT_KEY}.{field} must not name an answer twice"]
+    return []
+
+
+def _strict_derived_errors(section: dict[str, Any]) -> list[str]:
+    field = f"{STRICT_KEY}.derived_question"
+    asked = section.get("derived_question")
+    if not isinstance(asked, dict):
+        return [f"{field} must be an object"]
+    errors: list[str] = []
+    if not _is_text(asked.get("question")):
+        errors.append(f"{field}.question must be a non-blank string")
+    errors.extend(
+        e.replace(f"{SUPPORT_SCORE_KEY}.options", f"{field}.options", 1)
+        for e in _support_options_errors(asked.get("options"))
+    )
+    errors.extend(
+        _strict_derived_passes_errors(section.get("derived_passes"), asked.get("options"))
+    )
+    return errors
+
+
+def _strict_derived_passes_errors(passes: Any, options: Any) -> list[str]:
+    """``derived_passes``: a non-empty list of distinct keys of ``derived_question.options``."""
+    field = f"{STRICT_KEY}.derived_passes"
+    if not isinstance(passes, list) or not passes or not all(_is_text(p) for p in passes):
+        return [f"{field} must be a non-empty list of derived_question answers"]
+    if len(set(passes)) != len(passes):
+        return [f"{field} must not name an answer twice"]
+    keys = set(options) if isinstance(options, dict) else set()
+    unknown = [p for p in passes if p not in keys]
+    if unknown:
+        return [f"{field} names {', '.join(unknown)}, which derived_question.options does not have"]
+    return []
+
+
+def _strict_errors(section: Any, registry: set[str]) -> list[str]:
+    """Rules for the optional ``strict`` section; absent means strict is off."""
+    if section is None:
+        return []
+    if not isinstance(section, dict):
+        return [f"{STRICT_KEY} must be an object"]
+    errors: list[str] = []
+    enabled = section.get("enabled")
+    named = set(enabled) if isinstance(enabled, dict) else set()
+    errors.extend(_coverage_errors(f"{STRICT_KEY}.enabled", "model", named, registry))
+    for field in ("keep_marked", "drop"):
+        errors.extend(_strict_names_errors(field, section.get(field)))
+    kept, dropped = section.get("keep_marked"), section.get("drop")
+    if isinstance(kept, list) and isinstance(dropped, list) and set(kept) & set(dropped):
+        errors.append(f"{STRICT_KEY}.keep_marked and {STRICT_KEY}.drop must not share an answer")
+    if not _is_text(section.get("mark_text")):
+        errors.append(f"{STRICT_KEY}.mark_text must be a non-blank string")
+    errors.extend(_strict_derived_errors(section))
+    return errors
+
+
+def _fact_at_errors(label: str, at: Any) -> list[str]:
+    """``at``: exactly one of ``lines`` (two 1-based whole numbers) or ``search``."""
+    if not isinstance(at, dict) or len(at) != 1 or not set(at) <= {"lines", "search"}:
+        return [f"{label}: at must hold exactly one of lines or search"]
+    if "search" in at:
+        if _is_text(at["search"]):
+            return []
+        return [f"{label}: at.search must be a non-blank string"]
+    lines = at["lines"]
+    whole = [isinstance(n, int) and not isinstance(n, bool) for n in lines or []]
+    if not (isinstance(lines, list) and len(lines) == 2 and all(whole)):
+        return [f"{label}: at.lines must be two whole numbers, first and last line"]
+    if lines[0] < 1 or lines[1] < lines[0]:
+        return [f"{label}: at.lines must be 1-based with the last line not before the first"]
+    return []
+
+
+def _fact_errors(index: int, fact: Any) -> list[str]:
+    if not isinstance(fact, dict):
+        return []
+    label = f"facts[{index}]"
+    kind = fact.get("kind", "direct")
+    if kind not in FACT_KINDS:
+        return [f"{label}: kind {kind!r} is not one of {list(FACT_KINDS)}"]
+    errors: list[str] = []
+    if "at" in fact:
+        errors.extend(_fact_at_errors(label, fact["at"]))
+    elif "quote" not in fact:
+        errors.append(f"{label}: a fact needs at or quote")
+    if kind == "direct" and "value" not in fact and "at" not in fact:
+        errors.append(f"{label}: a direct fact needs a value unless it gives at")
+    if kind != "direct" and "value" not in fact:
+        errors.append(f"{label}: a {kind} fact needs a value")
+    if kind == "derived" and not fact.get("based_on"):
+        errors.append(f"{label}: a derived fact needs a non-empty based_on")
+    return errors
+
+
+def validate_facts(doc: dict[str, Any]) -> list[str]:
+    """Cross-field rules for a facts payload (the schema covers shape).
+
+    A fact has ``at`` or ``quote`` (the old shape: value, source, quote); ``at``
+    holds exactly one of ``lines`` or ``search``; a fact of kind ``llm`` or
+    ``derived`` has a ``value``; a ``derived`` fact has a non-empty ``based_on``;
+    an unknown ``kind`` is refused.
+    """
+    errors: list[str] = []
+    for index, fact in enumerate(doc.get("facts", [])):
+        errors.extend(_fact_errors(index, fact))
     return errors

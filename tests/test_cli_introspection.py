@@ -96,7 +96,8 @@ def test_explain_run_mentions_turn_fields(capsys: pytest.CaptureFixture[str]) ->
     rc = main(["explain", "run"])
     assert rc == 0
     out = capsys.readouterr().out
-    assert "final_reply" in out
+    assert "unchecked_final_reply" in out
+    assert "--strict on|off" in out
     assert "stop_reason" in out
     assert "lane_error" in out
 

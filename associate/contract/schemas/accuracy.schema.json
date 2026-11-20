@@ -47,6 +47,51 @@
         }
       }
     },
+    "strict": {
+      "type": "object",
+      "description": "Settings for strict facts (spec docs/specs/2026-11-19-associate-strict-facts.md). Optional: a file without it has strict off for every model. Registry coverage of `enabled`, that `keep_marked` and `drop` are distinct non-blank answers that do not overlap, the shape of `derived_question.options` and that `derived_passes` names its keys live in validate.validate_accuracy.",
+      "additionalProperties": false,
+      "required": ["enabled", "keep_marked", "drop", "mark_text", "derived_decides_drops", "derived_question", "derived_passes"],
+      "properties": {
+        "$comment": {"type": "string"},
+        "enabled": {
+          "type": "object",
+          "description": "The switch per registry model. Only the value true switches strict on.",
+          "additionalProperties": {"type": "boolean"}
+        },
+        "keep_marked": {
+          "type": "array",
+          "description": "Support-score answers whose fact is kept with `mark_text` beside it.",
+          "items": {"type": "string", "pattern": "\\S"}
+        },
+        "drop": {
+          "type": "array",
+          "description": "Support-score answers whose fact is dropped.",
+          "items": {"type": "string", "pattern": "\\S"}
+        },
+        "mark_text": {"type": "string", "pattern": "\\S", "description": "The mark written beside a kept-with-a-mark fact, as written."},
+        "derived_decides_drops": {"type": "boolean", "description": "False: a derived fact is never dropped on the decider's answer alone."},
+        "derived_question": {
+          "type": "object",
+          "description": "What the decider is asked about a derived fact: whether its conclusion follows from the facts it lists.",
+          "additionalProperties": false,
+          "required": ["question", "options"],
+          "properties": {
+            "question": {"type": "string", "pattern": "\\S", "description": "Sent as written."},
+            "options": {
+              "type": "object",
+              "description": "The answers: option key -> the criterion the decider is given for it. At least two (validate.validate_accuracy).",
+              "additionalProperties": {"type": "string", "pattern": "\\S"}
+            }
+          }
+        },
+        "derived_passes": {
+          "type": "array",
+          "description": "Keys of derived_question.options that would pass a derived fact if derived_decides_drops were true; any other answer would drop it. Non-empty, distinct, each a key of the options (validate.validate_accuracy).",
+          "items": {"type": "string", "pattern": "\\S"}
+        }
+      }
+    },
     "finish_reminder": {
       "type": "object",
       "description": "Settings for the finish reminder (deviation d3): what the extension sends a model whose task run is about to settle without an accepted finish, and how often. Optional: a file without it means no reminder. The range of `max` lives in validate.validate_accuracy.",

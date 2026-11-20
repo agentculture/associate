@@ -138,6 +138,12 @@ export interface SupportOptions {
   readonly signal?: AbortSignal;
   /** The clock, in epoch milliseconds; `Date.now` when absent. */
   readonly now?: () => number;
+  /**
+   * Line labels for the state, for a second question asked through this path
+   * (`lib/judge.ts`). Absent: `value` and `quote`, the support question's own.
+   * Also keeps that question's cache entries apart from the support score's.
+   */
+  readonly labels?: SupportLabels;
 }
 
 /** The request this module sends: the gate's address and headers, one question. */
@@ -153,6 +159,14 @@ export interface SupportRequest {
     >;
   };
 }
+
+/** The two line labels of a state. The support question's are `value` and `quote`; `lib/judge.ts` asks a second question under others. */
+export interface SupportLabels {
+  readonly value: string;
+  readonly quote: string;
+}
+
+const SUPPORT_LABELS: SupportLabels = { value: "value", quote: "quote" };
 
 // --------------------------------------------------------------------- pieces
 
@@ -214,10 +228,15 @@ function oneLineJson(text: string): string {
  * as written, with a blank line before the pair; it tells the decider what a
  * value and a quote are and that the quote is data.
  */
-export function buildSupportState(redaction: RedactionFilter, pair: SupportPair, background?: string): string {
+export function buildSupportState(
+  redaction: RedactionFilter,
+  pair: SupportPair,
+  background?: string,
+  labels: SupportLabels = SUPPORT_LABELS,
+): string {
   const lines = [
-    `value: ${oneLineJson(redaction.apply(pair.value))}`,
-    `quote: ${oneLineJson(redaction.apply(pair.quote))}`,
+    `${labels.value}: ${oneLineJson(redaction.apply(pair.value))}`,
+    `${labels.quote}: ${oneLineJson(redaction.apply(pair.quote))}`,
   ].join("\n");
   return background?.trim() ? `${background}\n\n${lines}` : lines;
 }
@@ -333,7 +352,7 @@ function raceAbort<T>(promise: Promise<T>, signal: AbortSignal): Promise<T> {
 function localResult(pair: SupportPair, options: SupportOptions): { state: string } | SupportNotScored {
   if (typeof pair?.value !== "string" || pair.value.trim() === "") return notScored("empty_value");
   if (typeof pair.quote !== "string" || pair.quote.trim() === "") return notScored("empty_quote");
-  const state = buildSupportState(options.redaction, pair, options.settings.background);
+  const state = buildSupportState(options.redaction, pair, options.settings.background, options.labels);
   const over = stateBytesOver(options.config, options.settings, state);
   if (over > 0) return notScored("too_long", `${over} bytes over the decider's input limit`);
   return { state };
@@ -398,8 +417,9 @@ async function ask(state: string, options: SupportOptions, deadline?: number): P
   }
 }
 
-function cacheKey(pair: SupportPair): string {
-  return JSON.stringify([pair.value, pair.quote]);
+function cacheKey(pair: SupportPair, labels?: SupportLabels): string {
+  // Unchanged for the support question; another question's entries carry its labels.
+  return labels ? JSON.stringify([labels.value, labels.quote, pair.value, pair.quote]) : JSON.stringify([pair.value, pair.quote]);
 }
 
 /**
@@ -412,7 +432,7 @@ function cacheKey(pair: SupportPair): string {
 function askCached(pair: SupportPair, state: string, options: SupportOptions, deadline?: number): Promise<SupportResult> {
   const entries = options.cache?.entries;
   if (!entries) return ask(state, options, deadline);
-  const key = cacheKey(pair);
+  const key = cacheKey(pair, options.labels);
   const held = entries.get(key);
   if (held) return held;
   const forget = () => {
@@ -522,7 +542,7 @@ async function batchResult(
   failed: SupportNotScoredReason | undefined,
 ): Promise<SupportResult> {
   const now = options.now ?? Date.now;
-  const held = options.cache?.entries.get(cacheKey(pair));
+  const held = options.cache?.entries.get(cacheKey(pair, options.labels));
   const left = deadline - now();
   if (!held && failed !== undefined) return notScored("skipped_after_failure", `not sent after ${failed}`);
   if (!held && left <= 0) return notScored("out_of_time");

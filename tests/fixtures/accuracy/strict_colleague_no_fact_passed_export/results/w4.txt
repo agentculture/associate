@@ -1,0 +1,11 @@
+21	  other module. The zero-deps guard (`tests/test_zero_deps.py`) enforces this.
+22	- **The all-engines rule.** Behavior that belongs to the *contract* (task fields,
+23	  result shape, the loop, the artifact, every runtime-owned feature) must hold
+24	  identically for **every** backend. If a change makes `mock` and `vllm-openai`
+25	  diverge in result shape, that is a bug. `tests/test_e2e_mock.py` is the guard.
+26	- **Runtime-owned features live in the loop, not in a backend.** Hooks,
+27	  telemetry, the `culture`/`devague` tools, the approval gate, work stats,
+28	  feedback, and the pre-handoff gates (lint, test-integrity, affected-tests) are
+29	  owned by `colleague/loop.py` and the shared `execute_work` path. A backend
+30	  module must never reimplement or touch them — it inherits them for free.
+31	- **subprocess and threads are confined.** Only `colleague/worktrees.py`

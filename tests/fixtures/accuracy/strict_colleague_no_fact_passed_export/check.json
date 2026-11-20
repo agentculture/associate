@@ -1,0 +1,417 @@
+{
+  "mode": "strict",
+  "mode_source": "contract",
+  "accepted": false,
+  "facts": [
+    {
+      "id": "f1",
+      "source": "w3",
+      "run": null,
+      "nearest": {
+        "offset": 2,
+        "matched": 72,
+        "text": "Colleague is a swappable coder-agent harness that turns different model > backends into repo workers behind one shared task runtime. > # Open the interactive cockpit (the session palette) at a terminal: uv run colleague Coll"
+      },
+      "source_kind": "file",
+      "first_hand": true,
+      "verdict": "refused",
+      "reason": "quote_absent",
+      "check": "quote_not_in_result",
+      "fix": "copy the quote word for word from the saved result of the entry you cite (the nearest match is shown), or cite the entry that holds it",
+      "kind_stated": "direct",
+      "based_on": [],
+      "dropped_by": null,
+      "drop_message": null,
+      "worded": null,
+      "kind_checked": "direct",
+      "status": "failed",
+      "drop_reason": "quote_absent",
+      "judge": null,
+      "strict_outcome": "dropped"
+    },
+    {
+      "id": "f2",
+      "source": "w3",
+      "run": null,
+      "nearest": {
+        "offset": 785,
+        "matched": 1,
+        "text": "Absorb** another agent's skills into colleague's own (writes files; add `--dry-run` to preview). | confined to the target repo, until it finishes or hits the step budget. - **Two backends**, both registered through the same `colleague.engines` entry-point group an out-of-tree plugin would use: - `mock` —"
+      },
+      "source_kind": "file",
+      "first_hand": true,
+      "verdict": "refused",
+      "reason": "quote_absent",
+      "check": "quote_not_in_result",
+      "fix": "copy the quote word for word from the saved result of the entry you cite (the nearest match is shown), or cite the entry that holds it",
+      "kind_stated": "direct",
+      "based_on": [],
+      "dropped_by": null,
+      "drop_message": null,
+      "worded": null,
+      "kind_checked": "direct",
+      "status": "failed",
+      "drop_reason": "quote_absent",
+      "judge": null,
+      "strict_outcome": "dropped"
+    },
+    {
+      "id": "f3",
+      "source": "w3",
+      "run": null,
+      "nearest": {
+        "offset": 960,
+        "matched": 12,
+        "text": "Two backends**, both registered through the same `colleague.engines` entry-point group an out-of-tree plugin would use: - `mock` — deterministic and networkless; the CI workhorse. - `vllm-openai` — drives any **OpenAI-compatible** `/v1/chat/completions` endpoint with tool calling. The bu"
+      },
+      "source_kind": "file",
+      "first_hand": true,
+      "verdict": "refused",
+      "reason": "quote_absent",
+      "check": "quote_not_in_result",
+      "fix": "copy the quote word for word from the saved result of the entry you cite (the nearest match is shown), or cite the entry that holds it",
+      "kind_stated": "direct",
+      "based_on": [],
+      "dropped_by": null,
+      "drop_message": null,
+      "worded": null,
+      "kind_checked": "direct",
+      "status": "failed",
+      "drop_reason": "quote_absent",
+      "judge": null,
+      "strict_outcome": "dropped"
+    },
+    {
+      "id": "f4",
+      "source": "w18",
+      "run": null,
+      "nearest": {
+        "offset": 0,
+        "matched": 12,
+        "text": "Ten tools — ``read_file``, ``write_file``, ``edit_file``, ``list_dir``, ``run_command``, ``culture``, ``devague``, ``subagent``, ``subagents``, and ``finish`` — are exposed to the model as OpenAI function/tool schemas (:data:`colleague.tool_schemas.SCHEMAS`, re-exported here as :data:`SCHEMAS`). :class:`Too"
+      },
+      "source_kind": "file",
+      "first_hand": true,
+      "verdict": "refused",
+      "reason": "quote_absent",
+      "check": "quote_not_in_result",
+      "fix": "copy the quote word for word from the saved result of the entry you cite (the nearest match is shown), or cite the entry that holds it",
+      "kind_stated": "direct",
+      "based_on": [],
+      "dropped_by": null,
+      "drop_message": null,
+      "worded": null,
+      "kind_checked": "direct",
+      "status": "failed",
+      "drop_reason": "quote_absent",
+      "judge": null,
+      "strict_outcome": "dropped"
+    },
+    {
+      "id": "f5",
+      "source": "w5",
+      "run": null,
+      "nearest": {
+        "offset": 0,
+        "matched": 0,
+        "text": "mock = \"colleague.engines.mock:MockEngine\" vllm-openai = \"colleague.engines.vllm_openai:VllmOpenAIEngine\""
+      },
+      "source_kind": "file",
+      "first_hand": true,
+      "verdict": "refused",
+      "reason": "quote_absent",
+      "check": "quote_not_in_result",
+      "fix": "copy the quote word for word from the saved result of the entry you cite (the nearest match is shown), or cite the entry that holds it",
+      "kind_stated": "direct",
+      "based_on": [],
+      "dropped_by": null,
+      "drop_message": null,
+      "worded": null,
+      "kind_checked": "direct",
+      "status": "failed",
+      "drop_reason": "quote_absent",
+      "judge": null,
+      "strict_outcome": "dropped"
+    },
+    {
+      "id": "f6",
+      "source": "w5",
+      "run": null,
+      "nearest": {
+        "offset": 0,
+        "matched": 0,
+        "text": "mock = \"colleague.engines.mock:MockEngine\" vllm-openai = \"colleague.engines.vllm_openai:VllmOpenAIEngine\""
+      },
+      "source_kind": "file",
+      "first_hand": true,
+      "verdict": "refused",
+      "reason": "quote_absent",
+      "check": "quote_not_in_result",
+      "fix": "copy the quote word for word from the saved result of the entry you cite (the nearest match is shown), or cite the entry that holds it",
+      "kind_stated": "direct",
+      "based_on": [],
+      "dropped_by": null,
+      "drop_message": null,
+      "worded": null,
+      "kind_checked": "direct",
+      "status": "failed",
+      "drop_reason": "quote_absent",
+      "judge": null,
+      "strict_outcome": "dropped"
+    },
+    {
+      "id": "f7",
+      "source": "w4",
+      "run": null,
+      "nearest": {
+        "offset": 81,
+        "matched": 21,
+        "text": "The all-engines rule.** Behavior that belongs to the *contract* (task fields, result shape, the loop, the artifact, every runtime-owned feature) must hold identically for **every** backend. If a change makes `mock` and `vllm-openai` diverge in result shape, that is a bug. `tests/test_e2e_mock.py` is the guard. - **Runtime-owned features live in the loop, not in a backend.** Hooks, telemetry, the `culture`/`devague` tools, the approval gate, work stats, feedback, and the pre-h"
+      },
+      "source_kind": "file",
+      "first_hand": true,
+      "verdict": "refused",
+      "reason": "quote_absent",
+      "check": "quote_not_in_result",
+      "fix": "copy the quote word for word from the saved result of the entry you cite (the nearest match is shown), or cite the entry that holds it",
+      "kind_stated": "direct",
+      "based_on": [],
+      "dropped_by": null,
+      "drop_message": null,
+      "worded": null,
+      "kind_checked": "direct",
+      "status": "failed",
+      "drop_reason": "quote_absent",
+      "judge": null,
+      "strict_outcome": "dropped"
+    },
+    {
+      "id": "f8",
+      "source": "w3",
+      "run": null,
+      "nearest": {
+        "offset": 2,
+        "matched": 2,
+        "text": "Colleague is a swappable coder-agent harness that turns different model > backends into repo workers behind one shared task runtime. > # Open the interactive cockpit (the session palette) at a terminal: uv run colleague Colleague is **not** a chat assistant and **not** an IDE plugin — it is a headless task runtime. For an interactive pair-programmer, use Claude Code or |---------|--------------| | `colleague work \"<g"
+      },
+      "source_kind": "file",
+      "first_hand": true,
+      "verdict": "refused",
+      "reason": "quote_absent",
+      "check": "quote_not_in_result",
+      "fix": "copy the quote word for word from the saved result of the entry you cite (the nearest match is shown), or cite the entry that holds it",
+      "kind_stated": "direct",
+      "based_on": [],
+      "dropped_by": null,
+      "drop_message": null,
+      "worded": null,
+      "kind_checked": "direct",
+      "status": "failed",
+      "drop_reason": "quote_absent",
+      "judge": null,
+      "strict_outcome": "dropped"
+    },
+    {
+      "id": "f9",
+      "source": "w5",
+      "run": null,
+      "nearest": {
+        "offset": 0,
+        "matched": 0,
+        "text": "mock = \"colleague.engines.mock:MockEngine\" vllm-openai = \"colleague.engines.vllm_openai:VllmOpenAIEngine\""
+      },
+      "source_kind": "file",
+      "first_hand": true,
+      "verdict": "refused",
+      "reason": "quote_absent",
+      "check": "quote_not_in_result",
+      "fix": "copy the quote word for word from the saved result of the entry you cite (the nearest match is shown), or cite the entry that holds it",
+      "kind_stated": "direct",
+      "based_on": [],
+      "dropped_by": null,
+      "drop_message": null,
+      "worded": null,
+      "kind_checked": "direct",
+      "status": "failed",
+      "drop_reason": "quote_absent",
+      "judge": null,
+      "strict_outcome": "dropped"
+    },
+    {
+      "id": "f10",
+      "source": "w12",
+      "run": null,
+      "nearest": {
+        "offset": 261,
+        "matched": 1,
+        "text": "COLLEAGUE_ENGINE > vllm-openai (never silent mock, #53). # Extensibility layer (templates / hooks / approvals / session): uv run colleague work --command <name> [args…] --repo . --engine mock --no-pr uv run colleague commands list --repo . # discovered templates (also: hooks list) # approve verbs accept --algo sha256|md5 (default sha256) and --json. uv run colleague session --repo . --engine mock # interactive palette (--pr to push+PR) # Lint + gates CI enforces: uv run black --check collea"
+      },
+      "source_kind": "file",
+      "first_hand": true,
+      "verdict": "refused",
+      "reason": "quote_absent",
+      "check": "quote_not_in_result",
+      "fix": "copy the quote word for word from the saved result of the entry you cite (the nearest match is shown), or cite the entry that holds it",
+      "kind_stated": "direct",
+      "based_on": [],
+      "dropped_by": null,
+      "drop_message": null,
+      "worded": null,
+      "kind_checked": "direct",
+      "status": "failed",
+      "drop_reason": "quote_absent",
+      "judge": null,
+      "strict_outcome": "dropped"
+    }
+  ],
+  "verdicts": [
+    {
+      "id": "v1",
+      "outcome": "refused",
+      "reason": "basis_refused",
+      "check": "conclusion_without_fact",
+      "fix": "fix or drop the refused facts this verdict rests on, then restate the verdict",
+      "strict_outcome": "dropped",
+      "strict_reason": "basis_refused"
+    }
+  ],
+  "open_items": [],
+  "graph": {
+    "order": [
+      "f1",
+      "f2",
+      "f3",
+      "f4",
+      "f5",
+      "f6",
+      "f7",
+      "f8",
+      "f9",
+      "f10"
+    ],
+    "refusals": []
+  },
+  "unchecked_text": {
+    "summary_sentences": 11,
+    "final_message_sentences": 11,
+    "final_message": "unchecked"
+  },
+  "outcome": "accepted",
+  "would_refuse": [],
+  "strict": {
+    "enabled": true,
+    "source": "contract",
+    "retry_rounds": 2,
+    "rounds_used": 1,
+    "round_open": true,
+    "returned_before": [],
+    "counts": {
+      "pass": 0,
+      "keep_marked": 0,
+      "returned": 0,
+      "dropped": 10,
+      "not_judged": 0
+    },
+    "drop_reasons": {
+      "quote_absent": 10,
+      "basis_refused": 1
+    },
+    "judge_counts": {
+      "direct_passed": 0,
+      "llm_judged": 0,
+      "derived_judged": 0,
+      "not_judged": 0
+    },
+    "dropped": [
+      {
+        "id": "f1",
+        "item": "fact",
+        "value": "Colleague is a swappable coder-agent harness — one shared task runtime, many model backends — headless, not a chat assistant or IDE plugin",
+        "reason": "quote_absent",
+        "fix": "copy the quote word for word from the saved result of the entry you cite (the nearest match is shown), or cite the entry that holds it",
+        "source": "w3"
+      },
+      {
+        "id": "f2",
+        "item": "fact",
+        "value": "Architecture parts: Mind/backend, Adapter (colleague/engines/), Task runtime (contract), Tool loop (colleague/loop.py), Plugins (entry points), Run report (artifact), Telemetry, Handoff, Doctor, Registry, Approval gate",
+        "reason": "quote_absent",
+        "fix": "copy the quote word for word from the saved result of the entry you cite (the nearest match is shown), or cite the entry that holds it",
+        "source": "w3"
+      },
+      {
+        "id": "f3",
+        "item": "fact",
+        "value": "Two bundled backends: mock (deterministic, networkless, contract reference, CI workhorse) and vllm-openai (OpenAI-compatible /v1/chat/completions with tool calling; default model unsloth/Qwen3.8-27B-NVFP4)",
+        "reason": "quote_absent",
+        "fix": "copy the quote word for word from the saved result of the entry you cite (the nearest match is shown), or cite the entry that holds it",
+        "source": "w3"
+      },
+      {
+        "id": "f4",
+        "item": "fact",
+        "value": "Tool surface: ten tools (read_file, write_file, edit_file, list_dir, run_command, culture, devague, subagent, subagents, finish) as OpenAI function schemas; edit_file is partial-edit; file tools confined to repo root; run_command cwd pinned to root",
+        "reason": "quote_absent",
+        "fix": "copy the quote word for word from the saved result of the entry you cite (the nearest match is shown), or cite the entry that holds it",
+        "source": "w18"
+      },
+      {
+        "id": "f5",
+        "item": "fact",
+        "value": "CLI scripts: colleague and clg both → colleague.cli:main; version 1.76.0",
+        "reason": "quote_absent",
+        "fix": "copy the quote word for word from the saved result of the entry you cite (the nearest match is shown), or cite the entry that holds it",
+        "source": "w5"
+      },
+      {
+        "id": "f6",
+        "item": "fact",
+        "value": "Entry points: colleague.engines (mock, vllm-openai) and colleague.renderers (ansi)",
+        "reason": "quote_absent",
+        "fix": "copy the quote word for word from the saved result of the entry you cite (the nearest match is shown), or cite the entry that holds it",
+        "source": "w5"
+      },
+      {
+        "id": "f7",
+        "item": "fact",
+        "value": "All-engines rule: contract behavior must hold identically for every backend; hooks, telemetry, approval gate, pre-finish gates live in the runtime loop (colleague/loop.py), never in engines",
+        "reason": "quote_absent",
+        "fix": "copy the quote word for word from the saved result of the entry you cite (the nearest match is shown), or cite the entry that holds it",
+        "source": "w4"
+      },
+      {
+        "id": "f8",
+        "item": "fact",
+        "value": "Key commands: colleague work \"<goal>\" --repo .; colleague work --command <name> [args…]; colleague (interactive palette); colleague doctor --probe; colleague learn; colleague learn-from claude",
+        "reason": "quote_absent",
+        "fix": "copy the quote word for word from the saved result of the entry you cite (the nearest match is shown), or cite the entry that holds it",
+        "source": "w3"
+      },
+      {
+        "id": "f9",
+        "item": "fact",
+        "value": "Build/test: hatchling build backend, Python >=3.12, Apache-2.0; one base dep agentfront>=0.20.0; optional extras [otel], [mcp], [tui], [voice], [resident], [culture]",
+        "reason": "quote_absent",
+        "fix": "copy the quote word for word from the saved result of the entry you cite (the nearest match is shown), or cite the entry that holds it",
+        "source": "w5"
+      },
+      {
+        "id": "f10",
+        "item": "fact",
+        "value": "Tests: uv run pytest -n auto (604 test files); zero-deps guard test_zero_deps.py; all-engines parity test_e2e_mock.py; 1000-line file limit test_file_length_limit.py; boundary test test_boundary.py; live vLLM e2e opt-in COLLEAGUE_VLLM_E2E=1 pytest tests/test_vllm_live.py; lint black/isort/flake8/bandit; rubric gate uv run teken cli doctor . --strict",
+        "reason": "quote_absent",
+        "fix": "copy the quote word for word from the saved result of the entry you cite (the nearest match is shown), or cite the entry that holds it",
+        "source": "w12"
+      },
+      {
+        "id": "v1",
+        "item": "verdict",
+        "value": "Colleague is a backend-agnostic, auditable headless coder-agent harness built around a shared Task/TaskResult contract and a bounded tool loop, with two bundled backends (mock and vllm-openai) discovered via entry points, tested via pytest with parallel execution and guarded by zero-deps, all-engines parity, file-length, and boundary tests.",
+        "reason": "basis_refused",
+        "fix": "fix or drop the refused facts this verdict rests on, then restate the verdict"
+      }
+    ],
+    "returned": [],
+    "not_judged_message": null
+  }
+}

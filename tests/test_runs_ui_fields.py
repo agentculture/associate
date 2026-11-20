@@ -342,3 +342,24 @@ def test_show_stays_under_64_kib_when_every_new_field_is_huge_too(cfg):
     shown = service.show(run_id, config=cfg)
     assert size(shown) < REPLY_LIMIT_BYTES
     assert shown["instruction"]  # cut, never dropped
+
+
+def test_show_names_the_unchecked_reply_and_has_no_final_reply_key(cfg):
+    """Strict t7 (c30): the reply is labelled unchecked; the checked answer sits beside it."""
+    new = write_run(
+        cfg.state_dir,
+        1,
+        REQUEST,
+        finished(
+            outcome="ok", merge="merged", unchecked_final_reply="the model said", answer="# A"
+        ),
+    )
+    old = write_run(cfg.state_dir, 2, REQUEST, finished(outcome="ok", final_reply="stored before"))
+    shown = service.show(new, config=cfg)
+    assert shown["unchecked_final_reply"] == "the model said"
+    assert shown["answer"] == "# A"
+    assert "final_reply" not in shown
+    older = service.show(old, config=cfg)
+    assert older["unchecked_final_reply"] == "stored before"
+    assert "final_reply" not in older and "final_reply_dropped" not in older
+    assert older["answer"] is None

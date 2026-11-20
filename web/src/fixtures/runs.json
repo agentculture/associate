@@ -192,7 +192,8 @@
       },
       "changed_paths_total": 1,
       "changed_paths_error": null,
-      "final_reply": "I raised the inline comment threshold to medium.",
+      "unchecked_final_reply": "I raised the inline comment threshold to medium.",
+      "answer": "# Answer (rendered by the harness from checked items)\n\nNothing was checked for this run.",
       "error": null,
       "changed_paths": [
         ".pr_agent.toml"
@@ -236,7 +237,8 @@
       },
       "changed_paths_total": 0,
       "changed_paths_error": null,
-      "final_reply": "The configuration already matches; nothing to change.",
+      "unchecked_final_reply": "The configuration already matches; nothing to change.",
+      "answer": null,
       "error": null,
       "changed_paths": [],
       "changed_paths_truncated": false,
@@ -283,7 +285,8 @@
       },
       "changed_paths_total": 2,
       "changed_paths_error": null,
-      "final_reply": "Three of the last ten pull requests had an accepted suggestion about a token printed in a log line.\n\nI added a compliance guideline to .pr_agent.toml and a short section to REVIEW.md.\n\nThe configuration validates. I did not run the Markdown check.",
+      "unchecked_final_reply": "Three of the last ten pull requests had an accepted suggestion about a token printed in a log line.\n\nI added a compliance guideline to .pr_agent.toml and a short section to REVIEW.md.\n\nThe configuration validates. I did not run the Markdown check.",
+      "answer": null,
       "error": null,
       "changed_paths": [
         ".pr_agent.toml",
@@ -328,7 +331,8 @@
       },
       "changed_paths_total": 1,
       "changed_paths_error": null,
-      "final_reply": "I documented the rules.",
+      "unchecked_final_reply": "I documented the rules.",
+      "answer": null,
       "error": null,
       "changed_paths": [
         "docs/review-rules.md"

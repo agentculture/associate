@@ -1,0 +1,63 @@
+{
+  "ok": true,
+  "extension_version": "0.1.0",
+  "contract_version": 1,
+  "contract_dir": "/home/ori/git/.worktrees.associate/agent-strict-t7/associate/contract",
+  "contract_source": "repo",
+  "schemas": [
+    "task",
+    "walk",
+    "statements"
+  ],
+  "session": {
+    "id": "support-finish",
+    "id_from_env": true,
+    "scratch_dir": "/tmp/associate-runs-qO1eIQ/support-finish/scratch",
+    "export_dir": "/tmp/associate-runs-qO1eIQ/support-finish/export",
+    "walk_path": "/tmp/associate-runs-qO1eIQ/support-finish/export/walk.jsonl"
+  },
+  "tools": [
+    "associate_ready",
+    "finish",
+    "check_quote",
+    "code_lens",
+    "delegate_run",
+    "delegate_status",
+    "eidetic_recall",
+    "eidetic_remember",
+    "ledger_append",
+    "ledger_list",
+    "read",
+    "grep",
+    "find",
+    "ls",
+    "bash",
+    "spawn_subagent",
+    "run_tests",
+    "web_search",
+    "web_page"
+  ],
+  "model": "worker",
+  "model_may_mutate": true,
+  "gate_ready": true,
+  "tools_outside_contract": [],
+  "active_tools": [
+    "associate_ready",
+    "finish",
+    "check_quote",
+    "code_lens",
+    "eidetic_recall",
+    "eidetic_remember",
+    "ledger_append",
+    "ledger_list",
+    "read",
+    "grep",
+    "find",
+    "ls",
+    "bash",
+    "run_tests",
+    "web_search",
+    "web_page"
+  ],
+  "writer_tools_active": []
+}

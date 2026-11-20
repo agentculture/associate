@@ -108,6 +108,8 @@ export async function openSession(env: Record<string, string | undefined> = {}):
       ASSOCIATE_SUPPORT_SCORE: undefined,
       ASSOCIATE_API_KEY: undefined,
       ASSOCIATE_BASE_URL: undefined,
+      // Strict facts pinned off (t5): the golden exports are the report/enforce flow.
+      ASSOCIATE_STRICT: "off",
       ...env,
     });
   } finally {

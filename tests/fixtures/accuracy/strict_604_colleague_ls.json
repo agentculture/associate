@@ -1,0 +1,45 @@
+{
+  "kind": "recorded",
+  "_origin": "Cut from the stored export of the measured broad-task run of 2026-11-19 on the colleague repository, arm check-off, repeat r1 (the run whose hand-back carried fact f11). The result of call w7 (an ls of tests/) is the saved result as recorded, except: the middle of the entries array was cut (the first 12 entries and the last 5 are kept, the cut is marked in the text) and the spill_path value, a scratch path, was replaced by a marker. The tail (count 200, cap 200, truncated true, total 604) is as recorded. The walk entry is as recorded, minus its timestamp and result copy.",
+  "recorded_fact": {
+    "_note": "f11 as the model handed it back (old shape: a quote, no pointer); the old check passed it because the quote is in the result.",
+    "id": "f11",
+    "value": "604 test files in tests/",
+    "source": "w7",
+    "quote": "total\":604",
+    "action": false
+  },
+  "recorded_sentence": {
+    "_note": "A sentence of the model's own finish summary of that run, not a fact.",
+    "text": "uv run pytest -n auto --cov=colleague --cov-report=xml --cov-report=term -v across 604 test files."
+  },
+  "constructed_strict_fact": {
+    "_note": "CONSTRUCTED, not recorded: the fact a model would have had to hand back under strict to say the same thing. The value is the recorded f11 value, in the model's wording; the pointer names the line of w7 that holds the number.",
+    "id": "f11",
+    "source": "w7",
+    "at": {
+      "search": "\"total\":604"
+    },
+    "value": "604 test files in tests/"
+  },
+  "walk": [
+    {
+      "id": "w7",
+      "tool": "ls",
+      "args": {
+        "path": "tests",
+        "purpose": "List the test directory structure"
+      },
+      "args_used": {
+        "path": "tests"
+      },
+      "source_kind": "tool",
+      "partial": false,
+      "truncated": true,
+      "saved_result": "results/w7.txt"
+    }
+  ],
+  "results": {
+    "w7": "{\"ok\":true,\"tool\":\"ls\",\"path\":\"tests\",\"entries\":[{\"name\":\"__init__.py\",\"type\":\"file\"},{\"name\":\"_agents_audit.py\",\"type\":\"file\"},{\"name\":\"_baseline_scenario.py\",\"type\":\"file\"},{\"name\":\"_batch_fixture.py\",\"type\":\"file\"},{\"name\":\"_vllm_http.py\",\"type\":\"file\"},{\"name\":\"conftest.py\",\"type\":\"file\"},{\"name\":\"file_length_baseline.json\",\"type\":\"file\"},{\"name\":\"fixtures\",\"type\":\"directory\"},{\"name\":\"snapshots\",\"type\":\"directory\"},{\"name\":\"test_203_acceptance.py\",\"type\":\"file\"},{\"name\":\"test_acting_add_knob.py\",\"type\":\"file\"},{\"name\":\"test_acting_drop_knob.py\",\"type\":\"file\"},{\"name\":\"test_actingsurface.py\",\"type\":\"file\"},\"<<entries cut from this fixture>>\",{\"name\":\"test_drive_stats.py\",\"type\":\"file\"},{\"name\":\"test_drive_to_work_backcompat.py\",\"type\":\"file\"},{\"name\":\"test_drive.py\",\"type\":\"file\"},{\"name\":\"test_dual_live.py\",\"type\":\"file\"},{\"name\":\"test_e2e_degradation.py\",\"type\":\"file\"},{\"name\":\"test_e2e_extensibility.py\",\"type\":\"file\"}],\"count\":200,\"cap\":200,\"truncated\":true,\"total\":604,\"total_exact\":true,\"not_shown_chars\":11790,\"args_used\":{\"path\":\"tests\"},\"spill_path\":\"<scratch path removed>\"}"
+  }
+}

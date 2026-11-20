@@ -97,9 +97,12 @@ def test_fact_source_rejects_path_characters(source):
 def test_fact_requires_its_fields_and_action_is_optional():
     schema = contract.load_schema("facts")
     assert validate.validate({"facts": [FACT]}, schema) == []
-    for key in ("id", "value", "source", "quote"):
+    for key in ("id", "source"):
         broken = {k: v for k, v in FACT.items() if k != key}
         assert validate.validate({"facts": [broken]}, schema)
+    for key in ("value", "quote"):
+        broken = {"facts": [{k: v for k, v in FACT.items() if k != key}]}
+        assert validate.validate_facts(broken)
     assert validate.validate({"facts": [{**FACT, "action": "yes"}]}, schema)
 
 

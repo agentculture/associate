@@ -203,6 +203,9 @@ SUPPORT_SCORE_CHOICES = ("on", "off")
 SUPPORT_CONTRACT_DEFAULT = "contract default"
 #: ``finish_reminder`` values an arm may carry (deviation d3); absent passes nothing.
 FINISH_REMINDER_CHOICES = ("on", "off")
+#: ``strict`` values an arm may carry (the strict-facts switch, ``associate run --strict``);
+#: absent passes nothing and the contract's per-model switch applies.
+STRICT_CHOICES = ("on", "off")
 EXTENSION_RELATIVE = Path(".pi") / "extensions" / "associate" / "index.ts"
 CONTRACT_DIR = "associate/contract"
 FACTS_FILE = "facts.json"
@@ -230,6 +233,7 @@ _FLAG_CHECK_MODE = "--check-mode"
 _FLAG_UNTRUSTED = "--untrusted-checkout"
 _FLAG_SUPPORT = "--support-score"
 _FLAG_REMINDER = "--finish-reminder"
+_FLAG_STRICT = "--strict"
 _UTF8 = "utf-8"
 _REV_PARSE = "rev-parse"
 
@@ -238,6 +242,7 @@ _K_CHECK_MODE = "check_mode"
 _K_UNTRUSTED = "untrusted_checkout"
 _K_SUPPORT = "support_score"
 _K_REMINDER = "finish_reminder"
+_K_STRICT = "strict"
 _K_HARNESS_COMMIT = "harness_commit"
 _K_PI_VERSION = "pi_version"
 _K_STATUS = "status"
@@ -275,7 +280,9 @@ class Arm:
     commit's own registry value and check mode apply. ``support_score`` None
     passes nothing either: the per-model switch in that commit's
     ``accuracy.json`` applies. ``finish_reminder`` None passes nothing: that
-    commit's ``associate run`` default applies.
+    commit's ``associate run`` default applies. ``strict`` None passes nothing:
+    the per-model switch in that commit's ``accuracy.json`` applies; ``on`` and
+    ``off`` are passed as ``associate run --strict``.
     """
 
     name: str
@@ -285,6 +292,7 @@ class Arm:
     reasoning: str | None = None
     support_score: str | None = None
     finish_reminder: str | None = None
+    strict: str | None = None
 
 
 @dataclass(frozen=True)
@@ -768,6 +776,9 @@ def _optional_flags(ctx: _Context, arm: Arm) -> list[tuple]:
     if arm.finish_reminder is not None:
         value = _fixed_choice(arm.finish_reminder, FINISH_REMINDER_CHOICES, _K_REMINDER)
         wanted.append((_K_REMINDER, _FLAG_REMINDER, [value], value))
+    if arm.strict is not None:
+        value = _fixed_choice(arm.strict, STRICT_CHOICES, _K_STRICT)
+        wanted.append((_K_STRICT, _FLAG_STRICT, [value], value))
     return wanted
 
 
@@ -809,6 +820,7 @@ def _settings(ctx: _Context, arm: Arm, harness: _Harness) -> tuple[list[str], di
         _K_CHECK_MODE: arm.check_mode,
         _K_SUPPORT: arm.support_score,
         _K_REMINDER: arm.finish_reminder,
+        _K_STRICT: arm.strict,
         _K_UNTRUSTED: ctx.untrusted_checkout,
         "timeout_s": ctx.timeout_s,
         "harness": ctx.harness,
@@ -843,6 +855,8 @@ def _arm_identity(arm: Arm, harness: _Harness) -> dict[str, Any]:
         identity[_K_SUPPORT] = arm.support_score
     if arm.finish_reminder is not None:
         identity[_K_REMINDER] = arm.finish_reminder
+    if arm.strict is not None:
+        identity[_K_STRICT] = arm.strict
     return identity
 
 
@@ -1185,9 +1199,27 @@ def _broad_fields(
             "text": answer.text,
             _K_SOURCE: answer.source,
             "empty_reason": answer.empty_reason,
+            **({"parts": [dict(part) for part in answer.parts]} if answer.parts else {}),
         },
-        "broad": {**marking, **broad_mod.answer_origin(result, answer.source)},
+        "broad": {
+            **marking,
+            **broad_mod.answer_origin(result, answer.source),
+            **_strict_fields(result, export_dir),
+        },
     }
+
+
+def _strict_fields(result: dict[str, Any] | None, export_dir: Path | None) -> dict[str, Any]:
+    """The ``broad`` keys a strict run adds: the switch the run had and the export's counts.
+
+    Nothing is added for an export that is not strict, so a record of a run
+    without strict facts keeps the shape it always had.
+    """
+    summary = answer_mod.strict_summary(answer_mod.read_check(export_dir))
+    if summary is None:
+        return {}
+    switch = (result or {}).get("strict_switch")
+    return {_K_STRICT: summary, "strict_switch": switch if isinstance(switch, str) else None}
 
 
 def _counts(result: dict[str, Any] | None, export_dir: Path | None) -> dict[str, Any] | None:
@@ -1237,6 +1269,7 @@ def _base_record(
         _K_HARNESS_COMMIT: arm_id[_K_HARNESS_COMMIT],
         _K_SUPPORT: arm_id.get(_K_SUPPORT) or SUPPORT_CONTRACT_DEFAULT,
         _K_REMINDER: arm_id.get(_K_REMINDER) or SUPPORT_CONTRACT_DEFAULT,
+        **({_K_STRICT: arm_id[_K_STRICT]} if _K_STRICT in arm_id else {}),
         _K_ATTEMPT: attempt,
         _K_HISTORY: history,
         "stored_at": time.time(),
@@ -1424,6 +1457,8 @@ def _arm_problems(arm: Arm) -> list[str]:
         problems.append(f"arm {arm.name}: {_K_SUPPORT} must be one of {SUPPORT_SCORE_CHOICES}")
     if arm.finish_reminder is not None and arm.finish_reminder not in FINISH_REMINDER_CHOICES:
         problems.append(f"arm {arm.name}: {_K_REMINDER} must be one of {FINISH_REMINDER_CHOICES}")
+    if arm.strict is not None and arm.strict not in STRICT_CHOICES:
+        problems.append(f"arm {arm.name}: {_K_STRICT} must be one of {STRICT_CHOICES}")
     return problems
 
 
@@ -1489,7 +1524,11 @@ def support_score_problems(
 
 
 #: The arm settings whose flag a harness commit must have when an arm sets them.
-_FLAGGED_SETTINGS = ((_K_SUPPORT, _FLAG_SUPPORT), (_K_REMINDER, _FLAG_REMINDER))
+_FLAGGED_SETTINGS = (
+    (_K_SUPPORT, _FLAG_SUPPORT),
+    (_K_REMINDER, _FLAG_REMINDER),
+    (_K_STRICT, _FLAG_STRICT),
+)
 
 
 def _flag_problems(arms: Sequence[Arm], commits: Mapping[str, str], prepared: Mapping) -> list[str]:

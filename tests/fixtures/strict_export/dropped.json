@@ -1,0 +1,14 @@
+{
+  "dropped": [
+    {
+      "id": "f2",
+      "item": "fact",
+      "value": "senses",
+      "reason": "decider_drop",
+      "fix": "the decider answered 'none': the evidence does not show the value; point at the lines that show it, or leave the fact out",
+      "source": "w1"
+    }
+  ],
+  "returned": [],
+  "not_judged": []
+}

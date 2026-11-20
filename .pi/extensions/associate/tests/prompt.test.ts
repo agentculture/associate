@@ -493,16 +493,48 @@ const RULE_PHRASES: Array<[string, RegExp]> = [
   ["reply with exactly the rendered answer", /exactly\s+that\s+text/],
 ];
 
-test("t18: the accuracy rules block is the same in all four prompts", () => {
-  const blocks = ALL_KEYS.map((key) => rulesBlock(promptFile(key)));
-  for (const [i, block] of blocks.entries()) {
-    assert.equal(block, blocks[0], `${ALL_KEYS[i]}'s rules block differs from ${ALL_KEYS[0]}'s`);
+// Strict facts (plan t8): worker and cortex tell the model to point at evidence;
+// senses and super-vl still carry the quote form. Each group shares one block.
+const POINTER_KEYS = ["worker", "cortex"];
+const QUOTE_KEYS = ALL_KEYS.filter((key) => !POINTER_KEYS.includes(key));
+
+for (const keys of [POINTER_KEYS, QUOTE_KEYS]) {
+  test(`t18: the accuracy rules block is the same in ${keys.join(", ")}`, () => {
+    const blocks = keys.map((key) => rulesBlock(promptFile(key)));
+    for (const [i, block] of blocks.entries()) {
+      assert.equal(block, blocks[0], `${keys[i]}'s rules block differs from ${keys[0]}'s`);
+    }
+  });
+}
+
+const POINTER_PHRASES: Array<[string, RegExp]> = [
+  ["a fact points and does not retype evidence", /points at its evidence; you do not retype it/],
+  ["the pointer has at, kind and based_on", /`source` \(a walk id\), `at`, its `kind` and, for a derived fact, `based_on`/],
+  ["no text copied into quote", /Do not copy text out of results into `quote`/],
+  ["how lines are counted", /counted\s+from 1 at the first line below the `walk id: wN` line/],
+  ["search copies the first line with the term", /`search`\s+copies the first line that contains the term exactly/],
+  ["the three kinds", /Kind `direct`.*Kind `llm`.*Kind `derived`/s],
+  [
+    "a direct value is left out or copied word for word; own words are llm and judged (deviation d3)",
+    /leave out `value`, or copy\s+it word for word.*Kind `llm`: anything in your\s+own words; give `value`, and the decider judges it/s,
+  ],
+  ["the worked example's direct fact gives no value", /"kind":"direct"\}`/],
+  ["a worked example with its command", /`\["wc","-l","README\.md"\]`/],
+  ["check_quote tries a pointer before finish", /`check_quote` on each pointer before `finish`/],
+];
+
+for (const [label, re] of POINTER_PHRASES) {
+  for (const key of POINTER_KEYS) {
+    test(`t8: ${key}'s rules block states: ${label}`, () => {
+      assert.match(rulesBlock(promptFile(key)), re);
+    });
   }
-});
+}
 
 for (const [label, re] of RULE_PHRASES) {
   test(`t18: the rules block states: ${label}`, () => {
-    assert.match(rulesBlock(promptFile(ALL_KEYS[0]!)), re);
+    // The quote form lives in senses and super-vl; worker and cortex are read for it in the t8 group.
+    assert.match(rulesBlock(promptFile(QUOTE_KEYS[0]!)), re);
   });
   test(`t18: AGENTS.md states: ${label}`, () => {
     const agents = readFileSync(join(REPO_ROOT, "AGENTS.md"), "utf8");

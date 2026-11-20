@@ -428,6 +428,10 @@ def final_turn(events: list[dict[str, Any]]) -> dict[str, Any]:
     runs live-bolt-tests-gaps/-gaps2): the walk holds tool calls only. Text
     blocks are kept (thinking is not), redacted and bounded; ``lane_error`` is
     present only when pi reported one.
+
+    The reply is the model's own last message, nothing the harness checked, so
+    it is named ``unchecked_final_reply``; the checked answer is the result's
+    ``answer``. Results written before the rename carry it as ``final_reply``.
     """
     last: dict[str, Any] | None = None
     for event in events:
@@ -439,7 +443,7 @@ def final_turn(events: list[dict[str, Any]]) -> dict[str, Any]:
         ):
             last = message
     if last is None:
-        return {"final_reply": "", "stop_reason": None}
+        return {"unchecked_final_reply": "", "stop_reason": None}
     blocks = last.get("content") if isinstance(last.get("content"), list) else []
     text = "\n".join(
         str(block.get("text", ""))
@@ -447,7 +451,7 @@ def final_turn(events: list[dict[str, Any]]) -> dict[str, Any]:
         if isinstance(block, dict) and block.get("type") == "text"
     ).strip()
     turn: dict[str, Any] = {
-        "final_reply": output_tail(text, FINAL_REPLY_CHARS),
+        "unchecked_final_reply": output_tail(text, FINAL_REPLY_CHARS),
         "stop_reason": last.get("stopReason") if isinstance(last.get("stopReason"), str) else None,
     }
     if last.get("errorMessage"):
@@ -626,6 +630,11 @@ REASONING_SETTINGS = ("model-default", "on", "off")
 SUPPORT_SCORE_SETTINGS = ("on", "off")
 SUPPORT_SCORE_ENV = "ASSOCIATE_SUPPORT_SCORE"
 
+#: ``--strict`` values, and the variable the launcher sets or clears per run for
+#: the extension's ``lib/strict.ts`` (never inherited).
+STRICT_SETTINGS = ("on", "off")
+STRICT_ENV = "ASSOCIATE_STRICT"
+
 #: ``--finish-reminder`` values, and the variable the launcher sets for every run
 #: for the extension's ``lib/reminder.ts`` (deviation d3; never inherited).
 FINISH_REMINDER_SETTINGS = ("on", "off")
@@ -653,6 +662,7 @@ class PiHarness(Harness):
         untrusted_checkout: bool = False,
         check_mode: str | None = None,
         support_score: str | None = None,
+        strict: str | None = None,
         finish_reminder: str | None = None,
         reasoning: str | None = None,
         executable: str | None = None,
@@ -671,6 +681,12 @@ class PiHarness(Harness):
                 remediation=f"use one of: {', '.join(SUPPORT_SCORE_SETTINGS)}",
             )
         self._support_score = support_score
+        if strict is not None and strict not in STRICT_SETTINGS:
+            raise HarnessError(
+                f"unknown strict setting {strict!r}",
+                remediation=f"use one of: {', '.join(STRICT_SETTINGS)}",
+            )
+        self._strict = strict
         if finish_reminder is not None and finish_reminder not in FINISH_REMINDER_SETTINGS:
             raise HarnessError(
                 f"unknown finish-reminder setting {finish_reminder!r}",
@@ -909,6 +925,8 @@ class PiHarness(Harness):
             "model": self.model_key(),
             "lobes_role": self.model_entry().get("lobes_role"),
             **self._reasoning_record(),
+            # What --strict asked for (null: accuracy.json's switch decides).
+            "strict_switch": self._strict,
             # d3: the switch this run had, and what the extension recorded.
             "finish_reminder_switch": self.finish_reminder_setting(),
             reminder.RESULT_KEY: reminder.run_field(export_dir),
@@ -1234,6 +1252,14 @@ class PiHarness(Harness):
             env[SUPPORT_SCORE_ENV] = self._support_score
         else:
             env.pop(SUPPORT_SCORE_ENV, None)
+
+        # The per-run strict-facts switch, from --strict only, by the same
+        # rule: set for this run or cleared, never inherited. Absent leaves
+        # accuracy.json's strict.enabled for the model in charge.
+        if self._strict:
+            env[STRICT_ENV] = self._strict
+        else:
+            env.pop(STRICT_ENV, None)
 
         # d3: the finish reminder, set for every run, never inherited: the
         # flag's value, else the contract's default. The mesh resident and a

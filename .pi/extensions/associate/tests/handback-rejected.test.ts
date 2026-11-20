@@ -82,6 +82,8 @@ async function openSession(env: Record<string, string | undefined> = {}): Promis
       ASSOCIATE_CONTINUE_FROM: undefined,
       ASSOCIATE_MODEL: undefined,
       [CHECK_MODE_ENV]: undefined,
+      // Strict facts pinned off (t5): these tests are the report/enforce flow.
+      ASSOCIATE_STRICT: "off",
       ...env,
     });
   } finally {

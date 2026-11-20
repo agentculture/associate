@@ -211,12 +211,13 @@ test("the tool never opens a path from its arguments: a path-shaped source reads
   }
 });
 
-test("the schema declares purpose as an optional string and requires source and quote", async () => {
+test("the schema declares purpose as an optional string and requires only source (quote or at is checked by the tool)", async () => {
   const r = await rig();
   try {
     const schema = r.tool.parameters;
     assert.equal(schema.properties.purpose.type, "string");
-    assert.deepEqual([...schema.required].sort(), ["quote", "source"]);
+    assert.deepEqual([...schema.required].sort(), ["source"]);
+    assert.equal(schema.properties.at.type, "object");
   } finally {
     r.dispose();
   }
@@ -254,4 +255,129 @@ test("the guard treats check_quote as a pure read for every active model", async
     assert.equal(decision, undefined, `${key}: ${JSON.stringify(decision)}`);
   }
   assert.equal(evaluateToolCall({ toolName: CHECK_TOOL_NAME, input: { source: "w1", quote: "q" }, scratchDir: "/s", cwd: "/c" }), undefined);
+});
+
+// ------------------------------------------------ the pointer form (strict facts, plan t8)
+
+/** Write a walk with the given entries beside the rig's saved results. */
+function writeWalk(exportDir: string, entries: Array<Record<string, unknown>>): void {
+  const lines = entries.map((e) => JSON.stringify({ ts: "t", result: {}, truncated: false, ...e }));
+  writeFileSync(join(exportDir, "walk.jsonl"), `${lines.join("\n")}\n`);
+}
+
+async function pointerRig() {
+  const r = await rig();
+  writeWalk(r.ctx.session.exportDir, [
+    { id: "w3", tool: "read", args: { path: "a.ts" }, args_used: { path: "a.ts" }, saved_result: "results/w3.txt", partial: false },
+    { id: "w4", tool: "bash", args_used: { argv: ["wc", "-l", "README.md"] }, saved_result: "results/w4.txt", partial: false },
+  ]);
+  saveResult(r.ctx.session.exportDir, "w4", '{"ok":true,"exit_code":0,"stdout":"412 README.md\\n"}\n', 0);
+  return r;
+}
+
+test("pointer form: lines return the copied quote, the command, the result file and the line numbers", async () => {
+  const r = await pointerRig();
+  try {
+    const out = await r.tool.execute("p1", { source: "w3", at: { lines: [2, 3] }, purpose: "p" });
+    assert.equal(out.details.ok, true);
+    assert.equal(out.details.quote, "2\t  return computeTheAnswer(42);\n3\t}");
+    assert.equal(out.details.command, "read a.ts");
+    assert.equal(out.details.result_file, "results/w3.txt");
+    assert.deepEqual(out.details.lines, [2, 3]);
+    assert.equal(out.details.source, "w3");
+    assert.deepEqual(JSON.parse(out.content[0]!.text).quote, out.details.quote);
+  } finally {
+    r.dispose();
+  }
+});
+
+test("pointer form: search copies the first line holding the term, and a given value is number-checked", async () => {
+  const r = await pointerRig();
+  try {
+    const ok = await r.tool.execute("p2", { source: "w4", at: { search: "412 README.md" }, value: "README.md has 412 lines" });
+    assert.equal(ok.details.ok, true);
+    assert.equal(ok.details.command, "wc -l README.md");
+    assert.deepEqual(ok.details.lines, [1, 1]);
+    assert.match(ok.details.quote, /412 README\.md/);
+    const bad = await r.tool.execute("p3", { source: "w4", at: { search: "412 README.md" }, value: "README.md has 413 lines" });
+    assert.equal(bad.details.ok, false);
+    assert.equal(bad.details.reason, "number_absent");
+    assert.ok(bad.details.fix.length > 0);
+  } finally {
+    r.dispose();
+  }
+});
+
+test("pointer form: a failed pointer gives the reason and the fix", async () => {
+  const r = await pointerRig();
+  try {
+    const past = await r.tool.execute("p4", { source: "w3", at: { lines: [10, 12] } });
+    assert.equal(past.details.ok, false);
+    assert.equal(past.details.reason, "pointer_out_of_range");
+    assert.ok(past.details.message.length > 0 && past.details.fix.length > 0);
+    const absent = await r.tool.execute("p5", { source: "w3", at: { search: "no such term" } });
+    assert.equal(absent.details.reason, "search_not_found");
+    const unknown = await r.tool.execute("p6", { source: "w8", at: { lines: [1, 1] } });
+    assert.equal(unknown.details.reason, "source_unknown");
+    const noWalk = await r.tool.execute("p7", { source: "w3", at: {} });
+    assert.equal(noWalk.details.ok, false);
+    assert.equal(noWalk.details.reason, "pointer_malformed");
+    assert.ok(noWalk.details.message.length > 0 && noWalk.details.fix.length > 0);
+  } finally {
+    r.dispose();
+  }
+});
+
+test("pointer form: a path-shaped source is refused, a label is looked up, and quote with at is refused", async () => {
+  const r = await pointerRig();
+  try {
+    const path = await r.tool.execute("p8", { source: "../w3", at: { lines: [1, 1] } });
+    assert.equal(path.details.code, "invalid_source");
+    const label = await r.tool.execute("p9", { source: "prior:w3", at: { lines: [1, 1] } });
+    assert.equal(label.details.code, "source_not_resolvable");
+    const both = await r.tool.execute("p10", { source: "w3", at: { lines: [1, 1] }, quote: "return computeTheAnswer(42);" });
+    assert.equal(both.details.ok, false);
+    assert.equal(both.details.code, "quote_and_at");
+  } finally {
+    r.dispose();
+  }
+});
+
+test("pointer form: a prior: source is resolved in the --continue-from run", async () => {
+  const root = mkdtempSync(join(tmpdir(), "associate-check-prior-at-"));
+  try {
+    const priorExport = join(root, "prior", "export");
+    mkdirSync(priorExport, { recursive: true });
+    writeWalk(priorExport, [{ id: "w3", tool: "read", args_used: { path: "p.ts" }, saved_result: "results/w3.txt", partial: false }]);
+    saveResult(priorExport, "w3", "1\tthe prior run read this line only\n", 0);
+    const checkout = join(root, "checkout");
+    mkdirSync(checkout);
+    const ctx = createAssociateContext({
+      checkoutRoot: checkout,
+      contract: CONTRACT,
+      env: { ASSOCIATE_EXPORT_ROOT: join(root, "runs"), ASSOCIATE_SESSION_ID: "t8-prior" },
+    });
+    const pi = new FakePi();
+    await register(pi, ctx, { ASSOCIATE_CONTINUE_FROM: priorExport });
+    const tool = pi.tools.find((t) => t.name === CHECK_TOOL_NAME)!;
+    const out = await tool.execute("q1", { source: "prior:w3", at: { lines: [1, 1] } });
+    assert.equal(out.details.ok, true);
+    assert.equal(out.details.run, "prior");
+    assert.match(out.details.quote, /prior run read this line only/);
+  } finally {
+    rmSync(root, { recursive: true, force: true });
+  }
+});
+
+test("pointer form: the quote form is unchanged and neither form given is an argument error", async () => {
+  const r = await pointerRig();
+  try {
+    const q = await r.tool.execute("p11", { source: "w3", quote: "return computeTheAnswer(42);" });
+    assert.equal(q.details.verdict, "passed");
+    const none = await r.tool.execute("p12", { source: "w3" });
+    assert.equal(none.details.ok, false);
+    assert.equal(none.details.code, "quote_or_at");
+  } finally {
+    r.dispose();
+  }
 });

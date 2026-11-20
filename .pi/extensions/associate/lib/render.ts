@@ -26,7 +26,9 @@
  * writes the result.
  */
 
+import { parseSourceRef } from "./facts.ts";
 import type { FactCheck, HandbackCheck, ItemCheck } from "./facts.ts";
+import type { StrictDecision, StrictFact } from "./strict.ts";
 import type { SupportResult } from "./support.ts";
 
 /** The heading every piece of unchecked model text sits under. */
@@ -170,23 +172,20 @@ function accepted<T extends ItemCheck>(items: readonly T[], position: number): b
   return items[position]?.outcome === "accepted";
 }
 
-/** The answer, as markdown, from accepted items only. */
-export function renderAnswer(input: RenderInput): string {
-  const payload = asRecord(input.payload);
-  const { check } = input;
-  const rawFacts = asArray(payload.facts).map(asRecord);
-  const rawVerdicts = asArray(payload.verdicts).map(asRecord);
-  const rawOpen = asArray(payload.open_items).map(asRecord);
-  const alternatives = new Map<string, Record<string, unknown>>();
-  for (const alt of asArray(payload.alternatives).map(asRecord)) {
-    const id = str(alt.id);
-    if (id && !alternatives.has(id)) alternatives.set(id, alt);
-  }
-
-  // The checker gives one verdict per payload item, in payload order.
+/**
+ * The conclusion lines of the verdicts `idAt` names (it returns the id of a
+ * verdict that is shown, undefined for one that is not). Shared by both
+ * renderings so the style stays one.
+ */
+function conclusionLines(
+  rawVerdicts: readonly Record<string, unknown>[],
+  alternatives: Map<string, Record<string, unknown>>,
+  idAt: (position: number) => string | undefined,
+): string[] {
   const conclusions: string[] = [];
   rawVerdicts.forEach((raw, position) => {
-    if (!accepted(check.verdicts, position)) return;
+    const id = idAt(position);
+    if (id === undefined) return;
     const basis = asArray(raw.basis).map(str).filter(Boolean);
     const verdict = str(raw.verdict);
     const tail = [
@@ -195,16 +194,65 @@ export function renderAnswer(input: RenderInput): string {
     ]
       .filter(Boolean)
       .join("; ");
-    conclusions.push(`- ${check.verdicts[position].id} [${verdict}] ${oneLine(str(raw.text))}${tail ? ` (${tail})` : ""}`);
+    conclusions.push(`- ${id} [${verdict}] ${oneLine(str(raw.text))}${tail ? ` (${tail})` : ""}`);
     const alt = str(raw.alternative);
     if (alt) conclusions.push(...alternativeLines(alt, alternatives));
   });
+  return conclusions;
+}
 
+/** The open-item lines of the items `idAt` names. */
+function openLines(rawOpen: readonly Record<string, unknown>[], idAt: (position: number) => string | undefined): string[] {
   const open: string[] = [];
   rawOpen.forEach((raw, position) => {
-    if (!accepted(check.open_items, position)) return;
-    open.push(`- ${check.open_items[position].id}: ${oneLine(str(raw.text))} (deciding check: ${oneLine(str(raw.check))})`);
+    const id = idAt(position);
+    if (id === undefined) return;
+    open.push(`- ${id}: ${oneLine(str(raw.text))} (deciding check: ${oneLine(str(raw.check))})`);
   });
+  return open;
+}
+
+function alternativesOf(payload: Record<string, unknown>): Map<string, Record<string, unknown>> {
+  const alternatives = new Map<string, Record<string, unknown>>();
+  for (const alt of asArray(payload.alternatives).map(asRecord)) {
+    const id = str(alt.id);
+    if (id && !alternatives.has(id)) alternatives.set(id, alt);
+  }
+  return alternatives;
+}
+
+/** The unchecked section: the model's own words under one label, with sentence counts. */
+function uncheckedLines(rawSummary: unknown, rawFinal: unknown): string[] {
+  const lines: string[] = [];
+  const summary = str(rawSummary).trim();
+  const finalMessage = str(rawFinal).trim();
+  lines.push(UNCHECKED_HEADING, "");
+  if (!summary && !finalMessage) lines.push("- none", "");
+  if (summary) {
+    const n = countSentences(summary);
+    lines.push(`Finish summary (${n} sentence${n === 1 ? "" : "s"}):`, "", ...blockQuote(summary), "");
+  }
+  if (finalMessage) {
+    const n = countSentences(finalMessage);
+    lines.push(`Final message (${n} sentence${n === 1 ? "" : "s"}):`, "", ...blockQuote(finalMessage), "");
+  }
+  return lines;
+}
+
+/** The answer, as markdown, from accepted items only. */
+export function renderAnswer(input: RenderInput): string {
+  const payload = asRecord(input.payload);
+  const { check } = input;
+  const rawFacts = asArray(payload.facts).map(asRecord);
+  const rawVerdicts = asArray(payload.verdicts).map(asRecord);
+  const rawOpen = asArray(payload.open_items).map(asRecord);
+  const alternatives = alternativesOf(payload);
+
+  // The checker gives one verdict per payload item, in payload order.
+  const conclusions = conclusionLines(rawVerdicts, alternatives, (position) =>
+    accepted(check.verdicts, position) ? check.verdicts[position].id : undefined,
+  );
+  const open = openLines(rawOpen, (position) => (accepted(check.open_items, position) ? check.open_items[position].id : undefined));
 
   const facts: string[] = [];
   let supportShown = false;
@@ -246,17 +294,208 @@ export function renderAnswer(input: RenderInput): string {
     );
   }
 
-  const summary = str(input.summary).trim();
-  const finalMessage = str(input.finalMessage).trim();
-  lines.push(UNCHECKED_HEADING, "");
-  if (!summary && !finalMessage) lines.push("- none", "");
-  if (summary) {
-    const n = countSentences(summary);
-    lines.push(`Finish summary (${n} sentence${n === 1 ? "" : "s"}):`, "", ...blockQuote(summary), "");
+  lines.push(...uncheckedLines(input.summary, input.finalMessage));
+  return lines.join("\n");
+}
+
+// ============================================================ the strict answer
+
+/**
+ * The answer under strict facts (plan t6; spec c1, c6, c7, c35, h11), from the
+ * strict check result directly. The answer section holds one entry per fact
+ * whose outcome is `pass` or `keep_marked`, in the model's order, each with how
+ * to check it again: its kind, the command, the result file and lines, and the
+ * evidence as copied by the harness, byte for byte. Dropped, returned and
+ * not-judged items are counted, never shown as items. The model's summary and
+ * final message appear only under the unchecked heading, after the answer
+ * section. "Copied" means the harness took the evidence from the saved result
+ * where the pointer said and the value is word for word in it (or no value was
+ * given); "judged" means the value is in the model's own words and the decider
+ * answered how much of it the evidence shows. Neither says the value is
+ * correct.
+ */
+export const STRICT_LEGEND =
+  "Items marked direct: the harness copied the evidence from a saved result (or found the model's quote in one), " +
+  "and the value is word for word in that evidence, or no value was given. " +
+  "Items marked llm: the value is in the model's own words; the decider read it beside the evidence (and the command, when the harness copied it) " +
+  "and answered how much of it the evidence shows. Items marked derived: the decider answered whether the conclusion " +
+  "follows from the facts it lists. The decider's answer is shown with each. " +
+  "Run the command in \"how to check\" to see the evidence again; none of this makes a value correct.";
+
+export interface StrictRenderInput {
+  /** The parsed hand-back, as given. */
+  readonly payload: unknown;
+  /** What `runStrict` decided (lib/strict.ts). */
+  readonly decision: StrictDecision;
+  /** accuracy.json `strict.mark_text`: written beside a kept-marked item. */
+  readonly markText: string;
+  /** The finish summary, unchecked. */
+  readonly summary?: string;
+  /** The model's final message after finish, unchecked. */
+  readonly finalMessage?: string;
+  /**
+   * For an old-shape fact (a quote, no pointer) that passed: the command and
+   * result file of the call it cites in this run (`renderCommand`), or
+   * undefined when none is known.
+   */
+  readonly legacy?: (source: string) => { command: string; result_file?: string } | undefined;
+}
+
+/** The shortest backtick fence that cannot be closed by anything in `text` (at least three). */
+export function fenceFor(text: string): string {
+  let longest = 0;
+  for (const run of text.match(/`+/g) ?? []) longest = Math.max(longest, run.length);
+  return "`".repeat(Math.max(3, longest + 1));
+}
+
+/** `text` as a markdown code span that cannot be closed by anything in it. */
+export function codeSpan(text: string): string {
+  let longest = 0;
+  for (const run of text.match(/`+/g) ?? []) longest = Math.max(longest, run.length);
+  const fence = "`".repeat(longest + 1);
+  const pad = /^[` ]|[` ]$/.test(text) ? " " : "";
+  return `${fence}${pad}${text}${pad}${fence}`;
+}
+
+const COPIED_TEXT_CAP = 200;
+
+const plural = (n: number, one: string, many = `${one}s`) => `${n} ${n === 1 ? one : many}`;
+
+function strictFactLines(
+  raw: Record<string, unknown>,
+  fact: StrictFact,
+  markText: string,
+  legacy: StrictRenderInput["legacy"],
+): string[] {
+  const evidence = fact.evidence;
+  const given = typeof raw.value === "string" && raw.value !== "" ? oneLine(raw.value) : null;
+  let value = given;
+  if (value === null) {
+    const copied = oneLine(evidence?.quote ?? str(raw.quote));
+    value = copied.length > COPIED_TEXT_CAP ? `${copied.slice(0, COPIED_TEXT_CAP)}... (the whole copied text is under result)` : copied;
   }
-  if (finalMessage) {
-    const n = countSentences(finalMessage);
-    lines.push(`Final message (${n} sentence${n === 1 ? "" : "s"}):`, "", ...blockQuote(finalMessage), "");
+  const source = str(raw.source);
+  const parsed = parseSourceRef(source);
+  const label = parsed.ok ? parsed.label : null;
+  const out: string[] = [`**${fact.id}:** ${value}`, ""];
+
+  // kind
+  const stated = fact.kind_stated;
+  const option = fact.judge?.judged ? fact.judge.option : null;
+  const based = fact.based_on.length > 0 ? fact.based_on.join(", ") : "";
+  let kind: string;
+  let checkedKind: string;
+  if (label !== null && !evidence) {
+    kind = `not checked directly: it rests on a labelled run (${label}) whose result was not read here`;
+    checkedKind = stated;
+  } else if (fact.judge === null || option === null) {
+    // Direct: no value, or the value word for word in the evidence (lib/facts.ts).
+    kind = evidence ? "direct (copied from the result)" : "direct (quote found in the result)";
+    checkedKind = "direct";
+  } else if (stated === "derived") {
+    kind = `derived (from ${based || "no listed fact"}; the decider answered ${option})`;
+    checkedKind = "derived";
+  } else {
+    // A value in the model's own wording is judged as llm whatever kind it stated.
+    kind = `llm (judged by the decider: ${option})`;
+    checkedKind = "llm";
   }
+  out.push(`- kind: ${kind}${checkedKind !== stated ? `; stated: ${stated}` : ""}`);
+
+  // how to check
+  let command: string | undefined;
+  let resultFile: string | undefined;
+  if (evidence) {
+    command = evidence.command;
+    resultFile = evidence.result_file;
+  } else if (label === null && legacy) {
+    const found = legacy(source);
+    command = found?.command;
+    resultFile = found?.result_file;
+  }
+  if (command !== undefined) out.push(`- how to check: ${codeSpan(command)}`);
+  if (label !== null && evidence) {
+    out.push(`- run: it rests on the labelled run ${label}; its saved result was read here`);
+  }
+  if (evidence) {
+    const [first, last] = evidence.lines;
+    out.push(`- result: ${codeSpan(evidence.result_file)}, ${first === last ? `line ${first}` : `lines ${first} to ${last}`}`);
+  } else if (resultFile !== undefined) {
+    out.push(`- result: ${codeSpan(resultFile)}, the quote as the model gave it, found in it`);
+  } else if (label === null) {
+    out.push(`- result: the saved result of ${source}, the quote as the model gave it, found in it`);
+  }
+  if (fact.strict_outcome === "keep_marked") {
+    out.push(`- marked: ${markText} (the decider answered ${fact.judge?.option ?? "an option that keeps it marked"})`);
+  }
+  const copied = evidence?.quote ?? (typeof raw.quote === "string" ? raw.quote : "");
+  if (copied !== "") {
+    const fence = fenceFor(copied);
+    out.push("", `${fence}text`, copied, fence);
+  }
+  out.push("");
+  return out;
+}
+
+/** The answer under strict facts, as markdown. */
+export function renderStrictAnswer(input: StrictRenderInput): string {
+  const payload = asRecord(input.payload);
+  const { decision } = input;
+  const rawFacts = asArray(payload.facts).map(asRecord);
+  const rawVerdicts = asArray(payload.verdicts).map(asRecord);
+  const rawOpen = asArray(payload.open_items).map(asRecord);
+  const alternatives = alternativesOf(payload);
+  const shown = (o: string) => o === "pass" || o === "keep_marked";
+
+  const conclusions = conclusionLines(rawVerdicts, alternatives, (position) => {
+    const item = decision.items.verdicts[position];
+    return item && item.strict_outcome === "pass" ? item.id : undefined;
+  });
+  const open = openLines(rawOpen, (position) => {
+    const item = decision.items.open_items[position];
+    return item && item.strict_outcome === "pass" ? item.id : undefined;
+  });
+  const facts: string[] = [];
+  let shownFacts = 0;
+  rawFacts.forEach((raw, position) => {
+    const fact = decision.facts[position];
+    if (!fact || !shown(fact.strict_outcome)) return;
+    shownFacts += 1;
+    facts.push(...strictFactLines(raw, fact, input.markText, input.legacy));
+  });
+
+  const lines: string[] = [ANSWER_HEADING, ""];
+  if (conclusions.length + open.length + shownFacts === 0) {
+    lines.push("No fact or conclusion is in the answer.", "");
+  }
+  if (conclusions.length) lines.push("## Conclusions", "", ...conclusions, "");
+  if (open.length) lines.push("## Open items", "", ...open, "");
+  if (shownFacts > 0) lines.push("## Facts", "", STRICT_LEGEND, "", ...facts);
+
+  // What is not in the answer, each only when non-zero.
+  const reasons = Object.entries(decision.drop_reasons).map(([reason, n]) => `${n} ${reason}`);
+  if (decision.dropped.length > 0) {
+    lines.push(
+      `${plural(decision.dropped.length, "item was", "items were")} dropped (${reasons.join(", ")}); ` +
+        "dropped.json in the export lists each with its reason and fix.",
+      "",
+    );
+  }
+  if (decision.returned.length > 0) {
+    const n = decision.returned.length;
+    lines.push(`${plural(n, "item was", "items were")} returned and not answered again; ${n === 1 ? "it is" : "they are"} not in this answer.`, "");
+  }
+  const notJudged = [
+    ...decision.facts.filter((f) => f.strict_outcome === "not_judged").map((f) => f.judge?.reason ?? "not_judged"),
+    ...[...decision.items.verdicts, ...decision.items.open_items].filter((i) => i.strict_outcome === "not_judged").map(() => "basis_not_judged"),
+  ];
+  if (notJudged.length > 0) {
+    const counted = new Map<string, number>();
+    for (const reason of notJudged) counted.set(reason, (counted.get(reason) ?? 0) + 1);
+    const why = [...counted].map(([reason, n]) => `${n} ${reason}`).join(", ");
+    lines.push(`${plural(notJudged.length, "item was", "items were")} not judged (${why}); ${notJudged.length === 1 ? "it is" : "they are"} not in this answer.`, "");
+  }
+
+  lines.push(...uncheckedLines(input.summary, input.finalMessage));
   return lines.join("\n");
 }

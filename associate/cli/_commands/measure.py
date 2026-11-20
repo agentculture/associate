@@ -93,7 +93,8 @@ _K_HARNESS_COMMIT = "harness_commit"
 _ARM_REQUIRED = ("name", _K_HARNESS_COMMIT, "model")
 _K_SUPPORT = "support_score"
 _K_REMINDER = "finish_reminder"
-_ARM_OPTIONAL = ("check_mode", "reasoning", _K_SUPPORT, _K_REMINDER)
+_K_STRICT = "strict"
+_ARM_OPTIONAL = ("check_mode", "reasoning", _K_SUPPORT, _K_REMINDER, _K_STRICT)
 _ARM_KEYS = frozenset(_ARM_REQUIRED + _ARM_OPTIONAL)
 _COLUMN_NAMES = {
     "runs": "runs",
@@ -106,7 +107,7 @@ _COLUMN_NAMES = {
 _ARMS_HINT = (
     "write the arms file as a JSON list of objects with name, harness_commit and model, "
     "and optionally check_mode (report or enforce), reasoning (model-default, on or off), "
-    "support_score (on or off) and finish_reminder (on or off)"
+    "support_score, finish_reminder and strict (each on or off)"
 )
 _STATUS_HINT = "start the comparison with `associate measure run` first"
 _POSITIVE_HINT = "give a positive whole number"
@@ -233,6 +234,7 @@ def _arm_value_problems(label: str, item: dict[str, Any]) -> list[str]:
         ("reasoning", runner.REASONING_CHOICES),
         (_K_SUPPORT, runner.SUPPORT_SCORE_CHOICES),
         (_K_REMINDER, runner.FINISH_REMINDER_CHOICES),
+        (_K_STRICT, runner.STRICT_CHOICES),
     ):
         if key in item and item[key] not in choices:
             problems.append(f"{label}: {key} must be one of {', '.join(choices)}")
@@ -274,6 +276,7 @@ def load_arms(path: Path) -> list[Arm]:
             reasoning=item.get("reasoning"),
             support_score=item.get(_K_SUPPORT),
             finish_reminder=item.get(_K_REMINDER),
+            strict=item.get(_K_STRICT),
         )
         for item in doc
     ]

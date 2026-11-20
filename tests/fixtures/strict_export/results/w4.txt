@@ -1,0 +1,29 @@
+{"summary":"The role table.","statements":[],"citations":[],"not_fully_read":false,"outcome":"accepted","mode":"strict","facts_checked":{"made":2,"checked":1,"passed":1,"refused":0,"unchecked":1},"strict":{"round":3,"rounds_used":2,"rounds_left":0,"counts":{"pass":1,"keep_marked":0,"returned":0,"dropped":1,"not_judged":0},"drop_reasons":{"decider_drop":1},"judge_counts":{"direct_passed":1,"llm_judged":1,"derived_judged":0,"not_judged":0}}}
+Hand-back accepted (strict facts): 1 fact in the answer (0 kept marked), 1 dropped, 0 not judged. The answer goes out without the dropped items; the hand-back is not refused.
+
+Dropped (not in the answer):
+- f2 (cites w1): decider_drop. Fix: the decider answered 'none': the evidence does not show the value; point at the lines that show it, or leave the fact out
+Now reply to the requester with exactly the answer below as your final message, then stop — a hand-back alone does not reach a mesh requester, and no further tool call is allowed.
+# Answer (rendered by the harness from checked items)
+
+## Facts
+
+Each item below was checked by the harness: its evidence was copied from a saved result, or its quote was found in one. An item the decider judged shows the decider's option. Run the command in "how to check" to see the evidence again; none of this makes a value correct.
+
+**f1:** ROLE_RESPONSIBILITIES
+
+- kind: direct
+- how to check: `read roles.py`
+- result: `results/w1.txt`, line 1
+
+```text
+1	ROLE_RESPONSIBILITIES = {
+```
+
+1 item was dropped (1 decider_drop); dropped.json in the export lists each with its reason and fix.
+
+## Unchecked: the model's own words, not checked by the harness
+
+Finish summary (1 sentence):
+
+> The role table.
