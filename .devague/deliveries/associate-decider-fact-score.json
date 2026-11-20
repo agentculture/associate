@@ -2,7 +2,7 @@
   "plan_slug": "associate-decider-fact-score",
   "schema_version": 2,
   "created": "2026-11-19T06:30:45Z",
-  "updated": "2026-11-19T11:56:26Z",
+  "updated": "2026-11-19T19:21:19Z",
   "deviations": [
     {
       "id": "d1",
@@ -58,6 +58,17 @@
       "status": "approved",
       "classification": "risky",
       "seq": 4
+    },
+    {
+      "id": "d5",
+      "what": "t12's statements were graded by model graders, not by hand: two blind Claude graders with a third for 121 statements, and one outside grader (Antigravity on a Gemini model) over all 1,657; the Gemini grading is the main reading with the Claude grading beside it; no person graded",
+      "task_ref": "t12",
+      "reason": "Operator, 2026-11-19: 'subagent graders as with labelling'; then 'You also have agy (Antigravity - google) to run agent as judge'; then accepted the recommendation to take Gemini's stricter reading as the main one",
+      "affects": [],
+      "origin": "user",
+      "status": "approved",
+      "classification": "acceptable",
+      "seq": 5
     }
   ],
   "evidence": [],
