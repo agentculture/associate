@@ -126,7 +126,10 @@ unsupported).
 | The same, held-out half | 123 of 133 (92.5%) | 4 of 88 (4.5%) |
 
 The spec's target was at least 90% of supported pairs and at most 10% of
-unsupported pairs passed. Of the 60 planted wrong values, 1 passed. Of the 20
+unsupported pairs passed. **The target is not met as specified.** The whole
+set reads 90.5% and 7.9%, and the development half 88.3% and 12.5%. No part of
+the set is a held-out result, because the wording was written after looking
+at it, and both raters are models. Of the 60 planted wrong values, 1 passed. Of the 20
 wrong pairs whose quote ends with a plea for yes, none passed. The background,
 the labelling guideline and the five options were all written after looking at
 pairs of this set. These shares say how often the decider's answer went with

@@ -277,14 +277,21 @@ run live):
   (`{"sent", "finish_followed"}`), `associate check` prints it, and a broad
   `measure` record stores `reminded`. With none sent every export file is
   byte-identical to before. Built and unit-tested against a fake pi; the pi
-  mechanism was seen once in a live probe with a throwaway extension; no run
-  of associate with the reminder has been measured.
+  mechanism was seen once in a live probe with a throwaway extension. In the
+  36 `worker` runs of the broad measurement the reminder was on in both arms:
+  one run in each arm was reminded once and both then ended with an accepted
+  `finish` (`docs/notes/support-score-broad-measurement.md`). That is two
+  runs, not a rate; a reminded run that still ended without `finish` has also
+  been seen.
 - **Broad measurement tasks and the measure sheet verbs** (0.14.0):
   `docs/accuracy/broad-tasks.json` (six repositories, 71 checked facts),
   `associate measure run --broad`, and `measure sheet`, `measure sheet-check`
   and `measure report` for blind hand grading
   (`associate/cli/_commands/measure_broad.py`, `associate/measure/broad.py`).
-  Built and tested on fixtures and the stub harness only; a real broad run is
+  Tested on fixtures and the stub harness, and used for one measurement: 36
+  `worker` runs were made with `measure run --broad` and graded through the
+  sheet verbs by model graders, not by a person
+  (`docs/notes/support-score-broad-measurement.md`). A real broad run is
   refused while `docs/accuracy/broad-difference-threshold.md` is a draft,
   missing or modified (the operator confirmed it on 2026-11-19).
 
@@ -341,10 +348,14 @@ model. Issue #39 follows from it.
   `associate/harness/worktree.py`;
 - **any** benchmark score: no row of the 8-row matrix has run (t21);
 - the accuracy method on `senses` (the gateway reported the role not feasible
-  on the measuring machine), with reasoning on, on the mesh path, in spawned
-  children or delegated runs, with a real `ledger` binary, or in enforce mode
-  beyond two worker runs; the recording of calls pi rejects before the hook is
-  tested against a fake pi only.
+  on the measuring machine), on the mesh path, in spawned children or
+  delegated runs, with a real `ledger` binary, or in enforce mode beyond two
+  worker runs; with reasoning on, no note records the method's counts
+  compared with a hand count (runs with reasoning on exist — the 16-run
+  pilots of `docs/notes/measure-pilot.md`, the 36 `worker` runs of the broad
+  measurement and one `cortex` run — and each measured something else); the
+  recording of calls pi rejects before the hook is tested against a fake pi
+  only.
 - the support score outside the 18 `check-on` runs of the broad measurement
   (`worker`, reasoning on, report mode) and one `cortex` run: the switch is
   off for every model; no run with the score on is recorded for `senses`, with

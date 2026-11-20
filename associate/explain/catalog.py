@@ -273,9 +273,10 @@ the value the quote, on its own, shows, answered `all`, `mostly`, `part`, `littl
 or `none`, the options in accuracy.json `support_score.options`). The switch, the
 question and their readers in the extension are built and unit-tested against a
 fake decider; the option wording was measured offline on a labelled set. One
-measurement had it on in 18 `worker` runs and off in 18, in report mode, and showed
-no difference in what the model handed back
-(docs/notes/support-score-broad-measurement.md). The switch is off for every model,
+measurement had it on in 18 `worker` runs and off in 18, in report mode. Under the
+committed rule no difference was shown in what the model handed back, on three
+runs per repository per arm graded by model graders; that does not show there is
+no difference (docs/notes/support-score-broad-measurement.md). The switch is off for every model,
 and the score is not a measure of accuracy.
 
 When the export holds a support score, the result carries it beside `accuracy`,
