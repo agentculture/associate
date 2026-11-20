@@ -2,7 +2,7 @@
   "plan_slug": "associate-strict-facts",
   "schema_version": 2,
   "created": "2026-11-20T14:34:55Z",
-  "updated": "2026-11-20T14:34:55Z",
+  "updated": "2026-11-20T15:25:32Z",
   "deviations": [
     {
       "id": "d1",
@@ -26,6 +26,21 @@
       "status": "approved",
       "classification": "acceptable",
       "seq": 1
+    },
+    {
+      "id": "d2",
+      "what": "The Python parity re-check for strict facts (task t7's first criterion, spec c39 and h25) is built now in the evidence-cli repository, where the re-check lives, with its own PR and release; associate then raises its evidence-cli floor and adds the parity test",
+      "task_ref": "t7",
+      "reason": "Operator, 2026-11-20: 'where the parity re-check goes: Now in evidence-cli'. The plan placed it in associate/accuracy, which only imports evidence-cli (lapse l1)",
+      "affects": [
+        "c39",
+        "h25",
+        "t12"
+      ],
+      "origin": "user",
+      "status": "approved",
+      "classification": "acceptable",
+      "seq": 2
     }
   ],
   "evidence": [],
