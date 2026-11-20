@@ -1,0 +1,155 @@
+{
+  "facts": {
+    "made": 10,
+    "checked": 10,
+    "passed": 0,
+    "refused": 10,
+    "unchecked": 0
+  },
+  "conclusions": {
+    "made": 1,
+    "supported": 1,
+    "refuted": 0,
+    "open": 0
+  },
+  "statements": {
+    "made": 1,
+    "without_fact": 0
+  },
+  "by_source_kind": {
+    "file": {
+      "made": 10,
+      "checked": 10,
+      "passed": 0,
+      "refused": 10,
+      "unchecked": 0
+    },
+    "tool": {
+      "made": 0,
+      "checked": 0,
+      "passed": 0,
+      "refused": 0,
+      "unchecked": 0
+    },
+    "web": {
+      "made": 0,
+      "checked": 0,
+      "passed": 0,
+      "refused": 0,
+      "unchecked": 0
+    },
+    "memory": {
+      "made": 0,
+      "checked": 0,
+      "passed": 0,
+      "refused": 0,
+      "unchecked": 0
+    },
+    "agent": {
+      "made": 0,
+      "checked": 0,
+      "passed": 0,
+      "refused": 0,
+      "unchecked": 0
+    },
+    "harness": {
+      "made": 0,
+      "checked": 0,
+      "passed": 0,
+      "refused": 0,
+      "unchecked": 0
+    }
+  },
+  "flags": [
+    {
+      "check": "quote_not_in_result",
+      "detail": "f1: quote_absent",
+      "ref": "w3"
+    },
+    {
+      "check": "quote_not_in_result",
+      "detail": "f2: quote_absent",
+      "ref": "w3"
+    },
+    {
+      "check": "quote_not_in_result",
+      "detail": "f3: quote_absent",
+      "ref": "w3"
+    },
+    {
+      "check": "quote_not_in_result",
+      "detail": "f4: quote_absent",
+      "ref": "w18"
+    },
+    {
+      "check": "quote_not_in_result",
+      "detail": "f5: quote_absent",
+      "ref": "w5"
+    },
+    {
+      "check": "quote_not_in_result",
+      "detail": "f6: quote_absent",
+      "ref": "w5"
+    },
+    {
+      "check": "quote_not_in_result",
+      "detail": "f7: quote_absent",
+      "ref": "w4"
+    },
+    {
+      "check": "quote_not_in_result",
+      "detail": "f8: quote_absent",
+      "ref": "w3"
+    },
+    {
+      "check": "quote_not_in_result",
+      "detail": "f9: quote_absent",
+      "ref": "w5"
+    },
+    {
+      "check": "quote_not_in_result",
+      "detail": "f10: quote_absent",
+      "ref": "w12"
+    },
+    {
+      "check": "conclusion_without_fact",
+      "detail": "v1: basis_refused"
+    }
+  ],
+  "python_recheck_ran": false,
+  "children": [],
+  "strict": {
+    "direct_passed": 0,
+    "llm_judged": 0,
+    "derived": 0,
+    "kept_with_mark": 0,
+    "returned": 0,
+    "not_judged": 0,
+    "dropped": {
+      "total": 10,
+      "by_reason": {
+        "quote_absent": 10
+      }
+    },
+    "by_stated_kind": {
+      "direct": {
+        "stated": 10,
+        "checked_as_direct": 0
+      },
+      "llm": {
+        "stated": 0,
+        "checked_as_direct": 0
+      },
+      "derived": {
+        "stated": 0,
+        "checked_as_direct": 0
+      }
+    },
+    "worded": 0,
+    "judged": 0
+  },
+  "unchecked_text": {
+    "summary_sentences": 11,
+    "final_message_sentences": 11
+  }
+}

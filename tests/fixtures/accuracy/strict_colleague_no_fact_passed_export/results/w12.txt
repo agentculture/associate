@@ -1,0 +1,21 @@
+632	```bash
+633	uv sync                                   # install (incl. dev group)
+634	uv run pytest -n auto                     # tests (parallel)
+635	uv run colleague backends list          # discovered backends (wheels = deprecated alias)
+636	uv run colleague work "<task>" --repo . --engine mock --no-pr
+637	# Backend resolution: --engine > COLLEAGUE_ENGINE > vllm-openai (never silent mock, #53).
+639	# Extensibility layer (templates / hooks / approvals / session):
+640	uv run colleague work --command <name> [args…] --repo . --engine mock --no-pr
+641	uv run colleague commands list --repo .          # discovered templates (also: hooks list)
+643	# approve verbs accept --algo sha256|md5 (default sha256) and --json.
+644	uv run colleague session --repo . --engine mock  # interactive palette (--pr to push+PR)
+645	
+652	
+653	# Lint + gates CI enforces:
+654	uv run black --check colleague tests && uv run isort --check-only colleague tests
+655	uv run flake8 colleague tests && uv run bandit -c pyproject.toml -r colleague
+656	uv run teken cli doctor . --strict        # agent-first rubric gate
+657	```
+658	
+659	The live vLLM proof is opt-in (`COLLEAGUE_VLLM_E2E=1 uv run pytest
+660	tests/test_vllm_live.py`) and needs a rig exposing tool calling

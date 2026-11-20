@@ -1,0 +1,9 @@
+2	
+3	Ten tools — ``read_file``, ``write_file``, ``edit_file``, ``list_dir``,
+4	``run_command``, ``culture``, ``devague``, ``subagent``, ``subagents``, and
+5	``finish`` — are exposed to the model as OpenAI function/tool schemas
+6	(:data:`colleague.tool_schemas.SCHEMAS`, re-exported here as :data:`SCHEMAS`).
+7	:class:`ToolExecutor` runs a requested call against a fixed repo root.
+8	``edit_file`` (#174) is the partial-edit primitive: an exact-string replace
+9	whose cost scales with the change, not the file size.
+10	

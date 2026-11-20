@@ -1,0 +1,93 @@
+{
+  "dropped": [
+    {
+      "id": "f1",
+      "item": "fact",
+      "value": "Colleague is a swappable coder-agent harness — one shared task runtime, many model backends — headless, not a chat assistant or IDE plugin",
+      "reason": "quote_absent",
+      "fix": "copy the quote word for word from the saved result of the entry you cite (the nearest match is shown), or cite the entry that holds it",
+      "source": "w3"
+    },
+    {
+      "id": "f2",
+      "item": "fact",
+      "value": "Architecture parts: Mind/backend, Adapter (colleague/engines/), Task runtime (contract), Tool loop (colleague/loop.py), Plugins (entry points), Run report (artifact), Telemetry, Handoff, Doctor, Registry, Approval gate",
+      "reason": "quote_absent",
+      "fix": "copy the quote word for word from the saved result of the entry you cite (the nearest match is shown), or cite the entry that holds it",
+      "source": "w3"
+    },
+    {
+      "id": "f3",
+      "item": "fact",
+      "value": "Two bundled backends: mock (deterministic, networkless, contract reference, CI workhorse) and vllm-openai (OpenAI-compatible /v1/chat/completions with tool calling; default model unsloth/Qwen3.8-27B-NVFP4)",
+      "reason": "quote_absent",
+      "fix": "copy the quote word for word from the saved result of the entry you cite (the nearest match is shown), or cite the entry that holds it",
+      "source": "w3"
+    },
+    {
+      "id": "f4",
+      "item": "fact",
+      "value": "Tool surface: ten tools (read_file, write_file, edit_file, list_dir, run_command, culture, devague, subagent, subagents, finish) as OpenAI function schemas; edit_file is partial-edit; file tools confined to repo root; run_command cwd pinned to root",
+      "reason": "quote_absent",
+      "fix": "copy the quote word for word from the saved result of the entry you cite (the nearest match is shown), or cite the entry that holds it",
+      "source": "w18"
+    },
+    {
+      "id": "f5",
+      "item": "fact",
+      "value": "CLI scripts: colleague and clg both → colleague.cli:main; version 1.76.0",
+      "reason": "quote_absent",
+      "fix": "copy the quote word for word from the saved result of the entry you cite (the nearest match is shown), or cite the entry that holds it",
+      "source": "w5"
+    },
+    {
+      "id": "f6",
+      "item": "fact",
+      "value": "Entry points: colleague.engines (mock, vllm-openai) and colleague.renderers (ansi)",
+      "reason": "quote_absent",
+      "fix": "copy the quote word for word from the saved result of the entry you cite (the nearest match is shown), or cite the entry that holds it",
+      "source": "w5"
+    },
+    {
+      "id": "f7",
+      "item": "fact",
+      "value": "All-engines rule: contract behavior must hold identically for every backend; hooks, telemetry, approval gate, pre-finish gates live in the runtime loop (colleague/loop.py), never in engines",
+      "reason": "quote_absent",
+      "fix": "copy the quote word for word from the saved result of the entry you cite (the nearest match is shown), or cite the entry that holds it",
+      "source": "w4"
+    },
+    {
+      "id": "f8",
+      "item": "fact",
+      "value": "Key commands: colleague work \"<goal>\" --repo .; colleague work --command <name> [args…]; colleague (interactive palette); colleague doctor --probe; colleague learn; colleague learn-from claude",
+      "reason": "quote_absent",
+      "fix": "copy the quote word for word from the saved result of the entry you cite (the nearest match is shown), or cite the entry that holds it",
+      "source": "w3"
+    },
+    {
+      "id": "f9",
+      "item": "fact",
+      "value": "Build/test: hatchling build backend, Python >=3.12, Apache-2.0; one base dep agentfront>=0.20.0; optional extras [otel], [mcp], [tui], [voice], [resident], [culture]",
+      "reason": "quote_absent",
+      "fix": "copy the quote word for word from the saved result of the entry you cite (the nearest match is shown), or cite the entry that holds it",
+      "source": "w5"
+    },
+    {
+      "id": "f10",
+      "item": "fact",
+      "value": "Tests: uv run pytest -n auto (604 test files); zero-deps guard test_zero_deps.py; all-engines parity test_e2e_mock.py; 1000-line file limit test_file_length_limit.py; boundary test test_boundary.py; live vLLM e2e opt-in COLLEAGUE_VLLM_E2E=1 pytest tests/test_vllm_live.py; lint black/isort/flake8/bandit; rubric gate uv run teken cli doctor . --strict",
+      "reason": "quote_absent",
+      "fix": "copy the quote word for word from the saved result of the entry you cite (the nearest match is shown), or cite the entry that holds it",
+      "source": "w12"
+    },
+    {
+      "id": "v1",
+      "item": "verdict",
+      "value": "Colleague is a backend-agnostic, auditable headless coder-agent harness built around a shared Task/TaskResult contract and a bounded tool loop, with two bundled backends (mock and vllm-openai) discovered via entry points, tested via pytest with parallel execution and guarded by zero-deps, all-engines parity, file-length, and boundary tests.",
+      "reason": "basis_refused",
+      "fix": "fix or drop the refused facts this verdict rests on, then restate the verdict"
+    }
+  ],
+  "returned": [],
+  "not_judged": []
+}
