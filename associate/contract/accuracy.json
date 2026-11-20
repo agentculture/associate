@@ -33,7 +33,7 @@
     }
   },
   "strict": {
-    "$comment": "Strict facts (docs/specs/2026-11-19-associate-strict-facts.md, claims c22, c25, c29, c39). `enabled` is the switch per registry model: on for worker and cortex, off for senses (spec c29) and super-vl; only the value true switches strict on. `keep_marked` and `drop` name answers of support_score.options: a fact the decider answers with a `keep_marked` key is kept with `mark_text` written beside it, a fact answered with a `drop` key is dropped, and an answer named in neither is handled as support_score.passes says. `derived_decides_drops` false means a derived fact (one that cites other facts through based_on) is never dropped on the decider's word alone; `derived_question` is what the decider is asked about a derived fact, whether its conclusion follows from the listed facts, answered with one key of `options`. Settings only: this block changes nothing until a later task reads it. TENTATIVE like the support-score options.",
+    "$comment": "Strict facts (docs/specs/2026-11-19-associate-strict-facts.md, claims c22, c25, c29, c39). `enabled` is the switch per registry model: on for worker and cortex, off for senses (spec c29) and super-vl; only the value true switches strict on. `keep_marked` and `drop` name answers of support_score.options: a fact the decider answers with a `keep_marked` key is kept with `mark_text` written beside it, a fact answered with a `drop` key is dropped, and an answer named in neither is handled as support_score.passes says. `derived_decides_drops` false means a derived fact (one that cites other facts through based_on) is never dropped on the decider's word alone; `derived_question` is what the decider is asked about a derived fact, whether its conclusion follows from the listed facts, answered with one key of `options`. The extension's finish reads it (.pi/extensions/associate/lib/strict.ts); ASSOCIATE_STRICT on|off overrides `enabled` for one run, and with strict on, `mode` does not apply. The decider is asked with the support_score question and bounds whatever support_score.enabled says. TENTATIVE like the support-score options.",
     "enabled": {
       "worker": true,
       "senses": false,
@@ -134,6 +134,21 @@
       "motivating_failure": "A worker review marked a finding 'CANNOT TELL' with no check that would decide it, carried only in the argument of a failed ledger call (live run scope20-worker-t3)."
     },
     {
+      "id": "evidence_not_resolved",
+      "strength": "refuse",
+      "motivating_failure": "In a worker review run on 2026-11-20 (strict-facts plan, task t1) all 5 facts were refused though the findings were right: 4 cited several calls in one source field and 1 added a note inside its quote."
+    },
+    {
+      "id": "based_on_unsound",
+      "strength": "refuse",
+      "motivating_failure": "In the 36 broad runs of 2026-11-19 a model stated '604 test files' from a listing of 604 directory entries; the count was a conclusion from another fact and nothing tied the two."
+    },
+    {
+      "id": "decider_answered_none",
+      "strength": "refuse",
+      "motivating_failure": "On the labelled set of 2026-11-19, 48 of 60 planted wrong values were answered none by the decider and the quote check alone passed them."
+    },
+    {
       "id": "closing_conclusion_second_hand",
       "strength": "refuse",
       "motivating_failure": "A spawn_subagent hand-back or a delegate_status final_reply is the child model's own account, not something the harness measured (tools/delegate.ts, cited in docs/specs/2026-11-17-associate-accuracy-method.md scope entry s13)."
@@ -155,6 +170,25 @@
     "verdict_with_unread": "closing_conclusion_unread",
     "open_without_check": "open_item_undecided",
     "closing_second_hand": "closing_conclusion_second_hand",
-    "ambiguous_reference": "ambiguous_run_label"
+    "ambiguous_reference": "ambiguous_run_label",
+    "pointer_missing": "evidence_not_resolved",
+    "pointer_malformed": "evidence_not_resolved",
+    "pointer_out_of_range": "evidence_not_resolved",
+    "pointer_unresolved": "evidence_not_resolved",
+    "search_not_found": "evidence_not_resolved",
+    "number_absent": "evidence_not_resolved",
+    "result_cut": "evidence_not_resolved",
+    "labelled_unread": "evidence_not_resolved",
+    "no_saved_result": "evidence_not_resolved",
+    "no_saved_text": "evidence_not_resolved",
+    "partial_result": "evidence_not_resolved",
+    "kind_unknown": "evidence_not_resolved",
+    "value_missing": "evidence_not_resolved",
+    "based_on_missing": "based_on_unsound",
+    "based_on_unknown": "based_on_unsound",
+    "based_on_cycle": "based_on_unsound",
+    "based_on_failed": "based_on_unsound",
+    "decider_drop": "decider_answered_none",
+    "basis_dropped": "conclusion_without_fact"
   }
 }

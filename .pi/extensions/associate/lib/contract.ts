@@ -142,6 +142,18 @@ export interface ContractAccuracy {
   readonly support_score?: SupportScoreSettings;
   /** Absent in a file written before the finish reminder: no reminder is sent. */
   readonly finish_reminder?: FinishReminderSettings;
+  /**
+   * Strict facts (version 2; lib/strict.ts reads it). Absent in a file written
+   * before strict facts: strict is then off. Field names are the contract's.
+   */
+  readonly strict?: {
+    readonly enabled: Readonly<Record<string, boolean>>;
+    readonly keep_marked: readonly string[];
+    readonly drop: readonly string[];
+    readonly mark_text: string;
+    readonly derived_decides_drops: boolean;
+    readonly derived_question: { readonly question: string; readonly options: Readonly<Record<string, string>> };
+  };
   /** Tool name -> source kind. */
   readonly source_kinds: Readonly<Record<string, SourceKind>>;
   readonly purpose_exempt_tools: readonly string[];
