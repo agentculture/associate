@@ -168,6 +168,12 @@ test("a malformed or missing pointer, an unknown or malformed source, a call wit
     { id: "w2", tool: "bash", args_used: { argv: ["git", "status"] } },
   ]);
   assert.equal(fail(resolveEvidence({ source: "w1" }, c)).reason, "pointer_missing");
+  // An empty at is a pointer that names neither lines nor search: malformed, with its own message and fix.
+  const empty = fail(resolveEvidence({ source: "w1", at: {} }, c));
+  assert.equal(empty.reason, "pointer_malformed");
+  assert.equal(empty.message, "the pointer {} is not valid");
+  assert.match(empty.fix, /exactly one of at\.lines/);
+  assert.equal(empty.run, null);
   for (const at of [{}, { lines: [3, 2] }, { lines: [0, 1] }, { lines: [1] }, { lines: [1, 2], search: "x" }, { search: " " }]) {
     assert.equal(fail(resolveEvidence({ source: "w1", at }, c)).reason, "pointer_malformed", JSON.stringify(at));
   }

@@ -145,6 +145,7 @@ test("return then keep on part: returned once with the answer and the fix, then 
       const firstCheck = readJson(join(s.exportDir, CHECK_FILENAME));
       assert.equal(firstCheck.facts[1].strict_outcome, "returned");
       assert.equal(firstCheck.facts[1].round, 1);
+      assert.deepEqual(firstCheck.strict.returned_before, [], "nothing was returned before the first round");
       assert.doesNotMatch(readFileSync(join(s.exportDir, "answer.md"), "utf8"), /\*\*f2:\*\*/, "a returned fact is not in the answer");
 
       // Unchanged and still answered part: kept with the mark, accepted.
@@ -155,6 +156,8 @@ test("return then keep on part: returned once with the answer and the fix, then 
       assert.equal(check.facts[1].mark, MARK);
       assert.equal(check.facts[1].judge.option, "part");
       assert.deepEqual(check.strict.returned, []);
+      // The record says why f2 is kept with the mark: it was returned in an earlier round of this prompt.
+      assert.deepEqual(check.strict.returned_before, ["f2"]);
       const answer = readFileSync(join(s.exportDir, "answer.md"), "utf8");
       assert.match(answer, new RegExp(`\\*\\*f2:\\*\\* senses\n[^]*- marked: ${MARK} \\(the decider answered part\\)`));
 
@@ -260,6 +263,9 @@ test("a part answer first seen in the last round is kept with the mark, not retu
         check.facts.map((f: any) => f.strict_outcome),
         ["pass", "keep_marked", "dropped"],
       );
+      // Kept with the mark because no round was left, not because it was returned before: the record tells them apart.
+      assert.deepEqual(check.strict.returned_before, []);
+      assert.equal(check.strict.retry_rounds, 0);
     });
   } finally {
     decider.restore();

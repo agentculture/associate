@@ -302,3 +302,63 @@ def test_a_damaged_strict_export_does_not_traceback(tmp_path, capsys):
     assert out["strict"]["report"] is None
     assert main(["check", str(broken)]) == 0
     assert "Strict (" in capsys.readouterr().out
+
+
+# ------------------------------------------- the ids returned in earlier rounds
+
+
+def _export_with_returned_before(tmp_path: Path, value: Any) -> Path:
+    import shutil
+
+    export = tmp_path / "with-returned-before"
+    shutil.copytree(STRICT_EXPORT, export)
+    check = json.loads((export / "check.json").read_text(encoding="utf-8"))
+    check["strict"]["returned_before"] = value
+    (export / "check.json").write_text(json.dumps(check), encoding="utf-8")
+    return export
+
+
+def test_returned_before_is_copied_from_check_json_as_it_is(tmp_path):
+    from associate.accuracy.strict import read_strict
+
+    export = _export_with_returned_before(tmp_path, ["f2", "f7"])
+    assert read_strict(export)["returned_before"] == ["f2", "f7"]
+
+
+def test_an_export_written_before_returned_before_still_loads(capsys):
+    from associate.accuracy.strict import read_strict
+
+    held = json.loads((STRICT_EXPORT / "check.json").read_text(encoding="utf-8"))["strict"]
+    assert "returned_before" not in held, "the fixture is an export from before the field"
+    assert read_strict(STRICT_EXPORT)["returned_before"] is None
+    assert main(["check", str(STRICT_EXPORT)]) == 0
+    assert "returned in earlier rounds: not recorded" in capsys.readouterr().out
+
+
+def test_check_prints_and_carries_returned_before(tmp_path, capsys):
+    export = _export_with_returned_before(tmp_path, ["f2"])
+    assert main(["check", str(export), "--json"]) == 0
+    out = json.loads(capsys.readouterr().out)
+    assert out["strict"]["returned_before"] == ["f2"]
+    # The new key in check.json is a record, not an input of the re-check: it still agrees.
+    assert out["python_recheck_agrees"] is True
+    assert main(["check", str(export)]) == 0
+    assert "returned in earlier rounds: f2" in capsys.readouterr().out
+
+
+def test_check_prints_none_when_nothing_was_returned_before(tmp_path, capsys):
+    export = _export_with_returned_before(tmp_path, [])
+    assert main(["check", str(export)]) == 0
+    assert "returned in earlier rounds: none" in capsys.readouterr().out
+
+
+def test_a_returned_before_that_is_not_a_list_does_not_traceback(tmp_path, capsys):
+    export = _export_with_returned_before(tmp_path, {"f2": True})
+    assert main(["check", str(export)]) == 0
+    assert "returned in earlier rounds: not recorded" in capsys.readouterr().out
+
+
+def test_a_strict_run_result_carries_returned_before(tmp_path):
+    export = _export_with_returned_before(tmp_path, ["f2"])
+    result, _ = _fake_pi_run(tmp_path, _files(export), strict="on")
+    assert result["strict"]["returned_before"] == ["f2"]

@@ -28,6 +28,9 @@ true. No count here is accuracy.
   (`tests/test_strict_vectors.py`), that it equals the copy inside the
   installed evidence-cli byte for byte, and that evidence-cli's `strict_recheck`
   gives every case's expected result (`tests/test_strict_recheck.py`).
+- The file has 64 cases. evidence-cli 0.8.0 holds the first 45. Until it takes
+  the other 19, the two tests that compare the files are marked as expected
+  failures; its `strict_recheck` is still run on all 64.
 
 ## Paths in the cases
 
@@ -74,15 +77,15 @@ patterns in order, each to the output of the one before.
 | `finish` | The `finish` payload: `facts`, `verdicts`, `open_items`, as the model gave them. |
 | `contract` | The settings that matter (see below). |
 | `decider` | The decider's stored answer per judged fact id (see below). |
-| `returned_before` | Fact ids returned in an earlier round of this task. |
+| `returned_before` | Fact ids returned to the model in an earlier round of the same prompt, sorted. For an export it is `strict.returned_before` of `check.json` (see The rounds record). |
 | `rounds_left` | How many rounds may still send facts back. `0` means none. |
 
 A walk entry has `id` (`wN`), `tool`, `args` (the arguments as asked, with
 `purpose`), and may have `args_used` (the arguments as the tool used them),
 `saved_result` (the file name of its saved result), `partial: true` (the saved
 result was cut at the size cap), `error`, and `source_kind`. Other fields are
-not read. An entry without `saved_result`, or whose file is missing from
-`results`, has no saved result.
+not read. Which text is the entry's saved result depends on the kind of fact
+(see Which saved result is read).
 
 `contract` holds:
 
@@ -91,10 +94,10 @@ not read. An entry without `saved_result`, or whose file is missing from
 | `strict.keep_marked` | Support answers that return a fact once, then keep it with the mark. |
 | `strict.drop` | Support answers that drop a fact. |
 | `strict.mark_text` | The mark written beside a kept fact. |
-| `strict.derived_decides_drops` | Whether a derived answer can drop a fact. `false` in every case. |
-| `strict.derived_passes` | Derived answers that would pass a fact if `derived_decides_drops` were true (`yes`, `mostly`). |
+| `strict.derived_decides_drops` | Whether a derived answer can drop a fact. Only the value `true` switches it on. `false` in every case but `derived_decides_drops_true` and `derived_passes_absent_fails_closed`. |
+| `strict.derived_passes` | Derived answers that pass a fact when `derived_decides_drops` is true (`yes`, `mostly`). The key may be absent: then no answer passes. |
 | `support_passes` | Support answers that pass a fact. |
-| `min_quote_length` | The matcher's shortest quote, for old-shape facts. |
+| `min_quote_length` | The matcher's shortest quote, for old-shape facts. Any JSON value may stand here; one that is not a positive integer is a broken contract (step 0). |
 | `retry_rounds` | Rounds a hand-back may be sent back. |
 | `source_kinds` | The source kind of each tool in the case (`file`, `tool`, `web`, `memory`, `agent`, `harness`). |
 
@@ -102,7 +105,9 @@ not read. An entry without `saved_result`, or whose file is missing from
 `question` is `support` or `derived`) or to `{not_judged: reason}` (no answer,
 for example `unreachable`). The re-check never calls the decider. It uses the
 stored answer for each fact it would send. Every stored answer is used, and
-every judged fact has one.
+every fact that is sent has one. A fact that cannot be sent (`no_evidence`,
+`no_inputs`, step 9) has no stored answer: the re-check works out that reason
+itself.
 
 ### `expect`
 
@@ -144,6 +149,21 @@ Each fact is checked on its own first. Then the shape rules, the graph, the
 decider and the cascade follow. The first failure of a fact is its reason,
 except where a later step says it replaces it.
 
+### 0. A broken `min_quote_length`
+
+`min_quote_length` is usable when it is a JSON number that is a whole number
+of 1 or more. Anything else (absent, null, `0`, a negative number, a fraction,
+a string, `true` or `false`, a list, an object) is a broken contract. In
+Python, test the type: `True` is an `int` there and must not count as 1.
+
+With a broken setting every fact fails as `quote_short` before its source is
+looked up: a pointer fact too, and a fact with an unknown source too. Its
+checker verdict is `refused`, `kind_checked` is its stated kind, `worded` is
+null, nothing is copied and nothing is sent. The shape rules (step 6) still
+run and replace the reason; a graph failure does not (the fact has already
+failed). A verdict resting on such a fact is `basis_refused`
+(`min_quote_length_zero`, `min_quote_length_true`).
+
 ### 1. The source
 
 The source is an optional run label and a walk id: `^([A-Za-z0-9_-]+:)?w[1-9][0-9]*$`.
@@ -153,18 +173,49 @@ The source is an optional run label and a walk id: `^([A-Za-z0-9_-]+:)?w[1-9][0-
 - A label that names neither a prior run nor a child fails as `source_unknown`.
   A label that names both is not usable either and fails the same way.
 - A walk id with no entry in that run fails as `source_unknown`.
-- An action fact (`action: true`) must name its `tool`
-  (`action_tool_missing`), cite an entry of that tool (`action_wrong_tool`),
-  and that entry must have no `error` and a saved result that is not a JSON
-  object with `ok: false` (`action_failed`). No case has an action fact.
+- An action fact is a fact with `action` exactly `true` (any other value, such
+  as the string `yes`, is not one). Strict changes nothing in its rule. After
+  its source is found and before any pointer or quote is looked at, three
+  things are checked, in this order. `tool` must be a string that is not empty
+  (`action_tool_missing`). The cited entry's `tool` must equal it
+  (`action_wrong_tool`). The entry must have no `error` key, and its saved
+  result must not be a JSON object with `ok` equal to `false`
+  (`action_failed`). The saved result read here is the one an old-shape fact
+  reads (see Which saved result is read); a result that is absent or is not
+  JSON does not fail the fact.
+- An action fact that passes these goes on like any other fact: its pointer or
+  quote, the number rule, direct or worded, the decider (`action_facts`).
 
 These failures make the fact's checker verdict `refused`.
+
+### Which saved result is read
+
+The two shapes of fact read the saved result in two ways. This is how the
+extension is built, and a second implementation must do the same.
+
+- A pointer (`at`) reads the file the walk entry names in `saved_result`. The
+  name must be a string of the form `results/wN.txt`
+  (`^results/w[1-9][0-9]*\.txt$`) and `results` must hold a text under that
+  name. The entry's own id is not compared with the name: an entry whose
+  `saved_result` names another entry's file reads that file, and
+  `evidence.result_file` is the name as the entry gives it. An entry without
+  `saved_result`, a name of another form, or a name `results` does not hold,
+  fails the fact as `no_saved_result`.
+- An old-shape fact (a `quote`, no `at`), the action check and the
+  `delegate_status` rule read `results/<the entry's own id>.txt`, whether or
+  not the entry has `saved_result`. When `results` holds no such text the
+  old-shape fact is `unchecked` (`no_saved_text`), also when its quote is too
+  short.
+
+In an export written by the extension an entry names its own file, so the two
+agree. `saved_result_file_read` shows each way they can differ.
 
 ### 2. A pointer (`at`)
 
 When `at` is an object, the pointer is resolved in the run the source names.
 
-1. No saved result for the entry: `no_saved_result`.
+1. No saved result for the entry (see Which saved result is read):
+   `no_saved_result`. This is checked before the shape of `at`.
 2. `at` must have exactly one of `lines` and `search`. `lines` is two whole
    numbers with `1 <= first <= last`. `search` is a string that is not blank.
    Otherwise: `pointer_malformed`.
@@ -175,8 +226,19 @@ When `at` is an object, the pointer is resolved in the run the source names.
    counted.
 5. A read result is counted by the line numbers it shows. This applies when
    the tool is `read`, `read_file`, `read_page` or `readpage` and the first
-   line starts with digits and a tab. Then `lines: [a, b]` names the lines
-   stamped `a` and `b`, and a search reports the stamp of the line it found.
+   line of the saved text starts with a stamp: one or more ASCII digits and a
+   tab (`^[0-9]+\t`). Only the first line decides. A read result whose first
+   line has no stamp, and the result of any other tool, is counted by position
+   even when its lines look stamped. In a stamped result:
+   - `lines: [a, b]` takes the first line whose stamp digits, as text, equal
+     `a` written as a decimal number, and the first line whose stamp equals
+     `b` (so a stamp `007` is not line 7). Both must be found. The quote is
+     every line from the one to the other by position, lines without a stamp
+     between them included. `evidence.lines` is `[a, b]`.
+   - A search looks at every line, stamped or not. `evidence.lines` is the
+     found line's stamp as a number, twice, or its position counted from 1
+     when that line has no stamp.
+   (`read_shown_line_numbers`, `read_stamps_mixed_lines`.)
 6. `search` takes the first line that contains the term (exact, case-sensitive
    substring). That one line is the evidence.
 7. Missing lines:
@@ -185,12 +247,14 @@ When `at` is an object, the pointer is resolved in the run the source names.
    - Lines past the end: `pointer_out_of_range`, or `result_cut` when the entry
      is `partial`. For a stamped read result, a stamp that is not shown is out
      of range; on a `partial` entry it is `result_cut` when the last line has
-     no stamp or the asked last line is above the last shown stamp.
+     no stamp or the asked last line is above the last shown stamp, and
+     `pointer_out_of_range` otherwise (`read_stamps_cut_result`).
 8. On a `partial` entry, evidence that includes the last kept line is
    `result_cut` too: that line may itself have been cut.
 9. The quote is the lines from first to last, byte for byte, joined with `\n`.
    Read stamps are kept.
-10. The number rule (below) on the value and the quote: `number_absent`.
+10. The number rule (below) on the value and the quote: `number_absent`. It is
+    applied only to a value that is a string and not blank.
 
 A failure here makes the checker verdict `refused`. Its `drop_reason` is the
 reason named above.
@@ -223,6 +287,13 @@ expression, tried left to right, first alternative first:
 tokens are compared as strings. Every token of the value must be a token of
 the evidence. Signs, units and letters around a number do not matter (`w12`
 holds `12`). `0.50` and `0.5` differ. A value with no number passes.
+
+The rule reads only a value that is a string. A value that is a number, a
+boolean, null, a list or an object is treated as no value in every step: the
+number rule is not applied to it (a value `99` beside evidence without 99
+passes), `worded` is false, and where a value is sent to the decider an empty
+string is sent. The shape rule `value_missing` looks only at whether the key
+is present, so it does not fail such a fact (`value_not_a_string`).
 
 ### 5. Direct or worded
 
@@ -274,6 +345,12 @@ fact with that id.
   connected group of two or more facts, or a fact naming itself.
 - A graph failure does not replace an earlier failure of the same fact, and a
   shape failure replaces it.
+- A graph failure does replace an unchecked result. A fact that was `unchecked`
+  (`no_saved_text`, `partial_result`) and names an unknown id or sits in a
+  cycle gets `status: failed` and the graph reason as `drop_reason`. Its
+  checker verdict stays `unchecked`, so a verdict resting on it is
+  `basis_dropped`, not `basis_refused` (`graph_failure_replaces_unchecked`).
+  The same holds for a fact that had passed or was waiting for the decider.
 - `graph.order` is a topological order of the groups. Each time, take the ready
   group whose first fact comes earliest in the model's order. A cycle's facts
   sit together in the model's order.
@@ -288,7 +365,17 @@ The dropped fact gets `status: dropped`, `drop_reason: based_on_failed` and
 `dropped_by` the root. The root is never an intermediate fact.
 
 The cascade runs after the checks and the graph, again after the shape rules,
-and a last time after the decider.
+and twice with the decider (step 9: after the first answers, and at the end).
+
+An unchecked fact (`no_saved_text`, `partial_result`) is not a failed fact in
+the first two cascades and is one in the two cascades of step 9. So a fact
+resting on an unchecked fact is dropped there, and `dropped_by` is the
+unchecked fact's own id; through a chain it is still that id. The unchecked
+fact itself keeps `status: unchecked`. Two things follow from the order. A
+derived fact resting on an unchecked fact is never sent. A fact that is not
+derived, is worded and rests on an unchecked fact is sent in the first step
+and then dropped, and its `judge` keeps the answer
+(`cascade_from_unchecked_fact`).
 
 ### 9. The decider
 
@@ -322,6 +409,23 @@ drops it, its `judge` still shows its answer.
   `id: (no value or quote available)`. When no listed fact has a value or a
   quote, nothing is sent.
 
+Two facts cannot be sent at all. They get `status: not_judged`, outcome
+`not_judged`, `judge: {question, option: null, reason}` and `sent: null`, and
+the case stores no answer for them. This is decided before the stored answer
+is looked at, so it holds during an outage too.
+
+- `no_evidence`: a fact for the support question whose evidence (the copied
+  quote, or the old-shape quote) is empty or only whitespace. The command line
+  is not put in front of blank evidence. A worded fact pointing at a blank
+  line is the way to get here.
+- `no_inputs`: a derived fact for which no id in `based_on` gives a line with
+  a value or a quote. A listed fact counts as having a value when its value is
+  a string that is not blank, and as having a quote when its copied quote (or
+  its own `quote`) is not blank.
+
+Blank is tested with the same trimming as in step 5
+(`not_sendable_no_evidence_no_inputs`).
+
 ### 10. Outcomes
 
 After the last cascade, each fact gets one outcome.
@@ -338,11 +442,26 @@ After the last cascade, each fact gets one outcome.
 | Answered with a `support_passes` option | `judged` | `pass` | null |
 | Support answer in none of the three lists | `judged` | `pass` | null |
 | Derived answer, `derived_decides_drops` false | `judged` | `pass` | null |
-| Derived answer, `derived_decides_drops` true: named in `derived_passes` / other | `judged` | `pass` / `dropped` (`decider_drop`) | |
+| Derived answer, `derived_decides_drops` true, named in `derived_passes` | `judged` | `pass` | null |
+| Derived answer, `derived_decides_drops` true, not named there or `derived_passes` absent | `judged` | `dropped` | `decider_drop` |
 | No answer | `not_judged` | `not_judged` | null |
 
 A round is left when `rounds_left > 0`. Lists are checked in this order:
 `keep_marked`, then `drop`, then `support_passes`.
+
+`returned_before` is read only for a support answer named in `keep_marked`. A
+fact named there and answered with a pass or drop option passes or is dropped
+like any other, and an id there that no fact has is ignored
+(`returned_before_only_changes_part_and_little`).
+
+`derived_decides_drops` is on only when it is exactly `true`. Then a derived
+answer named in `derived_passes` passes the fact and every other answer drops
+it; a derived fact is never returned and never kept with the mark. When
+`derived_passes` is absent no answer passes, so every answered derived fact is
+dropped: the setting fails closed. A fact dropped this way is a failed fact
+for the last cascade. A derived fact resting on it was sent in the same step,
+so it is dropped with `based_on_failed` and its `judge` keeps its answer
+(`derived_decides_drops_true`, `derived_passes_absent_fails_closed`).
 
 ### 11. Verdicts and open items
 
@@ -359,8 +478,25 @@ The checker rules come first. For a verdict, the first that applies:
 6. The closing verdict (the one with `closing: true`, else the last) that is
    `supported` or `refuted` with no first-hand basis fact:
    `closing_second_hand`. A fact is first-hand when its source kind is not
-   `agent` or `memory`. (A `delegate_status` result has its own rule in
-   `lib/facts.ts`; no case uses it.)
+   `agent` or `memory`. A fact whose source did not resolve has no kind and is
+   not first-hand. Strict changes nothing in this rule: the verdict is refused
+   by the checker and so dropped (`closing_verdict_second_hand`).
+
+   A fact citing a `delegate_status` entry that has a source kind has its own
+   rule, whatever that kind is. Take the entry's saved text (see Which saved result
+   is read). No text, or text that is not JSON: second-hand. Otherwise find,
+   anywhere in the parsed value, every key `unchecked_final_reply`,
+   `final_reply` or `answer` whose value is a string. For each, build the text
+   `"key":"value"` as compact JSON writes it (no space after the colon,
+   non-ASCII characters kept as they are). If the saved text does not hold
+   that text exactly, the fact is second-hand. Otherwise replace every
+   occurrence with `"key":""`. The fact is first-hand when the quote matcher
+   still finds its quote in the text that is left: the copied quote with a
+   minimum length of 1 for a pointer, the model's quote with
+   `min_quote_length` for an old-shape fact. A pointer copies whole lines, so
+   on a one-line result that holds the child's reply it is second-hand
+   (`delegate_status_quote_in_harness_fields`,
+   `delegate_status_pointer_reaches_child_words`).
 
 An open item is refused only without a `check` (`open_without_check`).
 
@@ -378,38 +514,93 @@ Then, per item:
 One line built from the walk entry. Text the model wrote about the command is
 never read.
 
-1. Take `args_used` when it is an object, else `args`. Drop the `purpose` key.
-2. Rewrite every string, and every object key, in the arguments:
+1. Take `args_used` when it is an object (not a list, not null), else `args`
+   when that is an object, else no arguments. `command_from` is `args_used` in
+   the first case and `args` in the other two. Drop the `purpose` key at the
+   top level only; a `purpose` key deeper inside stays.
+2. Rewrite every string value in the arguments, at any depth (in lists and in
+   objects), with the three steps below, in this order. An object key gets
+   step 3 only: a path in a key is not made relative. Numbers, booleans and
+   null are not touched.
    1. Paths under the checkout become relative. Trim trailing slashes from
-      `checkout_root`. When it is a run worktree
+      `checkout_root`. A root that does not start with `/`, or is `/` alone,
+      makes no path relative. When it is a run worktree
       (`<parent>/.worktrees.<name>/<run>`), the base is `<parent>/<name>`.
       Otherwise the base is the root itself. The worktrees directory is
-      `<parent of base>/.worktrees.<name of base>`. A match is the base, or
-      the worktrees directory followed by `/` and one path segment. It must
-      be followed by `/`, or by the end or a character that is not a letter,
-      digit, `_`, `.` or `-`. A match without its `/` becomes `.`. A match
-      with its `/` is removed, or becomes `.` when the end, whitespace or a
-      quote follows. So `<root>/lib` prints `lib`, and `<root>` prints `.`.
+      `<parent of base>/.worktrees.<name of base>`. A match is the worktrees
+      directory followed by `/` and one path segment (one or more characters
+      that are not `/`, whitespace, a quote or a backtick), or else the base;
+      the worktree form is tried first. It must be followed by `/`, or by the
+      end or a character that is not an ASCII letter, a digit, `_`, `.` or
+      `-`. A match without its `/` becomes `.`. A match with its `/` is
+      removed, or becomes `.` when the end, whitespace, a quote (`"` or `'`)
+      or a backtick follows. So `<root>/lib` prints `lib`, and `<root>` and
+      `<root>/` print `.`. A match may start anywhere in a string, and every
+      match in it is replaced: `--include=<root>/lib` prints `--include=lib`.
+      A path that only shares the root's first characters
+      (`/srv/work/project`) does not match. The worktrees directory with no
+      segment after it stays as it is.
    2. Other home paths become `~`. A home path is `/`, then `home` or `Users`,
       then `/` and one segment with no `/`, whitespace or quote; or `/` then
       `root`. It must be followed by `/`, whitespace, a quote, a backtick or the
-      end. (Written in words so this note names no home path itself; the
-      regular expression is `HOME_PREFIX` in `lib/evidence.ts`.)
-   3. The redaction filter.
+      end. Like a checkout match it may start anywhere in the string, also in
+      the middle of a longer path, and every match is replaced. This step runs
+      on the output of the step before, so a checkout under a home directory
+      is already relative. (Written in words so this note names no home path
+      itself; the regular expression is `HOME_PREFIX` in `lib/evidence.ts`.)
+   3. The redaction filter (see Top level), on the output of the step before.
+      A whole token may become the replacement text, which is then quoted
+      like any other string (`"[REDACTED]"`).
 
-   The tool name is redacted too.
+   The tool name gets steps 2 and 3, not step 1.
 3. Print by tool:
-   - `bash` with an `argv` list of strings: each token, joined by spaces.
-     When `cwd` is a string that is not blank, put `cd`, a space, the cwd
-     token and ` && ` in front: `cd . && grep -rn lib`.
-   - A read tool with a string `path`: `<tool> <path>`. When `start_line` or
-     `end_line` is a number, add a space and `lines <start>-<end>`, with `1`
-     for a missing start and `end` for a missing end.
-   - Any other tool: `<tool> key=value ...` in the recorded key order, or the
-     tool name alone when no argument is left.
+   - `bash` with an `argv` list in which every item is a string: each token,
+     joined by spaces. When `cwd` is a string that is not blank, put `cd`, a
+     space, the cwd token and ` && ` in front: `cd . && grep -rn lib`. Other
+     arguments of the call are not printed. A `bash` entry whose `argv` is
+     missing, is not a list or holds anything but strings is printed like any
+     other tool.
+   - A read tool (`read`, `read_file`, `read_page`, `readpage`) with a string
+     `path`: `<tool> <path>`. When `start_line` or `end_line` is a number, add
+     a space and `lines <start>-<end>`, with `1` for a missing start and `end`
+     for a missing end. Other arguments are not printed. A read entry whose
+     `path` is not a string is printed like any other tool.
+   - Any other tool: `<tool> key=value ...` in the recorded key order, joined
+     by spaces, the key as it is and the value as a token, or the tool name
+     alone when no argument is left.
 4. A token: a string matching `^[A-Za-z0-9_@%+=:,./~-]+$` prints as it is.
-   Any other string prints as a JSON string. A number, a boolean or null prints
-   as JSON. An object or a list prints as compact JSON in its key order.
+   Any other string, the empty string included, prints as a JSON string. A
+   number, a boolean or null prints as JSON. An object or a list prints as
+   compact JSON in its key order. JSON here is what JavaScript's
+   `JSON.stringify` writes: no space after `,` or `:`, and characters outside
+   ASCII kept as they are (in Python, `ensure_ascii=False` and
+   `separators=(",", ":")`). Quoting is not shell quoting: `it's` prints as
+   `"it's"`.
+
+`command_details`, `command_run_worktree_root` and `command_root_not_absolute`
+show each of these beside `command_relative_and_redacted`.
+
+## The rounds record
+
+`check.json` of a strict hand-back has a top-level `strict` object. Four of
+its keys say where the hand-back stood in its rounds:
+
+| Key | What it is |
+|---|---|
+| `retry_rounds` | Rounds the contract allows a hand-back to be sent back. |
+| `rounds_used` | Rounds sent back so far, this one included when `round_open` is true. |
+| `round_open` | `true` when this hand-back was sent back to the model. |
+| `returned_before` | The fact ids returned to the model in earlier rounds of the same prompt, as a sorted list (plain string order). The ids this round returns are not in it; they are in `returned`. |
+
+`returned_before` is the set the check was given, written before the round's
+own returns are added. It is the case input of the same name. With it a reader
+can tell the two ways a fact ends as `keep_marked`: its id is in
+`returned_before` (it was returned once and came back with a `keep_marked`
+answer), or it is not (no round was left). A new prompt empties the set. An
+export written before the key existed has no `returned_before`; a reader must
+load it and treat the set as not recorded. The Python side copies the key as
+it is (`associate check`, the `strict` object of a run result) and does not
+check it.
 
 ## Counts
 
@@ -458,7 +649,20 @@ The names say what each case shows. Every case has a `note`.
   `derived_with_failed_pointer`.
 - The decider and items: `decider_outage_not_judged`,
   `verdicts_on_dropped_facts`.
-- The command: `command_relative_and_redacted`.
+- The command: `command_relative_and_redacted`, `command_details`,
+  `command_run_worktree_root`, `command_root_not_absolute`.
+- A fact that could not be checked: `cascade_from_unchecked_fact`,
+  `graph_failure_replaces_unchecked`, `saved_result_file_read`.
+- Facts that cannot be sent: `not_sendable_no_evidence_no_inputs`.
+- A broken contract: `min_quote_length_zero`, `min_quote_length_true`.
+- A value that is not a string: `value_not_a_string`.
+- Line stamps: `read_stamps_mixed_lines`, `read_stamps_cut_result`.
+- Action facts and first-hand: `action_facts`, `closing_verdict_second_hand`,
+  `delegate_status_quote_in_harness_fields`,
+  `delegate_status_pointer_reaches_child_words`.
+- Derived answers that decide: `derived_decides_drops_true`,
+  `derived_passes_absent_fails_closed`.
+- Earlier rounds: `returned_before_only_changes_part_and_little`.
 
 ## Defined behaviour that may surprise
 

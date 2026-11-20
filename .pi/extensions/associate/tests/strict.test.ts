@@ -208,8 +208,13 @@ test("an outage keeps an llm fact out of the answer as not judged, never dropped
 test("a derived fact's decider answer is shown and never drops it", async () => {
   const derived = { id: "f5", kind: "derived", source: "w1", at: { lines: [3, 3] }, value: "worker", based_on: ["f1"] };
   const { decision } = await run([DIRECT, derived], fakeJudge({ f5: "no" }));
+  assert.equal(decision.facts[1].status, "judged");
+  assert.equal(decision.facts[1].kind_checked, "derived");
   assert.equal(decision.facts[1].strict_outcome, "pass");
+  assert.equal(decision.facts[1].judge?.question, "derived");
+  assert.equal(decision.facts[1].judge?.judged, true);
   assert.equal(decision.facts[1].judge?.option, "no");
+  assert.equal(decision.judge_counts.derived_judged, 1);
 });
 
 test("cascade: f2 and f3 based on a failed f1 are dropped, each naming f1 as the reason", async () => {

@@ -44,8 +44,11 @@ STRICT_EXPORT = FIXTURES / "strict_export"
 STRICT_EXPORTS = [STRICT_EXPORT, FIXTURES / "accuracy" / "strict_colleague_no_fact_passed_export"]
 QUOTE_EXPORT = FIXTURES / "measure" / "answer" / "older" / "export"
 
-#: sha256 of associate/contract/strict_vectors.json, the bytes evidence-cli 0.8.0 bundles.
-STRICT_VECTORS_SHA256 = "fb02095abc7470d9671393485ba667436cb16178d1c3d0b356f1f4f79f625103"
+#: sha256 of associate/contract/strict_vectors.json (64 cases). evidence-cli 0.8.0 bundles
+#: the earlier file of 45 cases; the two tests marked ``xfail`` below wait for it.
+STRICT_VECTORS_SHA256 = "94e07a7a43d9cbc45e6a6e9975d9aead8e37a432b1c85fb2794ed2774813d5fd"
+#: Why the comparison with the installed evidence-cli is expected to fail for now.
+WAITS_FOR_EVIDENCE_CLI = "waits for evidence-cli to take the new shared cases"
 PARTS = ["facts", "verdicts", "open_items", "accepted", "counts", "drop_reasons", "judge_counts"]
 ADDED_KEYS = (
     "python_recheck_agrees",
@@ -76,6 +79,11 @@ def test_the_installed_evidence_cli_is_at_the_floor_that_ships_the_strict_rechec
 # ------------------------------------------------------------- the shared cases
 
 
+def test_the_strict_cases_file_has_the_recorded_sha256():
+    assert hashlib.sha256(OURS.read_bytes()).hexdigest() == STRICT_VECTORS_SHA256
+
+
+@pytest.mark.xfail(strict=True, reason=WAITS_FOR_EVIDENCE_CLI)
 def test_the_strict_cases_file_equals_the_copy_in_the_installed_evidence_package():
     ours = OURS.read_bytes()
     theirs = resources.files("evidence").joinpath("data/strict_vectors.json").read_bytes()
@@ -88,13 +96,14 @@ def test_the_strict_cases_file_equals_the_copy_in_the_installed_evidence_package
     assert hashlib.sha256(theirs).hexdigest() == STRICT_VECTORS_SHA256
 
 
+@pytest.mark.xfail(strict=True, reason=WAITS_FOR_EVIDENCE_CLI)
 def test_evidence_cli_loads_the_same_cases():
     assert _same(load_strict_vectors(), DOC)
 
 
-def test_there_are_45_named_cases():
-    assert len(CASES) == 45
-    assert len({case["name"] for case in CASES}) == 45
+def test_there_are_64_named_cases():
+    assert len(CASES) == 64
+    assert len({case["name"] for case in CASES}) == 64
 
 
 @pytest.mark.parametrize("case", CASES, ids=lambda case: case["name"])

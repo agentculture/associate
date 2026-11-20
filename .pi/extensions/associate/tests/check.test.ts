@@ -321,6 +321,8 @@ test("pointer form: a failed pointer gives the reason and the fix", async () => 
     assert.equal(unknown.details.reason, "source_unknown");
     const noWalk = await r.tool.execute("p7", { source: "w3", at: {} });
     assert.equal(noWalk.details.ok, false);
+    assert.equal(noWalk.details.reason, "pointer_malformed");
+    assert.ok(noWalk.details.message.length > 0 && noWalk.details.fix.length > 0);
   } finally {
     r.dispose();
   }

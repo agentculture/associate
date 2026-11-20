@@ -75,6 +75,7 @@ _CHECK_FIELDS = (
     "retry_rounds",
     "rounds_used",
     "round_open",
+    "returned_before",
     "counts",
     "drop_reasons",
     "judge_counts",
@@ -102,8 +103,11 @@ def read_strict(export_dir: Path) -> Optional[dict[str, Any]]:
 
     Keys: ``source`` (always ``"extension"``), ``switch_source`` (what decided
     strict was on: ``environment`` or ``contract``), ``rounds_used``,
-    ``retry_rounds``, ``round_open``, ``counts`` (facts per outcome: pass,
-    keep_marked, returned, dropped, not_judged), ``dropped`` (``{"total",
+    ``retry_rounds``, ``round_open``, ``returned_before`` (the fact ids returned
+    to the model in earlier rounds of the same prompt, copied as the export
+    holds them; None for an export written before the field), ``counts``
+    (facts per outcome: pass, keep_marked, returned, dropped, not_judged),
+    ``dropped`` (``{"total",
     "by_reason"}``), ``returned``, ``not_judged``, ``judge_counts``, and
     ``report`` (the ``strict`` object of ``report.json``, when it holds one).
     A field the files do not hold is None. ``recheck`` (whether the Python
@@ -310,6 +314,13 @@ def recheck_lines(result: Mapping[str, Any]) -> list[str]:
     ]
 
 
+def _returned_before_text(value: Any) -> str:
+    """The ids returned in earlier rounds, for the text form; an absent or odd value is named."""
+    if not isinstance(value, list):
+        return "not recorded"
+    return ", ".join(str(one) for one in value) or "none"
+
+
 def count_lines(strict: Mapping[str, Any]) -> list[str]:
     """The text form of the extension's strict counts, labelled as the extension's."""
     counts = strict.get("counts") if isinstance(strict.get("counts"), dict) else {}
@@ -319,6 +330,7 @@ def count_lines(strict: Mapping[str, Any]) -> list[str]:
     return [
         "Strict (counted by the extension, copied from the export; not a second check)",
         f"  {rounds}",
+        f"  returned in earlier rounds: {_returned_before_text(strict.get('returned_before'))}",
         "  facts: " + "  ".join(f"{k} {counts.get(k)}" for k in _OUTCOMES),
         f"  dropped {dropped.get('total')}: {_named(dropped.get('by_reason') or {})}",
         (

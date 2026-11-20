@@ -291,7 +291,9 @@ result or its quote found in one; that is not a statement that it is true.
 
 The result also carries `strict`, the extension's own counts copied from the
 export's `report.json` and `check.json` and never recomputed: `source`
-(`extension`), `rounds_used`, `retry_rounds`, `counts` (facts per outcome: pass,
+(`extension`), `rounds_used`, `retry_rounds`, `returned_before` (the fact ids
+returned to the model in earlier rounds of the same prompt; null for an export
+written before the field), `counts` (facts per outcome: pass,
 keep_marked, returned, dropped, not_judged), `dropped` (`total` and `by_reason`),
 `returned`, `not_judged`, `report` and `recheck` (`ran`, `reason`, `agrees`). The
 counts are the same code's count of what it did; the second check is the one in

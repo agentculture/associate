@@ -304,6 +304,7 @@
     "retry_rounds": 2,
     "rounds_used": 1,
     "round_open": true,
+    "returned_before": [],
     "counts": {
       "pass": 0,
       "keep_marked": 0,

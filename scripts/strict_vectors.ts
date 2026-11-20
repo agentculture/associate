@@ -54,7 +54,13 @@ interface CaseDef {
   decider?: Record<string, Stored>;
   returned_before?: string[];
   rounds_left?: number;
-  contract?: { retry_rounds?: number; min_quote_length?: number };
+  contract?: {
+    retry_rounds?: number;
+    /** Any JSON value: a value that is not a positive integer is a broken contract. */
+    min_quote_length?: unknown;
+    /** Replaces the two derived settings; `derived_passes` left out means the key is absent from the case. */
+    strict?: { derived_decides_drops: boolean; derived_passes?: string[] };
+  };
 }
 
 /** A checkout root that is not a home directory (no tracked file may name a home path). */
@@ -531,6 +537,390 @@ const CASES: CaseDef[] = [
       ],
     },
   },
+  // --- the cascade from a fact the harness could not check
+  {
+    name: "cascade_from_unchecked_fact",
+    note: "An unchecked fact (no saved text, a partial result) counts as failed in the cascades run with the decider: what rests on it is dropped naming it as the root, also through a chain. A derived fact on it is never sent; a worded fact on it is sent first, and keeps its answer.",
+    run: {
+      walk: [
+        ...LS.walk,
+        { id: "w2", tool: "bash", args: { argv: ["make", "check"], purpose: "run the check" }, args_used: { argv: ["make", "check"] } },
+        { id: "w3", tool: "bash", args: { argv: ["cat", "notes.txt"], purpose: "read" }, args_used: { argv: ["cat", "notes.txt"] }, saved_result: "results/w3.txt", partial: true },
+      ],
+      results: { ...LS.results, "results/w3.txt": "line one\nline two\nline thr" },
+    },
+    finish: {
+      facts: [
+        { id: "f1", source: "w2", value: "the check passed", quote: "all checks passed without error" },
+        { id: "f2", kind: "derived", source: "w1", at: at(2), value: "lib has a beta module", based_on: ["f1"] },
+        { id: "f3", kind: "llm", source: "w1", at: at(2), value: "a beta module", based_on: ["f1"] },
+        { id: "f4", kind: "derived", source: "w1", at: at(3), value: "lib has a gamma module too", based_on: ["f2"] },
+        { id: "f5", source: "w3", value: "line one", quote: "line one\nline two" },
+        { id: "f6", source: "w1", at: at(1), based_on: ["f5"] },
+      ],
+    },
+    decider: { f3: support("all") },
+  },
+  {
+    name: "graph_failure_replaces_unchecked",
+    note: "A fact the harness could not check (no saved text) that also names an unknown id, or itself, fails with the graph reason, not no_saved_text. Its checker verdict stays unchecked, so a verdict on it is basis_dropped, not basis_refused.",
+    run: {
+      walk: [...LS.walk, { id: "w2", tool: "bash", args: { argv: ["make", "check"], purpose: "run the check" }, args_used: { argv: ["make", "check"] } }],
+      results: LS.results,
+    },
+    finish: {
+      facts: [
+        { id: "f1", source: "w2", value: "the check passed", quote: "all checks passed without error", based_on: ["f9"] },
+        { id: "f2", source: "w2", value: "the check passed", quote: "all checks passed without error", based_on: ["f2"] },
+        { id: "f3", source: "w1", at: at(1), based_on: ["f1"] },
+      ],
+      verdicts: [{ id: "v1", text: "The check passed.", verdict: "supported", basis: ["f1"] }],
+    },
+  },
+  // --- facts that cannot be sent to the decider
+  {
+    name: "not_sendable_no_evidence_no_inputs",
+    note: "A worded fact whose copied evidence is blank is not judged (no_evidence); a derived fact none of whose listed facts has a value or a non-blank quote is not judged (no_inputs). Neither is sent and neither has a stored answer. A derived fact with one usable listed fact is sent, the other shown as unavailable.",
+    run: {
+      walk: [{ id: "w1", tool: "bash", args: { argv: ["cat", "gap.txt"], purpose: "read" }, args_used: { argv: ["cat", "gap.txt"] }, saved_result: "results/w1.txt" }],
+      results: { "results/w1.txt": "first\n  \nthird\n" },
+    },
+    finish: {
+      facts: [
+        { id: "f1", source: "w1", at: at(2) },
+        { id: "f2", kind: "llm", source: "w1", at: at(2), value: "the second line is blank" },
+        { id: "f3", kind: "derived", source: "w1", at: at(1), value: "the output has a gap", based_on: ["f1"] },
+        { id: "f4", source: "w1", at: at(1) },
+        { id: "f5", kind: "derived", source: "w1", at: at(1), value: "the output starts with a word", based_on: ["f1", "f4"] },
+      ],
+      verdicts: [
+        { id: "v1", text: "Line two is blank.", verdict: "supported", basis: ["f2"] },
+        { id: "v2", text: "The output starts with a word.", verdict: "supported", basis: ["f4"] },
+      ],
+    },
+    decider: { f5: derived("yes") },
+  },
+  // --- a broken contract
+  {
+    name: "min_quote_length_zero",
+    note: "min_quote_length 0 is not a positive integer: every fact fails as quote_short before its source is looked up (a pointer fact and an unknown source too), nothing is copied or judged; a shape rule still replaces the reason; a verdict on such a fact is basis_refused.",
+    run: LS,
+    contract: { min_quote_length: 0 },
+    finish: {
+      facts: [
+        { id: "f1", source: "w1", at: at(1) },
+        { id: "f2", source: "w1", value: "gamma.ts", quote: "gamma.ts" },
+        { id: "f3", source: "w9", at: at(1) },
+        { id: "f4", kind: "guess", source: "w1", at: at(1) },
+        { id: "f5", kind: "llm", source: "w1", at: at(2), value: "a beta module", based_on: ["f1"] },
+      ],
+      verdicts: [{ id: "v1", text: "lib holds alpha.", verdict: "supported", basis: ["f1"] }],
+    },
+  },
+  {
+    name: "min_quote_length_true",
+    note: "min_quote_length true is not a number (in Python, True is an int: test the type): the contract is broken and every fact fails as quote_short.",
+    run: LS,
+    contract: { min_quote_length: true },
+    finish: {
+      facts: [
+        { id: "f1", source: "w1", at: at(1) },
+        { id: "f2", source: "w1", value: "gamma.ts", quote: "gamma.ts" },
+      ],
+    },
+  },
+  // --- which saved result is read
+  {
+    name: "saved_result_file_read",
+    note: "A pointer reads the file the entry names in saved_result (results/wN.txt, even another entry's); no saved_result, a name of another form, or a file not in results is no_saved_result. An old-shape fact reads results/<the entry's own id>.txt whether or not the entry names it; missing is no_saved_text.",
+    run: {
+      walk: [
+        { id: "w1", tool: "ls", args: { path: "lib", purpose: "list" }, args_used: { path: "lib" } },
+        { id: "w2", tool: "ls", args: { path: "docs", purpose: "list" }, args_used: { path: "docs" }, saved_result: "results/w2.txt" },
+        { id: "w3", tool: "ls", args: { path: "lib", purpose: "list again" }, args_used: { path: "lib" }, saved_result: "results/w1.txt" },
+        { id: "w4", tool: "ls", args: { path: "tests", purpose: "list" }, args_used: { path: "tests" }, saved_result: "w4.txt" },
+      ],
+      results: { "results/w1.txt": "alpha.ts\nbeta.ts\ngamma.ts\ndelta.ts\n", "results/w4.txt": "test_one.py\ntest_two.py\n" },
+    },
+    finish: {
+      facts: [
+        { id: "f1", source: "w1", value: "gamma.ts", quote: "gamma.ts" },
+        { id: "f2", source: "w1", at: at(1) },
+        { id: "f3", source: "w2", at: at(1) },
+        { id: "f4", source: "w2", value: "guide.md", quote: "guide.md is listed" },
+        { id: "f5", source: "w3", at: at(1) },
+        { id: "f6", source: "w3", value: "gamma.ts", quote: "gamma.ts" },
+        { id: "f7", source: "w4", at: at(1) },
+        { id: "f8", source: "w4", value: "test_two.py", quote: "test_two.py" },
+      ],
+    },
+  },
+  // --- a value that is not a string
+  {
+    name: "value_not_a_string",
+    note: "A value that is not a string (a number, a boolean) is no value: the number rule is not applied, worded is false and the fact passes as direct; value_missing does not apply (the key is present). A derived fact with such a value is sent with an empty conclusion.",
+    run: PYTEST,
+    finish: {
+      facts: [
+        { id: "f1", source: "w1", at: at(2), value: 99 },
+        { id: "f2", kind: "llm", source: "w1", at: at(2), value: true },
+        { id: "f3", source: "w1", value: 99, quote: "12 passed, 1 skipped in 0.51s" },
+        { id: "f4", kind: "derived", source: "w1", at: at(1), value: 7, based_on: ["f1"] },
+      ],
+    },
+    decider: { f4: derived("partly") },
+  },
+  // --- line stamps on a read result
+  {
+    name: "read_stamps_mixed_lines",
+    note: "A stamped read result: both ends of lines must be shown stamps, the lines between are taken by position (unstamped ones too); a search that finds an unstamped line reports its position. A read result whose first line has no stamp, and any other tool's result, is counted by position even when later lines look stamped.",
+    run: {
+      walk: [
+        { id: "w1", tool: "read", args: { path: `${ROOT}/lib/a.ts`, start_line: 10, purpose: "read" }, args_used: { path: `${ROOT}/lib/a.ts`, start_line: 10 }, saved_result: "results/w1.txt" },
+        { id: "w2", tool: "read", args: { path: `${ROOT}/lib/b.ts`, purpose: "read" }, args_used: { path: `${ROOT}/lib/b.ts` }, saved_result: "results/w2.txt" },
+        { id: "w3", tool: "bash", args: { argv: ["cat", "-n", "lib/c.ts"], purpose: "read" }, args_used: { argv: ["cat", "-n", "lib/c.ts"] }, saved_result: "results/w3.txt" },
+      ],
+      results: {
+        "results/w1.txt": "10\tfirst\n(line 11 is too long to show)\n12\tthird\n(2 more lines not shown)\n",
+        "results/w2.txt": "file: lib/b.ts\n5\tfive\n6\tsix\n",
+        "results/w3.txt": "7\tseven\n8\teight\n",
+      },
+    },
+    finish: {
+      facts: [
+        { id: "f1", source: "w1", at: at(10, 12) },
+        { id: "f2", source: "w1", at: search("more lines") },
+        { id: "f3", source: "w1", at: at(11, 12) },
+        { id: "f4", source: "w1", at: at(1, 2) },
+        { id: "f5", source: "w1", at: search("third") },
+        { id: "f6", source: "w2", at: at(1, 2) },
+        { id: "f7", source: "w2", at: search("six") },
+        { id: "f8", source: "w3", at: at(1) },
+        { id: "f9", source: "w3", at: at(7) },
+        { id: "f10", source: "w3", at: search("eight") },
+      ],
+    },
+  },
+  {
+    name: "read_stamps_cut_result",
+    note: "A stamped read result that was cut: lines before the last kept line are copied; the last kept line, a stamp above the last shown one, or a term not found is result_cut; a stamp below the shown ones is pointer_out_of_range. When the last kept line has no stamp, any stamp not shown is result_cut.",
+    run: {
+      walk: [
+        { id: "w1", tool: "read", args: { path: `${ROOT}/lib/a.ts`, start_line: 20, purpose: "read" }, args_used: { path: `${ROOT}/lib/a.ts`, start_line: 20 }, saved_result: "results/w1.txt", partial: true },
+        { id: "w2", tool: "read", args: { path: `${ROOT}/lib/b.ts`, start_line: 30, purpose: "read" }, args_used: { path: `${ROOT}/lib/b.ts`, start_line: 30 }, saved_result: "results/w2.txt", partial: true },
+      ],
+      results: { "results/w1.txt": "20\tconst a = 1;\n21\tconst b = 2;\n22\tconst c", "results/w2.txt": "30\tlet x;\n31\tlet y;\n(cut" },
+    },
+    finish: {
+      facts: [
+        { id: "f1", source: "w1", at: at(20) },
+        { id: "f2", source: "w1", at: at(21, 22) },
+        { id: "f3", source: "w1", at: at(25, 26) },
+        { id: "f4", source: "w1", at: at(5, 6) },
+        { id: "f5", source: "w1", at: search("const b") },
+        { id: "f6", source: "w1", at: search("const c") },
+        { id: "f7", source: "w1", at: search("const d") },
+        { id: "f8", source: "w2", at: at(5, 6) },
+        { id: "f9", source: "w2", at: at(30) },
+      ],
+    },
+  },
+  // --- the command, in detail
+  {
+    name: "command_details",
+    note: "How the command is printed: tokens that need quoting (a space, *, an empty string, a non-ASCII letter kept as it is), a checkout path inside a longer token, the root with and without its slash, a path that only shares the root's prefix, a blank cwd, a cwd in a run worktree, read windows, a tool printed as key=value with numbers, booleans, null, lists and objects, a redacted object key, only the top-level purpose dropped, and the fallbacks to args.",
+    run: {
+      walk: [
+        {
+          id: "w1",
+          tool: "bash",
+          args: { argv: ["grep"], purpose: "search" },
+          args_used: {
+            argv: ["grep", "-n", "two words", `--include=${ROOT}/lib/*.ts`, ROOT, `${ROOT}/`, "/srv/work/project/x", `${ROOT}/docs/a b.md`, "", "café", "it's", "password=hunter2hunter2"],
+            cwd: "  ",
+          },
+          saved_result: "results/w1.txt",
+        },
+        { id: "w2", tool: "bash", args: { argv: ["ls"], purpose: "list" }, args_used: { argv: ["ls"], cwd: "/srv/work/.worktrees.proj/run-7", timeout_ms: 5000 }, saved_result: "results/w2.txt" },
+        { id: "w3", tool: "bash", args: { argv: ["ls"], purpose: "list" }, args_used: { argv: ["ls"], cwd: `${ROOT}/lib` }, saved_result: "results/w3.txt" },
+        { id: "w4", tool: "read", args: { path: "lib/a.ts", purpose: "read" }, args_used: { path: `${ROOT}/lib/a.ts`, end_line: 40 }, saved_result: "results/w4.txt" },
+        { id: "w5", tool: "read_file", args: { path: "lib/a.ts", purpose: "read" }, args_used: { path: `${ROOT}/lib/a.ts`, start_line: 5 }, saved_result: "results/w5.txt" },
+        { id: "w6", tool: "read", args: { path: 7, purpose: "read" }, args_used: { path: 7, start_line: 5 }, saved_result: "results/w6.txt" },
+        {
+          id: "w7",
+          tool: "grep",
+          args: { pattern: "TODO", purpose: "search" },
+          args_used: {
+            pattern: "TODO|FIXME",
+            path: `${ROOT}/lib`,
+            max: 5,
+            ratio: 1.5,
+            ignore_case: true,
+            after: null,
+            globs: ["*.ts", `${ROOT}/x`],
+            opts: { "token:abc123": `${ROOT}/a`, [`${ROOT}/k`]: "v", purpose: "kept: not the top level" },
+          },
+          saved_result: "results/w7.txt",
+        },
+        { id: "w8", tool: "bash", args: { argv: ["ls", 1], purpose: "list" }, args_used: { argv: ["ls", 1] }, saved_result: "results/w8.txt" },
+        { id: "w9", tool: "ls", args: { purpose: "list" }, saved_result: "results/w9.txt" },
+        { id: "w10", tool: "ls", args: { path: "lib", purpose: "list" }, args_used: ["lib"], saved_result: "results/w10.txt" },
+      ],
+      results: Object.fromEntries(Array.from({ length: 10 }, (_, i) => [`results/w${i + 1}.txt`, "ok\n"])),
+    },
+    finish: { facts: Array.from({ length: 10 }, (_, i) => ({ id: `f${i + 1}`, source: `w${i + 1}`, at: at(1) })) },
+  },
+  {
+    name: "command_run_worktree_root",
+    note: "The checkout root is a run worktree (given with a trailing slash): paths under the main checkout and under any run worktree of it print relative; the worktrees directory itself is not a checkout and stays.",
+    checkout_root: "/srv/work/.worktrees.proj/run-1/",
+    run: {
+      walk: [
+        {
+          id: "w1",
+          tool: "bash",
+          args: { argv: ["ls"], purpose: "list" },
+          args_used: { argv: ["ls", `${ROOT}/lib`, "/srv/work/.worktrees.proj/run-1", "/srv/work/.worktrees.proj/run-2/lib", "/srv/work/.worktrees.proj"] },
+          saved_result: "results/w1.txt",
+        },
+      ],
+      results: { "results/w1.txt": "ok\n" },
+    },
+    finish: { facts: [{ id: "f1", source: "w1", at: at(1) }] },
+  },
+  {
+    name: "command_root_not_absolute",
+    note: "A checkout root that is not an absolute path makes no path relative.",
+    checkout_root: "proj",
+    run: {
+      walk: [{ id: "w1", tool: "bash", args: { argv: ["ls"], purpose: "list" }, args_used: { argv: ["ls", `${ROOT}/lib`, "proj/lib"] }, saved_result: "results/w1.txt" }],
+      results: { "results/w1.txt": "ok\n" },
+    },
+    finish: { facts: [{ id: "f1", source: "w1", at: at(1) }] },
+  },
+  // --- action facts, and first-hand
+  {
+    name: "action_facts",
+    note: "An action fact (action: true) must name its tool, cite a call of that tool, and that call must not have an error or a saved result that is a JSON object with ok false. One that passes goes on to the pointer and the direct-or-worded rule like any fact. Only the value true makes a fact an action fact.",
+    run: {
+      walk: [
+        { id: "w1", tool: "bash", args: { argv: ["make", "build"], purpose: "build" }, args_used: { argv: ["make", "build"] }, saved_result: "results/w1.txt" },
+        { id: "w2", tool: "write", args: { path: "lib/a.ts", purpose: "write" }, args_used: { path: `${ROOT}/lib/a.ts` }, saved_result: "results/w2.txt", error: "refused" },
+        { id: "w3", tool: "edit", args: { path: "lib/a.ts", purpose: "edit" }, args_used: { path: `${ROOT}/lib/a.ts` }, saved_result: "results/w3.txt" },
+        { id: "w4", tool: "edit", args: { path: "lib/b.ts", purpose: "edit" }, args_used: { path: `${ROOT}/lib/b.ts` }, saved_result: "results/w4.txt" },
+      ],
+      results: {
+        "results/w1.txt": "build done\n",
+        "results/w2.txt": "refused by the gate\n",
+        "results/w3.txt": '{"ok": false, "error": "no match"}\n',
+        "results/w4.txt": '{"ok": true, "replaced": 1}\n',
+      },
+    },
+    finish: {
+      facts: [
+        { id: "f1", action: true, tool: "bash", source: "w1", at: at(1) },
+        { id: "f2", action: true, source: "w1", at: at(1) },
+        { id: "f3", action: true, tool: "write", source: "w1", at: at(1) },
+        { id: "f4", action: true, tool: "write", source: "w2", at: at(1) },
+        { id: "f5", action: true, tool: "edit", source: "w3", at: at(1) },
+        { id: "f6", action: true, tool: "edit", source: "w4", at: at(1), value: "the edit was applied once" },
+        { id: "f7", action: "yes", source: "w2", at: at(1) },
+      ],
+      verdicts: [
+        { id: "v1", text: "The file was written.", verdict: "supported", basis: ["f4"] },
+        { id: "v2", text: "The build ran.", verdict: "supported", basis: ["f1"] },
+      ],
+    },
+    decider: { f6: support("all") },
+  },
+  {
+    name: "closing_verdict_second_hand",
+    note: "The closing verdict rests only on a child's reply (source kind agent): the fact itself passes, the verdict is refused by the checker (closing_second_hand) and dropped.",
+    run: {
+      walk: [{ id: "w1", tool: "spawn_subagent", args: { model: "senses", purpose: "ask a child" }, args_used: { model: "senses" }, saved_result: "results/w1.txt" }],
+      results: { "results/w1.txt": "the child says all 12 tests pass\n" },
+    },
+    finish: {
+      facts: [{ id: "f1", source: "w1", at: at(1) }],
+      verdicts: [{ id: "v1", text: "All tests pass.", verdict: "supported", basis: ["f1"], closing: true }],
+    },
+  },
+  {
+    name: "delegate_status_quote_in_harness_fields",
+    note: "A delegate_status result: a quote found in the saved text with the child's own words emptied is first-hand, so the closing verdict on it stands.",
+    run: {
+      walk: [{ id: "w1", tool: "delegate_status", args: { run_id: "r1", purpose: "read the result" }, args_used: { run_id: "r1" }, saved_result: "results/w1.txt" }],
+      results: { "results/w1.txt": '{"outcome":"clean","merge":"merged","unchecked_final_reply":"all 12 tests pass"}\n' },
+    },
+    finish: {
+      facts: [{ id: "f1", source: "w1", value: "merged", quote: '"merge":"merged"' }],
+      verdicts: [{ id: "v1", text: "The delegated run was merged.", verdict: "supported", basis: ["f1"], closing: true }],
+    },
+  },
+  {
+    name: "delegate_status_pointer_reaches_child_words",
+    note: "The same delegate_status result with a pointer: the copied line holds the child's own words, so it is not found once they are emptied; the fact passes but is second-hand, and the closing verdict on it is dropped (closing_second_hand).",
+    run: {
+      walk: [{ id: "w1", tool: "delegate_status", args: { run_id: "r1", purpose: "read the result" }, args_used: { run_id: "r1" }, saved_result: "results/w1.txt" }],
+      results: { "results/w1.txt": '{"outcome":"clean","merge":"merged","unchecked_final_reply":"all 12 tests pass"}\n' },
+    },
+    finish: {
+      facts: [{ id: "f1", source: "w1", at: at(1) }],
+      verdicts: [{ id: "v1", text: "The delegated run was merged.", verdict: "supported", basis: ["f1"], closing: true }],
+    },
+  },
+  // --- derived answers that decide
+  {
+    name: "derived_decides_drops_true",
+    note: "With derived_decides_drops true a derived answer decides: yes and mostly (derived_passes) pass, any other answer drops the fact (decider_drop); it is never returned or kept marked. A derived fact resting on one dropped this way was sent in the same step: it is dropped by the cascade and keeps its answer.",
+    run: COUNT,
+    contract: { strict: { derived_decides_drops: true, derived_passes: ["yes", "mostly"] } },
+    finish: {
+      facts: [
+        { id: "f1", source: "w1", at: at(1) },
+        { id: "f2", kind: "derived", source: "w1", at: at(1), value: "the tests directory is large", based_on: ["f1"] },
+        { id: "f3", kind: "derived", source: "w1", at: at(1), value: "the tests directory holds hundreds of entries", based_on: ["f1"] },
+        { id: "f4", kind: "derived", source: "w1", at: at(1), value: "every test passes", based_on: ["f1"] },
+        { id: "f5", kind: "derived", source: "w1", at: at(1), value: "the project is tested well", based_on: ["f1"] },
+        { id: "f6", kind: "derived", source: "w1", at: at(1), value: "there are no tests", based_on: ["f1"] },
+        { id: "f7", kind: "derived", source: "w1", at: at(1), value: "the suite can be trusted", based_on: ["f4"] },
+        { id: "f8", source: "w1", at: at(1), based_on: ["f6"] },
+      ],
+    },
+    decider: { f2: derived("yes"), f3: derived("mostly"), f4: derived("partly"), f5: derived("little"), f6: derived("no"), f7: derived("yes") },
+  },
+  {
+    name: "derived_passes_absent_fails_closed",
+    note: "derived_decides_drops true and no derived_passes in the contract: no answer passes, so every answered derived fact is dropped (decider_drop), yes included.",
+    run: COUNT,
+    contract: { strict: { derived_decides_drops: true } },
+    finish: {
+      facts: [
+        { id: "f1", source: "w1", at: at(1) },
+        { id: "f2", kind: "derived", source: "w1", at: at(1), value: "the tests directory is large", based_on: ["f1"] },
+        { id: "f3", kind: "derived", source: "w1", at: at(1), value: "the tests directory holds hundreds of entries", based_on: ["f1"] },
+      ],
+    },
+    decider: { f2: derived("yes"), f3: derived("mostly") },
+  },
+  // --- the ids returned in earlier rounds
+  {
+    name: "returned_before_only_changes_part_and_little",
+    note: "returned_before matters only for a keep_marked answer: a fact named there and answered part is kept with the mark, one answered all passes, one answered none is dropped; a fact not named there and answered little is returned (a round is left). An id there that no fact has is ignored.",
+    run: PYTEST,
+    finish: {
+      facts: [
+        { id: "f1", kind: "llm", source: "w1", at: at(2), value: "the whole suite passed" },
+        { id: "f2", kind: "llm", source: "w1", at: at(2), value: "12 tests passed and 1 was skipped" },
+        { id: "f3", kind: "llm", source: "w1", at: at(2), value: "no test was skipped" },
+        { id: "f4", kind: "llm", source: "w1", at: at(2), value: "the run was quick and clean" },
+        { id: "f5", source: "w1", at: at(2) },
+      ],
+    },
+    decider: { f1: support("part"), f2: support("all"), f3: support("none"), f4: support("little") },
+    returned_before: ["f3", "f9", "f1", "f2"],
+    rounds_left: 1,
+  },
 ];
 
 // ------------------------------------------------------------------ running
@@ -559,15 +949,20 @@ function pick<T extends Record<string, unknown>>(record: T, keys: readonly strin
 async function buildCase(def: CaseDef, base: ContractAccuracy, redact: (t: string) => string) {
   const strictBase = base.strict as unknown as StrictSettings;
   const retryRounds = def.contract?.retry_rounds ?? (base.retry_rounds as number);
-  const minQuote = def.contract?.min_quote_length ?? (base.min_quote_length as number);
+  const minQuote: unknown =
+    def.contract && Object.hasOwn(def.contract, "min_quote_length") ? def.contract.min_quote_length : base.min_quote_length;
+  // The two derived settings, as the case's contract holds them (derived_passes may be absent).
+  const derivedSettings: { derived_decides_drops: boolean; derived_passes?: readonly string[] } = def.contract?.strict ?? {
+    derived_decides_drops: strictBase.derived_decides_drops,
+    derived_passes: strictBase.derived_passes,
+  };
   const sourceKinds = pick(base.source_kinds as Record<string, string>, toolsOf(def));
   const contract = {
     strict: {
       keep_marked: strictBase.keep_marked,
       drop: strictBase.drop,
       mark_text: strictBase.mark_text,
-      derived_decides_drops: strictBase.derived_decides_drops,
-      derived_passes: strictBase.derived_passes,
+      ...derivedSettings,
     },
     support_passes: base.support_score!.passes,
     min_quote_length: minQuote,
@@ -595,7 +990,12 @@ async function buildCase(def: CaseDef, base: ContractAccuracy, redact: (t: strin
       const question = f.kind_stated === "derived" ? "derived" : "support";
       const own = material(f.id);
       const evidence = question === "support" ? supportEvidence(own) : derivedInputs(f.based_on, material);
-      if (!evidence) throw new Error(`${def.name}: ${f.id} would not be sent (no evidence text); give it evidence`);
+      if (!evidence) {
+        // Not sendable, as lib/judge.ts judgeOne answers before any request: no stored answer is read.
+        if (decider[f.id] !== undefined) throw new Error(`${def.name}: ${f.id} cannot be sent, but the case stores an answer for it`);
+        const reason = question === "support" ? "no_evidence" : "no_inputs";
+        return { ...f, status: "not_judged", judge: { question, option: null, judged: false, reason, confidence: null } };
+      }
       sent.set(f.id, { question, value: own?.value ?? "", evidence });
       const stored = decider[f.id];
       if (stored === undefined) throw new Error(`${def.name}: ${f.id} is judged but the case stores no decider answer`);
@@ -610,7 +1010,13 @@ async function buildCase(def: CaseDef, base: ContractAccuracy, redact: (t: strin
   const { check, decision } = await runStrict({
     handbackInput,
     accuracy,
-    settings: { ...strictBase, ...contract.strict },
+    settings: {
+      keep_marked: strictBase.keep_marked,
+      drop: strictBase.drop,
+      mark_text: strictBase.mark_text,
+      derived_question: strictBase.derived_question,
+      ...derivedSettings,
+    },
     passes: contract.support_passes,
     evidence: evidenceContextFor(handbackInput, { checkoutRoot, redact, sourceKinds: sourceKinds as never }),
     judge,
@@ -638,7 +1044,7 @@ async function buildCase(def: CaseDef, base: ContractAccuracy, redact: (t: strin
       finish: payload,
       contract,
       decider,
-      returned_before: def.returned_before ?? [],
+      returned_before: [...(def.returned_before ?? [])].sort(),
       rounds_left: roundsLeft,
     },
     expect: {

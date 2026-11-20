@@ -188,9 +188,9 @@ test("a derived answer never drops the fact: policy is show_only while derived_d
   const decider = answering((q) => (q === "support" ? "all" : "no"));
   const out = await judgeFacts(records(FACTS), deps(decider.fn, MATERIAL));
   const d1 = out.find((r) => r.id === "d1")!;
-  assert.equal(d1.judge!.option, "no");
-  assert.notEqual(d1.status, "dropped");
-  assert.notEqual(d1.status, "failed");
+  // The answer is stored and the fact is judged: not dropped, not failed, and not left to judge either.
+  assert.equal(d1.status, "judged");
+  assert.deepEqual(d1.judge, { question: "derived", option: "no", judged: true, reason: null, confidence: 0.9 });
 });
 
 test("a listed fact with no value is shown by its copied quote, marked; with neither it is marked unavailable", () => {

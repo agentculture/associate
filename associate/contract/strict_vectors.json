@@ -8091,6 +8091,5795 @@
           "judged": 0
         }
       }
+    },
+    {
+      "name": "cascade_from_unchecked_fact",
+      "note": "An unchecked fact (no saved text, a partial result) counts as failed in the cascades run with the decider: what rests on it is dropped naming it as the root, also through a chain. A derived fact on it is never sent; a worded fact on it is sent first, and keeps its answer.",
+      "input": {
+        "checkout_root": "/srv/work/proj",
+        "walk": [
+          {
+            "id": "w1",
+            "tool": "ls",
+            "args": {
+              "path": "/srv/work/proj/lib",
+              "purpose": "list lib"
+            },
+            "args_used": {
+              "path": "/srv/work/proj/lib"
+            },
+            "saved_result": "results/w1.txt"
+          },
+          {
+            "id": "w2",
+            "tool": "bash",
+            "args": {
+              "argv": [
+                "make",
+                "check"
+              ],
+              "purpose": "run the check"
+            },
+            "args_used": {
+              "argv": [
+                "make",
+                "check"
+              ]
+            }
+          },
+          {
+            "id": "w3",
+            "tool": "bash",
+            "args": {
+              "argv": [
+                "cat",
+                "notes.txt"
+              ],
+              "purpose": "read"
+            },
+            "args_used": {
+              "argv": [
+                "cat",
+                "notes.txt"
+              ]
+            },
+            "saved_result": "results/w3.txt",
+            "partial": true
+          }
+        ],
+        "results": {
+          "results/w1.txt": "alpha.ts\nbeta.ts\ngamma.ts\ndelta.ts\n",
+          "results/w3.txt": "line one\nline two\nline thr"
+        },
+        "prior_runs": {},
+        "children": [],
+        "finish": {
+          "facts": [
+            {
+              "id": "f1",
+              "source": "w2",
+              "value": "the check passed",
+              "quote": "all checks passed without error"
+            },
+            {
+              "id": "f2",
+              "kind": "derived",
+              "source": "w1",
+              "at": {
+                "lines": [
+                  2,
+                  2
+                ]
+              },
+              "value": "lib has a beta module",
+              "based_on": [
+                "f1"
+              ]
+            },
+            {
+              "id": "f3",
+              "kind": "llm",
+              "source": "w1",
+              "at": {
+                "lines": [
+                  2,
+                  2
+                ]
+              },
+              "value": "a beta module",
+              "based_on": [
+                "f1"
+              ]
+            },
+            {
+              "id": "f4",
+              "kind": "derived",
+              "source": "w1",
+              "at": {
+                "lines": [
+                  3,
+                  3
+                ]
+              },
+              "value": "lib has a gamma module too",
+              "based_on": [
+                "f2"
+              ]
+            },
+            {
+              "id": "f5",
+              "source": "w3",
+              "value": "line one",
+              "quote": "line one\nline two"
+            },
+            {
+              "id": "f6",
+              "source": "w1",
+              "at": {
+                "lines": [
+                  1,
+                  1
+                ]
+              },
+              "based_on": [
+                "f5"
+              ]
+            }
+          ],
+          "verdicts": [],
+          "open_items": []
+        },
+        "contract": {
+          "strict": {
+            "keep_marked": [
+              "part",
+              "little"
+            ],
+            "drop": [
+              "none"
+            ],
+            "mark_text": "evidence shows part of the value",
+            "derived_decides_drops": false,
+            "derived_passes": [
+              "yes",
+              "mostly"
+            ]
+          },
+          "support_passes": [
+            "all",
+            "mostly"
+          ],
+          "min_quote_length": 8,
+          "retry_rounds": 2,
+          "source_kinds": {
+            "bash": "tool",
+            "ls": "tool"
+          }
+        },
+        "decider": {
+          "f3": {
+            "question": "support",
+            "option": "all"
+          }
+        },
+        "returned_before": [],
+        "rounds_left": 2
+      },
+      "expect": {
+        "facts": [
+          {
+            "id": "f1",
+            "kind_stated": "direct",
+            "kind_checked": "direct",
+            "worded": null,
+            "status": "unchecked",
+            "strict_outcome": "dropped",
+            "drop_reason": "no_saved_text",
+            "dropped_by": null,
+            "evidence": null,
+            "judge": null,
+            "sent": null
+          },
+          {
+            "id": "f2",
+            "kind_stated": "derived",
+            "kind_checked": "derived",
+            "worded": true,
+            "status": "dropped",
+            "strict_outcome": "dropped",
+            "drop_reason": "based_on_failed",
+            "dropped_by": "f1",
+            "evidence": {
+              "quote": "beta.ts",
+              "command": "ls path=lib",
+              "command_from": "args_used",
+              "result_file": "results/w1.txt",
+              "lines": [
+                2,
+                2
+              ],
+              "run": null
+            },
+            "judge": null,
+            "sent": null
+          },
+          {
+            "id": "f3",
+            "kind_stated": "llm",
+            "kind_checked": "llm",
+            "worded": true,
+            "status": "dropped",
+            "strict_outcome": "dropped",
+            "drop_reason": "based_on_failed",
+            "dropped_by": "f1",
+            "evidence": {
+              "quote": "beta.ts",
+              "command": "ls path=lib",
+              "command_from": "args_used",
+              "result_file": "results/w1.txt",
+              "lines": [
+                2,
+                2
+              ],
+              "run": null
+            },
+            "judge": {
+              "question": "support",
+              "option": "all",
+              "reason": null
+            },
+            "sent": {
+              "question": "support",
+              "value": "a beta module",
+              "evidence": "command: ls path=lib\nbeta.ts"
+            }
+          },
+          {
+            "id": "f4",
+            "kind_stated": "derived",
+            "kind_checked": "derived",
+            "worded": true,
+            "status": "dropped",
+            "strict_outcome": "dropped",
+            "drop_reason": "based_on_failed",
+            "dropped_by": "f1",
+            "evidence": {
+              "quote": "gamma.ts",
+              "command": "ls path=lib",
+              "command_from": "args_used",
+              "result_file": "results/w1.txt",
+              "lines": [
+                3,
+                3
+              ],
+              "run": null
+            },
+            "judge": null,
+            "sent": null
+          },
+          {
+            "id": "f5",
+            "kind_stated": "direct",
+            "kind_checked": "direct",
+            "worded": null,
+            "status": "unchecked",
+            "strict_outcome": "dropped",
+            "drop_reason": "partial_result",
+            "dropped_by": null,
+            "evidence": null,
+            "judge": null,
+            "sent": null
+          },
+          {
+            "id": "f6",
+            "kind_stated": "direct",
+            "kind_checked": "direct",
+            "worded": false,
+            "status": "dropped",
+            "strict_outcome": "dropped",
+            "drop_reason": "based_on_failed",
+            "dropped_by": "f5",
+            "evidence": {
+              "quote": "alpha.ts",
+              "command": "ls path=lib",
+              "command_from": "args_used",
+              "result_file": "results/w1.txt",
+              "lines": [
+                1,
+                1
+              ],
+              "run": null
+            },
+            "judge": null,
+            "sent": null
+          }
+        ],
+        "graph": {
+          "order": [
+            "f1",
+            "f2",
+            "f3",
+            "f4",
+            "f5",
+            "f6"
+          ],
+          "refusals": []
+        },
+        "verdicts": [],
+        "open_items": [],
+        "counts": {
+          "pass": 0,
+          "keep_marked": 0,
+          "returned": 0,
+          "dropped": 6,
+          "not_judged": 0
+        },
+        "drop_reasons": {
+          "no_saved_text": 1,
+          "based_on_failed": 4,
+          "partial_result": 1
+        },
+        "judge_counts": {
+          "direct_passed": 0,
+          "llm_judged": 1,
+          "derived_judged": 0,
+          "not_judged": 0
+        },
+        "report": {
+          "direct_passed": 0,
+          "llm_judged": 0,
+          "derived": 0,
+          "kept_with_mark": 0,
+          "returned": 0,
+          "not_judged": 0,
+          "dropped": {
+            "total": 6,
+            "by_reason": {
+              "no_saved_text": 1,
+              "based_on_failed": 4,
+              "partial_result": 1
+            }
+          },
+          "by_stated_kind": {
+            "direct": {
+              "stated": 3,
+              "checked_as_direct": 0
+            },
+            "llm": {
+              "stated": 1,
+              "checked_as_direct": 0
+            },
+            "derived": {
+              "stated": 2,
+              "checked_as_direct": 0
+            }
+          },
+          "worded": 3,
+          "judged": 1
+        }
+      }
+    },
+    {
+      "name": "graph_failure_replaces_unchecked",
+      "note": "A fact the harness could not check (no saved text) that also names an unknown id, or itself, fails with the graph reason, not no_saved_text. Its checker verdict stays unchecked, so a verdict on it is basis_dropped, not basis_refused.",
+      "input": {
+        "checkout_root": "/srv/work/proj",
+        "walk": [
+          {
+            "id": "w1",
+            "tool": "ls",
+            "args": {
+              "path": "/srv/work/proj/lib",
+              "purpose": "list lib"
+            },
+            "args_used": {
+              "path": "/srv/work/proj/lib"
+            },
+            "saved_result": "results/w1.txt"
+          },
+          {
+            "id": "w2",
+            "tool": "bash",
+            "args": {
+              "argv": [
+                "make",
+                "check"
+              ],
+              "purpose": "run the check"
+            },
+            "args_used": {
+              "argv": [
+                "make",
+                "check"
+              ]
+            }
+          }
+        ],
+        "results": {
+          "results/w1.txt": "alpha.ts\nbeta.ts\ngamma.ts\ndelta.ts\n"
+        },
+        "prior_runs": {},
+        "children": [],
+        "finish": {
+          "facts": [
+            {
+              "id": "f1",
+              "source": "w2",
+              "value": "the check passed",
+              "quote": "all checks passed without error",
+              "based_on": [
+                "f9"
+              ]
+            },
+            {
+              "id": "f2",
+              "source": "w2",
+              "value": "the check passed",
+              "quote": "all checks passed without error",
+              "based_on": [
+                "f2"
+              ]
+            },
+            {
+              "id": "f3",
+              "source": "w1",
+              "at": {
+                "lines": [
+                  1,
+                  1
+                ]
+              },
+              "based_on": [
+                "f1"
+              ]
+            }
+          ],
+          "verdicts": [
+            {
+              "id": "v1",
+              "text": "The check passed.",
+              "verdict": "supported",
+              "basis": [
+                "f1"
+              ]
+            }
+          ],
+          "open_items": []
+        },
+        "contract": {
+          "strict": {
+            "keep_marked": [
+              "part",
+              "little"
+            ],
+            "drop": [
+              "none"
+            ],
+            "mark_text": "evidence shows part of the value",
+            "derived_decides_drops": false,
+            "derived_passes": [
+              "yes",
+              "mostly"
+            ]
+          },
+          "support_passes": [
+            "all",
+            "mostly"
+          ],
+          "min_quote_length": 8,
+          "retry_rounds": 2,
+          "source_kinds": {
+            "bash": "tool",
+            "ls": "tool"
+          }
+        },
+        "decider": {},
+        "returned_before": [],
+        "rounds_left": 2
+      },
+      "expect": {
+        "facts": [
+          {
+            "id": "f1",
+            "kind_stated": "direct",
+            "kind_checked": "direct",
+            "worded": null,
+            "status": "failed",
+            "strict_outcome": "dropped",
+            "drop_reason": "based_on_unknown",
+            "dropped_by": null,
+            "evidence": null,
+            "judge": null,
+            "sent": null
+          },
+          {
+            "id": "f2",
+            "kind_stated": "direct",
+            "kind_checked": "direct",
+            "worded": null,
+            "status": "failed",
+            "strict_outcome": "dropped",
+            "drop_reason": "based_on_cycle",
+            "dropped_by": null,
+            "evidence": null,
+            "judge": null,
+            "sent": null
+          },
+          {
+            "id": "f3",
+            "kind_stated": "direct",
+            "kind_checked": "direct",
+            "worded": false,
+            "status": "dropped",
+            "strict_outcome": "dropped",
+            "drop_reason": "based_on_failed",
+            "dropped_by": "f1",
+            "evidence": {
+              "quote": "alpha.ts",
+              "command": "ls path=lib",
+              "command_from": "args_used",
+              "result_file": "results/w1.txt",
+              "lines": [
+                1,
+                1
+              ],
+              "run": null
+            },
+            "judge": null,
+            "sent": null
+          }
+        ],
+        "graph": {
+          "order": [
+            "f1",
+            "f2",
+            "f3"
+          ],
+          "refusals": [
+            {
+              "reason": "based_on_unknown",
+              "fact": "f1",
+              "ids": [
+                "f9"
+              ]
+            },
+            {
+              "reason": "based_on_cycle",
+              "fact": null,
+              "ids": [
+                "f2"
+              ]
+            }
+          ]
+        },
+        "verdicts": [
+          {
+            "id": "v1",
+            "outcome": "accepted",
+            "reason": null,
+            "strict_outcome": "dropped",
+            "strict_reason": "basis_dropped"
+          }
+        ],
+        "open_items": [],
+        "counts": {
+          "pass": 0,
+          "keep_marked": 0,
+          "returned": 0,
+          "dropped": 3,
+          "not_judged": 0
+        },
+        "drop_reasons": {
+          "based_on_unknown": 1,
+          "based_on_cycle": 1,
+          "based_on_failed": 1,
+          "basis_dropped": 1
+        },
+        "judge_counts": {
+          "direct_passed": 0,
+          "llm_judged": 0,
+          "derived_judged": 0,
+          "not_judged": 0
+        },
+        "report": {
+          "direct_passed": 0,
+          "llm_judged": 0,
+          "derived": 0,
+          "kept_with_mark": 0,
+          "returned": 0,
+          "not_judged": 0,
+          "dropped": {
+            "total": 3,
+            "by_reason": {
+              "based_on_unknown": 1,
+              "based_on_cycle": 1,
+              "based_on_failed": 1
+            }
+          },
+          "by_stated_kind": {
+            "direct": {
+              "stated": 3,
+              "checked_as_direct": 0
+            },
+            "llm": {
+              "stated": 0,
+              "checked_as_direct": 0
+            },
+            "derived": {
+              "stated": 0,
+              "checked_as_direct": 0
+            }
+          },
+          "worded": 0,
+          "judged": 0
+        }
+      }
+    },
+    {
+      "name": "not_sendable_no_evidence_no_inputs",
+      "note": "A worded fact whose copied evidence is blank is not judged (no_evidence); a derived fact none of whose listed facts has a value or a non-blank quote is not judged (no_inputs). Neither is sent and neither has a stored answer. A derived fact with one usable listed fact is sent, the other shown as unavailable.",
+      "input": {
+        "checkout_root": "/srv/work/proj",
+        "walk": [
+          {
+            "id": "w1",
+            "tool": "bash",
+            "args": {
+              "argv": [
+                "cat",
+                "gap.txt"
+              ],
+              "purpose": "read"
+            },
+            "args_used": {
+              "argv": [
+                "cat",
+                "gap.txt"
+              ]
+            },
+            "saved_result": "results/w1.txt"
+          }
+        ],
+        "results": {
+          "results/w1.txt": "first\n  \nthird\n"
+        },
+        "prior_runs": {},
+        "children": [],
+        "finish": {
+          "facts": [
+            {
+              "id": "f1",
+              "source": "w1",
+              "at": {
+                "lines": [
+                  2,
+                  2
+                ]
+              }
+            },
+            {
+              "id": "f2",
+              "kind": "llm",
+              "source": "w1",
+              "at": {
+                "lines": [
+                  2,
+                  2
+                ]
+              },
+              "value": "the second line is blank"
+            },
+            {
+              "id": "f3",
+              "kind": "derived",
+              "source": "w1",
+              "at": {
+                "lines": [
+                  1,
+                  1
+                ]
+              },
+              "value": "the output has a gap",
+              "based_on": [
+                "f1"
+              ]
+            },
+            {
+              "id": "f4",
+              "source": "w1",
+              "at": {
+                "lines": [
+                  1,
+                  1
+                ]
+              }
+            },
+            {
+              "id": "f5",
+              "kind": "derived",
+              "source": "w1",
+              "at": {
+                "lines": [
+                  1,
+                  1
+                ]
+              },
+              "value": "the output starts with a word",
+              "based_on": [
+                "f1",
+                "f4"
+              ]
+            }
+          ],
+          "verdicts": [
+            {
+              "id": "v1",
+              "text": "Line two is blank.",
+              "verdict": "supported",
+              "basis": [
+                "f2"
+              ]
+            },
+            {
+              "id": "v2",
+              "text": "The output starts with a word.",
+              "verdict": "supported",
+              "basis": [
+                "f4"
+              ]
+            }
+          ],
+          "open_items": []
+        },
+        "contract": {
+          "strict": {
+            "keep_marked": [
+              "part",
+              "little"
+            ],
+            "drop": [
+              "none"
+            ],
+            "mark_text": "evidence shows part of the value",
+            "derived_decides_drops": false,
+            "derived_passes": [
+              "yes",
+              "mostly"
+            ]
+          },
+          "support_passes": [
+            "all",
+            "mostly"
+          ],
+          "min_quote_length": 8,
+          "retry_rounds": 2,
+          "source_kinds": {
+            "bash": "tool"
+          }
+        },
+        "decider": {
+          "f5": {
+            "question": "derived",
+            "option": "yes"
+          }
+        },
+        "returned_before": [],
+        "rounds_left": 2
+      },
+      "expect": {
+        "facts": [
+          {
+            "id": "f1",
+            "kind_stated": "direct",
+            "kind_checked": "direct",
+            "worded": false,
+            "status": "passed",
+            "strict_outcome": "pass",
+            "drop_reason": null,
+            "dropped_by": null,
+            "evidence": {
+              "quote": "  ",
+              "command": "cat gap.txt",
+              "command_from": "args_used",
+              "result_file": "results/w1.txt",
+              "lines": [
+                2,
+                2
+              ],
+              "run": null
+            },
+            "judge": null,
+            "sent": null
+          },
+          {
+            "id": "f2",
+            "kind_stated": "llm",
+            "kind_checked": "llm",
+            "worded": true,
+            "status": "not_judged",
+            "strict_outcome": "not_judged",
+            "drop_reason": null,
+            "dropped_by": null,
+            "evidence": {
+              "quote": "  ",
+              "command": "cat gap.txt",
+              "command_from": "args_used",
+              "result_file": "results/w1.txt",
+              "lines": [
+                2,
+                2
+              ],
+              "run": null
+            },
+            "judge": {
+              "question": "support",
+              "option": null,
+              "reason": "no_evidence"
+            },
+            "sent": null
+          },
+          {
+            "id": "f3",
+            "kind_stated": "derived",
+            "kind_checked": "derived",
+            "worded": true,
+            "status": "not_judged",
+            "strict_outcome": "not_judged",
+            "drop_reason": null,
+            "dropped_by": null,
+            "evidence": {
+              "quote": "first",
+              "command": "cat gap.txt",
+              "command_from": "args_used",
+              "result_file": "results/w1.txt",
+              "lines": [
+                1,
+                1
+              ],
+              "run": null
+            },
+            "judge": {
+              "question": "derived",
+              "option": null,
+              "reason": "no_inputs"
+            },
+            "sent": null
+          },
+          {
+            "id": "f4",
+            "kind_stated": "direct",
+            "kind_checked": "direct",
+            "worded": false,
+            "status": "passed",
+            "strict_outcome": "pass",
+            "drop_reason": null,
+            "dropped_by": null,
+            "evidence": {
+              "quote": "first",
+              "command": "cat gap.txt",
+              "command_from": "args_used",
+              "result_file": "results/w1.txt",
+              "lines": [
+                1,
+                1
+              ],
+              "run": null
+            },
+            "judge": null,
+            "sent": null
+          },
+          {
+            "id": "f5",
+            "kind_stated": "derived",
+            "kind_checked": "derived",
+            "worded": true,
+            "status": "judged",
+            "strict_outcome": "pass",
+            "drop_reason": null,
+            "dropped_by": null,
+            "evidence": {
+              "quote": "first",
+              "command": "cat gap.txt",
+              "command_from": "args_used",
+              "result_file": "results/w1.txt",
+              "lines": [
+                1,
+                1
+              ],
+              "run": null
+            },
+            "judge": {
+              "question": "derived",
+              "option": "yes",
+              "reason": null
+            },
+            "sent": {
+              "question": "derived",
+              "value": "the output starts with a word",
+              "evidence": "f1: (no value or quote available)\nf4: (no value given; its copied quote) first"
+            }
+          }
+        ],
+        "graph": {
+          "order": [
+            "f1",
+            "f2",
+            "f3",
+            "f4",
+            "f5"
+          ],
+          "refusals": []
+        },
+        "verdicts": [
+          {
+            "id": "v1",
+            "outcome": "accepted",
+            "reason": null,
+            "strict_outcome": "not_judged",
+            "strict_reason": null
+          },
+          {
+            "id": "v2",
+            "outcome": "accepted",
+            "reason": null,
+            "strict_outcome": "pass",
+            "strict_reason": null
+          }
+        ],
+        "open_items": [],
+        "counts": {
+          "pass": 3,
+          "keep_marked": 0,
+          "returned": 0,
+          "dropped": 0,
+          "not_judged": 2
+        },
+        "drop_reasons": {},
+        "judge_counts": {
+          "direct_passed": 2,
+          "llm_judged": 0,
+          "derived_judged": 1,
+          "not_judged": 2
+        },
+        "report": {
+          "direct_passed": 2,
+          "llm_judged": 0,
+          "derived": 1,
+          "kept_with_mark": 0,
+          "returned": 0,
+          "not_judged": 2,
+          "dropped": {
+            "total": 0,
+            "by_reason": {}
+          },
+          "by_stated_kind": {
+            "direct": {
+              "stated": 2,
+              "checked_as_direct": 2
+            },
+            "llm": {
+              "stated": 1,
+              "checked_as_direct": 0
+            },
+            "derived": {
+              "stated": 2,
+              "checked_as_direct": 0
+            }
+          },
+          "worded": 3,
+          "judged": 1
+        }
+      }
+    },
+    {
+      "name": "min_quote_length_zero",
+      "note": "min_quote_length 0 is not a positive integer: every fact fails as quote_short before its source is looked up (a pointer fact and an unknown source too), nothing is copied or judged; a shape rule still replaces the reason; a verdict on such a fact is basis_refused.",
+      "input": {
+        "checkout_root": "/srv/work/proj",
+        "walk": [
+          {
+            "id": "w1",
+            "tool": "ls",
+            "args": {
+              "path": "/srv/work/proj/lib",
+              "purpose": "list lib"
+            },
+            "args_used": {
+              "path": "/srv/work/proj/lib"
+            },
+            "saved_result": "results/w1.txt"
+          }
+        ],
+        "results": {
+          "results/w1.txt": "alpha.ts\nbeta.ts\ngamma.ts\ndelta.ts\n"
+        },
+        "prior_runs": {},
+        "children": [],
+        "finish": {
+          "facts": [
+            {
+              "id": "f1",
+              "source": "w1",
+              "at": {
+                "lines": [
+                  1,
+                  1
+                ]
+              }
+            },
+            {
+              "id": "f2",
+              "source": "w1",
+              "value": "gamma.ts",
+              "quote": "gamma.ts"
+            },
+            {
+              "id": "f3",
+              "source": "w9",
+              "at": {
+                "lines": [
+                  1,
+                  1
+                ]
+              }
+            },
+            {
+              "id": "f4",
+              "kind": "guess",
+              "source": "w1",
+              "at": {
+                "lines": [
+                  1,
+                  1
+                ]
+              }
+            },
+            {
+              "id": "f5",
+              "kind": "llm",
+              "source": "w1",
+              "at": {
+                "lines": [
+                  2,
+                  2
+                ]
+              },
+              "value": "a beta module",
+              "based_on": [
+                "f1"
+              ]
+            }
+          ],
+          "verdicts": [
+            {
+              "id": "v1",
+              "text": "lib holds alpha.",
+              "verdict": "supported",
+              "basis": [
+                "f1"
+              ]
+            }
+          ],
+          "open_items": []
+        },
+        "contract": {
+          "strict": {
+            "keep_marked": [
+              "part",
+              "little"
+            ],
+            "drop": [
+              "none"
+            ],
+            "mark_text": "evidence shows part of the value",
+            "derived_decides_drops": false,
+            "derived_passes": [
+              "yes",
+              "mostly"
+            ]
+          },
+          "support_passes": [
+            "all",
+            "mostly"
+          ],
+          "min_quote_length": 0,
+          "retry_rounds": 2,
+          "source_kinds": {
+            "ls": "tool"
+          }
+        },
+        "decider": {},
+        "returned_before": [],
+        "rounds_left": 2
+      },
+      "expect": {
+        "facts": [
+          {
+            "id": "f1",
+            "kind_stated": "direct",
+            "kind_checked": "direct",
+            "worded": null,
+            "status": "failed",
+            "strict_outcome": "dropped",
+            "drop_reason": "quote_short",
+            "dropped_by": null,
+            "evidence": null,
+            "judge": null,
+            "sent": null
+          },
+          {
+            "id": "f2",
+            "kind_stated": "direct",
+            "kind_checked": "direct",
+            "worded": null,
+            "status": "failed",
+            "strict_outcome": "dropped",
+            "drop_reason": "quote_short",
+            "dropped_by": null,
+            "evidence": null,
+            "judge": null,
+            "sent": null
+          },
+          {
+            "id": "f3",
+            "kind_stated": "direct",
+            "kind_checked": "direct",
+            "worded": null,
+            "status": "failed",
+            "strict_outcome": "dropped",
+            "drop_reason": "quote_short",
+            "dropped_by": null,
+            "evidence": null,
+            "judge": null,
+            "sent": null
+          },
+          {
+            "id": "f4",
+            "kind_stated": "direct",
+            "kind_checked": null,
+            "worded": null,
+            "status": "failed",
+            "strict_outcome": "dropped",
+            "drop_reason": "kind_unknown",
+            "dropped_by": null,
+            "evidence": null,
+            "judge": null,
+            "sent": null
+          },
+          {
+            "id": "f5",
+            "kind_stated": "llm",
+            "kind_checked": "llm",
+            "worded": null,
+            "status": "failed",
+            "strict_outcome": "dropped",
+            "drop_reason": "quote_short",
+            "dropped_by": null,
+            "evidence": null,
+            "judge": null,
+            "sent": null
+          }
+        ],
+        "graph": {
+          "order": [
+            "f1",
+            "f2",
+            "f3",
+            "f4",
+            "f5"
+          ],
+          "refusals": []
+        },
+        "verdicts": [
+          {
+            "id": "v1",
+            "outcome": "refused",
+            "reason": "basis_refused",
+            "strict_outcome": "dropped",
+            "strict_reason": "basis_refused"
+          }
+        ],
+        "open_items": [],
+        "counts": {
+          "pass": 0,
+          "keep_marked": 0,
+          "returned": 0,
+          "dropped": 5,
+          "not_judged": 0
+        },
+        "drop_reasons": {
+          "quote_short": 4,
+          "kind_unknown": 1,
+          "basis_refused": 1
+        },
+        "judge_counts": {
+          "direct_passed": 0,
+          "llm_judged": 0,
+          "derived_judged": 0,
+          "not_judged": 0
+        },
+        "report": {
+          "direct_passed": 0,
+          "llm_judged": 0,
+          "derived": 0,
+          "kept_with_mark": 0,
+          "returned": 0,
+          "not_judged": 0,
+          "dropped": {
+            "total": 5,
+            "by_reason": {
+              "quote_short": 4,
+              "kind_unknown": 1
+            }
+          },
+          "by_stated_kind": {
+            "direct": {
+              "stated": 4,
+              "checked_as_direct": 0
+            },
+            "llm": {
+              "stated": 1,
+              "checked_as_direct": 0
+            },
+            "derived": {
+              "stated": 0,
+              "checked_as_direct": 0
+            }
+          },
+          "worded": 0,
+          "judged": 0
+        }
+      }
+    },
+    {
+      "name": "min_quote_length_true",
+      "note": "min_quote_length true is not a number (in Python, True is an int: test the type): the contract is broken and every fact fails as quote_short.",
+      "input": {
+        "checkout_root": "/srv/work/proj",
+        "walk": [
+          {
+            "id": "w1",
+            "tool": "ls",
+            "args": {
+              "path": "/srv/work/proj/lib",
+              "purpose": "list lib"
+            },
+            "args_used": {
+              "path": "/srv/work/proj/lib"
+            },
+            "saved_result": "results/w1.txt"
+          }
+        ],
+        "results": {
+          "results/w1.txt": "alpha.ts\nbeta.ts\ngamma.ts\ndelta.ts\n"
+        },
+        "prior_runs": {},
+        "children": [],
+        "finish": {
+          "facts": [
+            {
+              "id": "f1",
+              "source": "w1",
+              "at": {
+                "lines": [
+                  1,
+                  1
+                ]
+              }
+            },
+            {
+              "id": "f2",
+              "source": "w1",
+              "value": "gamma.ts",
+              "quote": "gamma.ts"
+            }
+          ],
+          "verdicts": [],
+          "open_items": []
+        },
+        "contract": {
+          "strict": {
+            "keep_marked": [
+              "part",
+              "little"
+            ],
+            "drop": [
+              "none"
+            ],
+            "mark_text": "evidence shows part of the value",
+            "derived_decides_drops": false,
+            "derived_passes": [
+              "yes",
+              "mostly"
+            ]
+          },
+          "support_passes": [
+            "all",
+            "mostly"
+          ],
+          "min_quote_length": true,
+          "retry_rounds": 2,
+          "source_kinds": {
+            "ls": "tool"
+          }
+        },
+        "decider": {},
+        "returned_before": [],
+        "rounds_left": 2
+      },
+      "expect": {
+        "facts": [
+          {
+            "id": "f1",
+            "kind_stated": "direct",
+            "kind_checked": "direct",
+            "worded": null,
+            "status": "failed",
+            "strict_outcome": "dropped",
+            "drop_reason": "quote_short",
+            "dropped_by": null,
+            "evidence": null,
+            "judge": null,
+            "sent": null
+          },
+          {
+            "id": "f2",
+            "kind_stated": "direct",
+            "kind_checked": "direct",
+            "worded": null,
+            "status": "failed",
+            "strict_outcome": "dropped",
+            "drop_reason": "quote_short",
+            "dropped_by": null,
+            "evidence": null,
+            "judge": null,
+            "sent": null
+          }
+        ],
+        "graph": {
+          "order": [
+            "f1",
+            "f2"
+          ],
+          "refusals": []
+        },
+        "verdicts": [],
+        "open_items": [],
+        "counts": {
+          "pass": 0,
+          "keep_marked": 0,
+          "returned": 0,
+          "dropped": 2,
+          "not_judged": 0
+        },
+        "drop_reasons": {
+          "quote_short": 2
+        },
+        "judge_counts": {
+          "direct_passed": 0,
+          "llm_judged": 0,
+          "derived_judged": 0,
+          "not_judged": 0
+        },
+        "report": {
+          "direct_passed": 0,
+          "llm_judged": 0,
+          "derived": 0,
+          "kept_with_mark": 0,
+          "returned": 0,
+          "not_judged": 0,
+          "dropped": {
+            "total": 2,
+            "by_reason": {
+              "quote_short": 2
+            }
+          },
+          "by_stated_kind": {
+            "direct": {
+              "stated": 2,
+              "checked_as_direct": 0
+            },
+            "llm": {
+              "stated": 0,
+              "checked_as_direct": 0
+            },
+            "derived": {
+              "stated": 0,
+              "checked_as_direct": 0
+            }
+          },
+          "worded": 0,
+          "judged": 0
+        }
+      }
+    },
+    {
+      "name": "saved_result_file_read",
+      "note": "A pointer reads the file the entry names in saved_result (results/wN.txt, even another entry's); no saved_result, a name of another form, or a file not in results is no_saved_result. An old-shape fact reads results/<the entry's own id>.txt whether or not the entry names it; missing is no_saved_text.",
+      "input": {
+        "checkout_root": "/srv/work/proj",
+        "walk": [
+          {
+            "id": "w1",
+            "tool": "ls",
+            "args": {
+              "path": "lib",
+              "purpose": "list"
+            },
+            "args_used": {
+              "path": "lib"
+            }
+          },
+          {
+            "id": "w2",
+            "tool": "ls",
+            "args": {
+              "path": "docs",
+              "purpose": "list"
+            },
+            "args_used": {
+              "path": "docs"
+            },
+            "saved_result": "results/w2.txt"
+          },
+          {
+            "id": "w3",
+            "tool": "ls",
+            "args": {
+              "path": "lib",
+              "purpose": "list again"
+            },
+            "args_used": {
+              "path": "lib"
+            },
+            "saved_result": "results/w1.txt"
+          },
+          {
+            "id": "w4",
+            "tool": "ls",
+            "args": {
+              "path": "tests",
+              "purpose": "list"
+            },
+            "args_used": {
+              "path": "tests"
+            },
+            "saved_result": "w4.txt"
+          }
+        ],
+        "results": {
+          "results/w1.txt": "alpha.ts\nbeta.ts\ngamma.ts\ndelta.ts\n",
+          "results/w4.txt": "test_one.py\ntest_two.py\n"
+        },
+        "prior_runs": {},
+        "children": [],
+        "finish": {
+          "facts": [
+            {
+              "id": "f1",
+              "source": "w1",
+              "value": "gamma.ts",
+              "quote": "gamma.ts"
+            },
+            {
+              "id": "f2",
+              "source": "w1",
+              "at": {
+                "lines": [
+                  1,
+                  1
+                ]
+              }
+            },
+            {
+              "id": "f3",
+              "source": "w2",
+              "at": {
+                "lines": [
+                  1,
+                  1
+                ]
+              }
+            },
+            {
+              "id": "f4",
+              "source": "w2",
+              "value": "guide.md",
+              "quote": "guide.md is listed"
+            },
+            {
+              "id": "f5",
+              "source": "w3",
+              "at": {
+                "lines": [
+                  1,
+                  1
+                ]
+              }
+            },
+            {
+              "id": "f6",
+              "source": "w3",
+              "value": "gamma.ts",
+              "quote": "gamma.ts"
+            },
+            {
+              "id": "f7",
+              "source": "w4",
+              "at": {
+                "lines": [
+                  1,
+                  1
+                ]
+              }
+            },
+            {
+              "id": "f8",
+              "source": "w4",
+              "value": "test_two.py",
+              "quote": "test_two.py"
+            }
+          ],
+          "verdicts": [],
+          "open_items": []
+        },
+        "contract": {
+          "strict": {
+            "keep_marked": [
+              "part",
+              "little"
+            ],
+            "drop": [
+              "none"
+            ],
+            "mark_text": "evidence shows part of the value",
+            "derived_decides_drops": false,
+            "derived_passes": [
+              "yes",
+              "mostly"
+            ]
+          },
+          "support_passes": [
+            "all",
+            "mostly"
+          ],
+          "min_quote_length": 8,
+          "retry_rounds": 2,
+          "source_kinds": {
+            "ls": "tool"
+          }
+        },
+        "decider": {},
+        "returned_before": [],
+        "rounds_left": 2
+      },
+      "expect": {
+        "facts": [
+          {
+            "id": "f1",
+            "kind_stated": "direct",
+            "kind_checked": "direct",
+            "worded": false,
+            "status": "passed",
+            "strict_outcome": "pass",
+            "drop_reason": null,
+            "dropped_by": null,
+            "evidence": null,
+            "judge": null,
+            "sent": null
+          },
+          {
+            "id": "f2",
+            "kind_stated": "direct",
+            "kind_checked": "direct",
+            "worded": null,
+            "status": "failed",
+            "strict_outcome": "dropped",
+            "drop_reason": "no_saved_result",
+            "dropped_by": null,
+            "evidence": null,
+            "judge": null,
+            "sent": null
+          },
+          {
+            "id": "f3",
+            "kind_stated": "direct",
+            "kind_checked": "direct",
+            "worded": null,
+            "status": "failed",
+            "strict_outcome": "dropped",
+            "drop_reason": "no_saved_result",
+            "dropped_by": null,
+            "evidence": null,
+            "judge": null,
+            "sent": null
+          },
+          {
+            "id": "f4",
+            "kind_stated": "direct",
+            "kind_checked": "direct",
+            "worded": null,
+            "status": "unchecked",
+            "strict_outcome": "dropped",
+            "drop_reason": "no_saved_text",
+            "dropped_by": null,
+            "evidence": null,
+            "judge": null,
+            "sent": null
+          },
+          {
+            "id": "f5",
+            "kind_stated": "direct",
+            "kind_checked": "direct",
+            "worded": false,
+            "status": "passed",
+            "strict_outcome": "pass",
+            "drop_reason": null,
+            "dropped_by": null,
+            "evidence": {
+              "quote": "alpha.ts",
+              "command": "ls path=lib",
+              "command_from": "args_used",
+              "result_file": "results/w1.txt",
+              "lines": [
+                1,
+                1
+              ],
+              "run": null
+            },
+            "judge": null,
+            "sent": null
+          },
+          {
+            "id": "f6",
+            "kind_stated": "direct",
+            "kind_checked": "direct",
+            "worded": null,
+            "status": "unchecked",
+            "strict_outcome": "dropped",
+            "drop_reason": "no_saved_text",
+            "dropped_by": null,
+            "evidence": null,
+            "judge": null,
+            "sent": null
+          },
+          {
+            "id": "f7",
+            "kind_stated": "direct",
+            "kind_checked": "direct",
+            "worded": null,
+            "status": "failed",
+            "strict_outcome": "dropped",
+            "drop_reason": "no_saved_result",
+            "dropped_by": null,
+            "evidence": null,
+            "judge": null,
+            "sent": null
+          },
+          {
+            "id": "f8",
+            "kind_stated": "direct",
+            "kind_checked": "direct",
+            "worded": false,
+            "status": "passed",
+            "strict_outcome": "pass",
+            "drop_reason": null,
+            "dropped_by": null,
+            "evidence": null,
+            "judge": null,
+            "sent": null
+          }
+        ],
+        "graph": {
+          "order": [
+            "f1",
+            "f2",
+            "f3",
+            "f4",
+            "f5",
+            "f6",
+            "f7",
+            "f8"
+          ],
+          "refusals": []
+        },
+        "verdicts": [],
+        "open_items": [],
+        "counts": {
+          "pass": 3,
+          "keep_marked": 0,
+          "returned": 0,
+          "dropped": 5,
+          "not_judged": 0
+        },
+        "drop_reasons": {
+          "no_saved_result": 3,
+          "no_saved_text": 2
+        },
+        "judge_counts": {
+          "direct_passed": 3,
+          "llm_judged": 0,
+          "derived_judged": 0,
+          "not_judged": 0
+        },
+        "report": {
+          "direct_passed": 3,
+          "llm_judged": 0,
+          "derived": 0,
+          "kept_with_mark": 0,
+          "returned": 0,
+          "not_judged": 0,
+          "dropped": {
+            "total": 5,
+            "by_reason": {
+              "no_saved_result": 3,
+              "no_saved_text": 2
+            }
+          },
+          "by_stated_kind": {
+            "direct": {
+              "stated": 8,
+              "checked_as_direct": 3
+            },
+            "llm": {
+              "stated": 0,
+              "checked_as_direct": 0
+            },
+            "derived": {
+              "stated": 0,
+              "checked_as_direct": 0
+            }
+          },
+          "worded": 0,
+          "judged": 0
+        }
+      }
+    },
+    {
+      "name": "value_not_a_string",
+      "note": "A value that is not a string (a number, a boolean) is no value: the number rule is not applied, worded is false and the fact passes as direct; value_missing does not apply (the key is present). A derived fact with such a value is sent with an empty conclusion.",
+      "input": {
+        "checkout_root": "/srv/work/proj",
+        "walk": [
+          {
+            "id": "w1",
+            "tool": "run_tests",
+            "args": {
+              "purpose": "run the suite"
+            },
+            "args_used": {
+              "argv": [
+                "pytest",
+                "-q"
+              ]
+            },
+            "saved_result": "results/w1.txt"
+          }
+        ],
+        "results": {
+          "results/w1.txt": "collected 13 items\n12 passed, 1 skipped in 0.51s\n"
+        },
+        "prior_runs": {},
+        "children": [],
+        "finish": {
+          "facts": [
+            {
+              "id": "f1",
+              "source": "w1",
+              "at": {
+                "lines": [
+                  2,
+                  2
+                ]
+              },
+              "value": 99
+            },
+            {
+              "id": "f2",
+              "kind": "llm",
+              "source": "w1",
+              "at": {
+                "lines": [
+                  2,
+                  2
+                ]
+              },
+              "value": true
+            },
+            {
+              "id": "f3",
+              "source": "w1",
+              "value": 99,
+              "quote": "12 passed, 1 skipped in 0.51s"
+            },
+            {
+              "id": "f4",
+              "kind": "derived",
+              "source": "w1",
+              "at": {
+                "lines": [
+                  1,
+                  1
+                ]
+              },
+              "value": 7,
+              "based_on": [
+                "f1"
+              ]
+            }
+          ],
+          "verdicts": [],
+          "open_items": []
+        },
+        "contract": {
+          "strict": {
+            "keep_marked": [
+              "part",
+              "little"
+            ],
+            "drop": [
+              "none"
+            ],
+            "mark_text": "evidence shows part of the value",
+            "derived_decides_drops": false,
+            "derived_passes": [
+              "yes",
+              "mostly"
+            ]
+          },
+          "support_passes": [
+            "all",
+            "mostly"
+          ],
+          "min_quote_length": 8,
+          "retry_rounds": 2,
+          "source_kinds": {
+            "run_tests": "tool"
+          }
+        },
+        "decider": {
+          "f4": {
+            "question": "derived",
+            "option": "partly"
+          }
+        },
+        "returned_before": [],
+        "rounds_left": 2
+      },
+      "expect": {
+        "facts": [
+          {
+            "id": "f1",
+            "kind_stated": "direct",
+            "kind_checked": "direct",
+            "worded": false,
+            "status": "passed",
+            "strict_outcome": "pass",
+            "drop_reason": null,
+            "dropped_by": null,
+            "evidence": {
+              "quote": "12 passed, 1 skipped in 0.51s",
+              "command": "run_tests argv=[\"pytest\",\"-q\"]",
+              "command_from": "args_used",
+              "result_file": "results/w1.txt",
+              "lines": [
+                2,
+                2
+              ],
+              "run": null
+            },
+            "judge": null,
+            "sent": null
+          },
+          {
+            "id": "f2",
+            "kind_stated": "llm",
+            "kind_checked": "direct",
+            "worded": false,
+            "status": "passed",
+            "strict_outcome": "pass",
+            "drop_reason": null,
+            "dropped_by": null,
+            "evidence": {
+              "quote": "12 passed, 1 skipped in 0.51s",
+              "command": "run_tests argv=[\"pytest\",\"-q\"]",
+              "command_from": "args_used",
+              "result_file": "results/w1.txt",
+              "lines": [
+                2,
+                2
+              ],
+              "run": null
+            },
+            "judge": null,
+            "sent": null
+          },
+          {
+            "id": "f3",
+            "kind_stated": "direct",
+            "kind_checked": "direct",
+            "worded": false,
+            "status": "passed",
+            "strict_outcome": "pass",
+            "drop_reason": null,
+            "dropped_by": null,
+            "evidence": null,
+            "judge": null,
+            "sent": null
+          },
+          {
+            "id": "f4",
+            "kind_stated": "derived",
+            "kind_checked": "derived",
+            "worded": false,
+            "status": "judged",
+            "strict_outcome": "pass",
+            "drop_reason": null,
+            "dropped_by": null,
+            "evidence": {
+              "quote": "collected 13 items",
+              "command": "run_tests argv=[\"pytest\",\"-q\"]",
+              "command_from": "args_used",
+              "result_file": "results/w1.txt",
+              "lines": [
+                1,
+                1
+              ],
+              "run": null
+            },
+            "judge": {
+              "question": "derived",
+              "option": "partly",
+              "reason": null
+            },
+            "sent": {
+              "question": "derived",
+              "value": "",
+              "evidence": "f1: (no value given; its copied quote) 12 passed, 1 skipped in 0.51s"
+            }
+          }
+        ],
+        "graph": {
+          "order": [
+            "f1",
+            "f2",
+            "f3",
+            "f4"
+          ],
+          "refusals": []
+        },
+        "verdicts": [],
+        "open_items": [],
+        "counts": {
+          "pass": 4,
+          "keep_marked": 0,
+          "returned": 0,
+          "dropped": 0,
+          "not_judged": 0
+        },
+        "drop_reasons": {},
+        "judge_counts": {
+          "direct_passed": 3,
+          "llm_judged": 0,
+          "derived_judged": 1,
+          "not_judged": 0
+        },
+        "report": {
+          "direct_passed": 3,
+          "llm_judged": 0,
+          "derived": 1,
+          "kept_with_mark": 0,
+          "returned": 0,
+          "not_judged": 0,
+          "dropped": {
+            "total": 0,
+            "by_reason": {}
+          },
+          "by_stated_kind": {
+            "direct": {
+              "stated": 2,
+              "checked_as_direct": 2
+            },
+            "llm": {
+              "stated": 1,
+              "checked_as_direct": 1
+            },
+            "derived": {
+              "stated": 1,
+              "checked_as_direct": 0
+            }
+          },
+          "worded": 0,
+          "judged": 1
+        }
+      }
+    },
+    {
+      "name": "read_stamps_mixed_lines",
+      "note": "A stamped read result: both ends of lines must be shown stamps, the lines between are taken by position (unstamped ones too); a search that finds an unstamped line reports its position. A read result whose first line has no stamp, and any other tool's result, is counted by position even when later lines look stamped.",
+      "input": {
+        "checkout_root": "/srv/work/proj",
+        "walk": [
+          {
+            "id": "w1",
+            "tool": "read",
+            "args": {
+              "path": "/srv/work/proj/lib/a.ts",
+              "start_line": 10,
+              "purpose": "read"
+            },
+            "args_used": {
+              "path": "/srv/work/proj/lib/a.ts",
+              "start_line": 10
+            },
+            "saved_result": "results/w1.txt"
+          },
+          {
+            "id": "w2",
+            "tool": "read",
+            "args": {
+              "path": "/srv/work/proj/lib/b.ts",
+              "purpose": "read"
+            },
+            "args_used": {
+              "path": "/srv/work/proj/lib/b.ts"
+            },
+            "saved_result": "results/w2.txt"
+          },
+          {
+            "id": "w3",
+            "tool": "bash",
+            "args": {
+              "argv": [
+                "cat",
+                "-n",
+                "lib/c.ts"
+              ],
+              "purpose": "read"
+            },
+            "args_used": {
+              "argv": [
+                "cat",
+                "-n",
+                "lib/c.ts"
+              ]
+            },
+            "saved_result": "results/w3.txt"
+          }
+        ],
+        "results": {
+          "results/w1.txt": "10\tfirst\n(line 11 is too long to show)\n12\tthird\n(2 more lines not shown)\n",
+          "results/w2.txt": "file: lib/b.ts\n5\tfive\n6\tsix\n",
+          "results/w3.txt": "7\tseven\n8\teight\n"
+        },
+        "prior_runs": {},
+        "children": [],
+        "finish": {
+          "facts": [
+            {
+              "id": "f1",
+              "source": "w1",
+              "at": {
+                "lines": [
+                  10,
+                  12
+                ]
+              }
+            },
+            {
+              "id": "f2",
+              "source": "w1",
+              "at": {
+                "search": "more lines"
+              }
+            },
+            {
+              "id": "f3",
+              "source": "w1",
+              "at": {
+                "lines": [
+                  11,
+                  12
+                ]
+              }
+            },
+            {
+              "id": "f4",
+              "source": "w1",
+              "at": {
+                "lines": [
+                  1,
+                  2
+                ]
+              }
+            },
+            {
+              "id": "f5",
+              "source": "w1",
+              "at": {
+                "search": "third"
+              }
+            },
+            {
+              "id": "f6",
+              "source": "w2",
+              "at": {
+                "lines": [
+                  1,
+                  2
+                ]
+              }
+            },
+            {
+              "id": "f7",
+              "source": "w2",
+              "at": {
+                "search": "six"
+              }
+            },
+            {
+              "id": "f8",
+              "source": "w3",
+              "at": {
+                "lines": [
+                  1,
+                  1
+                ]
+              }
+            },
+            {
+              "id": "f9",
+              "source": "w3",
+              "at": {
+                "lines": [
+                  7,
+                  7
+                ]
+              }
+            },
+            {
+              "id": "f10",
+              "source": "w3",
+              "at": {
+                "search": "eight"
+              }
+            }
+          ],
+          "verdicts": [],
+          "open_items": []
+        },
+        "contract": {
+          "strict": {
+            "keep_marked": [
+              "part",
+              "little"
+            ],
+            "drop": [
+              "none"
+            ],
+            "mark_text": "evidence shows part of the value",
+            "derived_decides_drops": false,
+            "derived_passes": [
+              "yes",
+              "mostly"
+            ]
+          },
+          "support_passes": [
+            "all",
+            "mostly"
+          ],
+          "min_quote_length": 8,
+          "retry_rounds": 2,
+          "source_kinds": {
+            "bash": "tool",
+            "read": "file"
+          }
+        },
+        "decider": {},
+        "returned_before": [],
+        "rounds_left": 2
+      },
+      "expect": {
+        "facts": [
+          {
+            "id": "f1",
+            "kind_stated": "direct",
+            "kind_checked": "direct",
+            "worded": false,
+            "status": "passed",
+            "strict_outcome": "pass",
+            "drop_reason": null,
+            "dropped_by": null,
+            "evidence": {
+              "quote": "10\tfirst\n(line 11 is too long to show)\n12\tthird",
+              "command": "read lib/a.ts lines 10-end",
+              "command_from": "args_used",
+              "result_file": "results/w1.txt",
+              "lines": [
+                10,
+                12
+              ],
+              "run": null
+            },
+            "judge": null,
+            "sent": null
+          },
+          {
+            "id": "f2",
+            "kind_stated": "direct",
+            "kind_checked": "direct",
+            "worded": false,
+            "status": "passed",
+            "strict_outcome": "pass",
+            "drop_reason": null,
+            "dropped_by": null,
+            "evidence": {
+              "quote": "(2 more lines not shown)",
+              "command": "read lib/a.ts lines 10-end",
+              "command_from": "args_used",
+              "result_file": "results/w1.txt",
+              "lines": [
+                4,
+                4
+              ],
+              "run": null
+            },
+            "judge": null,
+            "sent": null
+          },
+          {
+            "id": "f3",
+            "kind_stated": "direct",
+            "kind_checked": "direct",
+            "worded": null,
+            "status": "failed",
+            "strict_outcome": "dropped",
+            "drop_reason": "pointer_out_of_range",
+            "dropped_by": null,
+            "evidence": null,
+            "judge": null,
+            "sent": null
+          },
+          {
+            "id": "f4",
+            "kind_stated": "direct",
+            "kind_checked": "direct",
+            "worded": null,
+            "status": "failed",
+            "strict_outcome": "dropped",
+            "drop_reason": "pointer_out_of_range",
+            "dropped_by": null,
+            "evidence": null,
+            "judge": null,
+            "sent": null
+          },
+          {
+            "id": "f5",
+            "kind_stated": "direct",
+            "kind_checked": "direct",
+            "worded": false,
+            "status": "passed",
+            "strict_outcome": "pass",
+            "drop_reason": null,
+            "dropped_by": null,
+            "evidence": {
+              "quote": "12\tthird",
+              "command": "read lib/a.ts lines 10-end",
+              "command_from": "args_used",
+              "result_file": "results/w1.txt",
+              "lines": [
+                12,
+                12
+              ],
+              "run": null
+            },
+            "judge": null,
+            "sent": null
+          },
+          {
+            "id": "f6",
+            "kind_stated": "direct",
+            "kind_checked": "direct",
+            "worded": false,
+            "status": "passed",
+            "strict_outcome": "pass",
+            "drop_reason": null,
+            "dropped_by": null,
+            "evidence": {
+              "quote": "file: lib/b.ts\n5\tfive",
+              "command": "read lib/b.ts",
+              "command_from": "args_used",
+              "result_file": "results/w2.txt",
+              "lines": [
+                1,
+                2
+              ],
+              "run": null
+            },
+            "judge": null,
+            "sent": null
+          },
+          {
+            "id": "f7",
+            "kind_stated": "direct",
+            "kind_checked": "direct",
+            "worded": false,
+            "status": "passed",
+            "strict_outcome": "pass",
+            "drop_reason": null,
+            "dropped_by": null,
+            "evidence": {
+              "quote": "6\tsix",
+              "command": "read lib/b.ts",
+              "command_from": "args_used",
+              "result_file": "results/w2.txt",
+              "lines": [
+                3,
+                3
+              ],
+              "run": null
+            },
+            "judge": null,
+            "sent": null
+          },
+          {
+            "id": "f8",
+            "kind_stated": "direct",
+            "kind_checked": "direct",
+            "worded": false,
+            "status": "passed",
+            "strict_outcome": "pass",
+            "drop_reason": null,
+            "dropped_by": null,
+            "evidence": {
+              "quote": "7\tseven",
+              "command": "cat -n lib/c.ts",
+              "command_from": "args_used",
+              "result_file": "results/w3.txt",
+              "lines": [
+                1,
+                1
+              ],
+              "run": null
+            },
+            "judge": null,
+            "sent": null
+          },
+          {
+            "id": "f9",
+            "kind_stated": "direct",
+            "kind_checked": "direct",
+            "worded": null,
+            "status": "failed",
+            "strict_outcome": "dropped",
+            "drop_reason": "pointer_out_of_range",
+            "dropped_by": null,
+            "evidence": null,
+            "judge": null,
+            "sent": null
+          },
+          {
+            "id": "f10",
+            "kind_stated": "direct",
+            "kind_checked": "direct",
+            "worded": false,
+            "status": "passed",
+            "strict_outcome": "pass",
+            "drop_reason": null,
+            "dropped_by": null,
+            "evidence": {
+              "quote": "8\teight",
+              "command": "cat -n lib/c.ts",
+              "command_from": "args_used",
+              "result_file": "results/w3.txt",
+              "lines": [
+                2,
+                2
+              ],
+              "run": null
+            },
+            "judge": null,
+            "sent": null
+          }
+        ],
+        "graph": {
+          "order": [
+            "f1",
+            "f2",
+            "f3",
+            "f4",
+            "f5",
+            "f6",
+            "f7",
+            "f8",
+            "f9",
+            "f10"
+          ],
+          "refusals": []
+        },
+        "verdicts": [],
+        "open_items": [],
+        "counts": {
+          "pass": 7,
+          "keep_marked": 0,
+          "returned": 0,
+          "dropped": 3,
+          "not_judged": 0
+        },
+        "drop_reasons": {
+          "pointer_out_of_range": 3
+        },
+        "judge_counts": {
+          "direct_passed": 7,
+          "llm_judged": 0,
+          "derived_judged": 0,
+          "not_judged": 0
+        },
+        "report": {
+          "direct_passed": 7,
+          "llm_judged": 0,
+          "derived": 0,
+          "kept_with_mark": 0,
+          "returned": 0,
+          "not_judged": 0,
+          "dropped": {
+            "total": 3,
+            "by_reason": {
+              "pointer_out_of_range": 3
+            }
+          },
+          "by_stated_kind": {
+            "direct": {
+              "stated": 10,
+              "checked_as_direct": 7
+            },
+            "llm": {
+              "stated": 0,
+              "checked_as_direct": 0
+            },
+            "derived": {
+              "stated": 0,
+              "checked_as_direct": 0
+            }
+          },
+          "worded": 0,
+          "judged": 0
+        }
+      }
+    },
+    {
+      "name": "read_stamps_cut_result",
+      "note": "A stamped read result that was cut: lines before the last kept line are copied; the last kept line, a stamp above the last shown one, or a term not found is result_cut; a stamp below the shown ones is pointer_out_of_range. When the last kept line has no stamp, any stamp not shown is result_cut.",
+      "input": {
+        "checkout_root": "/srv/work/proj",
+        "walk": [
+          {
+            "id": "w1",
+            "tool": "read",
+            "args": {
+              "path": "/srv/work/proj/lib/a.ts",
+              "start_line": 20,
+              "purpose": "read"
+            },
+            "args_used": {
+              "path": "/srv/work/proj/lib/a.ts",
+              "start_line": 20
+            },
+            "saved_result": "results/w1.txt",
+            "partial": true
+          },
+          {
+            "id": "w2",
+            "tool": "read",
+            "args": {
+              "path": "/srv/work/proj/lib/b.ts",
+              "start_line": 30,
+              "purpose": "read"
+            },
+            "args_used": {
+              "path": "/srv/work/proj/lib/b.ts",
+              "start_line": 30
+            },
+            "saved_result": "results/w2.txt",
+            "partial": true
+          }
+        ],
+        "results": {
+          "results/w1.txt": "20\tconst a = 1;\n21\tconst b = 2;\n22\tconst c",
+          "results/w2.txt": "30\tlet x;\n31\tlet y;\n(cut"
+        },
+        "prior_runs": {},
+        "children": [],
+        "finish": {
+          "facts": [
+            {
+              "id": "f1",
+              "source": "w1",
+              "at": {
+                "lines": [
+                  20,
+                  20
+                ]
+              }
+            },
+            {
+              "id": "f2",
+              "source": "w1",
+              "at": {
+                "lines": [
+                  21,
+                  22
+                ]
+              }
+            },
+            {
+              "id": "f3",
+              "source": "w1",
+              "at": {
+                "lines": [
+                  25,
+                  26
+                ]
+              }
+            },
+            {
+              "id": "f4",
+              "source": "w1",
+              "at": {
+                "lines": [
+                  5,
+                  6
+                ]
+              }
+            },
+            {
+              "id": "f5",
+              "source": "w1",
+              "at": {
+                "search": "const b"
+              }
+            },
+            {
+              "id": "f6",
+              "source": "w1",
+              "at": {
+                "search": "const c"
+              }
+            },
+            {
+              "id": "f7",
+              "source": "w1",
+              "at": {
+                "search": "const d"
+              }
+            },
+            {
+              "id": "f8",
+              "source": "w2",
+              "at": {
+                "lines": [
+                  5,
+                  6
+                ]
+              }
+            },
+            {
+              "id": "f9",
+              "source": "w2",
+              "at": {
+                "lines": [
+                  30,
+                  30
+                ]
+              }
+            }
+          ],
+          "verdicts": [],
+          "open_items": []
+        },
+        "contract": {
+          "strict": {
+            "keep_marked": [
+              "part",
+              "little"
+            ],
+            "drop": [
+              "none"
+            ],
+            "mark_text": "evidence shows part of the value",
+            "derived_decides_drops": false,
+            "derived_passes": [
+              "yes",
+              "mostly"
+            ]
+          },
+          "support_passes": [
+            "all",
+            "mostly"
+          ],
+          "min_quote_length": 8,
+          "retry_rounds": 2,
+          "source_kinds": {
+            "read": "file"
+          }
+        },
+        "decider": {},
+        "returned_before": [],
+        "rounds_left": 2
+      },
+      "expect": {
+        "facts": [
+          {
+            "id": "f1",
+            "kind_stated": "direct",
+            "kind_checked": "direct",
+            "worded": false,
+            "status": "passed",
+            "strict_outcome": "pass",
+            "drop_reason": null,
+            "dropped_by": null,
+            "evidence": {
+              "quote": "20\tconst a = 1;",
+              "command": "read lib/a.ts lines 20-end",
+              "command_from": "args_used",
+              "result_file": "results/w1.txt",
+              "lines": [
+                20,
+                20
+              ],
+              "run": null
+            },
+            "judge": null,
+            "sent": null
+          },
+          {
+            "id": "f2",
+            "kind_stated": "direct",
+            "kind_checked": "direct",
+            "worded": null,
+            "status": "failed",
+            "strict_outcome": "dropped",
+            "drop_reason": "result_cut",
+            "dropped_by": null,
+            "evidence": null,
+            "judge": null,
+            "sent": null
+          },
+          {
+            "id": "f3",
+            "kind_stated": "direct",
+            "kind_checked": "direct",
+            "worded": null,
+            "status": "failed",
+            "strict_outcome": "dropped",
+            "drop_reason": "result_cut",
+            "dropped_by": null,
+            "evidence": null,
+            "judge": null,
+            "sent": null
+          },
+          {
+            "id": "f4",
+            "kind_stated": "direct",
+            "kind_checked": "direct",
+            "worded": null,
+            "status": "failed",
+            "strict_outcome": "dropped",
+            "drop_reason": "pointer_out_of_range",
+            "dropped_by": null,
+            "evidence": null,
+            "judge": null,
+            "sent": null
+          },
+          {
+            "id": "f5",
+            "kind_stated": "direct",
+            "kind_checked": "direct",
+            "worded": false,
+            "status": "passed",
+            "strict_outcome": "pass",
+            "drop_reason": null,
+            "dropped_by": null,
+            "evidence": {
+              "quote": "21\tconst b = 2;",
+              "command": "read lib/a.ts lines 20-end",
+              "command_from": "args_used",
+              "result_file": "results/w1.txt",
+              "lines": [
+                21,
+                21
+              ],
+              "run": null
+            },
+            "judge": null,
+            "sent": null
+          },
+          {
+            "id": "f6",
+            "kind_stated": "direct",
+            "kind_checked": "direct",
+            "worded": null,
+            "status": "failed",
+            "strict_outcome": "dropped",
+            "drop_reason": "result_cut",
+            "dropped_by": null,
+            "evidence": null,
+            "judge": null,
+            "sent": null
+          },
+          {
+            "id": "f7",
+            "kind_stated": "direct",
+            "kind_checked": "direct",
+            "worded": null,
+            "status": "failed",
+            "strict_outcome": "dropped",
+            "drop_reason": "result_cut",
+            "dropped_by": null,
+            "evidence": null,
+            "judge": null,
+            "sent": null
+          },
+          {
+            "id": "f8",
+            "kind_stated": "direct",
+            "kind_checked": "direct",
+            "worded": null,
+            "status": "failed",
+            "strict_outcome": "dropped",
+            "drop_reason": "result_cut",
+            "dropped_by": null,
+            "evidence": null,
+            "judge": null,
+            "sent": null
+          },
+          {
+            "id": "f9",
+            "kind_stated": "direct",
+            "kind_checked": "direct",
+            "worded": false,
+            "status": "passed",
+            "strict_outcome": "pass",
+            "drop_reason": null,
+            "dropped_by": null,
+            "evidence": {
+              "quote": "30\tlet x;",
+              "command": "read lib/b.ts lines 30-end",
+              "command_from": "args_used",
+              "result_file": "results/w2.txt",
+              "lines": [
+                30,
+                30
+              ],
+              "run": null
+            },
+            "judge": null,
+            "sent": null
+          }
+        ],
+        "graph": {
+          "order": [
+            "f1",
+            "f2",
+            "f3",
+            "f4",
+            "f5",
+            "f6",
+            "f7",
+            "f8",
+            "f9"
+          ],
+          "refusals": []
+        },
+        "verdicts": [],
+        "open_items": [],
+        "counts": {
+          "pass": 3,
+          "keep_marked": 0,
+          "returned": 0,
+          "dropped": 6,
+          "not_judged": 0
+        },
+        "drop_reasons": {
+          "result_cut": 5,
+          "pointer_out_of_range": 1
+        },
+        "judge_counts": {
+          "direct_passed": 3,
+          "llm_judged": 0,
+          "derived_judged": 0,
+          "not_judged": 0
+        },
+        "report": {
+          "direct_passed": 3,
+          "llm_judged": 0,
+          "derived": 0,
+          "kept_with_mark": 0,
+          "returned": 0,
+          "not_judged": 0,
+          "dropped": {
+            "total": 6,
+            "by_reason": {
+              "result_cut": 5,
+              "pointer_out_of_range": 1
+            }
+          },
+          "by_stated_kind": {
+            "direct": {
+              "stated": 9,
+              "checked_as_direct": 3
+            },
+            "llm": {
+              "stated": 0,
+              "checked_as_direct": 0
+            },
+            "derived": {
+              "stated": 0,
+              "checked_as_direct": 0
+            }
+          },
+          "worded": 0,
+          "judged": 0
+        }
+      }
+    },
+    {
+      "name": "command_details",
+      "note": "How the command is printed: tokens that need quoting (a space, *, an empty string, a non-ASCII letter kept as it is), a checkout path inside a longer token, the root with and without its slash, a path that only shares the root's prefix, a blank cwd, a cwd in a run worktree, read windows, a tool printed as key=value with numbers, booleans, null, lists and objects, a redacted object key, only the top-level purpose dropped, and the fallbacks to args.",
+      "input": {
+        "checkout_root": "/srv/work/proj",
+        "walk": [
+          {
+            "id": "w1",
+            "tool": "bash",
+            "args": {
+              "argv": [
+                "grep"
+              ],
+              "purpose": "search"
+            },
+            "args_used": {
+              "argv": [
+                "grep",
+                "-n",
+                "two words",
+                "--include=/srv/work/proj/lib/*.ts",
+                "/srv/work/proj",
+                "/srv/work/proj/",
+                "/srv/work/project/x",
+                "/srv/work/proj/docs/a b.md",
+                "",
+                "café",
+                "it's",
+                "password=hunter2hunter2"
+              ],
+              "cwd": "  "
+            },
+            "saved_result": "results/w1.txt"
+          },
+          {
+            "id": "w2",
+            "tool": "bash",
+            "args": {
+              "argv": [
+                "ls"
+              ],
+              "purpose": "list"
+            },
+            "args_used": {
+              "argv": [
+                "ls"
+              ],
+              "cwd": "/srv/work/.worktrees.proj/run-7",
+              "timeout_ms": 5000
+            },
+            "saved_result": "results/w2.txt"
+          },
+          {
+            "id": "w3",
+            "tool": "bash",
+            "args": {
+              "argv": [
+                "ls"
+              ],
+              "purpose": "list"
+            },
+            "args_used": {
+              "argv": [
+                "ls"
+              ],
+              "cwd": "/srv/work/proj/lib"
+            },
+            "saved_result": "results/w3.txt"
+          },
+          {
+            "id": "w4",
+            "tool": "read",
+            "args": {
+              "path": "lib/a.ts",
+              "purpose": "read"
+            },
+            "args_used": {
+              "path": "/srv/work/proj/lib/a.ts",
+              "end_line": 40
+            },
+            "saved_result": "results/w4.txt"
+          },
+          {
+            "id": "w5",
+            "tool": "read_file",
+            "args": {
+              "path": "lib/a.ts",
+              "purpose": "read"
+            },
+            "args_used": {
+              "path": "/srv/work/proj/lib/a.ts",
+              "start_line": 5
+            },
+            "saved_result": "results/w5.txt"
+          },
+          {
+            "id": "w6",
+            "tool": "read",
+            "args": {
+              "path": 7,
+              "purpose": "read"
+            },
+            "args_used": {
+              "path": 7,
+              "start_line": 5
+            },
+            "saved_result": "results/w6.txt"
+          },
+          {
+            "id": "w7",
+            "tool": "grep",
+            "args": {
+              "pattern": "TODO",
+              "purpose": "search"
+            },
+            "args_used": {
+              "pattern": "TODO|FIXME",
+              "path": "/srv/work/proj/lib",
+              "max": 5,
+              "ratio": 1.5,
+              "ignore_case": true,
+              "after": null,
+              "globs": [
+                "*.ts",
+                "/srv/work/proj/x"
+              ],
+              "opts": {
+                "token:abc123": "/srv/work/proj/a",
+                "/srv/work/proj/k": "v",
+                "purpose": "kept: not the top level"
+              }
+            },
+            "saved_result": "results/w7.txt"
+          },
+          {
+            "id": "w8",
+            "tool": "bash",
+            "args": {
+              "argv": [
+                "ls",
+                1
+              ],
+              "purpose": "list"
+            },
+            "args_used": {
+              "argv": [
+                "ls",
+                1
+              ]
+            },
+            "saved_result": "results/w8.txt"
+          },
+          {
+            "id": "w9",
+            "tool": "ls",
+            "args": {
+              "purpose": "list"
+            },
+            "saved_result": "results/w9.txt"
+          },
+          {
+            "id": "w10",
+            "tool": "ls",
+            "args": {
+              "path": "lib",
+              "purpose": "list"
+            },
+            "args_used": [
+              "lib"
+            ],
+            "saved_result": "results/w10.txt"
+          }
+        ],
+        "results": {
+          "results/w1.txt": "ok\n",
+          "results/w2.txt": "ok\n",
+          "results/w3.txt": "ok\n",
+          "results/w4.txt": "ok\n",
+          "results/w5.txt": "ok\n",
+          "results/w6.txt": "ok\n",
+          "results/w7.txt": "ok\n",
+          "results/w8.txt": "ok\n",
+          "results/w9.txt": "ok\n",
+          "results/w10.txt": "ok\n"
+        },
+        "prior_runs": {},
+        "children": [],
+        "finish": {
+          "facts": [
+            {
+              "id": "f1",
+              "source": "w1",
+              "at": {
+                "lines": [
+                  1,
+                  1
+                ]
+              }
+            },
+            {
+              "id": "f2",
+              "source": "w2",
+              "at": {
+                "lines": [
+                  1,
+                  1
+                ]
+              }
+            },
+            {
+              "id": "f3",
+              "source": "w3",
+              "at": {
+                "lines": [
+                  1,
+                  1
+                ]
+              }
+            },
+            {
+              "id": "f4",
+              "source": "w4",
+              "at": {
+                "lines": [
+                  1,
+                  1
+                ]
+              }
+            },
+            {
+              "id": "f5",
+              "source": "w5",
+              "at": {
+                "lines": [
+                  1,
+                  1
+                ]
+              }
+            },
+            {
+              "id": "f6",
+              "source": "w6",
+              "at": {
+                "lines": [
+                  1,
+                  1
+                ]
+              }
+            },
+            {
+              "id": "f7",
+              "source": "w7",
+              "at": {
+                "lines": [
+                  1,
+                  1
+                ]
+              }
+            },
+            {
+              "id": "f8",
+              "source": "w8",
+              "at": {
+                "lines": [
+                  1,
+                  1
+                ]
+              }
+            },
+            {
+              "id": "f9",
+              "source": "w9",
+              "at": {
+                "lines": [
+                  1,
+                  1
+                ]
+              }
+            },
+            {
+              "id": "f10",
+              "source": "w10",
+              "at": {
+                "lines": [
+                  1,
+                  1
+                ]
+              }
+            }
+          ],
+          "verdicts": [],
+          "open_items": []
+        },
+        "contract": {
+          "strict": {
+            "keep_marked": [
+              "part",
+              "little"
+            ],
+            "drop": [
+              "none"
+            ],
+            "mark_text": "evidence shows part of the value",
+            "derived_decides_drops": false,
+            "derived_passes": [
+              "yes",
+              "mostly"
+            ]
+          },
+          "support_passes": [
+            "all",
+            "mostly"
+          ],
+          "min_quote_length": 8,
+          "retry_rounds": 2,
+          "source_kinds": {
+            "bash": "tool",
+            "grep": "tool",
+            "ls": "tool",
+            "read": "file"
+          }
+        },
+        "decider": {},
+        "returned_before": [],
+        "rounds_left": 2
+      },
+      "expect": {
+        "facts": [
+          {
+            "id": "f1",
+            "kind_stated": "direct",
+            "kind_checked": "direct",
+            "worded": false,
+            "status": "passed",
+            "strict_outcome": "pass",
+            "drop_reason": null,
+            "dropped_by": null,
+            "evidence": {
+              "quote": "ok",
+              "command": "grep -n \"two words\" \"--include=lib/*.ts\" . . /srv/work/project/x \"docs/a b.md\" \"\" \"café\" \"it's\" \"[REDACTED]\"",
+              "command_from": "args_used",
+              "result_file": "results/w1.txt",
+              "lines": [
+                1,
+                1
+              ],
+              "run": null
+            },
+            "judge": null,
+            "sent": null
+          },
+          {
+            "id": "f2",
+            "kind_stated": "direct",
+            "kind_checked": "direct",
+            "worded": false,
+            "status": "passed",
+            "strict_outcome": "pass",
+            "drop_reason": null,
+            "dropped_by": null,
+            "evidence": {
+              "quote": "ok",
+              "command": "cd . && ls",
+              "command_from": "args_used",
+              "result_file": "results/w2.txt",
+              "lines": [
+                1,
+                1
+              ],
+              "run": null
+            },
+            "judge": null,
+            "sent": null
+          },
+          {
+            "id": "f3",
+            "kind_stated": "direct",
+            "kind_checked": "direct",
+            "worded": false,
+            "status": "passed",
+            "strict_outcome": "pass",
+            "drop_reason": null,
+            "dropped_by": null,
+            "evidence": {
+              "quote": "ok",
+              "command": "cd lib && ls",
+              "command_from": "args_used",
+              "result_file": "results/w3.txt",
+              "lines": [
+                1,
+                1
+              ],
+              "run": null
+            },
+            "judge": null,
+            "sent": null
+          },
+          {
+            "id": "f4",
+            "kind_stated": "direct",
+            "kind_checked": "direct",
+            "worded": false,
+            "status": "passed",
+            "strict_outcome": "pass",
+            "drop_reason": null,
+            "dropped_by": null,
+            "evidence": {
+              "quote": "ok",
+              "command": "read lib/a.ts lines 1-40",
+              "command_from": "args_used",
+              "result_file": "results/w4.txt",
+              "lines": [
+                1,
+                1
+              ],
+              "run": null
+            },
+            "judge": null,
+            "sent": null
+          },
+          {
+            "id": "f5",
+            "kind_stated": "direct",
+            "kind_checked": "direct",
+            "worded": false,
+            "status": "passed",
+            "strict_outcome": "pass",
+            "drop_reason": null,
+            "dropped_by": null,
+            "evidence": {
+              "quote": "ok",
+              "command": "read_file lib/a.ts lines 5-end",
+              "command_from": "args_used",
+              "result_file": "results/w5.txt",
+              "lines": [
+                1,
+                1
+              ],
+              "run": null
+            },
+            "judge": null,
+            "sent": null
+          },
+          {
+            "id": "f6",
+            "kind_stated": "direct",
+            "kind_checked": "direct",
+            "worded": false,
+            "status": "passed",
+            "strict_outcome": "pass",
+            "drop_reason": null,
+            "dropped_by": null,
+            "evidence": {
+              "quote": "ok",
+              "command": "read path=7 start_line=5",
+              "command_from": "args_used",
+              "result_file": "results/w6.txt",
+              "lines": [
+                1,
+                1
+              ],
+              "run": null
+            },
+            "judge": null,
+            "sent": null
+          },
+          {
+            "id": "f7",
+            "kind_stated": "direct",
+            "kind_checked": "direct",
+            "worded": false,
+            "status": "passed",
+            "strict_outcome": "pass",
+            "drop_reason": null,
+            "dropped_by": null,
+            "evidence": {
+              "quote": "ok",
+              "command": "grep pattern=\"TODO|FIXME\" path=lib max=5 ratio=1.5 ignore_case=true after=null globs=[\"*.ts\",\"x\"] opts={\"[REDACTED]\":\"a\",\"/srv/work/proj/k\":\"v\",\"purpose\":\"kept: not the top level\"}",
+              "command_from": "args_used",
+              "result_file": "results/w7.txt",
+              "lines": [
+                1,
+                1
+              ],
+              "run": null
+            },
+            "judge": null,
+            "sent": null
+          },
+          {
+            "id": "f8",
+            "kind_stated": "direct",
+            "kind_checked": "direct",
+            "worded": false,
+            "status": "passed",
+            "strict_outcome": "pass",
+            "drop_reason": null,
+            "dropped_by": null,
+            "evidence": {
+              "quote": "ok",
+              "command": "bash argv=[\"ls\",1]",
+              "command_from": "args_used",
+              "result_file": "results/w8.txt",
+              "lines": [
+                1,
+                1
+              ],
+              "run": null
+            },
+            "judge": null,
+            "sent": null
+          },
+          {
+            "id": "f9",
+            "kind_stated": "direct",
+            "kind_checked": "direct",
+            "worded": false,
+            "status": "passed",
+            "strict_outcome": "pass",
+            "drop_reason": null,
+            "dropped_by": null,
+            "evidence": {
+              "quote": "ok",
+              "command": "ls",
+              "command_from": "args",
+              "result_file": "results/w9.txt",
+              "lines": [
+                1,
+                1
+              ],
+              "run": null
+            },
+            "judge": null,
+            "sent": null
+          },
+          {
+            "id": "f10",
+            "kind_stated": "direct",
+            "kind_checked": "direct",
+            "worded": false,
+            "status": "passed",
+            "strict_outcome": "pass",
+            "drop_reason": null,
+            "dropped_by": null,
+            "evidence": {
+              "quote": "ok",
+              "command": "ls path=lib",
+              "command_from": "args",
+              "result_file": "results/w10.txt",
+              "lines": [
+                1,
+                1
+              ],
+              "run": null
+            },
+            "judge": null,
+            "sent": null
+          }
+        ],
+        "graph": {
+          "order": [
+            "f1",
+            "f2",
+            "f3",
+            "f4",
+            "f5",
+            "f6",
+            "f7",
+            "f8",
+            "f9",
+            "f10"
+          ],
+          "refusals": []
+        },
+        "verdicts": [],
+        "open_items": [],
+        "counts": {
+          "pass": 10,
+          "keep_marked": 0,
+          "returned": 0,
+          "dropped": 0,
+          "not_judged": 0
+        },
+        "drop_reasons": {},
+        "judge_counts": {
+          "direct_passed": 10,
+          "llm_judged": 0,
+          "derived_judged": 0,
+          "not_judged": 0
+        },
+        "report": {
+          "direct_passed": 10,
+          "llm_judged": 0,
+          "derived": 0,
+          "kept_with_mark": 0,
+          "returned": 0,
+          "not_judged": 0,
+          "dropped": {
+            "total": 0,
+            "by_reason": {}
+          },
+          "by_stated_kind": {
+            "direct": {
+              "stated": 10,
+              "checked_as_direct": 10
+            },
+            "llm": {
+              "stated": 0,
+              "checked_as_direct": 0
+            },
+            "derived": {
+              "stated": 0,
+              "checked_as_direct": 0
+            }
+          },
+          "worded": 0,
+          "judged": 0
+        }
+      }
+    },
+    {
+      "name": "command_run_worktree_root",
+      "note": "The checkout root is a run worktree (given with a trailing slash): paths under the main checkout and under any run worktree of it print relative; the worktrees directory itself is not a checkout and stays.",
+      "input": {
+        "checkout_root": "/srv/work/.worktrees.proj/run-1/",
+        "walk": [
+          {
+            "id": "w1",
+            "tool": "bash",
+            "args": {
+              "argv": [
+                "ls"
+              ],
+              "purpose": "list"
+            },
+            "args_used": {
+              "argv": [
+                "ls",
+                "/srv/work/proj/lib",
+                "/srv/work/.worktrees.proj/run-1",
+                "/srv/work/.worktrees.proj/run-2/lib",
+                "/srv/work/.worktrees.proj"
+              ]
+            },
+            "saved_result": "results/w1.txt"
+          }
+        ],
+        "results": {
+          "results/w1.txt": "ok\n"
+        },
+        "prior_runs": {},
+        "children": [],
+        "finish": {
+          "facts": [
+            {
+              "id": "f1",
+              "source": "w1",
+              "at": {
+                "lines": [
+                  1,
+                  1
+                ]
+              }
+            }
+          ],
+          "verdicts": [],
+          "open_items": []
+        },
+        "contract": {
+          "strict": {
+            "keep_marked": [
+              "part",
+              "little"
+            ],
+            "drop": [
+              "none"
+            ],
+            "mark_text": "evidence shows part of the value",
+            "derived_decides_drops": false,
+            "derived_passes": [
+              "yes",
+              "mostly"
+            ]
+          },
+          "support_passes": [
+            "all",
+            "mostly"
+          ],
+          "min_quote_length": 8,
+          "retry_rounds": 2,
+          "source_kinds": {
+            "bash": "tool"
+          }
+        },
+        "decider": {},
+        "returned_before": [],
+        "rounds_left": 2
+      },
+      "expect": {
+        "facts": [
+          {
+            "id": "f1",
+            "kind_stated": "direct",
+            "kind_checked": "direct",
+            "worded": false,
+            "status": "passed",
+            "strict_outcome": "pass",
+            "drop_reason": null,
+            "dropped_by": null,
+            "evidence": {
+              "quote": "ok",
+              "command": "ls lib . lib /srv/work/.worktrees.proj",
+              "command_from": "args_used",
+              "result_file": "results/w1.txt",
+              "lines": [
+                1,
+                1
+              ],
+              "run": null
+            },
+            "judge": null,
+            "sent": null
+          }
+        ],
+        "graph": {
+          "order": [
+            "f1"
+          ],
+          "refusals": []
+        },
+        "verdicts": [],
+        "open_items": [],
+        "counts": {
+          "pass": 1,
+          "keep_marked": 0,
+          "returned": 0,
+          "dropped": 0,
+          "not_judged": 0
+        },
+        "drop_reasons": {},
+        "judge_counts": {
+          "direct_passed": 1,
+          "llm_judged": 0,
+          "derived_judged": 0,
+          "not_judged": 0
+        },
+        "report": {
+          "direct_passed": 1,
+          "llm_judged": 0,
+          "derived": 0,
+          "kept_with_mark": 0,
+          "returned": 0,
+          "not_judged": 0,
+          "dropped": {
+            "total": 0,
+            "by_reason": {}
+          },
+          "by_stated_kind": {
+            "direct": {
+              "stated": 1,
+              "checked_as_direct": 1
+            },
+            "llm": {
+              "stated": 0,
+              "checked_as_direct": 0
+            },
+            "derived": {
+              "stated": 0,
+              "checked_as_direct": 0
+            }
+          },
+          "worded": 0,
+          "judged": 0
+        }
+      }
+    },
+    {
+      "name": "command_root_not_absolute",
+      "note": "A checkout root that is not an absolute path makes no path relative.",
+      "input": {
+        "checkout_root": "proj",
+        "walk": [
+          {
+            "id": "w1",
+            "tool": "bash",
+            "args": {
+              "argv": [
+                "ls"
+              ],
+              "purpose": "list"
+            },
+            "args_used": {
+              "argv": [
+                "ls",
+                "/srv/work/proj/lib",
+                "proj/lib"
+              ]
+            },
+            "saved_result": "results/w1.txt"
+          }
+        ],
+        "results": {
+          "results/w1.txt": "ok\n"
+        },
+        "prior_runs": {},
+        "children": [],
+        "finish": {
+          "facts": [
+            {
+              "id": "f1",
+              "source": "w1",
+              "at": {
+                "lines": [
+                  1,
+                  1
+                ]
+              }
+            }
+          ],
+          "verdicts": [],
+          "open_items": []
+        },
+        "contract": {
+          "strict": {
+            "keep_marked": [
+              "part",
+              "little"
+            ],
+            "drop": [
+              "none"
+            ],
+            "mark_text": "evidence shows part of the value",
+            "derived_decides_drops": false,
+            "derived_passes": [
+              "yes",
+              "mostly"
+            ]
+          },
+          "support_passes": [
+            "all",
+            "mostly"
+          ],
+          "min_quote_length": 8,
+          "retry_rounds": 2,
+          "source_kinds": {
+            "bash": "tool"
+          }
+        },
+        "decider": {},
+        "returned_before": [],
+        "rounds_left": 2
+      },
+      "expect": {
+        "facts": [
+          {
+            "id": "f1",
+            "kind_stated": "direct",
+            "kind_checked": "direct",
+            "worded": false,
+            "status": "passed",
+            "strict_outcome": "pass",
+            "drop_reason": null,
+            "dropped_by": null,
+            "evidence": {
+              "quote": "ok",
+              "command": "ls /srv/work/proj/lib proj/lib",
+              "command_from": "args_used",
+              "result_file": "results/w1.txt",
+              "lines": [
+                1,
+                1
+              ],
+              "run": null
+            },
+            "judge": null,
+            "sent": null
+          }
+        ],
+        "graph": {
+          "order": [
+            "f1"
+          ],
+          "refusals": []
+        },
+        "verdicts": [],
+        "open_items": [],
+        "counts": {
+          "pass": 1,
+          "keep_marked": 0,
+          "returned": 0,
+          "dropped": 0,
+          "not_judged": 0
+        },
+        "drop_reasons": {},
+        "judge_counts": {
+          "direct_passed": 1,
+          "llm_judged": 0,
+          "derived_judged": 0,
+          "not_judged": 0
+        },
+        "report": {
+          "direct_passed": 1,
+          "llm_judged": 0,
+          "derived": 0,
+          "kept_with_mark": 0,
+          "returned": 0,
+          "not_judged": 0,
+          "dropped": {
+            "total": 0,
+            "by_reason": {}
+          },
+          "by_stated_kind": {
+            "direct": {
+              "stated": 1,
+              "checked_as_direct": 1
+            },
+            "llm": {
+              "stated": 0,
+              "checked_as_direct": 0
+            },
+            "derived": {
+              "stated": 0,
+              "checked_as_direct": 0
+            }
+          },
+          "worded": 0,
+          "judged": 0
+        }
+      }
+    },
+    {
+      "name": "action_facts",
+      "note": "An action fact (action: true) must name its tool, cite a call of that tool, and that call must not have an error or a saved result that is a JSON object with ok false. One that passes goes on to the pointer and the direct-or-worded rule like any fact. Only the value true makes a fact an action fact.",
+      "input": {
+        "checkout_root": "/srv/work/proj",
+        "walk": [
+          {
+            "id": "w1",
+            "tool": "bash",
+            "args": {
+              "argv": [
+                "make",
+                "build"
+              ],
+              "purpose": "build"
+            },
+            "args_used": {
+              "argv": [
+                "make",
+                "build"
+              ]
+            },
+            "saved_result": "results/w1.txt"
+          },
+          {
+            "id": "w2",
+            "tool": "write",
+            "args": {
+              "path": "lib/a.ts",
+              "purpose": "write"
+            },
+            "args_used": {
+              "path": "/srv/work/proj/lib/a.ts"
+            },
+            "saved_result": "results/w2.txt",
+            "error": "refused"
+          },
+          {
+            "id": "w3",
+            "tool": "edit",
+            "args": {
+              "path": "lib/a.ts",
+              "purpose": "edit"
+            },
+            "args_used": {
+              "path": "/srv/work/proj/lib/a.ts"
+            },
+            "saved_result": "results/w3.txt"
+          },
+          {
+            "id": "w4",
+            "tool": "edit",
+            "args": {
+              "path": "lib/b.ts",
+              "purpose": "edit"
+            },
+            "args_used": {
+              "path": "/srv/work/proj/lib/b.ts"
+            },
+            "saved_result": "results/w4.txt"
+          }
+        ],
+        "results": {
+          "results/w1.txt": "build done\n",
+          "results/w2.txt": "refused by the gate\n",
+          "results/w3.txt": "{\"ok\": false, \"error\": \"no match\"}\n",
+          "results/w4.txt": "{\"ok\": true, \"replaced\": 1}\n"
+        },
+        "prior_runs": {},
+        "children": [],
+        "finish": {
+          "facts": [
+            {
+              "id": "f1",
+              "action": true,
+              "tool": "bash",
+              "source": "w1",
+              "at": {
+                "lines": [
+                  1,
+                  1
+                ]
+              }
+            },
+            {
+              "id": "f2",
+              "action": true,
+              "source": "w1",
+              "at": {
+                "lines": [
+                  1,
+                  1
+                ]
+              }
+            },
+            {
+              "id": "f3",
+              "action": true,
+              "tool": "write",
+              "source": "w1",
+              "at": {
+                "lines": [
+                  1,
+                  1
+                ]
+              }
+            },
+            {
+              "id": "f4",
+              "action": true,
+              "tool": "write",
+              "source": "w2",
+              "at": {
+                "lines": [
+                  1,
+                  1
+                ]
+              }
+            },
+            {
+              "id": "f5",
+              "action": true,
+              "tool": "edit",
+              "source": "w3",
+              "at": {
+                "lines": [
+                  1,
+                  1
+                ]
+              }
+            },
+            {
+              "id": "f6",
+              "action": true,
+              "tool": "edit",
+              "source": "w4",
+              "at": {
+                "lines": [
+                  1,
+                  1
+                ]
+              },
+              "value": "the edit was applied once"
+            },
+            {
+              "id": "f7",
+              "action": "yes",
+              "source": "w2",
+              "at": {
+                "lines": [
+                  1,
+                  1
+                ]
+              }
+            }
+          ],
+          "verdicts": [
+            {
+              "id": "v1",
+              "text": "The file was written.",
+              "verdict": "supported",
+              "basis": [
+                "f4"
+              ]
+            },
+            {
+              "id": "v2",
+              "text": "The build ran.",
+              "verdict": "supported",
+              "basis": [
+                "f1"
+              ]
+            }
+          ],
+          "open_items": []
+        },
+        "contract": {
+          "strict": {
+            "keep_marked": [
+              "part",
+              "little"
+            ],
+            "drop": [
+              "none"
+            ],
+            "mark_text": "evidence shows part of the value",
+            "derived_decides_drops": false,
+            "derived_passes": [
+              "yes",
+              "mostly"
+            ]
+          },
+          "support_passes": [
+            "all",
+            "mostly"
+          ],
+          "min_quote_length": 8,
+          "retry_rounds": 2,
+          "source_kinds": {
+            "bash": "tool",
+            "edit": "tool",
+            "write": "tool"
+          }
+        },
+        "decider": {
+          "f6": {
+            "question": "support",
+            "option": "all"
+          }
+        },
+        "returned_before": [],
+        "rounds_left": 2
+      },
+      "expect": {
+        "facts": [
+          {
+            "id": "f1",
+            "kind_stated": "direct",
+            "kind_checked": "direct",
+            "worded": false,
+            "status": "passed",
+            "strict_outcome": "pass",
+            "drop_reason": null,
+            "dropped_by": null,
+            "evidence": {
+              "quote": "build done",
+              "command": "make build",
+              "command_from": "args_used",
+              "result_file": "results/w1.txt",
+              "lines": [
+                1,
+                1
+              ],
+              "run": null
+            },
+            "judge": null,
+            "sent": null
+          },
+          {
+            "id": "f2",
+            "kind_stated": "direct",
+            "kind_checked": "direct",
+            "worded": null,
+            "status": "failed",
+            "strict_outcome": "dropped",
+            "drop_reason": "action_tool_missing",
+            "dropped_by": null,
+            "evidence": null,
+            "judge": null,
+            "sent": null
+          },
+          {
+            "id": "f3",
+            "kind_stated": "direct",
+            "kind_checked": "direct",
+            "worded": null,
+            "status": "failed",
+            "strict_outcome": "dropped",
+            "drop_reason": "action_wrong_tool",
+            "dropped_by": null,
+            "evidence": null,
+            "judge": null,
+            "sent": null
+          },
+          {
+            "id": "f4",
+            "kind_stated": "direct",
+            "kind_checked": "direct",
+            "worded": null,
+            "status": "failed",
+            "strict_outcome": "dropped",
+            "drop_reason": "action_failed",
+            "dropped_by": null,
+            "evidence": null,
+            "judge": null,
+            "sent": null
+          },
+          {
+            "id": "f5",
+            "kind_stated": "direct",
+            "kind_checked": "direct",
+            "worded": null,
+            "status": "failed",
+            "strict_outcome": "dropped",
+            "drop_reason": "action_failed",
+            "dropped_by": null,
+            "evidence": null,
+            "judge": null,
+            "sent": null
+          },
+          {
+            "id": "f6",
+            "kind_stated": "direct",
+            "kind_checked": "llm",
+            "worded": true,
+            "status": "judged",
+            "strict_outcome": "pass",
+            "drop_reason": null,
+            "dropped_by": null,
+            "evidence": {
+              "quote": "{\"ok\": true, \"replaced\": 1}",
+              "command": "edit path=lib/b.ts",
+              "command_from": "args_used",
+              "result_file": "results/w4.txt",
+              "lines": [
+                1,
+                1
+              ],
+              "run": null
+            },
+            "judge": {
+              "question": "support",
+              "option": "all",
+              "reason": null
+            },
+            "sent": {
+              "question": "support",
+              "value": "the edit was applied once",
+              "evidence": "command: edit path=lib/b.ts\n{\"ok\": true, \"replaced\": 1}"
+            }
+          },
+          {
+            "id": "f7",
+            "kind_stated": "direct",
+            "kind_checked": "direct",
+            "worded": false,
+            "status": "passed",
+            "strict_outcome": "pass",
+            "drop_reason": null,
+            "dropped_by": null,
+            "evidence": {
+              "quote": "refused by the gate",
+              "command": "write path=lib/a.ts",
+              "command_from": "args_used",
+              "result_file": "results/w2.txt",
+              "lines": [
+                1,
+                1
+              ],
+              "run": null
+            },
+            "judge": null,
+            "sent": null
+          }
+        ],
+        "graph": {
+          "order": [
+            "f1",
+            "f2",
+            "f3",
+            "f4",
+            "f5",
+            "f6",
+            "f7"
+          ],
+          "refusals": []
+        },
+        "verdicts": [
+          {
+            "id": "v1",
+            "outcome": "refused",
+            "reason": "basis_refused",
+            "strict_outcome": "dropped",
+            "strict_reason": "basis_refused"
+          },
+          {
+            "id": "v2",
+            "outcome": "accepted",
+            "reason": null,
+            "strict_outcome": "pass",
+            "strict_reason": null
+          }
+        ],
+        "open_items": [],
+        "counts": {
+          "pass": 3,
+          "keep_marked": 0,
+          "returned": 0,
+          "dropped": 4,
+          "not_judged": 0
+        },
+        "drop_reasons": {
+          "action_tool_missing": 1,
+          "action_wrong_tool": 1,
+          "action_failed": 2,
+          "basis_refused": 1
+        },
+        "judge_counts": {
+          "direct_passed": 2,
+          "llm_judged": 1,
+          "derived_judged": 0,
+          "not_judged": 0
+        },
+        "report": {
+          "direct_passed": 2,
+          "llm_judged": 1,
+          "derived": 0,
+          "kept_with_mark": 0,
+          "returned": 0,
+          "not_judged": 0,
+          "dropped": {
+            "total": 4,
+            "by_reason": {
+              "action_tool_missing": 1,
+              "action_wrong_tool": 1,
+              "action_failed": 2
+            }
+          },
+          "by_stated_kind": {
+            "direct": {
+              "stated": 7,
+              "checked_as_direct": 2
+            },
+            "llm": {
+              "stated": 0,
+              "checked_as_direct": 0
+            },
+            "derived": {
+              "stated": 0,
+              "checked_as_direct": 0
+            }
+          },
+          "worded": 1,
+          "judged": 1
+        }
+      }
+    },
+    {
+      "name": "closing_verdict_second_hand",
+      "note": "The closing verdict rests only on a child's reply (source kind agent): the fact itself passes, the verdict is refused by the checker (closing_second_hand) and dropped.",
+      "input": {
+        "checkout_root": "/srv/work/proj",
+        "walk": [
+          {
+            "id": "w1",
+            "tool": "spawn_subagent",
+            "args": {
+              "model": "senses",
+              "purpose": "ask a child"
+            },
+            "args_used": {
+              "model": "senses"
+            },
+            "saved_result": "results/w1.txt"
+          }
+        ],
+        "results": {
+          "results/w1.txt": "the child says all 12 tests pass\n"
+        },
+        "prior_runs": {},
+        "children": [],
+        "finish": {
+          "facts": [
+            {
+              "id": "f1",
+              "source": "w1",
+              "at": {
+                "lines": [
+                  1,
+                  1
+                ]
+              }
+            }
+          ],
+          "verdicts": [
+            {
+              "id": "v1",
+              "text": "All tests pass.",
+              "verdict": "supported",
+              "basis": [
+                "f1"
+              ],
+              "closing": true
+            }
+          ],
+          "open_items": []
+        },
+        "contract": {
+          "strict": {
+            "keep_marked": [
+              "part",
+              "little"
+            ],
+            "drop": [
+              "none"
+            ],
+            "mark_text": "evidence shows part of the value",
+            "derived_decides_drops": false,
+            "derived_passes": [
+              "yes",
+              "mostly"
+            ]
+          },
+          "support_passes": [
+            "all",
+            "mostly"
+          ],
+          "min_quote_length": 8,
+          "retry_rounds": 2,
+          "source_kinds": {
+            "spawn_subagent": "agent"
+          }
+        },
+        "decider": {},
+        "returned_before": [],
+        "rounds_left": 2
+      },
+      "expect": {
+        "facts": [
+          {
+            "id": "f1",
+            "kind_stated": "direct",
+            "kind_checked": "direct",
+            "worded": false,
+            "status": "passed",
+            "strict_outcome": "pass",
+            "drop_reason": null,
+            "dropped_by": null,
+            "evidence": {
+              "quote": "the child says all 12 tests pass",
+              "command": "spawn_subagent model=senses",
+              "command_from": "args_used",
+              "result_file": "results/w1.txt",
+              "lines": [
+                1,
+                1
+              ],
+              "run": null
+            },
+            "judge": null,
+            "sent": null
+          }
+        ],
+        "graph": {
+          "order": [
+            "f1"
+          ],
+          "refusals": []
+        },
+        "verdicts": [
+          {
+            "id": "v1",
+            "outcome": "refused",
+            "reason": "closing_second_hand",
+            "strict_outcome": "dropped",
+            "strict_reason": "closing_second_hand"
+          }
+        ],
+        "open_items": [],
+        "counts": {
+          "pass": 1,
+          "keep_marked": 0,
+          "returned": 0,
+          "dropped": 0,
+          "not_judged": 0
+        },
+        "drop_reasons": {
+          "closing_second_hand": 1
+        },
+        "judge_counts": {
+          "direct_passed": 1,
+          "llm_judged": 0,
+          "derived_judged": 0,
+          "not_judged": 0
+        },
+        "report": {
+          "direct_passed": 1,
+          "llm_judged": 0,
+          "derived": 0,
+          "kept_with_mark": 0,
+          "returned": 0,
+          "not_judged": 0,
+          "dropped": {
+            "total": 0,
+            "by_reason": {}
+          },
+          "by_stated_kind": {
+            "direct": {
+              "stated": 1,
+              "checked_as_direct": 1
+            },
+            "llm": {
+              "stated": 0,
+              "checked_as_direct": 0
+            },
+            "derived": {
+              "stated": 0,
+              "checked_as_direct": 0
+            }
+          },
+          "worded": 0,
+          "judged": 0
+        }
+      }
+    },
+    {
+      "name": "delegate_status_quote_in_harness_fields",
+      "note": "A delegate_status result: a quote found in the saved text with the child's own words emptied is first-hand, so the closing verdict on it stands.",
+      "input": {
+        "checkout_root": "/srv/work/proj",
+        "walk": [
+          {
+            "id": "w1",
+            "tool": "delegate_status",
+            "args": {
+              "run_id": "r1",
+              "purpose": "read the result"
+            },
+            "args_used": {
+              "run_id": "r1"
+            },
+            "saved_result": "results/w1.txt"
+          }
+        ],
+        "results": {
+          "results/w1.txt": "{\"outcome\":\"clean\",\"merge\":\"merged\",\"unchecked_final_reply\":\"all 12 tests pass\"}\n"
+        },
+        "prior_runs": {},
+        "children": [],
+        "finish": {
+          "facts": [
+            {
+              "id": "f1",
+              "source": "w1",
+              "value": "merged",
+              "quote": "\"merge\":\"merged\""
+            }
+          ],
+          "verdicts": [
+            {
+              "id": "v1",
+              "text": "The delegated run was merged.",
+              "verdict": "supported",
+              "basis": [
+                "f1"
+              ],
+              "closing": true
+            }
+          ],
+          "open_items": []
+        },
+        "contract": {
+          "strict": {
+            "keep_marked": [
+              "part",
+              "little"
+            ],
+            "drop": [
+              "none"
+            ],
+            "mark_text": "evidence shows part of the value",
+            "derived_decides_drops": false,
+            "derived_passes": [
+              "yes",
+              "mostly"
+            ]
+          },
+          "support_passes": [
+            "all",
+            "mostly"
+          ],
+          "min_quote_length": 8,
+          "retry_rounds": 2,
+          "source_kinds": {
+            "delegate_status": "agent"
+          }
+        },
+        "decider": {},
+        "returned_before": [],
+        "rounds_left": 2
+      },
+      "expect": {
+        "facts": [
+          {
+            "id": "f1",
+            "kind_stated": "direct",
+            "kind_checked": "direct",
+            "worded": false,
+            "status": "passed",
+            "strict_outcome": "pass",
+            "drop_reason": null,
+            "dropped_by": null,
+            "evidence": null,
+            "judge": null,
+            "sent": null
+          }
+        ],
+        "graph": {
+          "order": [
+            "f1"
+          ],
+          "refusals": []
+        },
+        "verdicts": [
+          {
+            "id": "v1",
+            "outcome": "accepted",
+            "reason": null,
+            "strict_outcome": "pass",
+            "strict_reason": null
+          }
+        ],
+        "open_items": [],
+        "counts": {
+          "pass": 1,
+          "keep_marked": 0,
+          "returned": 0,
+          "dropped": 0,
+          "not_judged": 0
+        },
+        "drop_reasons": {},
+        "judge_counts": {
+          "direct_passed": 1,
+          "llm_judged": 0,
+          "derived_judged": 0,
+          "not_judged": 0
+        },
+        "report": {
+          "direct_passed": 1,
+          "llm_judged": 0,
+          "derived": 0,
+          "kept_with_mark": 0,
+          "returned": 0,
+          "not_judged": 0,
+          "dropped": {
+            "total": 0,
+            "by_reason": {}
+          },
+          "by_stated_kind": {
+            "direct": {
+              "stated": 1,
+              "checked_as_direct": 1
+            },
+            "llm": {
+              "stated": 0,
+              "checked_as_direct": 0
+            },
+            "derived": {
+              "stated": 0,
+              "checked_as_direct": 0
+            }
+          },
+          "worded": 0,
+          "judged": 0
+        }
+      }
+    },
+    {
+      "name": "delegate_status_pointer_reaches_child_words",
+      "note": "The same delegate_status result with a pointer: the copied line holds the child's own words, so it is not found once they are emptied; the fact passes but is second-hand, and the closing verdict on it is dropped (closing_second_hand).",
+      "input": {
+        "checkout_root": "/srv/work/proj",
+        "walk": [
+          {
+            "id": "w1",
+            "tool": "delegate_status",
+            "args": {
+              "run_id": "r1",
+              "purpose": "read the result"
+            },
+            "args_used": {
+              "run_id": "r1"
+            },
+            "saved_result": "results/w1.txt"
+          }
+        ],
+        "results": {
+          "results/w1.txt": "{\"outcome\":\"clean\",\"merge\":\"merged\",\"unchecked_final_reply\":\"all 12 tests pass\"}\n"
+        },
+        "prior_runs": {},
+        "children": [],
+        "finish": {
+          "facts": [
+            {
+              "id": "f1",
+              "source": "w1",
+              "at": {
+                "lines": [
+                  1,
+                  1
+                ]
+              }
+            }
+          ],
+          "verdicts": [
+            {
+              "id": "v1",
+              "text": "The delegated run was merged.",
+              "verdict": "supported",
+              "basis": [
+                "f1"
+              ],
+              "closing": true
+            }
+          ],
+          "open_items": []
+        },
+        "contract": {
+          "strict": {
+            "keep_marked": [
+              "part",
+              "little"
+            ],
+            "drop": [
+              "none"
+            ],
+            "mark_text": "evidence shows part of the value",
+            "derived_decides_drops": false,
+            "derived_passes": [
+              "yes",
+              "mostly"
+            ]
+          },
+          "support_passes": [
+            "all",
+            "mostly"
+          ],
+          "min_quote_length": 8,
+          "retry_rounds": 2,
+          "source_kinds": {
+            "delegate_status": "agent"
+          }
+        },
+        "decider": {},
+        "returned_before": [],
+        "rounds_left": 2
+      },
+      "expect": {
+        "facts": [
+          {
+            "id": "f1",
+            "kind_stated": "direct",
+            "kind_checked": "direct",
+            "worded": false,
+            "status": "passed",
+            "strict_outcome": "pass",
+            "drop_reason": null,
+            "dropped_by": null,
+            "evidence": {
+              "quote": "{\"outcome\":\"clean\",\"merge\":\"merged\",\"unchecked_final_reply\":\"all 12 tests pass\"}",
+              "command": "delegate_status run_id=r1",
+              "command_from": "args_used",
+              "result_file": "results/w1.txt",
+              "lines": [
+                1,
+                1
+              ],
+              "run": null
+            },
+            "judge": null,
+            "sent": null
+          }
+        ],
+        "graph": {
+          "order": [
+            "f1"
+          ],
+          "refusals": []
+        },
+        "verdicts": [
+          {
+            "id": "v1",
+            "outcome": "refused",
+            "reason": "closing_second_hand",
+            "strict_outcome": "dropped",
+            "strict_reason": "closing_second_hand"
+          }
+        ],
+        "open_items": [],
+        "counts": {
+          "pass": 1,
+          "keep_marked": 0,
+          "returned": 0,
+          "dropped": 0,
+          "not_judged": 0
+        },
+        "drop_reasons": {
+          "closing_second_hand": 1
+        },
+        "judge_counts": {
+          "direct_passed": 1,
+          "llm_judged": 0,
+          "derived_judged": 0,
+          "not_judged": 0
+        },
+        "report": {
+          "direct_passed": 1,
+          "llm_judged": 0,
+          "derived": 0,
+          "kept_with_mark": 0,
+          "returned": 0,
+          "not_judged": 0,
+          "dropped": {
+            "total": 0,
+            "by_reason": {}
+          },
+          "by_stated_kind": {
+            "direct": {
+              "stated": 1,
+              "checked_as_direct": 1
+            },
+            "llm": {
+              "stated": 0,
+              "checked_as_direct": 0
+            },
+            "derived": {
+              "stated": 0,
+              "checked_as_direct": 0
+            }
+          },
+          "worded": 0,
+          "judged": 0
+        }
+      }
+    },
+    {
+      "name": "derived_decides_drops_true",
+      "note": "With derived_decides_drops true a derived answer decides: yes and mostly (derived_passes) pass, any other answer drops the fact (decider_drop); it is never returned or kept marked. A derived fact resting on one dropped this way was sent in the same step: it is dropped by the cascade and keeps its answer.",
+      "input": {
+        "checkout_root": "/srv/work/proj",
+        "walk": [
+          {
+            "id": "w1",
+            "tool": "bash",
+            "args": {
+              "argv": [
+                "ls",
+                "tests"
+              ],
+              "purpose": "count the tests"
+            },
+            "args_used": {
+              "argv": [
+                "ls",
+                "tests"
+              ]
+            },
+            "saved_result": "results/w1.txt"
+          }
+        ],
+        "results": {
+          "results/w1.txt": "604\n"
+        },
+        "prior_runs": {},
+        "children": [],
+        "finish": {
+          "facts": [
+            {
+              "id": "f1",
+              "source": "w1",
+              "at": {
+                "lines": [
+                  1,
+                  1
+                ]
+              }
+            },
+            {
+              "id": "f2",
+              "kind": "derived",
+              "source": "w1",
+              "at": {
+                "lines": [
+                  1,
+                  1
+                ]
+              },
+              "value": "the tests directory is large",
+              "based_on": [
+                "f1"
+              ]
+            },
+            {
+              "id": "f3",
+              "kind": "derived",
+              "source": "w1",
+              "at": {
+                "lines": [
+                  1,
+                  1
+                ]
+              },
+              "value": "the tests directory holds hundreds of entries",
+              "based_on": [
+                "f1"
+              ]
+            },
+            {
+              "id": "f4",
+              "kind": "derived",
+              "source": "w1",
+              "at": {
+                "lines": [
+                  1,
+                  1
+                ]
+              },
+              "value": "every test passes",
+              "based_on": [
+                "f1"
+              ]
+            },
+            {
+              "id": "f5",
+              "kind": "derived",
+              "source": "w1",
+              "at": {
+                "lines": [
+                  1,
+                  1
+                ]
+              },
+              "value": "the project is tested well",
+              "based_on": [
+                "f1"
+              ]
+            },
+            {
+              "id": "f6",
+              "kind": "derived",
+              "source": "w1",
+              "at": {
+                "lines": [
+                  1,
+                  1
+                ]
+              },
+              "value": "there are no tests",
+              "based_on": [
+                "f1"
+              ]
+            },
+            {
+              "id": "f7",
+              "kind": "derived",
+              "source": "w1",
+              "at": {
+                "lines": [
+                  1,
+                  1
+                ]
+              },
+              "value": "the suite can be trusted",
+              "based_on": [
+                "f4"
+              ]
+            },
+            {
+              "id": "f8",
+              "source": "w1",
+              "at": {
+                "lines": [
+                  1,
+                  1
+                ]
+              },
+              "based_on": [
+                "f6"
+              ]
+            }
+          ],
+          "verdicts": [],
+          "open_items": []
+        },
+        "contract": {
+          "strict": {
+            "keep_marked": [
+              "part",
+              "little"
+            ],
+            "drop": [
+              "none"
+            ],
+            "mark_text": "evidence shows part of the value",
+            "derived_decides_drops": true,
+            "derived_passes": [
+              "yes",
+              "mostly"
+            ]
+          },
+          "support_passes": [
+            "all",
+            "mostly"
+          ],
+          "min_quote_length": 8,
+          "retry_rounds": 2,
+          "source_kinds": {
+            "bash": "tool"
+          }
+        },
+        "decider": {
+          "f2": {
+            "question": "derived",
+            "option": "yes"
+          },
+          "f3": {
+            "question": "derived",
+            "option": "mostly"
+          },
+          "f4": {
+            "question": "derived",
+            "option": "partly"
+          },
+          "f5": {
+            "question": "derived",
+            "option": "little"
+          },
+          "f6": {
+            "question": "derived",
+            "option": "no"
+          },
+          "f7": {
+            "question": "derived",
+            "option": "yes"
+          }
+        },
+        "returned_before": [],
+        "rounds_left": 2
+      },
+      "expect": {
+        "facts": [
+          {
+            "id": "f1",
+            "kind_stated": "direct",
+            "kind_checked": "direct",
+            "worded": false,
+            "status": "passed",
+            "strict_outcome": "pass",
+            "drop_reason": null,
+            "dropped_by": null,
+            "evidence": {
+              "quote": "604",
+              "command": "ls tests",
+              "command_from": "args_used",
+              "result_file": "results/w1.txt",
+              "lines": [
+                1,
+                1
+              ],
+              "run": null
+            },
+            "judge": null,
+            "sent": null
+          },
+          {
+            "id": "f2",
+            "kind_stated": "derived",
+            "kind_checked": "derived",
+            "worded": true,
+            "status": "judged",
+            "strict_outcome": "pass",
+            "drop_reason": null,
+            "dropped_by": null,
+            "evidence": {
+              "quote": "604",
+              "command": "ls tests",
+              "command_from": "args_used",
+              "result_file": "results/w1.txt",
+              "lines": [
+                1,
+                1
+              ],
+              "run": null
+            },
+            "judge": {
+              "question": "derived",
+              "option": "yes",
+              "reason": null
+            },
+            "sent": {
+              "question": "derived",
+              "value": "the tests directory is large",
+              "evidence": "f1: (no value given; its copied quote) 604"
+            }
+          },
+          {
+            "id": "f3",
+            "kind_stated": "derived",
+            "kind_checked": "derived",
+            "worded": true,
+            "status": "judged",
+            "strict_outcome": "pass",
+            "drop_reason": null,
+            "dropped_by": null,
+            "evidence": {
+              "quote": "604",
+              "command": "ls tests",
+              "command_from": "args_used",
+              "result_file": "results/w1.txt",
+              "lines": [
+                1,
+                1
+              ],
+              "run": null
+            },
+            "judge": {
+              "question": "derived",
+              "option": "mostly",
+              "reason": null
+            },
+            "sent": {
+              "question": "derived",
+              "value": "the tests directory holds hundreds of entries",
+              "evidence": "f1: (no value given; its copied quote) 604"
+            }
+          },
+          {
+            "id": "f4",
+            "kind_stated": "derived",
+            "kind_checked": "derived",
+            "worded": true,
+            "status": "judged",
+            "strict_outcome": "dropped",
+            "drop_reason": "decider_drop",
+            "dropped_by": null,
+            "evidence": {
+              "quote": "604",
+              "command": "ls tests",
+              "command_from": "args_used",
+              "result_file": "results/w1.txt",
+              "lines": [
+                1,
+                1
+              ],
+              "run": null
+            },
+            "judge": {
+              "question": "derived",
+              "option": "partly",
+              "reason": null
+            },
+            "sent": {
+              "question": "derived",
+              "value": "every test passes",
+              "evidence": "f1: (no value given; its copied quote) 604"
+            }
+          },
+          {
+            "id": "f5",
+            "kind_stated": "derived",
+            "kind_checked": "derived",
+            "worded": true,
+            "status": "judged",
+            "strict_outcome": "dropped",
+            "drop_reason": "decider_drop",
+            "dropped_by": null,
+            "evidence": {
+              "quote": "604",
+              "command": "ls tests",
+              "command_from": "args_used",
+              "result_file": "results/w1.txt",
+              "lines": [
+                1,
+                1
+              ],
+              "run": null
+            },
+            "judge": {
+              "question": "derived",
+              "option": "little",
+              "reason": null
+            },
+            "sent": {
+              "question": "derived",
+              "value": "the project is tested well",
+              "evidence": "f1: (no value given; its copied quote) 604"
+            }
+          },
+          {
+            "id": "f6",
+            "kind_stated": "derived",
+            "kind_checked": "derived",
+            "worded": true,
+            "status": "judged",
+            "strict_outcome": "dropped",
+            "drop_reason": "decider_drop",
+            "dropped_by": null,
+            "evidence": {
+              "quote": "604",
+              "command": "ls tests",
+              "command_from": "args_used",
+              "result_file": "results/w1.txt",
+              "lines": [
+                1,
+                1
+              ],
+              "run": null
+            },
+            "judge": {
+              "question": "derived",
+              "option": "no",
+              "reason": null
+            },
+            "sent": {
+              "question": "derived",
+              "value": "there are no tests",
+              "evidence": "f1: (no value given; its copied quote) 604"
+            }
+          },
+          {
+            "id": "f7",
+            "kind_stated": "derived",
+            "kind_checked": "derived",
+            "worded": true,
+            "status": "dropped",
+            "strict_outcome": "dropped",
+            "drop_reason": "based_on_failed",
+            "dropped_by": "f4",
+            "evidence": {
+              "quote": "604",
+              "command": "ls tests",
+              "command_from": "args_used",
+              "result_file": "results/w1.txt",
+              "lines": [
+                1,
+                1
+              ],
+              "run": null
+            },
+            "judge": {
+              "question": "derived",
+              "option": "yes",
+              "reason": null
+            },
+            "sent": {
+              "question": "derived",
+              "value": "the suite can be trusted",
+              "evidence": "f4: every test passes"
+            }
+          },
+          {
+            "id": "f8",
+            "kind_stated": "direct",
+            "kind_checked": "direct",
+            "worded": false,
+            "status": "dropped",
+            "strict_outcome": "dropped",
+            "drop_reason": "based_on_failed",
+            "dropped_by": "f6",
+            "evidence": {
+              "quote": "604",
+              "command": "ls tests",
+              "command_from": "args_used",
+              "result_file": "results/w1.txt",
+              "lines": [
+                1,
+                1
+              ],
+              "run": null
+            },
+            "judge": null,
+            "sent": null
+          }
+        ],
+        "graph": {
+          "order": [
+            "f1",
+            "f2",
+            "f3",
+            "f4",
+            "f5",
+            "f6",
+            "f7",
+            "f8"
+          ],
+          "refusals": []
+        },
+        "verdicts": [],
+        "open_items": [],
+        "counts": {
+          "pass": 3,
+          "keep_marked": 0,
+          "returned": 0,
+          "dropped": 5,
+          "not_judged": 0
+        },
+        "drop_reasons": {
+          "decider_drop": 3,
+          "based_on_failed": 2
+        },
+        "judge_counts": {
+          "direct_passed": 1,
+          "llm_judged": 0,
+          "derived_judged": 6,
+          "not_judged": 0
+        },
+        "report": {
+          "direct_passed": 1,
+          "llm_judged": 0,
+          "derived": 2,
+          "kept_with_mark": 0,
+          "returned": 0,
+          "not_judged": 0,
+          "dropped": {
+            "total": 5,
+            "by_reason": {
+              "decider_drop": 3,
+              "based_on_failed": 2
+            }
+          },
+          "by_stated_kind": {
+            "direct": {
+              "stated": 2,
+              "checked_as_direct": 1
+            },
+            "llm": {
+              "stated": 0,
+              "checked_as_direct": 0
+            },
+            "derived": {
+              "stated": 6,
+              "checked_as_direct": 0
+            }
+          },
+          "worded": 6,
+          "judged": 6
+        }
+      }
+    },
+    {
+      "name": "derived_passes_absent_fails_closed",
+      "note": "derived_decides_drops true and no derived_passes in the contract: no answer passes, so every answered derived fact is dropped (decider_drop), yes included.",
+      "input": {
+        "checkout_root": "/srv/work/proj",
+        "walk": [
+          {
+            "id": "w1",
+            "tool": "bash",
+            "args": {
+              "argv": [
+                "ls",
+                "tests"
+              ],
+              "purpose": "count the tests"
+            },
+            "args_used": {
+              "argv": [
+                "ls",
+                "tests"
+              ]
+            },
+            "saved_result": "results/w1.txt"
+          }
+        ],
+        "results": {
+          "results/w1.txt": "604\n"
+        },
+        "prior_runs": {},
+        "children": [],
+        "finish": {
+          "facts": [
+            {
+              "id": "f1",
+              "source": "w1",
+              "at": {
+                "lines": [
+                  1,
+                  1
+                ]
+              }
+            },
+            {
+              "id": "f2",
+              "kind": "derived",
+              "source": "w1",
+              "at": {
+                "lines": [
+                  1,
+                  1
+                ]
+              },
+              "value": "the tests directory is large",
+              "based_on": [
+                "f1"
+              ]
+            },
+            {
+              "id": "f3",
+              "kind": "derived",
+              "source": "w1",
+              "at": {
+                "lines": [
+                  1,
+                  1
+                ]
+              },
+              "value": "the tests directory holds hundreds of entries",
+              "based_on": [
+                "f1"
+              ]
+            }
+          ],
+          "verdicts": [],
+          "open_items": []
+        },
+        "contract": {
+          "strict": {
+            "keep_marked": [
+              "part",
+              "little"
+            ],
+            "drop": [
+              "none"
+            ],
+            "mark_text": "evidence shows part of the value",
+            "derived_decides_drops": true
+          },
+          "support_passes": [
+            "all",
+            "mostly"
+          ],
+          "min_quote_length": 8,
+          "retry_rounds": 2,
+          "source_kinds": {
+            "bash": "tool"
+          }
+        },
+        "decider": {
+          "f2": {
+            "question": "derived",
+            "option": "yes"
+          },
+          "f3": {
+            "question": "derived",
+            "option": "mostly"
+          }
+        },
+        "returned_before": [],
+        "rounds_left": 2
+      },
+      "expect": {
+        "facts": [
+          {
+            "id": "f1",
+            "kind_stated": "direct",
+            "kind_checked": "direct",
+            "worded": false,
+            "status": "passed",
+            "strict_outcome": "pass",
+            "drop_reason": null,
+            "dropped_by": null,
+            "evidence": {
+              "quote": "604",
+              "command": "ls tests",
+              "command_from": "args_used",
+              "result_file": "results/w1.txt",
+              "lines": [
+                1,
+                1
+              ],
+              "run": null
+            },
+            "judge": null,
+            "sent": null
+          },
+          {
+            "id": "f2",
+            "kind_stated": "derived",
+            "kind_checked": "derived",
+            "worded": true,
+            "status": "judged",
+            "strict_outcome": "dropped",
+            "drop_reason": "decider_drop",
+            "dropped_by": null,
+            "evidence": {
+              "quote": "604",
+              "command": "ls tests",
+              "command_from": "args_used",
+              "result_file": "results/w1.txt",
+              "lines": [
+                1,
+                1
+              ],
+              "run": null
+            },
+            "judge": {
+              "question": "derived",
+              "option": "yes",
+              "reason": null
+            },
+            "sent": {
+              "question": "derived",
+              "value": "the tests directory is large",
+              "evidence": "f1: (no value given; its copied quote) 604"
+            }
+          },
+          {
+            "id": "f3",
+            "kind_stated": "derived",
+            "kind_checked": "derived",
+            "worded": true,
+            "status": "judged",
+            "strict_outcome": "dropped",
+            "drop_reason": "decider_drop",
+            "dropped_by": null,
+            "evidence": {
+              "quote": "604",
+              "command": "ls tests",
+              "command_from": "args_used",
+              "result_file": "results/w1.txt",
+              "lines": [
+                1,
+                1
+              ],
+              "run": null
+            },
+            "judge": {
+              "question": "derived",
+              "option": "mostly",
+              "reason": null
+            },
+            "sent": {
+              "question": "derived",
+              "value": "the tests directory holds hundreds of entries",
+              "evidence": "f1: (no value given; its copied quote) 604"
+            }
+          }
+        ],
+        "graph": {
+          "order": [
+            "f1",
+            "f2",
+            "f3"
+          ],
+          "refusals": []
+        },
+        "verdicts": [],
+        "open_items": [],
+        "counts": {
+          "pass": 1,
+          "keep_marked": 0,
+          "returned": 0,
+          "dropped": 2,
+          "not_judged": 0
+        },
+        "drop_reasons": {
+          "decider_drop": 2
+        },
+        "judge_counts": {
+          "direct_passed": 1,
+          "llm_judged": 0,
+          "derived_judged": 2,
+          "not_judged": 0
+        },
+        "report": {
+          "direct_passed": 1,
+          "llm_judged": 0,
+          "derived": 0,
+          "kept_with_mark": 0,
+          "returned": 0,
+          "not_judged": 0,
+          "dropped": {
+            "total": 2,
+            "by_reason": {
+              "decider_drop": 2
+            }
+          },
+          "by_stated_kind": {
+            "direct": {
+              "stated": 1,
+              "checked_as_direct": 1
+            },
+            "llm": {
+              "stated": 0,
+              "checked_as_direct": 0
+            },
+            "derived": {
+              "stated": 2,
+              "checked_as_direct": 0
+            }
+          },
+          "worded": 2,
+          "judged": 2
+        }
+      }
+    },
+    {
+      "name": "returned_before_only_changes_part_and_little",
+      "note": "returned_before matters only for a keep_marked answer: a fact named there and answered part is kept with the mark, one answered all passes, one answered none is dropped; a fact not named there and answered little is returned (a round is left). An id there that no fact has is ignored.",
+      "input": {
+        "checkout_root": "/srv/work/proj",
+        "walk": [
+          {
+            "id": "w1",
+            "tool": "run_tests",
+            "args": {
+              "purpose": "run the suite"
+            },
+            "args_used": {
+              "argv": [
+                "pytest",
+                "-q"
+              ]
+            },
+            "saved_result": "results/w1.txt"
+          }
+        ],
+        "results": {
+          "results/w1.txt": "collected 13 items\n12 passed, 1 skipped in 0.51s\n"
+        },
+        "prior_runs": {},
+        "children": [],
+        "finish": {
+          "facts": [
+            {
+              "id": "f1",
+              "kind": "llm",
+              "source": "w1",
+              "at": {
+                "lines": [
+                  2,
+                  2
+                ]
+              },
+              "value": "the whole suite passed"
+            },
+            {
+              "id": "f2",
+              "kind": "llm",
+              "source": "w1",
+              "at": {
+                "lines": [
+                  2,
+                  2
+                ]
+              },
+              "value": "12 tests passed and 1 was skipped"
+            },
+            {
+              "id": "f3",
+              "kind": "llm",
+              "source": "w1",
+              "at": {
+                "lines": [
+                  2,
+                  2
+                ]
+              },
+              "value": "no test was skipped"
+            },
+            {
+              "id": "f4",
+              "kind": "llm",
+              "source": "w1",
+              "at": {
+                "lines": [
+                  2,
+                  2
+                ]
+              },
+              "value": "the run was quick and clean"
+            },
+            {
+              "id": "f5",
+              "source": "w1",
+              "at": {
+                "lines": [
+                  2,
+                  2
+                ]
+              }
+            }
+          ],
+          "verdicts": [],
+          "open_items": []
+        },
+        "contract": {
+          "strict": {
+            "keep_marked": [
+              "part",
+              "little"
+            ],
+            "drop": [
+              "none"
+            ],
+            "mark_text": "evidence shows part of the value",
+            "derived_decides_drops": false,
+            "derived_passes": [
+              "yes",
+              "mostly"
+            ]
+          },
+          "support_passes": [
+            "all",
+            "mostly"
+          ],
+          "min_quote_length": 8,
+          "retry_rounds": 2,
+          "source_kinds": {
+            "run_tests": "tool"
+          }
+        },
+        "decider": {
+          "f1": {
+            "question": "support",
+            "option": "part"
+          },
+          "f2": {
+            "question": "support",
+            "option": "all"
+          },
+          "f3": {
+            "question": "support",
+            "option": "none"
+          },
+          "f4": {
+            "question": "support",
+            "option": "little"
+          }
+        },
+        "returned_before": [
+          "f1",
+          "f2",
+          "f3",
+          "f9"
+        ],
+        "rounds_left": 1
+      },
+      "expect": {
+        "facts": [
+          {
+            "id": "f1",
+            "kind_stated": "llm",
+            "kind_checked": "llm",
+            "worded": true,
+            "status": "judged",
+            "strict_outcome": "keep_marked",
+            "drop_reason": null,
+            "dropped_by": null,
+            "evidence": {
+              "quote": "12 passed, 1 skipped in 0.51s",
+              "command": "run_tests argv=[\"pytest\",\"-q\"]",
+              "command_from": "args_used",
+              "result_file": "results/w1.txt",
+              "lines": [
+                2,
+                2
+              ],
+              "run": null
+            },
+            "judge": {
+              "question": "support",
+              "option": "part",
+              "reason": null
+            },
+            "sent": {
+              "question": "support",
+              "value": "the whole suite passed",
+              "evidence": "command: run_tests argv=[\"pytest\",\"-q\"]\n12 passed, 1 skipped in 0.51s"
+            }
+          },
+          {
+            "id": "f2",
+            "kind_stated": "llm",
+            "kind_checked": "llm",
+            "worded": true,
+            "status": "judged",
+            "strict_outcome": "pass",
+            "drop_reason": null,
+            "dropped_by": null,
+            "evidence": {
+              "quote": "12 passed, 1 skipped in 0.51s",
+              "command": "run_tests argv=[\"pytest\",\"-q\"]",
+              "command_from": "args_used",
+              "result_file": "results/w1.txt",
+              "lines": [
+                2,
+                2
+              ],
+              "run": null
+            },
+            "judge": {
+              "question": "support",
+              "option": "all",
+              "reason": null
+            },
+            "sent": {
+              "question": "support",
+              "value": "12 tests passed and 1 was skipped",
+              "evidence": "command: run_tests argv=[\"pytest\",\"-q\"]\n12 passed, 1 skipped in 0.51s"
+            }
+          },
+          {
+            "id": "f3",
+            "kind_stated": "llm",
+            "kind_checked": "llm",
+            "worded": true,
+            "status": "judged",
+            "strict_outcome": "dropped",
+            "drop_reason": "decider_drop",
+            "dropped_by": null,
+            "evidence": {
+              "quote": "12 passed, 1 skipped in 0.51s",
+              "command": "run_tests argv=[\"pytest\",\"-q\"]",
+              "command_from": "args_used",
+              "result_file": "results/w1.txt",
+              "lines": [
+                2,
+                2
+              ],
+              "run": null
+            },
+            "judge": {
+              "question": "support",
+              "option": "none",
+              "reason": null
+            },
+            "sent": {
+              "question": "support",
+              "value": "no test was skipped",
+              "evidence": "command: run_tests argv=[\"pytest\",\"-q\"]\n12 passed, 1 skipped in 0.51s"
+            }
+          },
+          {
+            "id": "f4",
+            "kind_stated": "llm",
+            "kind_checked": "llm",
+            "worded": true,
+            "status": "judged",
+            "strict_outcome": "returned",
+            "drop_reason": null,
+            "dropped_by": null,
+            "evidence": {
+              "quote": "12 passed, 1 skipped in 0.51s",
+              "command": "run_tests argv=[\"pytest\",\"-q\"]",
+              "command_from": "args_used",
+              "result_file": "results/w1.txt",
+              "lines": [
+                2,
+                2
+              ],
+              "run": null
+            },
+            "judge": {
+              "question": "support",
+              "option": "little",
+              "reason": null
+            },
+            "sent": {
+              "question": "support",
+              "value": "the run was quick and clean",
+              "evidence": "command: run_tests argv=[\"pytest\",\"-q\"]\n12 passed, 1 skipped in 0.51s"
+            }
+          },
+          {
+            "id": "f5",
+            "kind_stated": "direct",
+            "kind_checked": "direct",
+            "worded": false,
+            "status": "passed",
+            "strict_outcome": "pass",
+            "drop_reason": null,
+            "dropped_by": null,
+            "evidence": {
+              "quote": "12 passed, 1 skipped in 0.51s",
+              "command": "run_tests argv=[\"pytest\",\"-q\"]",
+              "command_from": "args_used",
+              "result_file": "results/w1.txt",
+              "lines": [
+                2,
+                2
+              ],
+              "run": null
+            },
+            "judge": null,
+            "sent": null
+          }
+        ],
+        "graph": {
+          "order": [
+            "f1",
+            "f2",
+            "f3",
+            "f4",
+            "f5"
+          ],
+          "refusals": []
+        },
+        "verdicts": [],
+        "open_items": [],
+        "counts": {
+          "pass": 2,
+          "keep_marked": 1,
+          "returned": 1,
+          "dropped": 1,
+          "not_judged": 0
+        },
+        "drop_reasons": {
+          "decider_drop": 1
+        },
+        "judge_counts": {
+          "direct_passed": 1,
+          "llm_judged": 4,
+          "derived_judged": 0,
+          "not_judged": 0
+        },
+        "report": {
+          "direct_passed": 1,
+          "llm_judged": 1,
+          "derived": 0,
+          "kept_with_mark": 1,
+          "returned": 1,
+          "not_judged": 0,
+          "dropped": {
+            "total": 1,
+            "by_reason": {
+              "decider_drop": 1
+            }
+          },
+          "by_stated_kind": {
+            "direct": {
+              "stated": 1,
+              "checked_as_direct": 1
+            },
+            "llm": {
+              "stated": 4,
+              "checked_as_direct": 0
+            },
+            "derived": {
+              "stated": 0,
+              "checked_as_direct": 0
+            }
+          },
+          "worded": 4,
+          "judged": 4
+        }
+      }
     }
   ]
 }

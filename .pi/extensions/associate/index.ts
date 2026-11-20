@@ -585,6 +585,8 @@ export default async function (pi: ExtensionAPI) {
       sourceKinds: accuracy.source_kinds,
     });
     const judgeBudget = createJudgeBudget(judgeSettings);
+    // The ids returned in earlier rounds of this prompt, as runStrict is given them (this round's are added below).
+    const returnedBefore = [...strictReturned].sort();
     const { check, decision } = await runStrict({
       handbackInput,
       accuracy,
@@ -621,6 +623,8 @@ export default async function (pi: ExtensionAPI) {
       retry_rounds: allowed,
       rounds_used: strictRounds,
       round_open: sendBack,
+      // Why a keep_marked fact was not returned: its id is here (returned before), or no round was left.
+      returned_before: returnedBefore,
       counts: decision.counts,
       drop_reasons: decision.drop_reasons,
       judge_counts: decision.judge_counts,
