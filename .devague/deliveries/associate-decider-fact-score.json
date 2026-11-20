@@ -2,7 +2,7 @@
   "plan_slug": "associate-decider-fact-score",
   "schema_version": 2,
   "created": "2026-11-19T06:30:45Z",
-  "updated": "2026-11-20T18:42:26Z",
+  "updated": "2026-11-20T23:55:44Z",
   "deviations": [
     {
       "id": "d1",
@@ -255,6 +255,25 @@
       "status": "approved",
       "superseded": false,
       "seq": 15
+    },
+    {
+      "id": "e10",
+      "obligation_ref": "o5",
+      "test_ref": "tests/test_support_wording.py (120 cases)",
+      "behavior_text": "a sentence that calls the support score or a count of it accuracy, a true measure, how right, or says it proves or makes the value true is a finding unless a denial stands in the same clause within six words; 27 bad sentences are found and 24 good ones pass; files are found through git ls-files",
+      "contract_text": "c23: the score is never called accuracy",
+      "evidence_type": "automated",
+      "strength": "sensitivity",
+      "strength_basis": "pytest on the closing branch: pass. Adds to e8 the three phrasings an outside review of PR 42 showed escaping (true measure, proves the value true, how right). Still blind to words outside TERMS and to a claim whose subject in a mixed file is only 'the score' or a pronoun",
+      "outcome": "pass",
+      "run": {
+        "timestamp": "2026-11-20T23:55:44Z",
+        "commit": "6b84cbf"
+      },
+      "origin": "llm",
+      "status": "proposed",
+      "superseded": false,
+      "seq": 16
     }
   ],
   "deltas": [
