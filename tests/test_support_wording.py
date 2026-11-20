@@ -38,7 +38,7 @@ What the rule cannot see:
 
 - in a mixed file, a claim that names its subject only as "the score", "the
   count", "it" or "they", or in a sentence before;
-- a claim in words that are not in ``TERMS`` ("the score tells you how right
+- a claim in words that are not in ``TERMS`` ("the score tells you how good
   the model is"), or one split across two sentences;
 - a denial that is real but stands further off than ``NEAR`` words or across a
   clause break is reported as a finding; the sentence has to be reworded;
@@ -82,8 +82,10 @@ TERM_FORMS = (
     r"(?:correctness|correct|truth) (?:rate|score)s?",
     r"rates? of correct\w*",
     r"correctness|how correct|(?:is|are) correct",
-    # the direct claim: the score "says the value is true", a pass "proves that the fact is true"
-    r"(?:says?|shows?|means?|proves?) (?:that )?(?:the|a) (?:value|fact) is true",
+    # the direct claim: the score "says the value is true", a pass "proves the value true"
+    r"(?:says?|shows?|means?|proves?|makes?) (?:that )?(?:the|a) (?:value|fact) (?:is )?true",
+    # the same claim in other words: "a true measure of the worker", "how right the model is"
+    r"true measures?|how right",
 )
 TERMS = re.compile(rf"\b{_any(TERM_FORMS)}\b", re.IGNORECASE | re.ASCII)
 
@@ -440,6 +442,9 @@ BAD = [
     "The count of passed facts shows how correct the model is.",
     "A passed fact is correct.",
     "The support score is not a count, it is accuracy and nothing else.",
+    "The support score gives a true measure of the worker.",
+    "The support mark proves the value true.",
+    "The support score tells you how right the model is.",
 ]
 
 GOOD = [
@@ -465,6 +470,8 @@ GOOD = [
     "The `accuracy` block holds the passed count.",
     "The support score is read from `result.accuracy` by the harness.",
     "No text of this work calls the support score or a count of it accuracy.",
+    "The support score is not a true measure of the worker.",
+    "A support mark does not make the value true.",
 ]
 
 #: Sentences of a mixed file that hold a term and are not about the support score.
