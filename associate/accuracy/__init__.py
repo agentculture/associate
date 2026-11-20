@@ -105,6 +105,7 @@ from evidence.accuracy.check import (  # noqa: E402 - only after the version che
 from evidence.accuracy.counts import fact_counts  # noqa: E402
 from evidence.accuracy.matcher import check_quote  # noqa: E402
 
+from associate.accuracy import strict as _strict  # noqa: E402
 from associate.accuracy import support as _support  # noqa: E402
 
 
@@ -141,6 +142,18 @@ def accuracy_result(
     result = _recheck_result(
         export_dir, accuracy, continue_from=continue_from, check_mode=check_mode
     )
+    strict = _strict.read_strict(export_dir)
+    if strict is not None:
+        # evidence-cli 0.7.x reads only the quote shape and would refuse every
+        # strict fact; the re-check is reported as not run, the extension's
+        # counts are copied under their own label (associate.accuracy.strict).
+        result = {
+            **result,
+            "accuracy": _strict.mask_accuracy(result["accuracy"]),
+            _strict.RESULT_KEY: strict,
+        }
+        # The support copy matches facts the re-check passed; it passed none.
+        return result
     # The two score files are read once. evidence-cli's accuracy_result runs
     # inspect_export inside itself and does not hand its facts back, so the
     # facts for the support copy need one more run, and only when the export

@@ -22,6 +22,13 @@ deviation d3), the result gains ``finish_reminder`` (``{"sent",
 "finish_followed"}``) and the text form ends with one ``Finish reminder:`` line.
 An export without it prints exactly what it printed before (see
 :mod:`associate.accuracy.reminder`).
+
+A strict export (``check.json`` mode ``strict``; its facts point with ``at``
+and carry no quote) is not re-checked: evidence-cli 0.7.x knows only the quote
+shape and would refuse every fact. The result says the re-check did not run
+(``python_recheck_ran`` false and ``not_applicable_reason``), and carries the
+extension's counts under ``strict``, labelled ``source: extension``
+(:mod:`associate.accuracy.strict`).
 """
 
 from __future__ import annotations
@@ -102,6 +109,10 @@ def render(result: dict[str, Any]) -> str:
     out += ["", "Calls", *_calls_lines(result), *_unsupported_runs_lines(result), "", "Facts"]
     if not result["applicable"]:
         out.append(f"  not applicable: {result['not_applicable_reason']}")
+        if isinstance(result.get("strict"), dict):
+            from associate.accuracy.strict import count_lines
+
+            out += ["", *count_lines(result["strict"])]
         return "\n".join([*out, *_closing_lines(result)])
     report = result["report"]
     out.append(_counts_line("all", report["facts"]))
@@ -128,6 +139,7 @@ def cmd_check(args: argparse.Namespace) -> int:
     # Imported here: without a usable evidence-cli this raises the exit-2 CliError.
     from associate.accuracy import ExportError, inspect_export
     from associate.accuracy.reminder import RESULT_KEY, read_reminder
+    from associate.accuracy.strict import mask_inspected, read_strict
     from associate.accuracy.support import option_keys, with_support
 
     json_mode = bool(getattr(args, "json", False))
@@ -141,8 +153,15 @@ def cmd_check(args: argparse.Namespace) -> int:
             message=str(err),
             remediation="pass an export directory holding walk.jsonl (<session>/export)",
         ) from err
-    # The support score is the extension's: copied from the export, never recomputed.
-    result = with_support(inspected, Path(args.export_dir), option_keys(accuracy))
+    strict = read_strict(Path(args.export_dir))
+    if strict is not None:
+        # evidence-cli reads only the quote shape: say it did not run, show the
+        # extension's counts as the extension's (associate.accuracy.strict). It
+        # holds no passed fact, so there is no support score to copy.
+        result = mask_inspected(inspected, strict)
+    else:
+        # The support score is the extension's: copied from the export, never recomputed.
+        result = with_support(inspected, Path(args.export_dir), option_keys(accuracy))
     held = read_reminder(Path(args.export_dir))
     if held is not None:
         result = {**result, RESULT_KEY: held}

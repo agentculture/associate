@@ -1,0 +1,7 @@
+{"summary":"The role table.","statements":[],"citations":[],"not_fully_read":false,"outcome":"returned","mode":"strict","facts_checked":{"made":2,"checked":1,"passed":1,"refused":0,"unchecked":1},"strict":{"round":1,"rounds_used":1,"rounds_left":2,"counts":{"pass":1,"keep_marked":0,"returned":0,"dropped":1,"not_judged":0},"drop_reasons":{"decider_drop":1},"judge_counts":{"direct_passed":1,"llm_judged":1,"derived_judged":0,"not_judged":0}}}
+Hand-back checked (strict facts), round 1 of 2: 1 dropped, 0 returned. The answer as it stands (1 fact, without the dropped and returned items) is recorded.
+
+Dropped (not in the answer):
+- f2 (cites w1): decider_drop. Fix: the decider answered 'none': the evidence does not show the value; point at the lines that show it, or leave the fact out
+
+You may fix these (tools are still available) and call finish again with the whole hand-back: 2 finish calls left, and the last one is accepted as it stands, without its dropped items. Or stop: the answer recorded now goes out as it is.

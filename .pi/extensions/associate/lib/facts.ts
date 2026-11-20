@@ -55,11 +55,12 @@
  * cited entry's tool (else the entry's harness-written `source_kind`). Agent
  * and memory kinds are second-hand: they are another model's words or a
  * remembered claim. One exception, `delegate_status`: its result is the
- * harness's own JSON, where `final_reply` is the delegated model's account and
- * every other field (outcome, merge, merge_reason, tests) was measured by the
- * harness. A fact quoting it is first-hand when its quote is still found in the
- * saved text with the `final_reply` string emptied; a quote reaching into
- * `final_reply`, or a result that is not such JSON, is second-hand.
+ * harness's own JSON, where `unchecked_final_reply` (`final_reply` in a result
+ * saved before the rename) is the delegated model's account and every other
+ * field (outcome, merge, merge_reason, tests) was measured by the harness. A
+ * fact quoting it is first-hand when its quote is still found in the saved text
+ * with that string emptied; a quote reaching into it, or a result that is not
+ * such JSON, is second-hand.
  *
  * Verdicts (first failing rule wins): a basis id naming no fact of the payload
  * (`unknown_fact`); a basis fact that was refused (`basis_refused`); supported
@@ -298,9 +299,11 @@ const SECOND_HAND_KINDS: ReadonlySet<SourceKind> = new Set<SourceKind>(["agent",
 const DELEGATE_STATUS_TOOL = "delegate_status";
 /**
  * The result fields that hold the child's own words: its final message, and the
- * rendered answer (which carries its finish summary and that message).
+ * rendered answer (which carries its finish summary and that message). The
+ * final message is `unchecked_final_reply` since the rename; `final_reply`
+ * stays listed so a result saved before it still has that field emptied.
  */
-const CHILD_ACCOUNT_KEYS: readonly string[] = ["final_reply", "answer"];
+const CHILD_ACCOUNT_KEYS: readonly string[] = ["unchecked_final_reply", "final_reply", "answer"];
 
 const REFERENCE = /^(?:([A-Za-z0-9_-]+):)?(w[1-9][0-9]*)$/;
 const LABEL = /^[A-Za-z0-9_-]+$/;

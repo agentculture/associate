@@ -1140,7 +1140,7 @@ def test_final_turn_keeps_the_last_assistant_reply_and_stop_reason():
         {"type": "agent_end", "messages": []},
     ]
     assert final_turn(events) == {
-        "final_reply": "I could not run id -u, so I stopped.",
+        "unchecked_final_reply": "I could not run id -u, so I stopped.",
         "stop_reason": "stop",
     }
 
@@ -1152,16 +1152,16 @@ def test_final_turn_reports_a_lane_error_and_redacts_and_bounds_the_reply():
     events = [_assistant_end("x" * 5000 + " " + secret, stop="error", errorMessage="503 " + secret)]
     turn = final_turn(events)
     assert turn["stop_reason"] == "error"
-    assert "sk-abcdefghijklmnop1234" not in turn["final_reply"]
+    assert "sk-abcdefghijklmnop1234" not in turn["unchecked_final_reply"]
     assert "sk-abcdefghijklmnop1234" not in turn["lane_error"]
-    assert len(turn["final_reply"]) <= FINAL_REPLY_CHARS
+    assert len(turn["unchecked_final_reply"]) <= FINAL_REPLY_CHARS
     assert turn["lane_error"].startswith("503")
 
 
 def test_final_turn_is_empty_when_no_assistant_message_arrived():
     from associate.harness.pi import final_turn
 
-    assert final_turn([]) == {"final_reply": "", "stop_reason": None}
+    assert final_turn([]) == {"unchecked_final_reply": "", "stop_reason": None}
 
 
 def test_the_run_result_says_how_the_run_ended(
@@ -1169,7 +1169,9 @@ def test_the_run_result_says_how_the_run_ended(
 ):
     assert _run(["--session-id", "final-turn", "--json"], checkout, tmp_path) == 0
     payload = json.loads(capsys.readouterr().out)
-    assert payload["final_reply"] == ""
+    assert payload["unchecked_final_reply"] == ""
+    assert "final_reply" not in payload, "the old key is absent, not duplicated"
+    assert "answer" in payload, "the checked answer sits beside the unchecked reply"
     assert payload["stop_reason"] is None
 
 

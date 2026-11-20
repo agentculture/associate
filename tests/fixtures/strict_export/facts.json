@@ -1,0 +1,29 @@
+{
+  "summary": "The role table.",
+  "facts": [
+    {
+      "id": "f1",
+      "kind": "direct",
+      "source": "w1",
+      "at": {
+        "lines": [
+          1,
+          1
+        ]
+      },
+      "value": "ROLE_RESPONSIBILITIES"
+    },
+    {
+      "id": "f2",
+      "kind": "llm",
+      "source": "w1",
+      "at": {
+        "lines": [
+          2,
+          2
+        ]
+      },
+      "value": "senses"
+    }
+  ]
+}

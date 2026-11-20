@@ -668,11 +668,18 @@ def _finished(reply: dict[str, Any], result: dict[str, Any]) -> None:
             "base_commit": result.get("base_commit"),
             "changed_paths_total": result.get("changed_paths_total", 0),
             "changed_paths_error": _cut(result.get("changed_paths_error"), SHOWN_TEXT_CHARS),
-            "final_reply": _cut(run_result.get("final_reply"), SHOWN_REPLY_CHARS),
+            "final_reply": _cut(_reply_of(run_result), SHOWN_REPLY_CHARS),
             "error": _cut(result.get("error"), SHOWN_TEXT_CHARS),
         }
     )
     _bound_paths(reply, result.get("changed_paths"))
+
+
+def _reply_of(run_result: dict[str, Any]) -> Any:
+    """The model's last message: ``unchecked_final_reply``, else the old ``final_reply``."""
+    if "unchecked_final_reply" in run_result:
+        return run_result["unchecked_final_reply"]
+    return run_result.get("final_reply")
 
 
 def _test_results(commands: list[Any]) -> dict[str, Any]:

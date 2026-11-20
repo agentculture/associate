@@ -1,0 +1,4 @@
+1	ROLE_RESPONSIBILITIES = {
+2	    "worker": ["execution", "tool_use", "repo_inspection"],
+3	    "senses": ["intake", "normalize_input"],
+4	}

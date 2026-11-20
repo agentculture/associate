@@ -110,11 +110,13 @@ _RESULT_KEYS = (
     "reasoning_applies_to",
     "check_mode",
     "support_score",
+    "strict_switch",
     _K_REMINDER_SWITCH,
     _K_REMINDER,
     "handback_outcome",
     "answer_path",
     "accuracy",
+    "strict",
 )
 
 #: The copied support keys the text form folds into its one ``support_scored`` line.
@@ -138,6 +140,9 @@ _REASONING_CHOICES = ("model-default", "on", "off")
 #: ``--support-score`` values; absent leaves accuracy.json's per-model switch in charge.
 _SUPPORT_SCORE_CHOICES = ("on", "off")
 
+#: ``--strict`` values; absent leaves accuracy.json's ``strict.enabled`` in charge.
+_STRICT_CHOICES = ("on", "off")
+
 #: ``--finish-reminder`` values; absent means ``on`` when accuracy.json has the section.
 _FINISH_REMINDER_CHOICES = ("on", "off")
 
@@ -157,6 +162,7 @@ def _build(harness_cls: type, args: argparse.Namespace) -> Any:
         "untrusted_checkout": args.untrusted_checkout,
         "check_mode": args.check_mode,
         "support_score": args.support_score,
+        "strict": args.strict,
         _K_REMINDER: args.finish_reminder,
         "reasoning": args.reasoning,
     }
@@ -284,6 +290,8 @@ def _with_settings(result: dict[str, Any], args: argparse.Namespace) -> dict[str
         result = {**result, "check_mode": args.check_mode}
     if "support_score" not in result:
         result = {**result, "support_score": args.support_score}
+    if "strict_switch" not in result:
+        result = {**result, "strict_switch": args.strict}
     if _K_REMINDER_SWITCH not in result:
         result = {**result, _K_REMINDER_SWITCH: args.finish_reminder}
     if args.reasoning and "reasoning" not in result:
@@ -532,6 +540,8 @@ def _render(result: dict[str, Any]) -> str:
         from associate.accuracy.support import answers_line
 
         shown["support_answers"] = answers_line(result["support_answers"])
+    if isinstance(result.get("strict"), dict):
+        shown["strict"] = _render_strict(result["strict"])
     if isinstance(result.get(_K_REMINDER), dict):
         from associate.accuracy.reminder import describe
 
@@ -558,6 +568,22 @@ def _render_accuracy(accuracy: dict[str, Any]) -> str:
         f"{key} {facts.get(key)}" for key in ("made", "passed", "refused", "unchecked")
     )
     return f"python re-check {accuracy.get('python_recheck_verdict')}; facts {counts}"
+
+
+def _render_strict(strict: dict[str, Any]) -> str:
+    """One line: the extension's strict counts, labelled as its own."""
+    counts = strict.get("counts") or {}
+    dropped = strict.get("dropped") or {}
+    reasons = ", ".join(f"{k} {v}" for k, v in (dropped.get("by_reason") or {}).items())
+    parts = " ".join(
+        f"{key} {counts.get(key)}"
+        for key in ("pass", "keep_marked", "returned", "dropped", "not_judged")
+    )
+    return (
+        f"counted by the extension, not re-checked here: rounds used "
+        f"{strict.get('rounds_used')}; facts {parts}; dropped by reason "
+        f"{reasons or 'none'}"
+    )
 
 
 def _render_tests(tests: dict[str, Any]) -> str:
@@ -659,6 +685,18 @@ def register(sub: argparse._SubParsersAction) -> None:
         "ambient value is not inherited). Without the flag the contract's switch applies. "
         "Recorded in the result as support_score: what was asked for, not that anything "
         "was scored.",
+    )
+    p.add_argument(
+        "--strict",
+        choices=_STRICT_CHOICES,
+        default=None,
+        help="Per-run switch for strict facts (facts that point at lines of a saved result "
+        "and are kept, marked, returned or dropped), overriding accuracy.json's "
+        "strict.enabled for the model (sets ASSOCIATE_STRICT for the run; an ambient value "
+        "is not inherited). Without the flag the contract's switch applies. Recorded in the "
+        "result as strict_switch: what was asked for, not that strict ran. A strict run's "
+        "result carries strict, the extension's own counts; the Python re-check does not "
+        "run on strict facts.",
     )
     p.add_argument(
         "--finish-reminder",

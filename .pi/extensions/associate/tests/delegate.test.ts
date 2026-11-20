@@ -201,7 +201,8 @@ function runResult(overrides: Record<string, unknown> = {}): string {
     worktree: "/x/.worktrees.checkout/run-dlg-x",
     run_branch: "associate-run/dlg-x",
     tests: { passed: true, commands: [] },
-    final_reply: "I changed the file.",
+    unchecked_final_reply: "I changed the file.",
+    answer: "# Answer (rendered by the harness from checked items)",
     stop_reason: "stop",
     ...overrides,
   });
@@ -587,19 +588,22 @@ test("d18: status reports running, then the finished associate run --json result
 
     await launcher.runs[0]!.end(
       { exitCode: 0 },
-      { stdout: runResult({ merge: "kept", merge_reason: "tests failed: uv run pytest -q exited 1", final_reply: "done; token=abcdef123456" }) },
+      { stdout: runResult({ merge: "kept", merge_reason: "tests failed: uv run pytest -q exited 1", unchecked_final_reply: "done; token=abcdef123456" }) },
     );
     const finished = await call(t.status, { run_id: started.run_id });
     assert.equal(finished.ok, true, JSON.stringify(finished));
     assert.equal(finished.state, "finished");
     assert.equal(finished.exit_code, 0);
     assert.equal(finished.citation_label, started.citation_label);
-    for (const key of ["outcome", "merge", "merge_reason", "worktree", "tests", "final_reply"]) {
+    for (const key of ["outcome", "merge", "merge_reason", "worktree", "tests", "unchecked_final_reply", "answer"]) {
       assert.ok(key in finished.result, `${key} missing from the result`);
     }
     assert.equal(finished.result.merge, "kept");
     assert.match(finished.result.merge_reason, /tests failed/);
-    assert.ok(!finished.result.final_reply.includes("abcdef123456"), "the result is redacted");
+    assert.ok(!finished.result.unchecked_final_reply.includes("abcdef123456"), "the result is redacted");
+    assert.match(finished.result.answer, /rendered by the harness/, "the checked answer sits beside the unchecked reply");
+    assert.ok(!("final_reply" in finished.result), "the old key is absent, not duplicated");
+    assert.match(finished.note, /unchecked_final_reply is the delegated model's own account, not checked/);
     assert.equal(finished.truncated, false);
 
     // The record on disk says how it ended.
@@ -750,6 +754,25 @@ test("d18: status after a restart reads the record on disk: running while the pi
   }
 });
 
+test("t7: a stored result with the old final_reply key reaches the peer under the unchecked name only", async () => {
+  const r = rig();
+  try {
+    const launcher = fakeLauncher();
+    const t = tools(r, launcher);
+    const started = await call(t.run, { model: "worker", task: TASK });
+    const old = JSON.parse(runResult());
+    delete old.unchecked_final_reply;
+    old.final_reply = "an older harness wrote this";
+    await launcher.runs[0]!.end({ exitCode: 0 }, { stdout: JSON.stringify(old) });
+    const out = await call(t.status, { run_id: started.run_id });
+    assert.equal(out.result.unchecked_final_reply, "an older harness wrote this");
+    assert.ok(!("final_reply" in out.result), "the old key is renamed, not duplicated");
+    assert.match(out.result.answer, /rendered by the harness/);
+  } finally {
+    r.dispose();
+  }
+});
+
 test("d18: a result over the contract budget is cut, final reply first", async () => {
   const r = rig();
   try {
@@ -757,7 +780,7 @@ test("d18: a result over the contract budget is cut, final reply first", async (
     const t = tools(r, launcher);
     const started = await call(t.run, { model: "worker", task: TASK });
     const max = (CONTRACT.policy.budgets as any).delegate.max_output_chars as number;
-    await launcher.runs[0]!.end({ exitCode: 0 }, { stdout: runResult({ final_reply: "y".repeat(max * 2) }) });
+    await launcher.runs[0]!.end({ exitCode: 0 }, { stdout: runResult({ unchecked_final_reply: "y".repeat(max * 2) }) });
     const out = await call(t.status, { run_id: started.run_id });
     assert.equal(out.truncated, true);
     assert.ok(JSON.stringify(out.result).length <= max);
@@ -772,7 +795,7 @@ test("review: with no budgets.delegate in the contract, status refuses rather th
   try {
     const launcher = fakeLauncher();
     const started = await call(tools(r, launcher).run, { model: "worker", task: TASK });
-    await launcher.runs[0]!.end({ exitCode: 0 }, { stdout: runResult({ final_reply: "y".repeat(60_000) }) });
+    await launcher.runs[0]!.end({ exitCode: 0 }, { stdout: runResult({ unchecked_final_reply: "y".repeat(60_000) }) });
     // The same session, reloaded against a contract that defines no delegate budget.
     const policy = structuredClone(r.ctx.policy) as any;
     delete policy.budgets.delegate;

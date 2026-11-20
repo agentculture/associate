@@ -530,7 +530,19 @@ function delegateBudget(ctx: AssociateContext): { maxChars: number; timeoutMs: n
   return { maxChars, timeoutMs };
 }
 
-/** The run's result within `max` JSON chars: the final reply is cut first, then only the outcome is kept. */
+/**
+ * The run's result with the model's own last message under the name that says
+ * it is unchecked. A result written before the rename carries it as
+ * `final_reply`; it is renamed here, never duplicated, so a peer never sees the
+ * old key. The harness's checked `answer` is left beside it as it is.
+ */
+export function labelResult(result: Record<string, unknown>): Record<string, unknown> {
+  if (!("final_reply" in result)) return result;
+  const { final_reply, ...rest } = result;
+  return "unchecked_final_reply" in rest ? rest : { ...rest, unchecked_final_reply: final_reply };
+}
+
+/** The run's result within `max` JSON chars: the unchecked final reply is cut first, then only the outcome is kept. */
 function boundedResult(
   result: Record<string, unknown>,
   max: number,
@@ -538,10 +550,10 @@ function boundedResult(
   const size = (value: unknown) => (JSON.stringify(value) ?? "").length;
   if (size(result) <= max) return { result, truncated: false };
   let cut = result;
-  if (typeof result.final_reply === "string") {
+  if (typeof result.unchecked_final_reply === "string") {
     const over = size(result) - max;
-    const keep = Math.max(0, result.final_reply.length - over - 64);
-    cut = { ...result, final_reply: result.final_reply.slice(0, keep) };
+    const keep = Math.max(0, result.unchecked_final_reply.length - over - 64);
+    cut = { ...result, unchecked_final_reply: result.unchecked_final_reply.slice(0, keep) };
     if (size(cut) <= max) return { result: cut, truncated: true };
   }
   const tests = result.tests && typeof result.tests === "object" ? (result.tests as Record<string, unknown>) : undefined;
@@ -925,7 +937,7 @@ export function createDelegateTools(ctx: AssociateContext, deps: DelegateDeps = 
         ),
       );
     }
-    const bounded = boundedResult(redactValue(result!, redaction), budget.maxChars);
+    const bounded = boundedResult(redactValue(labelResult(result!), redaction), budget.maxChars);
     return toolResult({
       ok: true,
       ...base,
@@ -934,7 +946,8 @@ export function createDelegateTools(ctx: AssociateContext, deps: DelegateDeps = 
       result: bounded.result,
       truncated: bounded.truncated,
       note:
-        "final_reply is the delegated model's own account; outcome, merge, merge_reason and tests are the harness's",
+        "unchecked_final_reply is the delegated model's own account, not checked; answer is what the harness " +
+        "rendered from the items it checked; outcome, merge, merge_reason and tests are the harness's",
     });
   }
 

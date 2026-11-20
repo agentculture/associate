@@ -259,6 +259,24 @@ refused and the model may answer again for accuracy.json `retry_rounds` more
 rounds; a hand-back still failing ends the run with outcome `refused`, and the verb
 exits `3`. `report` mode records what would have been refused and refuses nothing.
 
+## The strict switch
+
+`--strict on|off` overrides accuracy.json `strict.enabled` for the model for this
+run only, by setting `ASSOCIATE_STRICT`; an ambient value in the operator's
+environment is not inherited (it is cleared when the flag is absent). The result's
+`strict_switch` is the flag's value, or null when the contract's switch applies:
+what was asked for, not that strict ran.
+
+A strict run's facts point at lines of a saved result (`at`) and carry no quote,
+so the Python re-check (evidence-cli 0.7.x) does not run on them: `accuracy` says
+`python_recheck_ran` false, with `not_applicable_reason` naming that, no verdict
+and no counts from it. The result carries `strict`, the extension's own counts
+copied from the export's `report.json` and `check.json` and never recomputed:
+`source` (`extension`), `rounds_used`, `retry_rounds`, `counts` (facts per
+outcome: pass, keep_marked, returned, dropped, not_judged), `dropped`
+(`total` and `by_reason`), `returned`, `not_judged` and `report`. They are the
+same code's count of what it did, not a second, independent check.
+
 ## The support-score switch
 
 `--support-score on|off` overrides the model's switch in accuracy.json
@@ -334,7 +352,7 @@ and `walk_path` to read. The `accuracy` block carries the Python re-check counts
 when the export holds facts, and says `python_recheck_ran` false with a
 `not_applicable_reason` when it holds none (a killed run usually holds none). The
 verb exits `4`. A *preflight* that does not finish proved nothing: it exits `2`
-and prints no result. The task turn's `final_reply`, `stop_reason` and
+and prints no result. The task turn's `unchecked_final_reply`, `stop_reason` and
 `lane_error` are absent from a timeout result, because pi never reported them.
 
 ## Reasoning for one run
@@ -355,11 +373,15 @@ A harness that does not apply it (`--harness stub`) still records it, without
 
 ## How the turn ended
 
-With `--json`, the result also says how the task turn ended: `final_reply`
-is the model's last assistant reply (text only, redacted, at most 2000
-characters); `stop_reason` is pi's stop reason for that reply (for example
-`stop` or `length`), or null when no assistant reply arrived; and
-`lane_error` is present only when pi reported an error from the model lane.
+With `--json`, the result also says how the task turn ended:
+`unchecked_final_reply` is the model's last assistant reply (text only,
+redacted, at most 2000 characters), named for what it is: the model's own
+words, not checked by the harness. The checked answer is `answer`, beside it.
+The key was `final_reply` before; the old key is absent from the result, not
+duplicated, and a reader of stored results reads both. `stop_reason` is pi's
+stop reason for that reply (for example `stop` or `length`), or null when no
+assistant reply arrived; and `lane_error` is present only when pi reported an
+error from the model lane.
 A run that ended without `finish` is visible here: the reply says why, or
 is empty.
 
@@ -371,6 +393,7 @@ is empty.
     associate run --harness stub
     associate run "Summarize the gate" --check-mode enforce --json
     associate run "Summarize the gate" --support-score on --json
+    associate run "Summarize the gate" --strict on --json
     associate run "Summarize the gate" --finish-reminder off --json
     associate run --continue-from <prior export dir>
     associate run "Summarize the gate" --reasoning off --timeout 1500 --json
@@ -449,6 +472,17 @@ a statement that the fact is true. A fact that could not be checked (no saved te
 or only part of it) is `unchecked` and is never counted as passed. An export written
 before the walk format marker has no facts: they are reported as not applicable, and
 the calls are still listed.
+
+## A strict export
+
+An export written by a strict run (`check.json` mode `strict`; its facts point at
+lines with `at` and carry no quote) is not re-checked here: evidence-cli 0.7.x
+knows only the quote shape and would refuse every such fact. The result says the
+Python re-check did not run (`python_recheck_ran` false, `not_applicable_reason`
+`strict export: the Python re-check for strict facts is not in evidence-cli yet`),
+lists the calls, and prints the extension's strict counts under `strict`, labelled
+`source: extension`. Those counts are read from `report.json` and `check.json`,
+never recomputed, and are not a second check. The exit code is `0`.
 
 ## The support score, copied
 

@@ -1,0 +1,104 @@
+{
+  "facts": {
+    "made": 2,
+    "checked": 1,
+    "passed": 1,
+    "refused": 0,
+    "unchecked": 1
+  },
+  "conclusions": {
+    "made": 0,
+    "supported": 0,
+    "refuted": 0,
+    "open": 0
+  },
+  "statements": {
+    "made": 0,
+    "without_fact": 0
+  },
+  "by_source_kind": {
+    "file": {
+      "made": 2,
+      "checked": 1,
+      "passed": 1,
+      "refused": 0,
+      "unchecked": 1
+    },
+    "tool": {
+      "made": 0,
+      "checked": 0,
+      "passed": 0,
+      "refused": 0,
+      "unchecked": 0
+    },
+    "web": {
+      "made": 0,
+      "checked": 0,
+      "passed": 0,
+      "refused": 0,
+      "unchecked": 0
+    },
+    "memory": {
+      "made": 0,
+      "checked": 0,
+      "passed": 0,
+      "refused": 0,
+      "unchecked": 0
+    },
+    "agent": {
+      "made": 0,
+      "checked": 0,
+      "passed": 0,
+      "refused": 0,
+      "unchecked": 0
+    },
+    "harness": {
+      "made": 0,
+      "checked": 0,
+      "passed": 0,
+      "refused": 0,
+      "unchecked": 0
+    }
+  },
+  "flags": [
+    {
+      "check": "decider_answered_none",
+      "detail": "f2: decider_drop",
+      "ref": "w1"
+    }
+  ],
+  "python_recheck_ran": false,
+  "children": [],
+  "strict": {
+    "direct_passed": 1,
+    "llm_judged": 0,
+    "derived": 0,
+    "kept_with_mark": 0,
+    "returned": 0,
+    "not_judged": 0,
+    "dropped": {
+      "total": 1,
+      "by_reason": {
+        "decider_drop": 1
+      }
+    },
+    "by_stated_kind": {
+      "direct": {
+        "stated": 1,
+        "checked_as_direct": 1
+      },
+      "llm": {
+        "stated": 1,
+        "checked_as_direct": 0
+      },
+      "derived": {
+        "stated": 0,
+        "checked_as_direct": 0
+      }
+    }
+  },
+  "unchecked_text": {
+    "summary_sentences": 1,
+    "final_message_sentences": 0
+  }
+}

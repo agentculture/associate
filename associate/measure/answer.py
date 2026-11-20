@@ -4,7 +4,8 @@ One rule for every arm, whatever harness version produced the run: the answer
 is the words the model gave, with no line the harness wrote.
 
 - A harness that has no hand-back (before PR #27) leaves the model's last
-  reply in the run result (``final_reply``). That is the answer.
+  reply in the run result (``unchecked_final_reply``; ``final_reply`` in a result
+  stored before the rename, which is still read). That is the answer.
 - The current harness writes ``answer.md`` into the export: a rendering of
   the checked items (conclusions, open items, the facts list) followed by one
   labelled section holding the model's finish summary and final message. The
@@ -183,13 +184,27 @@ def _read(path: Path) -> str | None:
         return None
 
 
+#: The run result's key for the model's last message: ``unchecked_final_reply``
+#: since the rename, ``final_reply`` in a result stored before it. The source
+#: labels below name the role, not the key, and stay as stored records have them.
+_REPLY_KEYS = ("unchecked_final_reply", "final_reply")
+
+
+def result_reply(result: Mapping[str, Any] | None) -> Any:
+    """The model's last message in a stored run result, under whichever key it was written."""
+    for key in _REPLY_KEYS:
+        if key in (result or {}):
+            return (result or {})[key]
+    return None
+
+
 def _candidate(result: Mapping[str, Any] | None, export_dir: Path | None) -> tuple[str, str]:
     """The raw text and its source, before harness lines are removed."""
     if export_dir is not None:
         rendered = _read(Path(export_dir) / ANSWER_FILE)
         if rendered is not None:
             return _unchecked_section(rendered) or "", SOURCE_ANSWER_MD
-    reply = (result or {}).get("final_reply")
+    reply = result_reply(result)
     return (reply if isinstance(reply, str) else ""), SOURCE_FINAL_REPLY
 
 
@@ -222,7 +237,7 @@ def _statement_texts(export_dir: Path) -> str:
 
 def _full_message(result: Mapping[str, Any] | None, export_dir: Path | None) -> tuple[str, str]:
     """The last message from the fullest source there is, unfiltered, and that source."""
-    kept = (result or {}).get("final_reply")
+    kept = result_reply(result)
     cut = isinstance(kept, str) and len(kept) >= FINAL_REPLY_CAP
     reply = kept.strip() if isinstance(kept, str) else ""
     saved = (_read(export_dir / FINAL_MESSAGE_FILE) or "").strip() if export_dir else ""
