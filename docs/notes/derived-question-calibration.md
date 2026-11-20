@@ -65,6 +65,23 @@ On the planted items both raters labelled all 40 swapped-basis items `no`.
 Rater `b` labelled every changed-number and negated item `no`; rater `a`
 labelled 28 of 30 and 17 of 20 `no`.
 
+### A third reading of 40 items
+
+A third model (a different Gemini model from rater `b`, through Antigravity)
+labelled 40 items blind, with the same guideline. The items were picked by a
+hash of their ids: 10 real items both raters call `yes`, 10 they call `partly`,
+5 they call `no`, 5 planted items they call `no` (3 changed number, 2 negated)
+and 10 real items the raters disagree on.
+
+| Items | Third reader's labels |
+|---|---|
+| 30 the raters agree on | the same label as the raters on all 30 |
+| 10 the raters disagree on | the label of rater `a` on 7, of rater `b` on 3 |
+
+This is a check on a sample, not a third label for the set. The third reader
+is a model of the same vendor as rater `b`. On the 10 disagreements it more
+often read the conclusion as following, as rater `a` did.
+
 ## What the decider answered
 
 The decider was asked twice on the same items, one item per request, with no
