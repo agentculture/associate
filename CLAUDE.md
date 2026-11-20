@@ -360,8 +360,9 @@ model. Issue #39 follows from it.
   (`worker`, reasoning on, report mode) and one `cortex` run: the switch is
   off for every model; no run with the score on is recorded for `senses`, with
   reasoning off, in enforce mode, on the mesh path, in a spawned child or in a
-  delegated run; how often a model passed a `value` to `check_quote` in those runs is
-  not in the note;
+  delegated run; in 4 of the 18 `check-on` runs the model never called
+  `check_quote`, so it was shown no answer, and what a model did after seeing
+  one was not counted;
 - the broad tasks beyond that one comparison: 36 `worker` runs are stored and
   were graded through the sheet verbs by model graders; no person graded a
   statement, the facts-stated count was not read by hand, and no other model

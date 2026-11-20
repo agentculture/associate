@@ -155,8 +155,10 @@ the model's unchecked text, which no check reads.
   recorded. For `cortex` there is one run and no more (below).
 - More than one decider on one day, and more than three runs per repository
   per arm.
-- How often a model passed a value to `check_quote` in the measured runs: the
-  note does not give it.
+- What a model did after it was shown an answer. The stored walks say how
+  often it was shown one: in 14 of the 18 `check-on` runs at least once (105
+  of 148 `check_quote` calls came back with an answer), and in 4 runs never,
+  because the model did not call `check_quote`.
 - Whether a fact the decider passes is true. In the broad measurement the
   statements matched to a passed fact were graded true 54 times and false 5
   times, and those matched to a `part` or `little` answer 63 and 6, by a text
@@ -164,7 +166,9 @@ the model's unchecked text, which no check reads.
 
 One `cortex` run with the score on was recorded on 2026-11-20 (report mode,
 reasoning on, harness at 0.14.2 before release, one small task: read
-`accuracy.json` and report three settings). It handed back 3 facts, the quote
+`accuracy.json` and report three settings; its export is committed as
+`tests/fixtures/accuracy/cortex_support_score_on_export`, with the machine paths
+in `ready.json` masked). It handed back 3 facts, the quote
 of each was found, and the decider answered `all` for all 3; `check.json`
 holds a `support` record for each and `report.json` says `support_scored` 3.
 It is one run on an easy task. It shows the files are written on `cortex`,

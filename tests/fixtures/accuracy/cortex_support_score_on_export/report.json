@@ -1,0 +1,78 @@
+{
+  "facts": {
+    "made": 3,
+    "checked": 3,
+    "passed": 3,
+    "refused": 0,
+    "unchecked": 0
+  },
+  "conclusions": {
+    "made": 3,
+    "supported": 3,
+    "refuted": 0,
+    "open": 0
+  },
+  "statements": {
+    "made": 3,
+    "without_fact": 0
+  },
+  "by_source_kind": {
+    "file": {
+      "made": 3,
+      "checked": 3,
+      "passed": 3,
+      "refused": 0,
+      "unchecked": 0
+    },
+    "tool": {
+      "made": 0,
+      "checked": 0,
+      "passed": 0,
+      "refused": 0,
+      "unchecked": 0
+    },
+    "web": {
+      "made": 0,
+      "checked": 0,
+      "passed": 0,
+      "refused": 0,
+      "unchecked": 0
+    },
+    "memory": {
+      "made": 0,
+      "checked": 0,
+      "passed": 0,
+      "refused": 0,
+      "unchecked": 0
+    },
+    "agent": {
+      "made": 0,
+      "checked": 0,
+      "passed": 0,
+      "refused": 0,
+      "unchecked": 0
+    },
+    "harness": {
+      "made": 0,
+      "checked": 0,
+      "passed": 0,
+      "refused": 0,
+      "unchecked": 0
+    }
+  },
+  "flags": [],
+  "python_recheck_ran": false,
+  "children": [],
+  "unchecked_text": {
+    "summary_sentences": 4,
+    "final_message_sentences": 4
+  },
+  "support_scored": 3,
+  "support_answers": {
+    "all": 3,
+    "mostly": 0,
+    "part": 0,
+    "little": 0,
+    "none": 0
+  }
+}

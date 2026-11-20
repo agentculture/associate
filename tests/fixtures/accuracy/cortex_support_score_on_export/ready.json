@@ -1,0 +1,72 @@
+{
+  "ok": true,
+  "extension_version": "0.1.0",
+  "contract_version": 1,
+  "contract_dir": "<associate-tree>/associate/contract",
+  "contract_source": "env",
+  "schemas": [
+    "task",
+    "walk",
+    "statements"
+  ],
+  "session": {
+    "id": "decider-t12-cortex-score-on",
+    "id_from_env": true,
+    "scratch_dir": "<session-root>/scratch",
+    "export_dir": "<session-root>/export",
+    "walk_path": "<session-root>/export/walk.jsonl"
+  },
+  "tools": [
+    "read",
+    "bash",
+    "powershell",
+    "edit",
+    "write",
+    "grep",
+    "find",
+    "ls",
+    "associate_ready",
+    "finish",
+    "check_quote",
+    "code_lens",
+    "delegate_run",
+    "delegate_status",
+    "eidetic_recall",
+    "eidetic_remember",
+    "ledger_append",
+    "ledger_list",
+    "spawn_subagent",
+    "run_tests",
+    "web_search",
+    "web_page"
+  ],
+  "model": "cortex",
+  "model_may_mutate": true,
+  "gate_ready": true,
+  "tools_outside_contract": [],
+  "active_tools": [
+    "read",
+    "bash",
+    "edit",
+    "write",
+    "grep",
+    "find",
+    "ls",
+    "associate_ready",
+    "finish",
+    "check_quote",
+    "code_lens",
+    "eidetic_recall",
+    "eidetic_remember",
+    "ledger_append",
+    "ledger_list",
+    "spawn_subagent",
+    "run_tests",
+    "web_search",
+    "web_page"
+  ],
+  "writer_tools_active": [
+    "edit",
+    "write"
+  ]
+}

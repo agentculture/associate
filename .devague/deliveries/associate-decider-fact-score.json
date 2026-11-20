@@ -2,7 +2,7 @@
   "plan_slug": "associate-decider-fact-score",
   "schema_version": 2,
   "created": "2026-11-19T06:30:45Z",
-  "updated": "2026-11-20T17:21:38Z",
+  "updated": "2026-11-20T18:36:21Z",
   "deviations": [
     {
       "id": "d1",
@@ -217,6 +217,44 @@
       "status": "proposed",
       "superseded": false,
       "seq": 12
+    },
+    {
+      "id": "e8",
+      "obligation_ref": "o5",
+      "test_ref": "tests/test_support_wording.py (115 cases)",
+      "behavior_text": "a sentence that calls the support score or a count of it accuracy is a finding unless a denial stands in the same clause within six words; 24 bad sentences are found and 22 good ones pass; files are found through git ls-files",
+      "contract_text": "c23: the score is never called accuracy",
+      "evidence_type": "automated",
+      "strength": "sensitivity",
+      "strength_basis": "pytest on the closing branch after the review fixes: pass. Replaces e5, whose counts (72 cases, 10 bad, 11 good) describe the test before a code review found it too loose and it was rewritten in 6ecc877. The docstring lists what it still cannot see: in a mixed file, a claim whose subject is only 'the score' or a pronoun",
+      "outcome": "pass",
+      "run": {
+        "timestamp": "2026-11-20T18:36:21Z",
+        "commit": "6ecc877"
+      },
+      "origin": "llm",
+      "status": "proposed",
+      "superseded": false,
+      "seq": 14
+    },
+    {
+      "id": "e9",
+      "obligation_ref": "o1",
+      "test_ref": "tests/test_support_cortex_run.py on tests/fixtures/accuracy/cortex_support_score_on_export",
+      "behavior_text": "the export of one live cortex run with the score on holds a support record for each of its 3 quote-found facts and support_scored 3 in report.json",
+      "contract_text": "t12 first criterion: one live run in report mode on cortex with the score on leaves a check.json in which every quote-found fact is scored or marked not scored",
+      "evidence_type": "observation",
+      "strength": "fidelity",
+      "strength_basis": "one live run on 2026-11-20, made during closing and after PR 40 merged, on an easy read task; its export is committed with machine paths masked. One run, not a rate",
+      "outcome": "pass",
+      "run": {
+        "timestamp": "2026-11-20T18:36:21Z",
+        "commit": "6ecc877"
+      },
+      "origin": "llm",
+      "status": "proposed",
+      "superseded": false,
+      "seq": 15
     }
   ],
   "deltas": [

@@ -157,6 +157,20 @@ In the 18 `check-on` runs the decider scored 98 facts: `part` 39, `all` 35,
 `little` 14, `mostly` 10, `none` 0. So 45 passed and 53 did not. Three runs had
 no fact with a found quote, so nothing was scored in them.
 
+How often the model saw an answer during a run was counted on 2026-11-20 from
+the stored walks of the 36 runs. In report mode the model sees the answer only
+when it calls `check_quote` with a value and the quote is found.
+
+| Arm | Runs that called `check_quote` | Calls | Calls that passed a value | Calls that came back with a support answer |
+|---|---|---|---|---|
+| `check-off` | 16 of 18 | 131 | 131 | 0 |
+| `check-on` | 14 of 18 | 148 | 148 | 105 |
+
+So in 14 of the 18 `check-on` runs the model was shown at least one answer,
+and in 4 it was shown none, because it never called `check_quote`. In those 4
+runs the two arms did not differ in what the model saw. What a model did after
+seeing an answer was not counted.
+
 A pass does not make a fact true. Matching each graded statement to the fact
 it restates (by text similarity, a heuristic of the measuring session, not
 part of the harness), on the Gemini grading:

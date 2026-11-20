@@ -1,0 +1,92 @@
+{
+  "mode": "report",
+  "mode_source": "env",
+  "accepted": true,
+  "facts": [
+    {
+      "id": "f1",
+      "source": "w2",
+      "run": null,
+      "nearest": null,
+      "source_kind": "file",
+      "first_hand": true,
+      "verdict": "passed",
+      "reason": null,
+      "check": null,
+      "fix": null,
+      "support": {
+        "status": "scored",
+        "answer": "all",
+        "supports": true,
+        "confidence": 0.7653
+      }
+    },
+    {
+      "id": "f2",
+      "source": "w2",
+      "run": null,
+      "nearest": null,
+      "source_kind": "file",
+      "first_hand": true,
+      "verdict": "passed",
+      "reason": null,
+      "check": null,
+      "fix": null,
+      "support": {
+        "status": "scored",
+        "answer": "all",
+        "supports": true,
+        "confidence": 0.6585
+      }
+    },
+    {
+      "id": "f3",
+      "source": "w2",
+      "run": null,
+      "nearest": null,
+      "source_kind": "file",
+      "first_hand": true,
+      "verdict": "passed",
+      "reason": null,
+      "check": null,
+      "fix": null,
+      "support": {
+        "status": "scored",
+        "answer": "all",
+        "supports": true,
+        "confidence": 0.6785
+      }
+    }
+  ],
+  "verdicts": [
+    {
+      "id": "v1",
+      "outcome": "accepted",
+      "reason": null,
+      "check": null,
+      "fix": null
+    },
+    {
+      "id": "v2",
+      "outcome": "accepted",
+      "reason": null,
+      "check": null,
+      "fix": null
+    },
+    {
+      "id": "v3",
+      "outcome": "accepted",
+      "reason": null,
+      "check": null,
+      "fix": null
+    }
+  ],
+  "open_items": [],
+  "unchecked_text": {
+    "summary_sentences": 4,
+    "final_message_sentences": 4,
+    "final_message": "unchecked"
+  },
+  "outcome": "accepted",
+  "would_refuse": []
+}
