@@ -253,9 +253,12 @@ run live):
   unit-tested against a fake decider; the option wording and the pass
   rule were measured offline on a labelled set
   (`docs/notes/support-score-calibration.md`, two model raters, tentative).
-  The only recorded runs with the choice question are the 18 `check-on`
-  `worker` runs of the broad measurement, where the decider answered it for 98
-  facts (`docs/notes/support-score-broad-measurement.md`). The earlier yes/no
+  The recorded runs with the choice question are the 18 `check-on` `worker`
+  runs of the broad measurement, where the decider answered it for 98 facts
+  (`docs/notes/support-score-broad-measurement.md`), and one `cortex` run on
+  2026-11-20 (report mode, reasoning on, one small read task: 3 facts with a
+  found quote, all 3 answered `all`; `docs/notes/accuracy-checks.md`). That is
+  one run, not a rate. The earlier yes/no
   question was probed live once with four pairs (plan
   `.devague/plans/associate-decider-fact-score.json`). Never call it accuracy;
   `tests/test_support_wording.py` fails when a text of this work does.
@@ -343,17 +346,20 @@ model. Issue #39 follows from it.
   beyond two worker runs; the recording of calls pi rejects before the hook is
   tested against a fake pi only.
 - the support score outside the 18 `check-on` runs of the broad measurement
-  (`worker`, reasoning on, report mode): the switch is off for every model; no
-  run with the score on is recorded for `senses` or `cortex`, with reasoning
-  off, in enforce mode, on the mesh path, in a spawned child or in a delegated
-  run; how often a model passed a `value` to `check_quote` in those runs is
+  (`worker`, reasoning on, report mode) and one `cortex` run: the switch is
+  off for every model; no run with the score on is recorded for `senses`, with
+  reasoning off, in enforce mode, on the mesh path, in a spawned child or in a
+  delegated run; how often a model passed a `value` to `check_quote` in those runs is
   not in the note;
 - the broad tasks beyond that one comparison: 36 `worker` runs are stored and
   were graded through the sheet verbs by model graders; no person graded a
   statement, the facts-stated count was not read by hand, and no other model
   has run the tasks;
-- the finish reminder in any run of associate: it is tested against a fake pi
-  only, and whether a reminded model then calls `finish` has not been seen.
+- the finish reminder beyond the broad measurement: in those 36 `worker` runs
+  one run in each arm was reminded once and both then ended with an accepted
+  `finish` (`docs/notes/support-score-broad-measurement.md`). That is two
+  runs. A reminded run that still ends without `finish` has also been seen;
+  no rate is known, and nothing is measured on `cortex` or `senses`.
 
 Say "built and unit-tested", never "works", for these. Live findings that
 remain open: worker sometimes ends without `finish` (seen again in an

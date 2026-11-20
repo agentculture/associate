@@ -147,9 +147,9 @@ the model's unchecked text, which no check reads.
 **Not measured.**
 
 - Any labelling or grading by a person.
-- A run with the score on for `senses` or `cortex`, with reasoning off, in
-  enforce mode, on the mesh path, in a spawned child or in a delegated run:
-  none is recorded.
+- A run with the score on for `senses`, with reasoning off, in enforce mode,
+  on the mesh path, in a spawned child or in a delegated run: none is
+  recorded. For `cortex` there is one run and no more (below).
 - More than one decider on one day, and more than three runs per repository
   per arm.
 - How often a model passed a value to `check_quote` in the measured runs: the
@@ -158,3 +158,11 @@ the model's unchecked text, which no check reads.
   statements matched to a passed fact were graded true 54 times and false 5
   times, and those matched to a `part` or `little` answer 63 and 6, by a text
   match made after the fact.
+
+One `cortex` run with the score on was recorded on 2026-11-20 (report mode,
+reasoning on, harness at 0.14.2 before release, one small task: read
+`accuracy.json` and report three settings). It handed back 3 facts, the quote
+of each was found, and the decider answered `all` for all 3; `check.json`
+holds a `support` record for each and `report.json` says `support_scored` 3.
+It is one run on an easy task. It shows the files are written on `cortex`,
+and nothing about how the answers go on harder facts.
