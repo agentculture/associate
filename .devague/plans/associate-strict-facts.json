@@ -3,9 +3,9 @@
   "title": "associate strict facts",
   "frame_slug": "associate-strict-facts",
   "schema_version": 5,
-  "status": "drafting",
+  "status": "exported",
   "created": "2026-11-20T12:33:37Z",
-  "updated": "2026-11-20T12:37:12Z",
+  "updated": "2026-11-20T12:39:05Z",
   "targets": [
     {
       "id": "c1",
@@ -391,7 +391,7 @@
       "id": "t1",
       "summary": "Contract: fact schema and accuracy settings for strict facts, with a version bump",
       "origin": "llm",
-      "status": "proposed",
+      "status": "confirmed",
       "acceptance_criteria": [
         "facts.schema.json accepts on a fact: kind (direct, llm, derived), at (a line range or a search term in the cited call's saved result), based_on (list of fact ids); quote becomes optional and value is optional for a direct fact; a schema version field is added",
         "accuracy.json version is 2 and holds a strict block: on for worker and cortex, off for senses and super-vl, kept-with-a-mark answers (part, little), dropping answers (none), derived_decides_drops false",
@@ -409,7 +409,7 @@
       "id": "t2",
       "summary": "Extension: resolve a fact's pointer and copy its evidence by code",
       "origin": "llm",
-      "status": "proposed",
+      "status": "confirmed",
       "acceptance_criteria": [
         "new lib/evidence.ts: given a fact's source and at, returns the quoted text copied from the saved result, the command built from the walk entry's args_used, and the result file name; for a direct fact with no value, the value is the copied text",
         "a pointer that names lines past the end, or a search term not in the result, gives a named failure reason; a node test feeds each and sees it",
@@ -443,7 +443,7 @@
       "id": "t3",
       "summary": "Extension: fact kinds, the kind floor, and the based_on graph",
       "origin": "llm",
-      "status": "proposed",
+      "status": "confirmed",
       "acceptance_criteria": [
         "lib/facts.ts reads kind and based_on; based_on ids must exist; a cycle is refused with the fix; facts are checked in dependency order",
         "when a fact fails, every fact based on it (directly or through others) is flagged and dropped with the failed fact's id as the reason; node test: f1 fails, f2 and f3 name f1, all three drop and the message names f1 for f2 and f3; cycle f1 to f2 to f1 is refused",
@@ -466,7 +466,7 @@
       "id": "t4",
       "summary": "Extension: the decider judges llm and derived facts, and an outage is 'not judged'",
       "origin": "llm",
-      "status": "proposed",
+      "status": "confirmed",
       "acceptance_criteria": [
         "an llm fact is sent to the decider with its value and the evidence the harness copied, using the five-option support question; the option is stored on the fact",
         "a derived fact is sent with its conclusion and the values of the facts it lists, asking whether the conclusion follows; the answer is stored and shown, and by contract (derived_decides_drops false) it never drops the fact",
@@ -489,7 +489,7 @@
       "id": "t5",
       "summary": "Extension: the strict hand-back flow",
       "origin": "llm",
-      "status": "proposed",
+      "status": "confirmed",
       "acceptance_criteria": [
         "with strict on: a fact that fails a direct check or is answered none is dropped; a fact answered part or little is returned once with the answer and the fix, and if still part or little it is kept with the mark 'evidence shows part of the value'",
         "the model is told each dropped or returned item and why, and may answer again for retry_rounds; after the last round the answer goes out without the dropped items and the run is not refused",
@@ -511,7 +511,7 @@
       "id": "t6",
       "summary": "Extension: render the answer from passed items only, with how to check each",
       "origin": "llm",
-      "status": "proposed",
+      "status": "confirmed",
       "acceptance_criteria": [
         "answer.md's answer section holds only items that passed or are kept with a mark; each shows its kind, the command, the result file and the copied evidence; an llm or derived item shows the decider's option",
         "no sentence of the model's summary or final message is in the answer section; both stay in the export under the unchecked label",
@@ -534,7 +534,7 @@
       "id": "t7",
       "summary": "Python: parity re-check, old exports, the run result and the peer-facing label",
       "origin": "llm",
-      "status": "proposed",
+      "status": "confirmed",
       "acceptance_criteria": [
         "associate/accuracy implements the same kinds, kind floor, order, cascade and drop reasons; a parity test runs shared fixtures through the extension's check.json and the Python re-check and compares kinds, order and drops",
         "associate check loads a stored export written before the bump and one written after",
@@ -557,7 +557,7 @@
       "id": "t8",
       "summary": "Prompts and tool text: the model points, the harness copies",
       "origin": "llm",
-      "status": "proposed",
+      "status": "confirmed",
       "acceptance_criteria": [
         "the finish tool description and the worker and cortex prompts tell the model to give for each fact: the walk id, where in that result the evidence is, the kind, and based_on; and not to retype evidence",
         "check_quote accepts a pointer and returns what the harness would copy, so a model can try a pointer before finish",
@@ -575,7 +575,7 @@
       "id": "t9",
       "summary": "Replays from stored exports",
       "origin": "llm",
-      "status": "proposed",
+      "status": "confirmed",
       "acceptance_criteria": [
         "the '604 test files' fact from the measured colleague run is a committed fixture; replayed, the number is found in the cited result, the command shown is the listing of entries, and the test text states what the check catches and what it does not",
         "the measured colleague run in which no fact passed is a fixture; replayed, the answer states how many items were dropped and why and the run result carries the same counts"
@@ -594,7 +594,7 @@
       "id": "t10",
       "summary": "Measure: a strict arm, attribution by item id, and what a caller receives",
       "origin": "llm",
-      "status": "proposed",
+      "status": "confirmed",
       "acceptance_criteria": [
         "associate measure run --broad takes arms strict-on and strict-off",
         "the sheet tags each statement with the answer item id it came from, or as final reply; the report prints per run: graded statements of the answer and of the final reply separately, how many rest on a passed basis and how many of those were graded false, kept-with-mark facts graded false, run time and retry rounds",
@@ -615,7 +615,7 @@
       "id": "t11",
       "summary": "A labelled set for the derived-fact question",
       "origin": "llm",
-      "status": "proposed",
+      "status": "confirmed",
       "acceptance_criteria": [
         "a committed set of derived facts (conclusion plus the facts it lists), built from stored exports and planted wrong conclusions, labelled by two raters of which at least one is not a Claude model",
         "the decider's answers on the set are committed with a note giving the shares on raters' agreed pairs; the note says the answer does not decide drops and what result would be needed before it does"
@@ -633,7 +633,7 @@
       "id": "t12",
       "summary": "Recorded live runs on worker and cortex with the default contract",
       "origin": "llm",
-      "status": "proposed",
+      "status": "confirmed",
       "acceptance_criteria": [
         "one worker and one cortex run on a broad task with the default contract are stored and described in a note: every answer item has a kind, a cited call and a passed check; at least one count shows its command and result as walk.jsonl and the result file hold them; quotes and commands compared byte for byte; the three kinds appear or the note says which did not",
         "the walk and the message the model received show dropped items, or the note says none were dropped in that run",
@@ -669,7 +669,7 @@
       "id": "t13",
       "summary": "The broad comparison: strict on against strict off",
       "origin": "llm",
-      "status": "proposed",
+      "status": "confirmed",
       "acceptance_criteria": [
         "six broad tasks, 3 runs per arm on worker, stored; graded blind by graders that include at least one outside model; verdicts and the report committed",
         "the note gives the rule's verdict on statements graded false in the answer, the count of false statements whose command is shown for counts, checklist facts stated, kept-with-mark facts graded false, run time and retry rounds; whether models moved counts into free text (spec c16) is reported",
@@ -691,7 +691,7 @@
       "id": "t14",
       "summary": "Closing docs, the repo rule, the wording test and the version",
       "origin": "llm",
-      "status": "proposed",
+      "status": "confirmed",
       "acceptance_criteria": [
         "CLAUDE.md: the accuracy section describes strict facts, the measured and not-measured lists are updated, and the rule on enforce is restated for strict (spec c26); docs/notes/accuracy-checks.md lists each new check with its motivating failure",
         "the wording test over docs finds no 'accuracy' or 'score' for the new counts; git diff shows no change to gate.json and nothing under lobes-cli or colleague",

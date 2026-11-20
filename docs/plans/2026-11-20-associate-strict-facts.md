@@ -1,0 +1,163 @@
+# Build Plan — associate strict facts
+
+slug: `associate-strict-facts` · status: `exported` · from frame: `associate-strict-facts`
+
+> associate hands back strict facts: every claim in the answer rests on a basis a reader can check, and a count comes with the command that produced it
+
+## Tasks
+
+### t1 — Contract: fact schema and accuracy settings for strict facts, with a version bump
+
+- instruction: Files: associate/contract/schemas/facts.schema.json, associate/contract/accuracy.json, associate/contract/validate.py, tests/`test_contract`\*.py. Change no gate.json. Senses stays off (spec c29).
+- covers: c22, c25, c39
+- acceptance:
+  - facts.schema.json accepts on a fact: kind (direct, llm, derived), at (a line range or a search term in the cited call's saved result), `based_on` (list of fact ids); quote becomes optional and value is optional for a direct fact; a schema version field is added
+  - accuracy.json version is 2 and holds a strict block: on for worker and cortex, off for senses and super-vl, kept-with-a-mark answers (part, little), dropping answers (none), `derived_decides_drops` false
+  - associate/contract/validate.py accepts the new files and refuses an unknown kind; pytest covers both; a fact written in the old shape (value, source, quote) still validates
+
+### t2 — Extension: resolve a fact's pointer and copy its evidence by code
+
+- instruction: Files: new .pi/extensions/associate/lib/evidence.ts and .pi/extensions/associate/tests/evidence.test.ts only. Read lib/walk.ts (`args_used`), lib/results.ts (cap), lib/facts.ts (label lookup), lib/matcher.ts. Do not edit lib/facts.ts in this task.
+- depends on: t1
+- covers: c8, h3, c9, c14, h16, c32, h19, c33, h20, c34, h21, c41
+- acceptance:
+  - new lib/evidence.ts: given a fact's source and at, returns the quoted text copied from the saved result, the command built from the walk entry's `args_used`, and the result file name; for a direct fact with no value, the value is the copied text
+  - a pointer that names lines past the end, or a search term not in the result, gives a named failure reason; a node test feeds each and sees it
+  - a number in a fact's value is looked up in the copied result; absent gives a named reason
+  - a saved result cut at the contract cap with the evidence beyond the cut gives 'not checkable from the saved result' with the fix to cite a narrower call
+  - prior:wN and cN:wN sources resolve when the labelled export is present and otherwise give the labelled-run wording, never 'direct'
+  - printed commands show paths under the checkout as relative and carry nothing from the environment; a node test with an absolute worktree path and a token-looking value in `args_used` finds neither in the output
+  - a node test shows resolving starts no process and makes no tool call
+  - a node test where the model's description of the command differs from `args_used` renders the `args_used` command
+
+### t3 — Extension: fact kinds, the kind floor, and the `based_on` graph
+
+- instruction: Files: .pi/extensions/associate/lib/facts.ts and its test file. Keep old-shape facts (quote, no kind) working as kind direct checked by the matcher.
+- depends on: t1
+- covers: c22, c23, h10, c40, h26
+- acceptance:
+  - lib/facts.ts reads kind and `based_on`; `based_on` ids must exist; a cycle is refused with the fix; facts are checked in dependency order
+  - when a fact fails, every fact based on it (directly or through others) is flagged and dropped with the failed fact's id as the reason; node test: f1 fails, f2 and f3 name f1, all three drop and the message names f1 for f2 and f3; cycle f1 to f2 to f1 is refused
+  - a fact stating kind llm or derived whose evidence is found by the direct check is checked directly and counted as direct; node test
+  - check.json records each fact's stated kind, the kind it was checked as, and its drop reason
+
+### t4 — Extension: the decider judges llm and derived facts, and an outage is 'not judged'
+
+- instruction: Files: .pi/extensions/associate/lib/support.ts plus a new .pi/extensions/associate/lib/judge.ts and tests. The derived question text goes in accuracy.json beside the support question (coordinate the key name with t1: strict.`derived_question`).
+- depends on: t2, t3
+- covers: c24, c31, h18, c36
+- acceptance:
+  - an llm fact is sent to the decider with its value and the evidence the harness copied, using the five-option support question; the option is stored on the fact
+  - a derived fact is sent with its conclusion and the values of the facts it lists, asking whether the conclusion follows; the answer is stored and shown, and by contract (`derived_decides_drops` false) it never drops the fact
+  - decider unreachable or malformed answer: the fact is marked not judged with the reason, is not dropped as failed, and the message to the model names the outage; node test with a fake decider that fails
+  - llm-judged and derived facts are never counted with direct-passed facts
+
+### t5 — Extension: the strict hand-back flow
+
+- instruction: Files: .pi/extensions/associate/lib/handback.ts, .pi/extensions/associate/tools/finish (where finish is registered), tests. Spec c28: no refusal after the last round in strict mode.
+- depends on: t3, t4
+- covers: c7, c10, c25
+- acceptance:
+  - with strict on: a fact that fails a direct check or is answered none is dropped; a fact answered part or little is returned once with the answer and the fix, and if still part or little it is kept with the mark 'evidence shows part of the value'
+  - the model is told each dropped or returned item and why, and may answer again for `retry_rounds`; after the last round the answer goes out without the dropped items and the run is not refused
+  - `ASSOCIATE_STRICT` (on or off) overrides the contract for one run; any other value is ignored with one stderr line; with strict off the present report/enforce behaviour is unchanged (existing node tests pass unmodified)
+  - node tests cover: drop on none, return-then-keep on part, cascade message, rounds exhausted
+
+### t6 — Extension: render the answer from passed items only, with how to check each
+
+- instruction: Files: .pi/extensions/associate/lib/render.ts and tests. Use the words 'quote found', 'checked', 'judged'; never 'accuracy' or 'score'.
+- depends on: t5
+- covers: c1, c6, c7, c35, h11
+- acceptance:
+  - answer.md's answer section holds only items that passed or are kept with a mark; each shows its kind, the command, the result file and the copied evidence; an llm or derived item shows the decider's option
+  - no sentence of the model's summary or final message is in the answer section; both stay in the export under the unchecked label
+  - the answer states how many items were dropped, by reason; every dropped item is in the export with its reason
+  - report.json counts direct-passed, llm-judged, derived, kept-with-mark, not-judged and dropped facts separately, and facts per stated kind
+
+### t7 — Python: parity re-check, old exports, the run result and the peer-facing label
+
+- instruction: Files: associate/accuracy/\*.py, associate/harness/pi.py, associate/cli/`_commands`/run.py and check.py, associate/explain/catalog.py, associate/cli/`_commands`/learn.py, .pi/extensions/associate/tools/delegate.ts, tests/. A renamed `final_reply` field is a change peers see: keep the old key absent, not duplicated, and say so in the changelog.
+- depends on: t6
+- covers: c30, h17, c35, c39, h25
+- acceptance:
+  - associate/accuracy implements the same kinds, kind floor, order, cascade and drop reasons; a parity test runs shared fixtures through the extension's check.json and the Python re-check and compares kinds, order and drops
+  - associate check loads a stored export written before the bump and one written after
+  - associate run --json carries the strict counts and the drop reasons; `final_reply` appears only under a field named as unchecked, with the checked answer beside it; `delegate_status` returns the same labelled pair; tests on both outputs
+  - associate run --strict on|off sets `ASSOCIATE_STRICT` for the run; the explain catalog and learn text name the flag; teken cli doctor --strict passes
+
+### t8 — Prompts and tool text: the model points, the harness copies
+
+- instruction: Files: .pi/extensions/associate/prompts/worker.md, .pi/extensions/associate/prompts/cortex.md, .pi/extensions/associate/tools/check.ts, the finish tool's description text. Short, plain instructions; one worked example of a count with its command.
+- depends on: t1
+- covers: c41
+- acceptance:
+  - the finish tool description and the worker and cortex prompts tell the model to give for each fact: the walk id, where in that result the evidence is, the kind, and `based_on`; and not to retype evidence
+  - `check_quote` accepts a pointer and returns what the harness would copy, so a model can try a pointer before finish
+  - the senses prompt is unchanged; node tests cover the `check_quote` pointer form
+
+### t9 — Replays from stored exports
+
+- instruction: Files: tests/fixtures/accuracy/ (new fixtures cut from the stored t12 results; no machine paths), one pytest file, one node test file. Old-shape facts: the replay shows how they are treated under strict.
+- depends on: t6, t7
+- covers: h4, h22
+- acceptance:
+  - the '604 test files' fact from the measured colleague run is a committed fixture; replayed, the number is found in the cited result, the command shown is the listing of entries, and the test text states what the check catches and what it does not
+  - the measured colleague run in which no fact passed is a fixture; replayed, the answer states how many items were dropped and why and the run result carries the same counts
+
+### t10 — Measure: a strict arm, attribution by item id, and what a caller receives
+
+- instruction: Files: associate/measure/\*.py, tests/`test_measure`\*.py, docs/accuracy/ for the comparison. The committed broad rule (5 of 6) is unchanged.
+- depends on: t7
+- covers: c11, h6, c38, h24
+- acceptance:
+  - associate measure run --broad takes arms strict-on and strict-off
+  - the sheet tags each statement with the answer item id it came from, or as final reply; the report prints per run: graded statements of the answer and of the final reply separately, how many rest on a passed basis and how many of those were graded false, kept-with-mark facts graded false, run time and retry rounds
+  - for the stored t12 runs, a committed comparison lists where the harness attribution and the earlier text-matching attribution differ
+
+### t11 — A labelled set for the derived-fact question
+
+- instruction: Main-session task (it calls the decider and outside graders). Files: docs/accuracy/derived-labelled-set.json, docs/notes/derived-question-calibration.md, a script under scripts/. Outside rater: agy with the recorded recipe.
+- depends on: t4
+- covers: c36, h23
+- acceptance:
+  - a committed set of derived facts (conclusion plus the facts it lists), built from stored exports and planted wrong conclusions, labelled by two raters of which at least one is not a Claude model
+  - the decider's answers on the set are committed with a note giving the shares on raters' agreed pairs; the note says the answer does not decide drops and what result would be needed before it does
+
+### t12 — Recorded live runs on worker and cortex with the default contract
+
+- instruction: Main-session task, sequential runs (the lane serves one request at a time). Note: docs/notes/strict-facts-live-acceptance.md. Each item is one run, not a rate. If a kind or a drop never occurs in the runs, say so; do not stage it.
+- depends on: t5, t6, t7, t8
+- covers: c1, h13, c4, h14, c6, h1, h2, c25, h12, h9, h5, h18, h27, h28
+- acceptance:
+  - one worker and one cortex run on a broad task with the default contract are stored and described in a note: every answer item has a kind, a cited call and a passed check; at least one count shows its command and result as walk.jsonl and the result file hold them; quotes and commands compared byte for byte; the three kinds appear or the note says which did not
+  - the walk and the message the model received show dropped items, or the note says none were dropped in that run
+  - one run in which a fact is answered part: it is returned once and the note says what the model did next
+  - one fault-injected run with the decider unreachable: llm and derived facts are under 'not judged', none dropped as failed
+  - three items of one recorded answer are run again by an outside agent in the pinned checkout and the printed result is compared; the note says who did it and that no person did, unless the operator does
+
+### t13 — The broad comparison: strict on against strict off
+
+- instruction: Main-session task; about 36 runs of about 10 minutes. No verdict beyond the committed rule; middle values without a verdict.
+- depends on: t10, t12
+- covers: c12, h7, c5, h15
+- acceptance:
+  - six broad tasks, 3 runs per arm on worker, stored; graded blind by graders that include at least one outside model; verdicts and the report committed
+  - the note gives the rule's verdict on statements graded false in the answer, the count of false statements whose command is shown for counts, checklist facts stated, kept-with-mark facts graded false, run time and retry rounds; whether models moved counts into free text (spec c16) is reported
+  - the before-state numbers of spec c5 are recomputed from the stored t12 results and the spec corrected if they differ
+
+### t14 — Closing docs, the repo rule, the wording test and the version
+
+- instruction: Files: CLAUDE.md, README if it names the hand-back, docs/notes/accuracy-checks.md, CHANGELOG.md, pyproject.toml, uv.lock, tests/`test_wording`\*.py.
+- depends on: t13
+- covers: c13, h8, c14, c30, c39
+- acceptance:
+  - CLAUDE.md: the accuracy section describes strict facts, the measured and not-measured lists are updated, and the rule on enforce is restated for strict (spec c26); docs/notes/accuracy-checks.md lists each new check with its motivating failure
+  - the wording test over docs finds no 'accuracy' or 'score' for the new counts; git diff shows no change to gate.json and nothing under lobes-cli or colleague
+  - CHANGELOG entry names the contract version bump and the renamed `final_reply` field; version bumped (minor)
+
+## Risks
+
+- [follow_up] Honesty condition h5 still says a returned fact 'narrows the value or the run ends refused'; c10 and c28 as amended say the fact is kept with a mark and the run is not refused. The plan follows c10 and c28; h5 should be reworded in the spec
+- [unknown_nonblocking] Whether models respond to drops by handing back fewer facts (spec park), how children and delegated runs behave under strict, and the time cost of retries are not known until t12 and t13
+- [follow_up] The `final_reply` field in associate run --json and `delegate_status` is renamed to an unchecked-labelled field; colleague reads delegate output. No change is made in colleague; an issue is filed there if it reads the old key
+- [unknown_nonblocking] associate itself reviews each code task before merge (operator, 2026-11-20, dogfooding): a cortex run from the released 0.14.x tree reads the task diff and hands back findings with facts. Only one review run by cortex has been measured before; its findings are a second opinion the main session checks, and each review run is recorded as one run, not a rate

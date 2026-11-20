@@ -191,8 +191,6 @@ Edit the Owner/Model columns before approving gate 2 — the default Model is a 
 
 ## End state
 
-note: plan has not converged — this is a preview, not a commitment
-
 ### Announcement
 
 - associate hands back strict facts: every claim in the answer rests on a basis a reader can check, and a count comes with the command that produced it
