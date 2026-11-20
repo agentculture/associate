@@ -4,7 +4,7 @@
   "schema_version": 6,
   "status": "exported",
   "created": "2026-11-19T18:44:49Z",
-  "updated": "2026-11-19T19:20:06Z",
+  "updated": "2026-11-20T12:14:34Z",
   "claims": [
     {
       "id": "c1",
@@ -704,6 +704,18 @@
           "instruction": ""
         }
       ],
+      "hard_questions": [],
+      "links": [],
+      "instruction": "",
+      "revisions": []
+    },
+    {
+      "id": "c41",
+      "kind": "requirement",
+      "text": "The model does not retype evidence. A fact names the call it rests on (walk id) and where in that call's saved result the evidence is (line range or search term); the harness copies the quoted text, the command as used and the result file into the fact by code. For a direct fact whose value is itself in the result (a count, a line, a match), the harness also takes the value from the result. The model writes only the claim wording for llm and derived facts, and those are judged against the evidence the harness copied. A fact whose pointer resolves to nothing is dropped with that reason.",
+      "origin": "llm",
+      "status": "proposed",
+      "honesty_conditions": [],
       "hard_questions": [],
       "links": [],
       "instruction": "",
