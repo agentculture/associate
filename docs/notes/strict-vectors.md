@@ -27,6 +27,16 @@ true. No count here is accuracy.
 - The Python tests in this repository only check that the file is well formed
   (`tests/test_strict_vectors.py`).
 
+## Paths in the cases
+
+Every case uses the checkout root `/srv/work/proj`, which is not a home
+directory, and run worktrees in the matching `/srv/work/.worktrees.proj/<run>`
+layout. One string in `command_relative_and_redacted` is a placeholder home
+path (a made-up user under the Linux home root) on purpose: it shows that a home path outside the
+checkout is printed as `~`. That string is the documented exception to the rule
+against home-directory paths in tracked files, and `tests/test_strict_vectors.py`
+checks that it is the only one.
+
 ## Top level
 
 | Key | What it is |
@@ -378,8 +388,11 @@ never read.
       digit, `_`, `.` or `-`. A match without its `/` becomes `.`. A match
       with its `/` is removed, or becomes `.` when the end, whitespace or a
       quote follows. So `<root>/lib` prints `lib`, and `<root>` prints `.`.
-   2. Other home paths become `~`: `/home/<user>`, `/Users/<user>` or `/root`,
-      followed by `/`, whitespace, a quote, a backtick or the end.
+   2. Other home paths become `~`. A home path is `/`, then `home` or `Users`,
+      then `/` and one segment with no `/`, whitespace or quote; or `/` then
+      `root`. It must be followed by `/`, whitespace, a quote, a backtick or the
+      end. (Written in words so this note names no home path itself; the
+      regular expression is `HOME_PREFIX` in `lib/evidence.ts`.)
    3. The redaction filter.
 
    The tool name is redacted too.

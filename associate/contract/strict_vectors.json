@@ -17,17 +17,17 @@
       "name": "lines_pointer_no_value",
       "note": "A lines pointer and no value: the harness copies lines 2 to 3; direct, never judged.",
       "input": {
-        "checkout_root": "/home/someone/git/proj",
+        "checkout_root": "/srv/work/proj",
         "walk": [
           {
             "id": "w1",
             "tool": "ls",
             "args": {
-              "path": "/home/someone/git/proj/lib",
+              "path": "/srv/work/proj/lib",
               "purpose": "list lib"
             },
             "args_used": {
-              "path": "/home/someone/git/proj/lib"
+              "path": "/srv/work/proj/lib"
             },
             "saved_result": "results/w1.txt"
           }
@@ -165,17 +165,17 @@
       "name": "search_pointer_value_copied",
       "note": "A search pointer copies the first line holding the term; the value is that line word for word: direct.",
       "input": {
-        "checkout_root": "/home/someone/git/proj",
+        "checkout_root": "/srv/work/proj",
         "walk": [
           {
             "id": "w1",
             "tool": "ls",
             "args": {
-              "path": "/home/someone/git/proj/lib",
+              "path": "/srv/work/proj/lib",
               "purpose": "list lib"
             },
             "args_used": {
-              "path": "/home/someone/git/proj/lib"
+              "path": "/srv/work/proj/lib"
             },
             "saved_result": "results/w1.txt"
           }
@@ -312,17 +312,17 @@
       "name": "value_ends_trimmed_is_direct",
       "note": "Leading and trailing whitespace of the value is trimmed before the substring test: direct.",
       "input": {
-        "checkout_root": "/home/someone/git/proj",
+        "checkout_root": "/srv/work/proj",
         "walk": [
           {
             "id": "w1",
             "tool": "ls",
             "args": {
-              "path": "/home/someone/git/proj/lib",
+              "path": "/srv/work/proj/lib",
               "purpose": "list lib"
             },
             "args_used": {
-              "path": "/home/someone/git/proj/lib"
+              "path": "/srv/work/proj/lib"
             },
             "saved_result": "results/w1.txt"
           }
@@ -458,17 +458,17 @@
       "name": "value_case_differs_is_worded",
       "note": "The comparison is case-sensitive: 'Beta.ts' is not in 'beta.ts', so it is worded and judged (all: pass).",
       "input": {
-        "checkout_root": "/home/someone/git/proj",
+        "checkout_root": "/srv/work/proj",
         "walk": [
           {
             "id": "w1",
             "tool": "ls",
             "args": {
-              "path": "/home/someone/git/proj/lib",
+              "path": "/srv/work/proj/lib",
               "purpose": "list lib"
             },
             "args_used": {
-              "path": "/home/someone/git/proj/lib"
+              "path": "/srv/work/proj/lib"
             },
             "saved_result": "results/w1.txt"
           }
@@ -618,7 +618,7 @@
       "name": "value_inner_whitespace_differs_is_worded",
       "note": "Whitespace inside the value must match exactly: two spaces where the line has one is worded (mostly: pass).",
       "input": {
-        "checkout_root": "/home/someone/git/proj",
+        "checkout_root": "/srv/work/proj",
         "walk": [
           {
             "id": "w1",
@@ -782,17 +782,17 @@
       "name": "stated_llm_value_copied_is_direct",
       "note": "A fact stating llm whose value is word for word in the copied line is direct and not judged.",
       "input": {
-        "checkout_root": "/home/someone/git/proj",
+        "checkout_root": "/srv/work/proj",
         "walk": [
           {
             "id": "w1",
             "tool": "read",
             "args": {
-              "path": "/home/someone/git/proj/lib/roles.py",
+              "path": "/srv/work/proj/lib/roles.py",
               "purpose": "read the role table"
             },
             "args_used": {
-              "path": "/home/someone/git/proj/lib/roles.py"
+              "path": "/srv/work/proj/lib/roles.py"
             },
             "saved_result": "results/w1.txt"
           }
@@ -932,7 +932,7 @@
       "name": "worded_all_pass",
       "note": "A value in the model's own words, answered all: passes as llm.",
       "input": {
-        "checkout_root": "/home/someone/git/proj",
+        "checkout_root": "/srv/work/proj",
         "walk": [
           {
             "id": "w1",
@@ -1094,7 +1094,7 @@
       "name": "worded_mostly_pass",
       "note": "Answered mostly: passes as llm (mostly is in support_score.passes).",
       "input": {
-        "checkout_root": "/home/someone/git/proj",
+        "checkout_root": "/srv/work/proj",
         "walk": [
           {
             "id": "w1",
@@ -1256,7 +1256,7 @@
       "name": "604_part_first_time_returned",
       "note": "The 604 case: a count in the model's own words, stated direct, judged with the command; part the first time: returned.",
       "input": {
-        "checkout_root": "/home/someone/git/proj",
+        "checkout_root": "/srv/work/proj",
         "walk": [
           {
             "id": "w1",
@@ -1425,7 +1425,7 @@
       "name": "604_part_returned_before_kept_marked",
       "note": "The same fact answered part after it was returned in an earlier round: kept with the mark.",
       "input": {
-        "checkout_root": "/home/someone/git/proj",
+        "checkout_root": "/srv/work/proj",
         "walk": [
           {
             "id": "w1",
@@ -1596,7 +1596,7 @@
       "name": "604_part_no_round_left_kept_marked",
       "note": "Answered part with no round left: kept with the mark instead of returned.",
       "input": {
-        "checkout_root": "/home/someone/git/proj",
+        "checkout_root": "/srv/work/proj",
         "walk": [
           {
             "id": "w1",
@@ -1765,7 +1765,7 @@
       "name": "604_little_first_time_returned",
       "note": "Answered little (also a keep_marked option) the first time: returned.",
       "input": {
-        "checkout_root": "/home/someone/git/proj",
+        "checkout_root": "/srv/work/proj",
         "walk": [
           {
             "id": "w1",
@@ -1934,7 +1934,7 @@
       "name": "604_none_dropped",
       "note": "Answered none: dropped (decider_drop).",
       "input": {
-        "checkout_root": "/home/someone/git/proj",
+        "checkout_root": "/srv/work/proj",
         "walk": [
           {
             "id": "w1",
@@ -2107,7 +2107,7 @@
       "name": "604_bare_number_is_direct",
       "note": "The value 604 is word for word in the line: direct, whatever the command counted.",
       "input": {
-        "checkout_root": "/home/someone/git/proj",
+        "checkout_root": "/srv/work/proj",
         "walk": [
           {
             "id": "w1",
@@ -2263,7 +2263,7 @@
       "name": "number_absent",
       "note": "A number in the value that the copied line does not show drops the fact for any stated kind, before the decider.",
       "input": {
-        "checkout_root": "/home/someone/git/proj",
+        "checkout_root": "/srv/work/proj",
         "walk": [
           {
             "id": "w1",
@@ -2413,7 +2413,7 @@
       "name": "number_thousands_separator",
       "note": "1,234 in the value and 1234 in the evidence are the same number token; the value is worded and judged.",
       "input": {
-        "checkout_root": "/home/someone/git/proj",
+        "checkout_root": "/srv/work/proj",
         "walk": [
           {
             "id": "w1",
@@ -2584,17 +2584,17 @@
       "name": "pointer_out_of_range",
       "note": "Lines past the end of a whole result: dropped (pointer_out_of_range), whatever the kind.",
       "input": {
-        "checkout_root": "/home/someone/git/proj",
+        "checkout_root": "/srv/work/proj",
         "walk": [
           {
             "id": "w1",
             "tool": "ls",
             "args": {
-              "path": "/home/someone/git/proj/lib",
+              "path": "/srv/work/proj/lib",
               "purpose": "list lib"
             },
             "args_used": {
-              "path": "/home/someone/git/proj/lib"
+              "path": "/srv/work/proj/lib"
             },
             "saved_result": "results/w1.txt"
           }
@@ -2728,17 +2728,17 @@
       "name": "search_not_found",
       "note": "A search term in no line of a whole result: dropped (search_not_found).",
       "input": {
-        "checkout_root": "/home/someone/git/proj",
+        "checkout_root": "/srv/work/proj",
         "walk": [
           {
             "id": "w1",
             "tool": "ls",
             "args": {
-              "path": "/home/someone/git/proj/lib",
+              "path": "/srv/work/proj/lib",
               "purpose": "list lib"
             },
             "args_used": {
-              "path": "/home/someone/git/proj/lib"
+              "path": "/srv/work/proj/lib"
             },
             "saved_result": "results/w1.txt"
           }
@@ -2867,7 +2867,7 @@
       "name": "result_cut",
       "note": "A partial (cut) result: lines before the last kept line are copied; the last kept line or beyond is result_cut.",
       "input": {
-        "checkout_root": "/home/someone/git/proj",
+        "checkout_root": "/srv/work/proj",
         "walk": [
           {
             "id": "w1",
@@ -3095,19 +3095,19 @@
       "name": "read_shown_line_numbers",
       "note": "A read result is counted by the line numbers it shows: [3401, 3402] copies those stamped lines; [1, 2] is out of range.",
       "input": {
-        "checkout_root": "/home/someone/git/proj",
+        "checkout_root": "/srv/work/proj",
         "walk": [
           {
             "id": "w1",
             "tool": "read",
             "args": {
-              "path": "/home/someone/git/proj/lib/big.ts",
+              "path": "/srv/work/proj/lib/big.ts",
               "start_line": 3400,
               "end_line": 3402,
               "purpose": "read the end"
             },
             "args_used": {
-              "path": "/home/someone/git/proj/lib/big.ts",
+              "path": "/srv/work/proj/lib/big.ts",
               "start_line": 3400,
               "end_line": 3402
             },
@@ -3307,17 +3307,17 @@
       "name": "prior_source_present",
       "note": "A prior: source resolves in the prior run's walk and saved result.",
       "input": {
-        "checkout_root": "/home/someone/git/proj",
+        "checkout_root": "/srv/work/proj",
         "walk": [
           {
             "id": "w1",
             "tool": "ls",
             "args": {
-              "path": "/home/someone/git/proj/lib",
+              "path": "/srv/work/proj/lib",
               "purpose": "list lib"
             },
             "args_used": {
-              "path": "/home/someone/git/proj/lib"
+              "path": "/srv/work/proj/lib"
             },
             "saved_result": "results/w1.txt"
           }
@@ -3332,11 +3332,11 @@
                 "id": "w1",
                 "tool": "read",
                 "args": {
-                  "path": "/home/someone/git/proj/lib/roles.py",
+                  "path": "/srv/work/proj/lib/roles.py",
                   "purpose": "read the role table"
                 },
                 "args_used": {
-                  "path": "/home/someone/git/proj/lib/roles.py"
+                  "path": "/srv/work/proj/lib/roles.py"
                 },
                 "saved_result": "results/w1.txt"
               }
@@ -3477,17 +3477,17 @@
       "name": "prior_source_absent",
       "note": "A prior: source with no prior run loaded: the checker refuses it as an unknown source before any pointer is resolved.",
       "input": {
-        "checkout_root": "/home/someone/git/proj",
+        "checkout_root": "/srv/work/proj",
         "walk": [
           {
             "id": "w1",
             "tool": "ls",
             "args": {
-              "path": "/home/someone/git/proj/lib",
+              "path": "/srv/work/proj/lib",
               "purpose": "list lib"
             },
             "args_used": {
-              "path": "/home/someone/git/proj/lib"
+              "path": "/srv/work/proj/lib"
             },
             "saved_result": "results/w1.txt"
           }
@@ -3620,17 +3620,17 @@
       "name": "child_source_present",
       "note": "A child label (c1:w1) resolves in that child's walk and saved result.",
       "input": {
-        "checkout_root": "/home/someone/git/proj",
+        "checkout_root": "/srv/work/proj",
         "walk": [
           {
             "id": "w1",
             "tool": "read",
             "args": {
-              "path": "/home/someone/git/proj/lib/roles.py",
+              "path": "/srv/work/proj/lib/roles.py",
               "purpose": "read the role table"
             },
             "args_used": {
-              "path": "/home/someone/git/proj/lib/roles.py"
+              "path": "/srv/work/proj/lib/roles.py"
             },
             "saved_result": "results/w1.txt"
           }
@@ -3647,11 +3647,11 @@
                 "id": "w1",
                 "tool": "ls",
                 "args": {
-                  "path": "/home/someone/git/proj/lib",
+                  "path": "/srv/work/proj/lib",
                   "purpose": "list lib"
                 },
                 "args_used": {
-                  "path": "/home/someone/git/proj/lib"
+                  "path": "/srv/work/proj/lib"
                 },
                 "saved_result": "results/w1.txt"
               }
@@ -3787,17 +3787,17 @@
       "name": "child_source_absent",
       "note": "A child label no child carries: refused as an unknown source.",
       "input": {
-        "checkout_root": "/home/someone/git/proj",
+        "checkout_root": "/srv/work/proj",
         "walk": [
           {
             "id": "w1",
             "tool": "read",
             "args": {
-              "path": "/home/someone/git/proj/lib/roles.py",
+              "path": "/srv/work/proj/lib/roles.py",
               "purpose": "read the role table"
             },
             "args_used": {
-              "path": "/home/someone/git/proj/lib/roles.py"
+              "path": "/srv/work/proj/lib/roles.py"
             },
             "saved_result": "results/w1.txt"
           }
@@ -3814,11 +3814,11 @@
                 "id": "w1",
                 "tool": "ls",
                 "args": {
-                  "path": "/home/someone/git/proj/lib",
+                  "path": "/srv/work/proj/lib",
                   "purpose": "list lib"
                 },
                 "args_used": {
-                  "path": "/home/someone/git/proj/lib"
+                  "path": "/srv/work/proj/lib"
                 },
                 "saved_result": "results/w1.txt"
               }
@@ -3948,17 +3948,17 @@
       "name": "unknown_source",
       "note": "A walk id the walk never recorded, and a path given as a source: both dropped.",
       "input": {
-        "checkout_root": "/home/someone/git/proj",
+        "checkout_root": "/srv/work/proj",
         "walk": [
           {
             "id": "w1",
             "tool": "ls",
             "args": {
-              "path": "/home/someone/git/proj/lib",
+              "path": "/srv/work/proj/lib",
               "purpose": "list lib"
             },
             "args_used": {
-              "path": "/home/someone/git/proj/lib"
+              "path": "/srv/work/proj/lib"
             },
             "saved_result": "results/w1.txt"
           }
@@ -4116,7 +4116,7 @@
       "name": "no_saved_result",
       "note": "A pointer into a call whose result was not saved: dropped (no_saved_result).",
       "input": {
-        "checkout_root": "/home/someone/git/proj",
+        "checkout_root": "/srv/work/proj",
         "walk": [
           {
             "id": "w1",
@@ -4255,17 +4255,17 @@
       "name": "old_shape_found_direct",
       "note": "An old-shape fact (a typed quote, no at) whose quote the matcher finds and whose value is inside the quote: direct.",
       "input": {
-        "checkout_root": "/home/someone/git/proj",
+        "checkout_root": "/srv/work/proj",
         "walk": [
           {
             "id": "w1",
             "tool": "read",
             "args": {
-              "path": "/home/someone/git/proj/lib/roles.py",
+              "path": "/srv/work/proj/lib/roles.py",
               "purpose": "read the role table"
             },
             "args_used": {
-              "path": "/home/someone/git/proj/lib/roles.py"
+              "path": "/srv/work/proj/lib/roles.py"
             },
             "saved_result": "results/w1.txt"
           }
@@ -4389,17 +4389,17 @@
       "name": "old_shape_found_worded_judged",
       "note": "An old-shape fact whose value is not inside its quote: judged against the quote alone (no command line).",
       "input": {
-        "checkout_root": "/home/someone/git/proj",
+        "checkout_root": "/srv/work/proj",
         "walk": [
           {
             "id": "w1",
             "tool": "read",
             "args": {
-              "path": "/home/someone/git/proj/lib/roles.py",
+              "path": "/srv/work/proj/lib/roles.py",
               "purpose": "read the role table"
             },
             "args_used": {
-              "path": "/home/someone/git/proj/lib/roles.py"
+              "path": "/srv/work/proj/lib/roles.py"
             },
             "saved_result": "results/w1.txt"
           }
@@ -4537,17 +4537,17 @@
       "name": "old_shape_not_found",
       "note": "An old-shape fact whose quote is not in the result: dropped (quote_absent) even though it states llm.",
       "input": {
-        "checkout_root": "/home/someone/git/proj",
+        "checkout_root": "/srv/work/proj",
         "walk": [
           {
             "id": "w1",
             "tool": "read",
             "args": {
-              "path": "/home/someone/git/proj/lib/roles.py",
+              "path": "/srv/work/proj/lib/roles.py",
               "purpose": "read the role table"
             },
             "args_used": {
-              "path": "/home/someone/git/proj/lib/roles.py"
+              "path": "/srv/work/proj/lib/roles.py"
             },
             "saved_result": "results/w1.txt"
           }
@@ -4676,7 +4676,7 @@
       "name": "old_shape_number_absent",
       "note": "An old-shape fact whose quote is found but whose value states a number the quote does not show: number_absent.",
       "input": {
-        "checkout_root": "/home/someone/git/proj",
+        "checkout_root": "/srv/work/proj",
         "walk": [
           {
             "id": "w1",
@@ -4817,17 +4817,17 @@
       "name": "shape_unknown_kind",
       "note": "A kind that is not direct, llm or derived: dropped (kind_unknown).",
       "input": {
-        "checkout_root": "/home/someone/git/proj",
+        "checkout_root": "/srv/work/proj",
         "walk": [
           {
             "id": "w1",
             "tool": "ls",
             "args": {
-              "path": "/home/someone/git/proj/lib",
+              "path": "/srv/work/proj/lib",
               "purpose": "list lib"
             },
             "args_used": {
-              "path": "/home/someone/git/proj/lib"
+              "path": "/srv/work/proj/lib"
             },
             "saved_result": "results/w1.txt"
           }
@@ -4958,17 +4958,17 @@
       "name": "shape_no_at_no_quote",
       "note": "Neither at nor quote: dropped (pointer_missing).",
       "input": {
-        "checkout_root": "/home/someone/git/proj",
+        "checkout_root": "/srv/work/proj",
         "walk": [
           {
             "id": "w1",
             "tool": "ls",
             "args": {
-              "path": "/home/someone/git/proj/lib",
+              "path": "/srv/work/proj/lib",
               "purpose": "list lib"
             },
             "args_used": {
-              "path": "/home/someone/git/proj/lib"
+              "path": "/srv/work/proj/lib"
             },
             "saved_result": "results/w1.txt"
           }
@@ -5095,17 +5095,17 @@
       "name": "shape_lines_and_search",
       "note": "Both lines and search in at: dropped (pointer_malformed).",
       "input": {
-        "checkout_root": "/home/someone/git/proj",
+        "checkout_root": "/srv/work/proj",
         "walk": [
           {
             "id": "w1",
             "tool": "ls",
             "args": {
-              "path": "/home/someone/git/proj/lib",
+              "path": "/srv/work/proj/lib",
               "purpose": "list lib"
             },
             "args_used": {
-              "path": "/home/someone/git/proj/lib"
+              "path": "/srv/work/proj/lib"
             },
             "saved_result": "results/w1.txt"
           }
@@ -5238,17 +5238,17 @@
       "name": "shape_llm_without_value",
       "note": "An llm fact with no value: dropped (value_missing), although with no value the copied text alone would be direct.",
       "input": {
-        "checkout_root": "/home/someone/git/proj",
+        "checkout_root": "/srv/work/proj",
         "walk": [
           {
             "id": "w1",
             "tool": "ls",
             "args": {
-              "path": "/home/someone/git/proj/lib",
+              "path": "/srv/work/proj/lib",
               "purpose": "list lib"
             },
             "args_used": {
-              "path": "/home/someone/git/proj/lib"
+              "path": "/srv/work/proj/lib"
             },
             "saved_result": "results/w1.txt"
           }
@@ -5381,17 +5381,17 @@
       "name": "shape_derived_without_based_on",
       "note": "A derived fact with no based_on: dropped (based_on_missing) and never sent to the decider.",
       "input": {
-        "checkout_root": "/home/someone/git/proj",
+        "checkout_root": "/srv/work/proj",
         "walk": [
           {
             "id": "w1",
             "tool": "ls",
             "args": {
-              "path": "/home/someone/git/proj/lib",
+              "path": "/srv/work/proj/lib",
               "purpose": "list lib"
             },
             "args_used": {
-              "path": "/home/someone/git/proj/lib"
+              "path": "/srv/work/proj/lib"
             },
             "saved_result": "results/w1.txt"
           }
@@ -5525,17 +5525,17 @@
       "name": "based_on_unknown_id",
       "note": "based_on names f7, which no fact has: f2 fails (based_on_unknown) and f3, based on f2, is dropped naming f2.",
       "input": {
-        "checkout_root": "/home/someone/git/proj",
+        "checkout_root": "/srv/work/proj",
         "walk": [
           {
             "id": "w1",
             "tool": "ls",
             "args": {
-              "path": "/home/someone/git/proj/lib",
+              "path": "/srv/work/proj/lib",
               "purpose": "list lib"
             },
             "args_used": {
-              "path": "/home/someone/git/proj/lib"
+              "path": "/srv/work/proj/lib"
             },
             "saved_result": "results/w1.txt"
           }
@@ -5766,17 +5766,17 @@
       "name": "based_on_cycle",
       "note": "f1 and f2 name each other: both fail (based_on_cycle); f3, based on f2, is dropped naming f2.",
       "input": {
-        "checkout_root": "/home/someone/git/proj",
+        "checkout_root": "/srv/work/proj",
         "walk": [
           {
             "id": "w1",
             "tool": "ls",
             "args": {
-              "path": "/home/someone/git/proj/lib",
+              "path": "/srv/work/proj/lib",
               "purpose": "list lib"
             },
             "args_used": {
-              "path": "/home/someone/git/proj/lib"
+              "path": "/srv/work/proj/lib"
             },
             "saved_result": "results/w1.txt"
           }
@@ -6012,17 +6012,17 @@
       "name": "cascade_chain_names_root",
       "note": "f3 rests on f2, which rests on f1, whose pointer fails: both drops name f1 (the root); the order is f1, f2, f3.",
       "input": {
-        "checkout_root": "/home/someone/git/proj",
+        "checkout_root": "/srv/work/proj",
         "walk": [
           {
             "id": "w1",
             "tool": "ls",
             "args": {
-              "path": "/home/someone/git/proj/lib",
+              "path": "/srv/work/proj/lib",
               "purpose": "list lib"
             },
             "args_used": {
-              "path": "/home/someone/git/proj/lib"
+              "path": "/srv/work/proj/lib"
             },
             "saved_result": "results/w1.txt"
           }
@@ -6234,7 +6234,7 @@
       "name": "derived_each_answer",
       "note": "Derived facts answered yes, mostly, partly, little and no: each is shown with its answer and none is dropped (derived_decides_drops false).",
       "input": {
-        "checkout_root": "/home/someone/git/proj",
+        "checkout_root": "/srv/work/proj",
         "walk": [
           {
             "id": "w1",
@@ -6644,7 +6644,7 @@
       "name": "derived_on_decider_dropped_fact",
       "note": "A derived fact resting on a fact the decider answered none: dropped by the cascade, naming that fact, and never sent to the decider (it stores no answer).",
       "input": {
-        "checkout_root": "/home/someone/git/proj",
+        "checkout_root": "/srv/work/proj",
         "walk": [
           {
             "id": "w1",
@@ -6858,7 +6858,7 @@
       "name": "direct_on_decider_dropped_fact",
       "note": "A direct fact (its own check passed) resting on a fact the decider answered none: dropped by the last cascade, and not counted as direct_passed.",
       "input": {
-        "checkout_root": "/home/someone/git/proj",
+        "checkout_root": "/srv/work/proj",
         "walk": [
           {
             "id": "w1",
@@ -7070,17 +7070,17 @@
       "name": "derived_with_failed_pointer",
       "note": "A derived fact whose own pointer fails is dropped for that reason; it is never judged.",
       "input": {
-        "checkout_root": "/home/someone/git/proj",
+        "checkout_root": "/srv/work/proj",
         "walk": [
           {
             "id": "w1",
             "tool": "ls",
             "args": {
-              "path": "/home/someone/git/proj/lib",
+              "path": "/srv/work/proj/lib",
               "purpose": "list lib"
             },
             "args_used": {
-              "path": "/home/someone/git/proj/lib"
+              "path": "/srv/work/proj/lib"
             },
             "saved_result": "results/w1.txt"
           }
@@ -7251,7 +7251,7 @@
       "name": "decider_outage_not_judged",
       "note": "The decider gave no answer: worded facts are not judged (kept out, not dropped); a verdict on one is not judged; a verdict on a direct fact passes.",
       "input": {
-        "checkout_root": "/home/someone/git/proj",
+        "checkout_root": "/srv/work/proj",
         "walk": [
           {
             "id": "w1",
@@ -7528,7 +7528,7 @@
       "name": "verdicts_on_dropped_facts",
       "note": "A verdict on a fact the checker refused is dropped (basis_refused); on a fact the decider dropped or returned, basis_dropped; an open item likewise.",
       "input": {
-        "checkout_root": "/home/someone/git/proj",
+        "checkout_root": "/srv/work/proj",
         "walk": [
           {
             "id": "w1",
@@ -7888,9 +7888,9 @@
     },
     {
       "name": "command_relative_and_redacted",
-      "note": "Paths under the checkout or its run worktrees print relative, other home paths as ~, token-looking values redacted; an entry without args_used falls back to args.",
+      "note": "Paths under the checkout or its run worktrees print relative, other home paths as ~, token-looking values redacted; an entry without args_used falls back to args. The home path in w2 is deliberate test input for the ~ masking (the one documented exception to the no-home-path rule).",
       "input": {
-        "checkout_root": "/home/someone/git/proj",
+        "checkout_root": "/srv/work/proj",
         "walk": [
           {
             "id": "w1",
@@ -7902,7 +7902,7 @@
                 "token=abcd1234efgh5678",
                 "lib"
               ],
-              "cwd": "/home/someone/git/proj",
+              "cwd": "/srv/work/proj",
               "purpose": "find the token"
             },
             "args_used": {
@@ -7910,10 +7910,10 @@
                 "grep",
                 "-rn",
                 "token=abcd1234efgh5678",
-                "/home/someone/git/proj/lib",
-                "/home/someone/git/.worktrees.proj/run-1/lib"
+                "/srv/work/proj/lib",
+                "/srv/work/.worktrees.proj/run-1/lib"
               ],
-              "cwd": "/home/someone/git/proj"
+              "cwd": "/srv/work/proj"
             },
             "saved_result": "results/w1.txt"
           },

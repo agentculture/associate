@@ -57,7 +57,10 @@ interface CaseDef {
   contract?: { retry_rounds?: number; min_quote_length?: number };
 }
 
-const ROOT = "/home/someone/git/proj";
+/** A checkout root that is not a home directory (no tracked file may name a home path). */
+const ROOT = "/srv/work/proj";
+/** The one home path, in command_relative_and_redacted only: deliberate test input for the ~ masking. */
+const HOME_NOTE = "/home/someone/notes/todo.txt";
 
 const LS: Run = {
   walk: [{ id: "w1", tool: "ls", args: { path: `${ROOT}/lib`, purpose: "list lib" }, args_used: { path: `${ROOT}/lib` }, saved_result: "results/w1.txt" }],
@@ -504,7 +507,7 @@ const CASES: CaseDef[] = [
   // --- the command
   {
     name: "command_relative_and_redacted",
-    note: "Paths under the checkout or its run worktrees print relative, other home paths as ~, token-looking values redacted; an entry without args_used falls back to args.",
+    note: "Paths under the checkout or its run worktrees print relative, other home paths as ~, token-looking values redacted; an entry without args_used falls back to args. The home path in w2 is deliberate test input for the ~ masking (the one documented exception to the no-home-path rule).",
     run: {
       walk: [
         {
@@ -512,12 +515,12 @@ const CASES: CaseDef[] = [
           tool: "bash",
           args: { argv: ["grep", "-rn", "token=abcd1234efgh5678", "lib"], cwd: ROOT, purpose: "find the token" },
           args_used: {
-            argv: ["grep", "-rn", "token=abcd1234efgh5678", `${ROOT}/lib`, "/home/someone/git/.worktrees.proj/run-1/lib"],
+            argv: ["grep", "-rn", "token=abcd1234efgh5678", `${ROOT}/lib`, "/srv/work/.worktrees.proj/run-1/lib"],
             cwd: ROOT,
           },
           saved_result: "results/w1.txt",
         },
-        { id: "w2", tool: "read", args: { path: "/home/someone/notes/todo.txt", purpose: "read my notes" }, saved_result: "results/w2.txt" },
+        { id: "w2", tool: "read", args: { path: HOME_NOTE, purpose: "read my notes" }, saved_result: "results/w2.txt" },
       ],
       results: { "results/w1.txt": "lib/a.ts:3:found\n", "results/w2.txt": "1\tship it\n" },
     },

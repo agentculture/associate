@@ -85,3 +85,17 @@ def test_every_case_has_the_required_keys():
 def test_case_names_are_unique():
     names = [case["name"] for case in _doc()["cases"]]
     assert len(names) == len(set(names))
+
+
+def test_the_only_home_path_is_the_deliberate_one_in_the_command_case():
+    """No tracked file names a home path; the one exception is test input for the ~ masking."""
+    doc = _doc()
+    for case in doc["cases"]:
+        text = json.dumps(case)
+        count = text.count("/home/") + text.count("/Users/") + text.count('"/root')
+        if case["name"] == "command_relative_and_redacted":
+            assert count == 1, count
+            assert "deliberate test input" in case["note"]
+        else:
+            assert count == 0, case["name"]
+        assert not case["input"]["checkout_root"].startswith(("/home/", "/Users/", "/root"))
