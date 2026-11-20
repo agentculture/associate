@@ -20,20 +20,20 @@ Edit the Owner/Model columns before approving gate 2 — the default Model is a 
 
 | Task | Owner | Model |
 | --- | --- | --- |
-| `t1` | subagent; review: associate cortex run before merge | sonnet |
-| `t2` | subagent; review: associate cortex run before merge | opus |
-| `t3` | subagent; review: associate cortex run before merge | opus |
-| `t8` | subagent; review: associate cortex run before merge | sonnet |
-| `t4` | subagent; review: associate cortex run before merge | sonnet |
-| `t5` | subagent; review: associate cortex run before merge | opus |
+| `t1` | subagent; review: associate worker run before merge (deviation d1) | sonnet |
+| `t2` | subagent; review: associate worker run before merge (deviation d1) | opus |
+| `t3` | subagent; review: associate worker run before merge (deviation d1) | opus |
+| `t8` | subagent; review: associate worker run before merge (deviation d1) | sonnet |
+| `t4` | subagent; review: associate worker run before merge (deviation d1) | sonnet |
+| `t5` | subagent; review: associate worker run before merge (deviation d1) | opus |
 | `t11` | main session; raters: one Claude subagent, one agy (Gemini) | fable (main session) |
-| `t6` | subagent; review: associate cortex run before merge | sonnet |
-| `t7` | subagent; review: associate cortex run before merge | sonnet |
-| `t9` | subagent; review: associate cortex run before merge | sonnet |
-| `t10` | subagent; review: associate cortex run before merge | sonnet |
+| `t6` | subagent; review: associate worker run before merge (deviation d1) | sonnet |
+| `t7` | subagent; review: associate worker run before merge (deviation d1) | sonnet |
+| `t9` | subagent; review: associate worker run before merge (deviation d1) | sonnet |
+| `t10` | subagent; review: associate worker run before merge (deviation d1) | sonnet |
 | `t12` | main session; the runs are worker and cortex | fable (main session) |
 | `t13` | main session; runs on worker; graders: Claude subagents and agy (Gemini) | fable (main session) |
-| `t14` | subagent; review: associate cortex run before merge | sonnet |
+| `t14` | subagent; review: associate worker run before merge (deviation d1) | sonnet |
 
 ## Wave 1
 
