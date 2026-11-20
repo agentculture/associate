@@ -20,6 +20,13 @@ while that file is missing, not committed, modified, or still a draft. The
 report applies the rule to each count only when the file is committed,
 unmodified and confirmed; otherwise it says the verdict is not computed.
 
+The strict pair
+---------------
+When an arm sets ``strict`` (``strict-on`` and ``strict-off`` are the usual names), the
+key holds per statement where it came from and ``report`` adds the strict section and
+applies the rule to the answer's false statements instead of all of them (the
+final reply's are printed beside, not ruled on).
+
 Nothing here prints a count as a score, adds counts up over runs, or prints a
 percentage.
 """
@@ -62,6 +69,13 @@ _RULE_COUNTS = (
     ("facts_stated", "facts marked as stated", True),
     ("statements_false", "statements counted false", False),
 )
+#: The counts the rule is applied to for a strict pair: the answer's statements are the ones
+#: the strict arm changes, so the rule reads them, not the final reply's.
+_STRICT_RULE_COUNTS = (
+    ("facts_stated", "facts marked as stated", True),
+    ("answer_false", "answer statements graded false", False),
+)
+_JOINED_COUNTS = ("statements_false", "answer_false")
 
 
 def _broad() -> ModuleType:
@@ -288,7 +302,9 @@ def _joined(args: argparse.Namespace, results: Path, records: list[dict[str, Any
         ) from exc
 
 
-def _rule(note: Path, rows: list[dict[str, Any]], joined: bool) -> dict[str, Any]:
+def _rule(
+    note: Path, rows: list[dict[str, Any]], joined: bool, counts: tuple = _RULE_COUNTS
+) -> dict[str, Any]:
     state: dict[str, Any] = {"file": str(note), _K_APPLIED: False, _K_WHY_NOT: None, _K_COUNTS: {}}
     problem = rule_problem(note)
     if problem is not None:
@@ -296,8 +312,8 @@ def _rule(note: Path, rows: list[dict[str, Any]], joined: bool) -> dict[str, Any
         return state
     rule = _broad().read_rule(note.read_text(encoding=_UTF8))
     state[_K_APPLIED] = True
-    for name, _label, higher in _RULE_COUNTS:
-        if name == "statements_false" and not joined:
+    for name, _label, higher in counts:
+        if name in _JOINED_COUNTS and not joined:
             continue
         counts = _sheet().rule_counts(rows, name)
         state[_K_COUNTS][name] = _broad().rule_verdict(rule, counts, higher_is_better=higher)
@@ -317,14 +333,14 @@ def _verdict_text(found: dict[str, Any]) -> str:
     return f"{found[_K_VERDICT]} (repositories an arm is better in: {wins}; {found['why']})"
 
 
-def _rule_lines(state: dict[str, Any]) -> list[str]:
+def _rule_lines(state: dict[str, Any], counts: tuple = _RULE_COUNTS) -> list[str]:
     if not state[_K_APPLIED]:
         return [
             f"The committed rule's verdict is not computed: {state['file']}: {state[_K_WHY_NOT]}.",
             "Read the counts above against the rule by hand.",
         ]
     lines = [f"The committed rule ({state['file']}), applied to each count on its own:"]
-    for name, label, _higher in _RULE_COUNTS:
+    for name, label, _higher in counts:
         if name in state[_K_COUNTS]:
             lines.append(f"  {label}: {_verdict_text(state['counts'][name])}")
         else:
@@ -334,13 +350,18 @@ def _rule_lines(state: dict[str, Any]) -> list[str]:
 
 def _report_text(payload: dict[str, Any]) -> str:
     parts = [_sheet().render_rows(payload[_K_RUNS])]
+    strict = payload.get("strict_pair")
+    if strict:
+        parts.append(_sheet().render_strict_rows(payload[_K_RUNS]))
     if payload[_K_NOT_FINISHED]:
         shown = ", ".join(
             f"{task} {arm} r{repeat}" for task, arm, repeat in payload[_K_NOT_FINISHED]
         )
         parts.append(f"Stored runs that did not finish and have no answer: {shown}")
-    parts.append("\n".join(_rule_lines(payload["rule"])))
-    parts.append(_sheet().render_middles(payload[_K_RUNS]))
+    counts = _STRICT_RULE_COUNTS if strict else _RULE_COUNTS
+    parts.append("\n".join(_rule_lines(payload["rule"], counts)))
+    middles = _sheet().STRICT_MIDDLE_COUNTS if strict else _sheet().MIDDLE_COUNTS
+    parts.append(_sheet().render_middles(payload[_K_RUNS], middles))
     if payload[_K_PLUMBING]:
         parts.append(base.PLUMBING_LINE)
     return "\n\n".join(parts)
@@ -370,6 +391,8 @@ def cmd_report(
     not_finished = sorted(
         sheet.run_key(record) for record in records if record.get("status") != "finished"
     )
+    strict = sheet.is_strict_comparison(records)
+    middle_counts = sheet.STRICT_MIDDLE_COUNTS if strict else sheet.MIDDLE_COUNTS
     payload = {
         _K_BROAD: True,
         "joined": joined is not None,
@@ -378,11 +401,15 @@ def cmd_report(
         _K_RUNS: rows,
         "without_finish": sheet.finish_counts(rows),
         "middle_values": {
-            count: sheet.middle_values(rows, count) for count, _label in sheet.MIDDLE_COUNTS
+            count: sheet.middle_values(rows, count) for count, _label in middle_counts
         },
-        "rule": _rule(note, rows, joined is not None),
+        "rule": _rule(
+            note, rows, joined is not None, _STRICT_RULE_COUNTS if strict else _RULE_COUNTS
+        ),
         _K_NOT_FINISHED: [list(key) for key in not_finished],
     }
+    if strict:
+        payload["strict_pair"] = True
     json_mode = base._json_mode(args)
     emit_result(payload if json_mode else _report_text(payload), json_mode=json_mode)
     return 0

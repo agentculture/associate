@@ -1,0 +1,236 @@
+{
+  "format": 1,
+  "kind": "broad_attribution_comparison",
+  "note": "Statements of the 36 stored broad runs attributed by the structure of each run's export, beside the totals of the earlier text-matching attribution, which are all that was written down. Counts of statements; none is a score.",
+  "structural": {
+    "runs": 36,
+    "runs_attributed": 36,
+    "runs_not_attributed": [],
+    "by_source": {
+      "claude": {
+        "fact": {
+          "true": 205,
+          "false": 6,
+          "not_checkable": 3,
+          "no verdict": 0
+        },
+        "conclusion": {
+          "true": 28,
+          "false": 2,
+          "not_checkable": 4,
+          "no verdict": 0
+        },
+        "open_item": {
+          "true": 1,
+          "false": 0,
+          "not_checkable": 23,
+          "no verdict": 0
+        },
+        "summary": {
+          "true": 401,
+          "false": 26,
+          "not_checkable": 99,
+          "no verdict": 0
+        },
+        "final_reply": {
+          "true": 640,
+          "false": 34,
+          "not_checkable": 173,
+          "no verdict": 0
+        },
+        "summary_and_final": {
+          "true": 8,
+          "false": 3,
+          "not_checkable": 1,
+          "no verdict": 0
+        },
+        "structure cannot decide": {
+          "true": 0,
+          "false": 0,
+          "not_checkable": 0,
+          "no verdict": 0
+        }
+      },
+      "gemini": {
+        "fact": {
+          "true": 197,
+          "false": 13,
+          "not_checkable": 4,
+          "no verdict": 0
+        },
+        "conclusion": {
+          "true": 28,
+          "false": 2,
+          "not_checkable": 4,
+          "no verdict": 0
+        },
+        "open_item": {
+          "true": 1,
+          "false": 1,
+          "not_checkable": 22,
+          "no verdict": 0
+        },
+        "summary": {
+          "true": 377,
+          "false": 53,
+          "not_checkable": 96,
+          "no verdict": 0
+        },
+        "final_reply": {
+          "true": 601,
+          "false": 78,
+          "not_checkable": 168,
+          "no verdict": 0
+        },
+        "summary_and_final": {
+          "true": 8,
+          "false": 3,
+          "not_checkable": 1,
+          "no verdict": 0
+        },
+        "structure cannot decide": {
+          "true": 0,
+          "false": 0,
+          "not_checkable": 0,
+          "no verdict": 0
+        }
+      }
+    }
+  },
+  "written_totals": {
+    "claude": {
+      "fact_quote_found": [
+        239,
+        6,
+        7
+      ],
+      "fact_quote_refused": [
+        22,
+        0,
+        0
+      ],
+      "unchecked_text": [
+        1022,
+        65,
+        296
+      ]
+    },
+    "gemini": {
+      "fact_quote_found": [
+        228,
+        16,
+        8
+      ],
+      "fact_quote_refused": [
+        19,
+        1,
+        2
+      ],
+      "unchecked_text": [
+        965,
+        133,
+        285
+      ]
+    }
+  },
+  "comparison": {
+    "claude": {
+      "structural_answer_items": [
+        234,
+        8,
+        30
+      ],
+      "structural_summary_and_final_message": [
+        1049,
+        63,
+        273
+      ],
+      "structural_cannot_decide": [
+        0,
+        0,
+        0
+      ],
+      "written_fact_quote_found": [
+        239,
+        6,
+        7
+      ],
+      "written_fact_quote_refused": [
+        22,
+        0,
+        0
+      ],
+      "written_unchecked_text": [
+        1022,
+        65,
+        296
+      ],
+      "written_found_plus_refused": [
+        261,
+        6,
+        7
+      ],
+      "difference_answer_items_minus_written_found_plus_refused": [
+        -27,
+        2,
+        23
+      ],
+      "difference_unchecked_minus_written_unchecked": [
+        27,
+        -2,
+        -23
+      ]
+    },
+    "gemini": {
+      "structural_answer_items": [
+        226,
+        16,
+        30
+      ],
+      "structural_summary_and_final_message": [
+        986,
+        134,
+        265
+      ],
+      "structural_cannot_decide": [
+        0,
+        0,
+        0
+      ],
+      "written_fact_quote_found": [
+        228,
+        16,
+        8
+      ],
+      "written_fact_quote_refused": [
+        19,
+        1,
+        2
+      ],
+      "written_unchecked_text": [
+        965,
+        133,
+        285
+      ],
+      "written_found_plus_refused": [
+        247,
+        17,
+        10
+      ],
+      "difference_answer_items_minus_written_found_plus_refused": [
+        -21,
+        -1,
+        20
+      ],
+      "difference_unchecked_minus_written_unchecked": [
+        21,
+        1,
+        -20
+      ]
+    }
+  },
+  "per_statement_comparison": {
+    "possible": false,
+    "why": "the earlier attribution was not stored per statement, only as totals, so no statement can be listed as attributed differently; the totals above are the whole comparison there is"
+  }
+}

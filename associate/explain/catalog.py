@@ -798,8 +798,8 @@ Every sub-verb takes `--json`.
 
 - `--arms FILE`: a JSON list of arms, each `{"name", "harness_commit", "model"}` and
   optionally `"check_mode"` (`report` or `enforce`), `"reasoning"` (`model-default`,
-  `on` or `off`), `"support_score"` (`on` or `off`) and `"finish_reminder"` (`on` or
-  `off`). An unknown key or a duplicate
+  `on` or `off`), `"support_score"` (`on` or `off`), `"finish_reminder"` (`on` or
+  `off`) and `"strict"` (`on` or `off`). An unknown key or a duplicate
   name is refused with the reason. `harness_commit` is a commit id of 7 to 64
   hexadecimal characters; a branch or tag name is refused.
 - `"support_score"` is passed to every run of the arm as `associate run
@@ -812,6 +812,13 @@ Every sub-verb takes `--json`.
   run` default applies. Each stored record names it under `finish_reminder`: `on`,
   `off` or `contract default`. An arm that sets it on a harness commit whose
   `associate run` has no `--finish-reminder` is refused before any run.
+- `"strict"` is passed to every run of the arm as `associate run --strict`; an arm
+  without it passes nothing and the switch in its harness commit's accuracy.json
+  applies. The strict pair for `run --broad` is two arms, for example `strict-on` and
+  `strict-off`, that differ only in this key: the support-score switch is left at the
+  contract default in both. Each stored record of such an arm names it under `strict`.
+  An arm that sets it on a harness commit whose `associate run` has no `--strict` is
+  refused before any run. An arms file without the key works as before.
 - Before the first run the arms are checked. When they carry more than one
   support-score setting (an arm without one counts as a setting), each arm that sets
   it must have another arm with a different setting and the same model, reasoning,
@@ -930,6 +937,22 @@ repository, a pinned commit and the facts).
   not checkable and the number of statements. Otherwise it refuses (exit 1) and prints
   nothing. Counts are per run; they are never added up over runs and never printed as
   a percentage.
+- A record written from a run's export keeps the answer in parts, and the key (never
+  the sheet) says per statement where it came from: `origin` (`answer`, `summary` or
+  `final_reply`) and, for an item of a strict answer, `item` (`f1`, `v1`, `o1`),
+  `strict_outcome`, `kind_checked` and the decider's `option`. They are read from the
+  export's structure (`answer.md` and `check.json`), never matched on text. A
+  non-strict export has `origin` only. Older records have none and are split as before.
+- When any stored run's arm sets `strict`, `report` adds a per-run section for the
+  strict pair: statements of the answer graded true, false and not checkable;
+  statements of the final reply (the summary and the final message) likewise; of the
+  answer statements, how many rest on an item whose outcome is `pass` and how many of
+  those were graded false; items kept with a mark that were graded false; the run time
+  in seconds; the retry rounds used and the items dropped, copied from `check.json`;
+  and the checklist facts marked as stated, so a loss of stated facts shows. The rule
+  file is then applied to the facts marked as stated and to the answer statements
+  graded false (not to the final reply's), with the middle values beside them and no
+  verdict drawn from those. These are counts, never a score and never accuracy.
 - The report applies the rule file to each count on its own when that file is
   committed, unmodified and confirmed: per repository an arm is better when every one
   of its runs is at least as good as every run of the other arm and one is strictly
