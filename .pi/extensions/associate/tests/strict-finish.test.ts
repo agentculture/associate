@@ -109,8 +109,8 @@ test("drop on none: an llm fact the decider answers none is dropped, the model t
       const report = readJson(join(s.exportDir, REPORT_FILENAME));
       assert.ok(report.flags.some((f: any) => f.check === "decider_answered_none" && f.detail === "f2: decider_drop"));
       const answer = readFileSync(join(s.exportDir, "answer.md"), "utf8");
-      assert.match(answer, /- f1: ROLE_RESPONSIBILITIES/);
-      assert.doesNotMatch(answer, /- f2:/);
+      assert.match(answer, /\*\*f1:\*\* ROLE_RESPONSIBILITIES/);
+      assert.doesNotMatch(answer, /\*\*f2:\*\*/);
 
       // Tools stay callable while the round is open.
       const read = (await s.pi.fireToolCall({
@@ -145,7 +145,7 @@ test("return then keep on part: returned once with the answer and the fix, then 
       const firstCheck = readJson(join(s.exportDir, CHECK_FILENAME));
       assert.equal(firstCheck.facts[1].strict_outcome, "returned");
       assert.equal(firstCheck.facts[1].round, 1);
-      assert.doesNotMatch(readFileSync(join(s.exportDir, "answer.md"), "utf8"), /- f2:/, "a returned fact is not in the answer");
+      assert.doesNotMatch(readFileSync(join(s.exportDir, "answer.md"), "utf8"), /\*\*f2:\*\*/, "a returned fact is not in the answer");
 
       // Unchanged and still answered part: kept with the mark, accepted.
       const second = await callFinish(s.pi, "fin-2", payload(DIRECT, LLM));
@@ -156,7 +156,7 @@ test("return then keep on part: returned once with the answer and the fix, then 
       assert.equal(check.facts[1].judge.option, "part");
       assert.deepEqual(check.strict.returned, []);
       const answer = readFileSync(join(s.exportDir, "answer.md"), "utf8");
-      assert.match(answer, new RegExp(`- f2: senses \\[${MARK}; decider: part\\]`));
+      assert.match(answer, new RegExp(`\\*\\*f2:\\*\\* senses\n[^]*- marked: ${MARK} \\(the decider answered part\\)`));
 
       const walk = finishEntries(s.exportDir);
       assert.equal(walk.length, 2);
@@ -226,7 +226,7 @@ test("rounds exhausted: after retry_rounds the hand-back is accepted without the
       assert.equal(check.strict.round_open, false);
       assert.deepEqual(check.strict.dropped.map((d: any) => d.id), ["f3"]);
       const answer = readFileSync(join(s.exportDir, "answer.md"), "utf8");
-      assert.match(answer, /- f1: ROLE_RESPONSIBILITIES/);
+      assert.match(answer, /\*\*f1:\*\* ROLE_RESPONSIBILITIES/);
       assert.doesNotMatch(answer, /pyproject/);
       assert.ok(!existsSync(join(s.exportDir, "rejected_handback.json")), "nothing was rejected");
 
@@ -281,7 +281,7 @@ test("an outage: llm facts are kept out as not judged, none dropped, the model t
       const check = readJson(join(s.exportDir, CHECK_FILENAME));
       assert.equal(check.facts[1].strict_outcome, "not_judged");
       assert.deepEqual(check.strict.dropped, []);
-      assert.doesNotMatch(readFileSync(join(s.exportDir, "answer.md"), "utf8"), /- f2:/);
+      assert.doesNotMatch(readFileSync(join(s.exportDir, "answer.md"), "utf8"), /\*\*f2:\*\*/);
     });
   } finally {
     decider.restore();

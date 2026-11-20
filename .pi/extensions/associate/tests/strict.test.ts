@@ -20,7 +20,6 @@ import {
   STRICT_RETURN_FIX,
   evidenceContextFor,
   formatStrictMessage,
-  renderView,
   resolveStrict,
   runStrict,
   shapeProblem,
@@ -302,19 +301,4 @@ test("the message lists every dropped and returned item, the rounds left, and th
   const final = formatStrictMessage(decision, { round: 2, retryRounds: 2, final: true });
   assert.doesNotMatch(final, /finish calls left/);
   assert.match(final, /not refused/);
-});
-
-// ------------------------------------------------------- what render is handed
-
-test("render is handed only pass and keep_marked facts as accepted; the mark rides on the value", async () => {
-  const bad = { id: "f3", source: "w1", value: "pyproject.toml", quote: "a content-identical copy sits in pyproject.toml" };
-  const result = await run([DIRECT, LLM, bad], fakeJudge({ f2: "part" }), { canReturn: false });
-  const view = renderView(result.payload, result.check, result.decision);
-  const verdicts = Object.fromEntries(view.check.facts.map((f: FactCheck) => [f.id, f.verdict]));
-  assert.notEqual(verdicts.f1, "refused");
-  assert.notEqual(verdicts.f2, "refused");
-  assert.equal(verdicts.f3, "refused");
-  const facts = (view.payload as { facts: Array<Record<string, unknown>> }).facts;
-  assert.equal(facts[0].quote, "1\tROLE_RESPONSIBILITIES = {", "the copied evidence is the quote shown");
-  assert.match(String(facts[1].value), new RegExp(`\\[${STRICT.mark_text}; decider: part\\]`));
 });

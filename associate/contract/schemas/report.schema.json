@@ -42,6 +42,39 @@
       "type": "integer",
       "description": "How many facts the decider gave a support answer (how much of the value the quote, on its own, shows). Written by the extension; absent when the score is switched off. A count of facts answered, whatever the answer: it is no part of the facts counts and says nothing about whether a value is true."
     },
+    "strict": {
+      "type": "object",
+      "description": "Written by the extension when strict facts ran. Facts counted by how they were checked, never by whether a value is correct: direct_passed (the harness found the evidence), llm_judged and derived (passed on the decider's answer), kept_with_mark (kept with the contract's mark), returned, not_judged, dropped (facts only, in total and per reason), and by_stated_kind (facts per kind as the model stated it, with how many of those passed the direct check alone).",
+      "additionalProperties": false,
+      "required": ["direct_passed", "llm_judged", "derived", "kept_with_mark", "returned", "not_judged", "dropped", "by_stated_kind"],
+      "properties": {
+        "direct_passed": {"type": "integer"},
+        "llm_judged": {"type": "integer"},
+        "derived": {"type": "integer"},
+        "kept_with_mark": {"type": "integer"},
+        "returned": {"type": "integer"},
+        "not_judged": {"type": "integer"},
+        "dropped": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["total", "by_reason"],
+          "properties": {
+            "total": {"type": "integer"},
+            "by_reason": {"type": "object", "additionalProperties": {"type": "integer"}}
+          }
+        },
+        "by_stated_kind": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["direct", "llm", "derived"],
+          "properties": {
+            "direct": {"$ref": "#/$defs/stated_kind"},
+            "llm": {"$ref": "#/$defs/stated_kind"},
+            "derived": {"$ref": "#/$defs/stated_kind"}
+          }
+        }
+      }
+    },
     "support_answers": {
       "type": "object",
       "description": "How many facts got each support answer: one count per option of the contract's support_score.options, in that order, zeros included. Written by the extension; absent when the score is switched off. No part of the facts counts, and no answer means the value is true.",
@@ -89,6 +122,12 @@
     }
   },
   "$defs": {
+    "stated_kind": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["stated", "checked_as_direct"],
+      "properties": {"stated": {"type": "integer"}, "checked_as_direct": {"type": "integer"}}
+    },
     "fact_counts": {
       "type": "object",
       "additionalProperties": false,

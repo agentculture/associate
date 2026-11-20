@@ -616,43 +616,99 @@ export function formatStrictMessage(
   return lines.join("\n");
 }
 
-// --------------------------------------------------------- what render is handed
+// ------------------------------------------------------------ the export records
+
+/** The plain record of what is not in the answer (`dropped.json`, strict t6). */
+export const DROPPED_FILENAME = "dropped.json";
+
+export interface NotJudgedItem {
+  readonly id: string;
+  readonly item: "fact" | "verdict" | "open_item";
+  readonly value: string | null;
+  /** Why: the decider's reason for a fact, `basis_not_judged` for a verdict or open item. */
+  readonly reason: string;
+}
 
 /**
- * The payload and check `lib/render.ts` is handed under strict (its new form
- * is a later task): every fact, verdict and open item outside the answer
- * (dropped, returned, not judged) is marked refused so render leaves it out;
- * a fact whose evidence was copied shows the copied text as its quote, a
- * direct fact with no value shows the value the resolver took, and a kept
- * fact carries the mark and the decider's option on its value.
+ * Every dropped item (id, the value as given, reason, fix, `dropped_by` for a
+ * cascade drop), the returned items and the not-judged items, each under its
+ * own key. None of them is in the answer; this file is the record a reader opens.
  */
-export function renderView(payload: unknown, check: HandbackCheck, decision: StrictDecision): { payload: unknown; check: HandbackCheck } {
+export function droppedRecord(
+  payload: unknown,
+  decision: StrictDecision,
+): { dropped: DroppedItem[]; returned: ReturnedItem[]; not_judged: NotJudgedItem[] } {
   const record = isRecord(payload) ? payload : {};
-  const rawFacts = Array.isArray(record.facts) ? record.facts : [];
-  const inAnswer = (o: StrictOutcome) => o === "pass" || o === "keep_marked";
-  const facts = rawFacts.map((raw, i) => {
-    const fact = isRecord(raw) ? { ...raw } : {};
-    const strict = decision.facts[i];
-    if (!strict) return fact;
-    if (strict.evidence) fact.quote = strict.evidence.quote;
-    if (typeof fact.value !== "string" && strict.evidence) fact.value = strict.evidence.quote;
-    if (strict.strict_outcome === "keep_marked") {
-      fact.value = `${str(fact.value)} [${strict.mark ?? ""}; decider: ${strict.judge?.option ?? "?"}]`;
+  const list = (key: string) => (Array.isArray(record[key]) ? (record[key] as unknown[]).map((x) => (isRecord(x) ? x : {})) : []);
+  const rawFacts = list("facts");
+  const not_judged: NotJudgedItem[] = [];
+  decision.facts.forEach((f, i) => {
+    if (f.strict_outcome === "not_judged") {
+      not_judged.push({ id: f.id, item: "fact", value: valueOf(rawFacts[i] ?? {}), reason: f.judge?.reason ?? "not_judged" });
     }
-    return fact;
   });
-  const out = (item: ItemCheck, s: StrictItem | undefined): ItemCheck =>
-    s && !inAnswer(s.strict_outcome) ? { ...item, outcome: "refused" } : item;
+  const items = (key: "verdicts" | "open_items", kind: "verdict" | "open_item") =>
+    decision.items[key].forEach((v, i) => {
+      if (v.strict_outcome !== "not_judged") return;
+      const text = list(key)[i]?.text;
+      not_judged.push({ id: v.id, item: kind, value: typeof text === "string" ? text : null, reason: "basis_not_judged" });
+    });
+  items("verdicts", "verdict");
+  items("open_items", "open_item");
+  return { dropped: decision.dropped, returned: decision.returned, not_judged };
+}
+
+/** report.json's `strict` object (strict t6): facts counted by how they were checked, never by whether the value is correct. */
+export interface StrictReport {
+  readonly direct_passed: number;
+  readonly llm_judged: number;
+  readonly derived: number;
+  readonly kept_with_mark: number;
+  readonly returned: number;
+  readonly not_judged: number;
+  /** Facts dropped (verdicts and open items are not counted here), in total and per reason. */
+  readonly dropped: { total: number; by_reason: Record<string, number> };
+  /** Facts per kind as the model stated it, and how many of those passed the direct check. */
+  readonly by_stated_kind: Record<"direct" | "llm" | "derived", { stated: number; checked_as_direct: number }>;
+}
+
+/**
+ * Counts for the facts of one strict hand-back. `direct_passed`: passed with
+ * no decider answer (the harness found the evidence). `llm_judged` and
+ * `derived`: passed on the decider's answer (a derived fact is stated as
+ * derived). `kept_with_mark`: kept with the contract's mark. `checked_as_direct`
+ * counts the facts of that stated kind that passed the direct check alone.
+ */
+export function strictReport(decision: StrictDecision): StrictReport {
+  const by_stated_kind = {
+    direct: { stated: 0, checked_as_direct: 0 },
+    llm: { stated: 0, checked_as_direct: 0 },
+    derived: { stated: 0, checked_as_direct: 0 },
+  };
+  let direct_passed = 0;
+  let llm_judged = 0;
+  let derived = 0;
+  const by_reason: Record<string, number> = {};
+  for (const f of decision.facts) {
+    const kind = Object.hasOwn(by_stated_kind, f.kind_stated) ? f.kind_stated : "direct";
+    by_stated_kind[kind].stated += 1;
+    if (f.strict_outcome === "pass") {
+      if (f.judge === null || !f.judge.judged) {
+        direct_passed += 1;
+        by_stated_kind[kind].checked_as_direct += 1;
+      } else if (f.kind_stated === "derived") derived += 1;
+      else llm_judged += 1;
+    }
+  }
+  for (const d of decision.dropped) if (d.item === "fact") by_reason[d.reason] = (by_reason[d.reason] ?? 0) + 1;
   return {
-    payload: { ...record, facts },
-    check: {
-      ...check,
-      facts: check.facts.map((f, i) => {
-        const s = decision.facts[i];
-        return s && !inAnswer(s.strict_outcome) ? { ...f, verdict: "refused" } : f;
-      }),
-      verdicts: check.verdicts.map((v, i) => out(v, decision.items.verdicts[i])),
-      open_items: check.open_items.map((v, i) => out(v, decision.items.open_items[i])),
-    },
+    direct_passed,
+    llm_judged,
+    derived,
+    kept_with_mark: decision.counts.keep_marked,
+    returned: decision.counts.returned,
+    not_judged: decision.counts.not_judged,
+    dropped: { total: decision.counts.dropped, by_reason },
+    by_stated_kind,
   };
 }

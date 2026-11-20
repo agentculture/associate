@@ -67,7 +67,9 @@ import {
 } from "./lib/handback.ts";
 import { installPromptInjection } from "./lib/prompt.ts";
 import { registerAssociateProvider } from "./lib/provider.ts";
-import { countSentences, renderAnswer } from "./lib/render.ts";
+import { countSentences, renderAnswer, renderStrictAnswer } from "./lib/render.ts";
+import { parseSourceRef } from "./lib/facts.ts";
+import { renderCommand } from "./lib/evidence.ts";
 import { createAssociateContext, loadToolModules } from "./lib/runtime.ts";
 import { FinishReminder, resolveFinishReminder, type SettleEventLike } from "./lib/reminder.ts";
 import { createSupportCache, type SupportOptions } from "./lib/support.ts";
@@ -76,12 +78,14 @@ import { judgeFacts, type FactMaterial, type JudgedFact } from "./lib/judge.ts";
 import {
   evidenceContextFor,
   formatStrictMessage,
-  renderView,
+  DROPPED_FILENAME,
+  droppedRecord,
   resolveStrict,
   runStrict,
   strictFlags,
   strictOffShapeProblem,
   strictOverride,
+  strictReport,
 } from "./lib/strict.ts";
 import { supportScoreFor } from "./lib/supportswitch.ts";
 import { assistantMessageText, installStatementsRecorder, messageHasToolCalls } from "./lib/statements.ts";
@@ -374,6 +378,8 @@ export default async function (pi: ExtensionAPI) {
          * from on message_end without asking again.
          */
         support: FactSupport | undefined;
+        /** Strict: the answer again with the model's final message (the strict rendering has no support marker). */
+        rerender?: (finalMessage: string) => string;
       }
     | undefined;
 
@@ -571,16 +577,17 @@ export default async function (pi: ExtensionAPI) {
     const allowed = retryRounds ?? 0;
     const canReturn = strictRounds < allowed;
     const round = strictRounds + 1;
+    const evidence = evidenceContextFor(handbackInput, {
+      checkoutRoot: ctx.checkoutRoot,
+      redact: redaction.apply,
+      sourceKinds: accuracy.source_kinds,
+    });
     const { check, decision } = await runStrict({
       handbackInput,
       accuracy,
       settings: strict.settings!,
       passes: accuracy.support_score?.passes ?? [],
-      evidence: evidenceContextFor(handbackInput, {
-        checkoutRoot: ctx.checkoutRoot,
-        redact: redaction.apply,
-        sourceKinds: accuracy.source_kinds,
-      }),
+      evidence,
       judge: (facts, material) => judgeStrict(facts, material, signal),
       returnedBefore: strictReturned,
       canReturn,
@@ -599,7 +606,11 @@ export default async function (pi: ExtensionAPI) {
 
     const summary = typeof payload.summary === "string" ? payload.summary : "";
     const counts: UncheckedCounts = { summary_sentences: countSentences(summary), final_message_sentences: 0 };
-    const report = { ...check.report, flags: [...check.report.flags, ...strictFlags(decision, accuracy.refusal_checks ?? {})] };
+    const report = {
+      ...check.report,
+      flags: [...check.report.flags, ...strictFlags(decision, accuracy.refusal_checks ?? {})],
+      strict: strictReport(decision),
+    };
     const strictRecord = {
       enabled: true,
       source: strict.source,
@@ -627,32 +638,44 @@ export default async function (pi: ExtensionAPI) {
       would_refuse: [],
       strict: strictRecord,
     });
-    // render is handed only what is in the answer (lib/strict.ts renderView).
-    const view = renderView(payload, check, decision);
-    const viewCheck: HandbackCheck = { ...view.check, report };
+    // The answer is rendered from the strict result directly (lib/render.ts).
+    // An old-shape fact (a quote, no pointer) shows the command of the call it cites.
+    const legacy = (source: string) => {
+      const parsed = parseSourceRef(source);
+      if (!parsed.ok || parsed.label !== null) return undefined;
+      const entry = evidence.entry(parsed.id) as { saved_result?: unknown } | undefined;
+      if (!entry) return undefined;
+      return {
+        command: renderCommand(entry, evidence).command,
+        ...(typeof entry.saved_result === "string" ? { result_file: entry.saved_result } : {}),
+      };
+    };
+    const rerender = (finalMessage: string | undefined) =>
+      renderStrictAnswer({ payload, decision, markText: strict.settings!.mark_text, summary, finalMessage, legacy });
+    const viewCheck: HandbackCheck = { ...check, report };
     let checkRecord: Record<string, unknown> = recordFor(undefined);
-    let answer = renderAnswer({ payload: view.payload, check: viewCheck, summary });
+    const answer = rerender(undefined);
     writeJson(CHECK_FILENAME, checkRecord);
+    writeJson(DROPPED_FILENAME, droppedRecord(payload, decision));
     writeReport(report, counts);
     writeExport(ANSWER_FILENAME, answer);
     const recorded = {
-      payload: view.payload as Record<string, unknown>,
+      payload,
       check: viewCheck,
       checkRecord,
       summary,
       answer,
       support: undefined as FactSupport | undefined,
+      rerender: (finalMessage: string) => rerender(finalMessage),
     };
     accepted = recorded;
     // The report-only support score (its own switch), as with strict off.
     const support = await scoreFacts(check, payload, signal);
     if (support !== undefined) {
       checkRecord = recordFor(support);
-      answer = renderAnswer({ payload: view.payload, check: viewCheck, summary, support });
       writeJson(CHECK_FILENAME, checkRecord);
       writeReport(report, counts, support);
-      writeExport(ANSWER_FILENAME, answer);
-      if (accepted === recorded) accepted = { ...recorded, checkRecord, answer, support };
+      if (accepted === recorded) accepted = { ...recorded, checkRecord, support };
     }
 
     const message = formatStrictMessage(decision, { round, retryRounds: allowed, final: !sendBack });
@@ -1078,7 +1101,9 @@ export default async function (pi: ExtensionAPI) {
     if (!same) {
       writeExport(
         ANSWER_FILENAME,
-        renderAnswer({ payload: accepted.payload, check: accepted.check, summary: accepted.summary, finalMessage: said, support: accepted.support }),
+        accepted.rerender
+          ? accepted.rerender(said)
+          : renderAnswer({ payload: accepted.payload, check: accepted.check, summary: accepted.summary, finalMessage: said, support: accepted.support }),
       );
     }
   });
