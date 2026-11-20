@@ -345,7 +345,7 @@ def test_show_stays_under_64_kib_when_every_new_field_is_huge_too(cfg):
 
 
 def test_show_names_the_unchecked_reply_and_has_no_final_reply_key(cfg):
-    """Strict t7 (spec c30): the model's reply is labelled unchecked; the checked answer sits beside it."""
+    """Strict t7 (c30): the reply is labelled unchecked; the checked answer sits beside it."""
     new = write_run(
         cfg.state_dir,
         1,
