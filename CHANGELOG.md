@@ -5,6 +5,12 @@ All notable changes to this project will be documented in this file.
 Format follows [Keep a Changelog](https://keepachangelog.com/). This project
 adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.14.1] - 2026-11-19
+
+### Added
+
+- **The support check measured on six broad tasks** (plan task t12; `docs/notes/support-score-broad-measurement.md`). 36 `worker` runs, three per repository per arm, with the check off and on. Under the committed rule no difference is shown, on checklist facts stated or on statements graded false, and that holds on both gradings. The 1,657 statements were graded by model graders, not by a person: two Claude graders with a third for disputes (71 false) and one outside Gemini grader (150 false), the main reading. Both gradings of every statement are in `docs/accuracy/broad-graded-statements.json`. About nine in ten statements graded false are in the model's unchecked text. The switch stays off for every model. None of these counts is accuracy.
+
 ## [0.14.0] - 2026-11-19
 
 ### Added

@@ -4,7 +4,7 @@
   "schema_version": 6,
   "status": "exported",
   "created": "2026-11-18T08:35:48Z",
-  "updated": "2026-11-19T12:25:05Z",
+  "updated": "2026-11-20T12:29:59Z",
   "claims": [
     {
       "id": "c1",
@@ -681,6 +681,17 @@
       "skipped_check": "",
       "refs": [
         "trial2"
+      ],
+      "origin": "llm",
+      "status": "approved"
+    },
+    {
+      "id": "l3",
+      "code": "grader-unverified",
+      "what": "the checklist facts marked as stated in the t12 report are a word-match first marking that was not read by hand, though the report says every marking is read by hand",
+      "skipped_check": "hand-reading of the 36 runs' fact markings",
+      "refs": [
+        "t12"
       ],
       "origin": "llm",
       "status": "approved"
