@@ -2,7 +2,7 @@
   "plan_slug": "associate-decider-fact-score",
   "schema_version": 2,
   "created": "2026-11-19T06:30:45Z",
-  "updated": "2026-11-19T19:21:19Z",
+  "updated": "2026-11-20T23:55:44Z",
   "deviations": [
     {
       "id": "d1",
@@ -69,9 +69,254 @@
       "status": "approved",
       "classification": "acceptable",
       "seq": 5
+    },
+    {
+      "id": "d6",
+      "what": "Of the four needs t13 lists for lobes-cli, one is filed as an issue (lobes-cli 344: measure decider builds on associate's two evidence-question sets, published as the private dataset culture-dev/associate-evidence-questions). Priority between callers is not filed. Several states per request is not filed: a test on 2026-11-20 showed 24 requests take about 21 seconds whether 1, 4 or 8 are in flight, and 9 of 24 get 503 when all 24 are in flight. Naming the served model is not decided.",
+      "task_ref": "t13",
+      "reason": "Operator decisions of 2026-11-20: only one decider model exists, so the calibration need becomes a dataset lobes can measure on; no priority issue; batching saves only the network round trip.",
+      "affects": [
+        "t13"
+      ],
+      "origin": "user",
+      "status": "approved",
+      "classification": "acceptable",
+      "seq": 13
     }
   ],
-  "evidence": [],
-  "deltas": [],
+  "evidence": [
+    {
+      "id": "e1",
+      "obligation_ref": "o1",
+      "test_ref": ".pi/extensions/associate/tests/support-finish.test.ts (23 tests)",
+      "behavior_text": "finish writes facts[i].support and the report counts; score off leaves the files byte-identical",
+      "contract_text": "c2: the extension asks the decider one question per quote-found fact at finish and stores the answer per fact",
+      "evidence_type": "automated",
+      "strength": "execution",
+      "strength_basis": "node --test run on the closing branch against a fake decider: 23 pass, 0 fail; no live decider in this test",
+      "outcome": "pass",
+      "run": {
+        "timestamp": "2026-11-20T17:20:54Z",
+        "commit": "a4d6ccc"
+      },
+      "origin": "llm",
+      "status": "approved",
+      "superseded": false,
+      "seq": 6
+    },
+    {
+      "id": "e2",
+      "obligation_ref": "o2",
+      "test_ref": ".pi/extensions/associate/tests/support.test.ts (38 tests)",
+      "behavior_text": "each failure kind is recorded as not scored; pairs are redacted, asked once per session, bounded by the contract's caps",
+      "contract_text": "c3, c22, c25, c27, c28: own client, bounded, redacted, asked once, empty or over-long pairs not sent",
+      "evidence_type": "automated",
+      "strength": "execution",
+      "strength_basis": "node --test against a fake decider: 38 pass, 0 fail",
+      "outcome": "pass",
+      "run": {
+        "timestamp": "2026-11-20T17:20:54Z",
+        "commit": "a4d6ccc"
+      },
+      "origin": "llm",
+      "status": "approved",
+      "superseded": false,
+      "seq": 7
+    },
+    {
+      "id": "e3",
+      "obligation_ref": "o3",
+      "test_ref": ".pi/extensions/associate/tests/check-support.test.ts (19 tests)",
+      "behavior_text": "the support key is added beside the unchanged matcher keys",
+      "contract_text": "c6: check_quote returns the support score as one added key",
+      "evidence_type": "automated",
+      "strength": "execution",
+      "strength_basis": "node --test against a fake decider: 19 pass, 0 fail",
+      "outcome": "pass",
+      "run": {
+        "timestamp": "2026-11-20T17:20:54Z",
+        "commit": "a4d6ccc"
+      },
+      "origin": "llm",
+      "status": "approved",
+      "superseded": false,
+      "seq": 8
+    },
+    {
+      "id": "e4",
+      "obligation_ref": "o4",
+      "test_ref": ".pi/extensions/associate/tests/render-support.test.ts (11 tests)",
+      "behavior_text": "the rendered answer shows both marks separately and never a number",
+      "contract_text": "c7: the rendered answer marks each fact with both signals separately",
+      "evidence_type": "automated",
+      "strength": "execution",
+      "strength_basis": "node --test: 11 pass, 0 fail",
+      "outcome": "pass",
+      "run": {
+        "timestamp": "2026-11-20T17:20:54Z",
+        "commit": "a4d6ccc"
+      },
+      "origin": "llm",
+      "status": "approved",
+      "superseded": false,
+      "seq": 9
+    },
+    {
+      "id": "e5",
+      "obligation_ref": "o5",
+      "test_ref": "tests/test_support_wording.py (72 cases)",
+      "behavior_text": "a sentence that calls the score or a count accuracy is a finding unless it denies it; 10 bad sentences are found and 11 good ones pass",
+      "contract_text": "c23: the score is never called accuracy",
+      "evidence_type": "automated",
+      "strength": "sensitivity",
+      "strength_basis": "pytest on the closing branch: pass; the test is shown to fail on planted bad sentences, and it failed for real on a first changelog draft. Its docstring lists what it cannot see (a claim through a pronoun alone in a mixed file)",
+      "outcome": "pass",
+      "run": {
+        "timestamp": "2026-11-20T17:20:54Z",
+        "commit": "a4d6ccc"
+      },
+      "origin": "llm",
+      "status": "rejected",
+      "superseded": false,
+      "seq": 10
+    },
+    {
+      "id": "e6",
+      "obligation_ref": "o6",
+      "test_ref": "python3 scripts/support_shares.py on the committed set",
+      "behavior_text": "real pairs: 229 of 253 supported passed (90.5%), 12 of 152 unsupported passed (7.9%); development half 88.3% and 12.5%, held-out half 92.5% and 4.5%",
+      "contract_text": "c19: on at least 300 real pairs labelled by two raters, pass at least 90% of supported and at most 10% of unsupported",
+      "evidence_type": "observation",
+      "strength": "fidelity",
+      "strength_basis": "recomputed from the committed file today. The whole set meets the target; the development half does not. Both raters are models, and the question wording was written after looking at this set, so this is not a held-out result",
+      "outcome": "fail",
+      "run": {
+        "timestamp": "2026-11-20T17:20:54Z",
+        "commit": "a4d6ccc"
+      },
+      "origin": "llm",
+      "status": "approved",
+      "superseded": false,
+      "seq": 11
+    },
+    {
+      "id": "e7",
+      "obligation_ref": "o7",
+      "test_ref": "docs/notes/support-score-broad-measurement.md and docs/accuracy/broad-graded-statements.json",
+      "behavior_text": "36 worker runs, 3 per repository per arm; under the committed rule no difference shown on either count, on both gradings",
+      "contract_text": "c20: one broad task per repository on six repositories, at least 3 runs per arm, compared under a committed rule",
+      "evidence_type": "observation",
+      "strength": "fidelity",
+      "strength_basis": "read from the committed note; the runs were not repeated today. Graded by model graders, not by a person (deviation d5); the facts-stated count is a word match not read by hand (lapse l3)",
+      "outcome": "pass",
+      "run": {
+        "timestamp": "2026-11-20T17:20:54Z",
+        "commit": "a4d6ccc"
+      },
+      "origin": "llm",
+      "status": "approved",
+      "superseded": false,
+      "seq": 12
+    },
+    {
+      "id": "e8",
+      "obligation_ref": "o5",
+      "test_ref": "tests/test_support_wording.py (115 cases)",
+      "behavior_text": "a sentence that calls the support score or a count of it accuracy is a finding unless a denial stands in the same clause within six words; 24 bad sentences are found and 22 good ones pass; files are found through git ls-files",
+      "contract_text": "c23: the score is never called accuracy",
+      "evidence_type": "automated",
+      "strength": "sensitivity",
+      "strength_basis": "pytest on the closing branch after the review fixes: pass. Replaces e5, whose counts (72 cases, 10 bad, 11 good) describe the test before a code review found it too loose and it was rewritten in 6ecc877. The docstring lists what it still cannot see: in a mixed file, a claim whose subject is only 'the score' or a pronoun",
+      "outcome": "pass",
+      "run": {
+        "timestamp": "2026-11-20T18:36:21Z",
+        "commit": "6ecc877"
+      },
+      "origin": "llm",
+      "status": "approved",
+      "superseded": false,
+      "seq": 14
+    },
+    {
+      "id": "e9",
+      "obligation_ref": "o1",
+      "test_ref": "tests/test_support_cortex_run.py on tests/fixtures/accuracy/cortex_support_score_on_export",
+      "behavior_text": "the export of one live cortex run with the score on holds a support record for each of its 3 quote-found facts and support_scored 3 in report.json",
+      "contract_text": "t12 first criterion: one live run in report mode on cortex with the score on leaves a check.json in which every quote-found fact is scored or marked not scored",
+      "evidence_type": "observation",
+      "strength": "fidelity",
+      "strength_basis": "one live run on 2026-11-20, made during closing and after PR 40 merged, on an easy read task; its export is committed with machine paths masked. One run, not a rate",
+      "outcome": "pass",
+      "run": {
+        "timestamp": "2026-11-20T18:36:21Z",
+        "commit": "6ecc877"
+      },
+      "origin": "llm",
+      "status": "approved",
+      "superseded": false,
+      "seq": 15
+    },
+    {
+      "id": "e10",
+      "obligation_ref": "o5",
+      "test_ref": "tests/test_support_wording.py (120 cases)",
+      "behavior_text": "a sentence that calls the support score or a count of it accuracy, a true measure, how right, or says it proves or makes the value true is a finding unless a denial stands in the same clause within six words; 27 bad sentences are found and 24 good ones pass; files are found through git ls-files",
+      "contract_text": "c23: the score is never called accuracy",
+      "evidence_type": "automated",
+      "strength": "sensitivity",
+      "strength_basis": "pytest on the closing branch: pass. Adds to e8 the three phrasings an outside review of PR 42 showed escaping (true measure, proves the value true, how right). Still blind to words outside TERMS and to a claim whose subject in a mixed file is only 'the score' or a pronoun",
+      "outcome": "pass",
+      "run": {
+        "timestamp": "2026-11-20T23:55:44Z",
+        "commit": "6b84cbf"
+      },
+      "origin": "llm",
+      "status": "proposed",
+      "superseded": false,
+      "seq": 16
+    }
+  ],
+  "deltas": [
+    {
+      "id": "b1",
+      "kind": "amended",
+      "behavior_text": "The support question is a five-option choice with a background (all, mostly, part, little, none; all or mostly passes), not a yes/no probability cut at a number",
+      "caused_by": [
+        "d4"
+      ],
+      "evidence_refs": [
+        "e6"
+      ],
+      "origin": "llm",
+      "status": "approved",
+      "superseded": false
+    },
+    {
+      "id": "b2",
+      "kind": "added",
+      "behavior_text": "The harness reminds a model once to call finish when its task turn ends without it",
+      "caused_by": [
+        "d3"
+      ],
+      "evidence_refs": [],
+      "origin": "llm",
+      "status": "approved",
+      "superseded": false
+    },
+    {
+      "id": "b3",
+      "kind": "amended",
+      "behavior_text": "The broad measurement's statements were graded by model graders (Claude and Gemini), not by hand",
+      "caused_by": [
+        "d5"
+      ],
+      "evidence_refs": [
+        "e7"
+      ],
+      "origin": "llm",
+      "status": "approved",
+      "superseded": false
+    }
+  ],
   "supersessions": []
 }

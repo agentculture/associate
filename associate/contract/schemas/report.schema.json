@@ -2,7 +2,7 @@
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "$id": "https://github.com/agentculture/associate/contract/report.schema.json",
   "title": "associate accuracy report",
-  "description": "The harness-written accuracy counts for one run: per kind, per source kind, reviewer flags, whether the Python re-check ran, and child runs listed with their own counts. A passed fact means its quote was found in the saved result it cites, nothing more.",
+  "description": "The counts the harness writes for one run of the accuracy method: per kind, per source kind, reviewer flags, whether the Python re-check ran, and child runs listed with their own counts. A passed fact means its quote was found in the saved result it cites, nothing more.",
   "type": "object",
   "additionalProperties": false,
   "required": ["facts", "conclusions", "statements", "by_source_kind", "flags", "python_recheck_ran"],

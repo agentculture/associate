@@ -1,0 +1,1 @@
+{"source":"w2","verdict":"passed","reason":null,"nearest":null,"support":{"status":"scored","answer":"all","supports":true,"confidence":0.5384,"meaning":"the quote shows the value"}}

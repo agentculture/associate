@@ -1,0 +1,1 @@
+support_score in associate/contract/accuracy.json has five option names — all, mostly, part, little, none — of which all and mostly pass. enabled is false for every registry model: worker, senses, cortex and super-vl. All facts were verified with check_quote (support: all). Nothing was changed.

@@ -1,0 +1,66 @@
+{
+  "statements": [
+    {
+      "text": "The five option names of support_score are all, mostly, part, little, none.",
+      "evidence": [
+        "w2",
+        "w5"
+      ],
+      "status": "referenced",
+      "citations": []
+    },
+    {
+      "text": "The options that pass are all and mostly.",
+      "evidence": [
+        "w2",
+        "w4"
+      ],
+      "status": "referenced",
+      "citations": []
+    },
+    {
+      "text": "support_score.enabled is false for worker, senses, cortex and super-vl.",
+      "evidence": [
+        "w2",
+        "w6"
+      ],
+      "status": "referenced",
+      "citations": []
+    },
+    {
+      "text": "Nothing in the checkout was changed; the task was read-only and every check_quote passed with support 'all'.",
+      "evidence": [
+        "w7"
+      ],
+      "status": "referenced",
+      "citations": []
+    },
+    {
+      "text": "support_score in associate/contract/accuracy.json has five option names — all, mostly, part, little, none — of which all and mostly pass. enabled is false for every registry model: worker, senses, cortex and super-vl. All facts were verified with check_quote (support: all). Nothing was changed.",
+      "evidence": [],
+      "status": "unreferenced",
+      "citations": []
+    }
+  ],
+  "citations": [
+    {
+      "path": "associate/contract/accuracy.json",
+      "line": 17,
+      "check": "encountered",
+      "walk_id": "w2"
+    },
+    {
+      "path": "associate/contract/accuracy.json",
+      "line": 24,
+      "check": "encountered",
+      "walk_id": "w2"
+    },
+    {
+      "path": "associate/contract/accuracy.json",
+      "line": 28,
+      "check": "encountered",
+      "walk_id": "w2"
+    }
+  ],
+  "not_fully_read": false
+}

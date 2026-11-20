@@ -4,7 +4,7 @@
   "schema_version": 6,
   "status": "exported",
   "created": "2026-11-18T08:35:48Z",
-  "updated": "2026-11-20T12:29:59Z",
+  "updated": "2026-11-20T18:42:25Z",
   "claims": [
     {
       "id": "c1",
@@ -697,5 +697,69 @@
       "status": "approved"
     }
   ],
-  "obligations": []
+  "obligations": [
+    {
+      "id": "o1",
+      "claim_id": "c2",
+      "seam": "finish, check.json and report.json",
+      "behavior": "each quote-found fact gets a stored support answer or a not-scored reason; with the score off no file changes",
+      "source_text": "at finish, after the quote check, the extension asks the decider one question per fact that passed the quote check (does the quote, on its own, state or directly show the value) and stores the score per fact in check.json and a count in report.json under their own names; the score never enters accepted, the refusal list, or the passed, refused and unchecked counts",
+      "origin": "llm",
+      "status": "approved"
+    },
+    {
+      "id": "o2",
+      "claim_id": "c3",
+      "seam": "lib/support.ts client",
+      "behavior": "a missing key, timeout, non-2xx or malformed answer is recorded as not scored; no gate line, no Super tier, no fallback",
+      "source_text": "the score is fetched by a small client of its own, not by the gate's evaluate path: no Super tier, no read-only fallback, no gate id and no gate line in the walk; a missing key, timeout, non-2xx or malformed answer is recorded as not scored and never as passed, and finish still writes all its files",
+      "origin": "llm",
+      "status": "approved"
+    },
+    {
+      "id": "o3",
+      "claim_id": "c6",
+      "seam": "check_quote tool result",
+      "behavior": "check_quote returns one added support key with a meaning in words when the quote is found and the score is on",
+      "source_text": "check_quote returns the support score for a quote and value as one added key beside the matcher verdict, so the model can check a claim before it hands back; the existing keys do not change",
+      "origin": "llm",
+      "status": "approved"
+    },
+    {
+      "id": "o4",
+      "claim_id": "c7",
+      "seam": "answer.md",
+      "behavior": "each scored fact carries a second, separate mark in words and a legend saying neither mark means the value is true",
+      "source_text": "the rendered answer marks each fact with both signals separately: quote found, and whether the quote supports the value with its score, or not scored",
+      "origin": "llm",
+      "status": "approved"
+    },
+    {
+      "id": "o5",
+      "claim_id": "c23",
+      "seam": "user-facing strings and documents of this work",
+      "behavior": "no text calls the support score or its count accuracy",
+      "source_text": "the score is never called accuracy and never folded into the quote-found counts; a low score is shown to the model as information, not as a refusal",
+      "origin": "llm",
+      "status": "approved"
+    },
+    {
+      "id": "o6",
+      "claim_id": "c19",
+      "seam": "docs/accuracy/support-labelled-set.json with scripts/support_shares.py",
+      "behavior": "at least 90% of real pairs both raters call supported pass and at most 10% of those both call unsupported pass",
+      "source_text": "on a labelled set of at least 300 real value-and-quote pairs, labelled by two raters, the decider score at the contract cut-off passes at least 90% of the pairs both raters call supported and at most 10% of the pairs both call unsupported; the set and the labels are committed",
+      "origin": "llm",
+      "status": "approved"
+    },
+    {
+      "id": "o7",
+      "claim_id": "c20",
+      "seam": "docs/notes/support-score-broad-measurement.md",
+      "behavior": "six repositories, at least 3 runs per arm on worker, false statements counted blind, the result stated whichever way it comes out",
+      "source_text": "on one broad explanation task per repository, on six repositories (culture, culture-rules, colleague, associate, coherence-cli, workledger-cli, each pinned to a commit), run at least 3 times per repository on worker with the score switched off and at least 3 times with it on, each run is reported with two counts: how many of that repository's checked facts it states correctly (from a checklist of at least 8 facts per repository, each checked twice independently before the first run), and how many of its statements are false by hand-grading against the repository; counts are reported per run and not pooled into one percentage, the rule for what difference is called a change is committed before the first run, and the result is stated whichever way it comes out",
+      "origin": "llm",
+      "status": "approved"
+    }
+  ]
 }
