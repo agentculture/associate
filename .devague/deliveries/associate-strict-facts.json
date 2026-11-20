@@ -2,7 +2,7 @@
   "plan_slug": "associate-strict-facts",
   "schema_version": 2,
   "created": "2026-11-20T14:34:55Z",
-  "updated": "2026-11-20T15:25:32Z",
+  "updated": "2026-11-20T15:27:03Z",
   "deviations": [
     {
       "id": "d1",
@@ -41,6 +41,23 @@
       "status": "approved",
       "classification": "acceptable",
       "seq": 2
+    },
+    {
+      "id": "d3",
+      "what": "A value counts as direct only when the fact gives no value or its value is word for word inside the copied evidence; a value in the model's own wording is judged by the decider whatever kind the fact states, after the pointer and number checks. This replaces the rule of spec c40 and honesty condition h26 that a fact whose evidence is found is checked directly and counted as direct",
+      "task_ref": "t3",
+      "reason": "Operator, 2026-11-20: 'Option A (as recommended)'. With the harness copying evidence (c41) a resolved pointer is always found, so c40 as written passed 'There are 604 test files' on a line holding 604 with no judgement; found while building t5 and again by the t6 builder",
+      "affects": [
+        "c40",
+        "h26",
+        "c24",
+        "t5",
+        "t6"
+      ],
+      "origin": "user",
+      "status": "approved",
+      "classification": "acceptable",
+      "seq": 3
     }
   ],
   "evidence": [],
