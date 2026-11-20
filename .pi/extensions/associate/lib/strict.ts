@@ -11,16 +11,20 @@
  * setting is the contract's (`strict`, `support_score.passes`).
  *
  * The flow, per hand-back (`runStrict`):
- *   1. `checkHandback` (lib/facts.ts) with a resolver adapter over
- *      `resolveEvidence` (lib/evidence.ts): a fact with `at` has its evidence
- *      copied by code; the kind floor, the graph refusals (unknown id, cycle)
- *      and the first cascade are t3's.
+ *   1. `checkHandback` (lib/facts.ts) with `strict: true` and a resolver
+ *      adapter over `resolveEvidence` (lib/evidence.ts): a fact with `at` has
+ *      its evidence copied by code; the pointer and number checks fail any
+ *      kind; then the direct-or-worded rule (plan deviation d3, replacing the
+ *      kind floor): a fact with no value or a value word for word in its
+ *      evidence passes as direct, any other value is left `to_judge` as llm
+ *      whatever kind it stated, and a derived fact is always `to_judge`. The
+ *      graph refusals (unknown id, cycle) and the first cascade are t3's.
  *   2. The shape rules (`shapeProblem`, the same cross-field rules as Python
  *      `validate_facts`): a fact that breaks one fails with that reason and
  *      its fix, before anything is asked about it; the cascade is redone.
- *   3. `judge` for the facts left `to_judge` (an llm or derived fact the
- *      direct check did not pass), with `material` built from the facts as
- *      given and the evidence copied for them.
+ *   3. `judge` for the facts left `to_judge`, with `material` built from the
+ *      facts as given and the evidence copied for them (for a fact whose
+ *      pointer resolved, the command too).
  *   4. `policyFor` (lib/judge.ts) per judged fact: `drop` fails it
  *      (`decider_drop`); `keep_marked` returns it once, or keeps it with
  *      `strict.mark_text` when it was returned before in this task or no
@@ -353,7 +357,7 @@ export async function runStrict(input: StrictRunInput): Promise<StrictRun> {
     failedWith.set(fact, result.message);
     return { ok: false, reason: result.reason, fix: result.fix };
   };
-  const check = checkHandback(input.handbackInput, input.accuracy, { resolveEvidence: resolver });
+  const check = checkHandback(input.handbackInput, input.accuracy, { resolveEvidence: resolver, strict: true });
 
   // 2. shape rules, then the cascade again
   const shapes = rawFacts.map((raw) => shapeProblem(raw));
@@ -375,8 +379,10 @@ export async function runStrict(input: StrictRunInput): Promise<StrictRun> {
     const i = firstById.get(id);
     if (i === undefined) return undefined;
     const raw = rawFacts[i]!;
-    const evidence = copied.get(raw)?.quote ?? (typeof raw.quote === "string" && raw.quote !== "" ? raw.quote : null);
-    return { value: valueOf(raw), evidence };
+    const resolved = copied.get(raw);
+    const evidence = resolved?.quote ?? (typeof raw.quote === "string" && raw.quote !== "" ? raw.quote : null);
+    // A fact whose pointer resolved is judged with the command beside the copied lines (lib/judge.ts).
+    return { value: valueOf(raw), evidence, command: resolved?.command ?? null };
   };
   const judged = await input.judge(shaped, material);
 
@@ -670,14 +676,20 @@ export interface StrictReport {
   readonly dropped: { total: number; by_reason: Record<string, number> };
   /** Facts per kind as the model stated it, and how many of those passed the direct check. */
   readonly by_stated_kind: Record<"direct" | "llm" | "derived", { stated: number; checked_as_direct: number }>;
+  /** Facts whose value was in the model's own wording (`worded: true`), whatever happened to them next. */
+  readonly worded: number;
+  /** Facts the decider answered for (support or derived question), whatever the answer. */
+  readonly judged: number;
 }
 
 /**
  * Counts for the facts of one strict hand-back. `direct_passed`: passed with
- * no decider answer (the harness found the evidence). `llm_judged` and
- * `derived`: passed on the decider's answer (a derived fact is stated as
- * derived). `kept_with_mark`: kept with the contract's mark. `checked_as_direct`
- * counts the facts of that stated kind that passed the direct check alone.
+ * no decider answer (no value, or the value word for word in the evidence).
+ * `llm_judged` and `derived`: passed on the decider's answer (a derived fact is
+ * stated as derived). `kept_with_mark`: kept with the contract's mark.
+ * `checked_as_direct` counts the facts of that stated kind that passed the
+ * direct check alone. `worded`: facts whose value was in the model's own
+ * wording. `judged`: facts the decider gave an answer for.
  */
 export function strictReport(decision: StrictDecision): StrictReport {
   const by_stated_kind = {
@@ -710,5 +722,7 @@ export function strictReport(decision: StrictDecision): StrictReport {
     not_judged: decision.counts.not_judged,
     dropped: { total: decision.counts.dropped, by_reason },
     by_stated_kind,
+    worded: decision.facts.filter((f) => f.worded === true).length,
+    judged: decision.facts.filter((f) => f.judge !== null && f.judge.judged).length,
   };
 }

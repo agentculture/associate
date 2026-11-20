@@ -4,6 +4,11 @@
  *
  * Old-shape facts (a quote, no kind) are covered by `facts.test.ts` and the
  * shared vectors; these cases add the new fields only.
+ *
+ * `checkHandback` without `strict` is the strict-off path, where the kind
+ * floor still sets `kind_checked` (recorded only). With `strict: true` the
+ * direct-or-worded rule replaces it (plan deviation d3); those cases are under
+ * "strict on" below.
  */
 
 import test from "node:test";
@@ -52,7 +57,7 @@ test("an old-shape fact (quote, no kind) is a direct fact checked by the matcher
   assert.equal(got.accepted, true);
 });
 
-test("kind floor: a fact stating llm or derived whose quote is in the result is checked and counted as direct", () => {
+test("strict off (unchanged): the kind floor still records a fact stating llm or derived whose quote is in the result as direct", () => {
   const got = checkHandback(
     input([
       { id: "f1", kind: "llm", value: "the file has 604 entries", source: "w1", quote: GOOD },
@@ -71,7 +76,7 @@ test("kind floor: a fact stating llm or derived whose quote is in the result is 
   assert.equal(got.report.facts.passed, 2, "counted with the direct-passed facts");
 });
 
-test("an llm or derived fact whose evidence the direct check does not find is left to judge, not refused", () => {
+test("strict off (unchanged): an llm or derived fact whose evidence the direct check does not find is left to judge, not refused", () => {
   const got = checkHandback(
     input([
       { id: "f1", value: "a stated value", source: "w1", quote: GOOD },
@@ -128,7 +133,7 @@ test("a fact with only a pointer and no resolver is unchecked as pointer_unresol
   assert.equal(f1.drop_reason, null);
 });
 
-test("a pointer the resolver resolves is checked directly against the copied quote", () => {
+test("strict off (unchanged): a pointer the resolver resolves is checked directly against the copied quote", () => {
   const seen: unknown[] = [];
   const resolveEvidence: EvidenceResolver = (fact, located) => {
     seen.push([fact.id, located.entry.id, located.text]);
@@ -344,4 +349,141 @@ test("check.json's per-fact record carries kind_stated, kind_checked, based_on a
   assert.equal(written[0].kind_stated, "llm");
   assert.equal(written[0].kind_checked, "llm");
   assert.equal(written[1].drop_reason, null);
+});
+
+// --- strict on: the direct-or-worded rule (plan deviation d3) -----------------
+
+/** A resolver that copies the given text for every fact, as lib/evidence.ts would after its own checks. */
+const copying = (quote: string): EvidenceResolver => () => ({
+  ok: true,
+  quote,
+  command: "read",
+  result_file: "results/w1.txt",
+  value: null,
+  source_kind: "file",
+});
+
+function strictCheck(facts: unknown[], quote = GOOD) {
+  return checkHandback(input(facts), accuracy, { resolveEvidence: copying(quote), strict: true });
+}
+
+test("strict on: a fact stating llm whose value is word for word in the evidence is direct, not judged", () => {
+  const got = strictCheck([{ id: "f1", kind: "llm", value: "holds 604 entries", source: "w1", at: { lines: [2, 2] } }]);
+  const f1 = got.facts[0];
+  assert.equal(f1.status, "passed");
+  assert.equal(f1.kind_stated, "llm");
+  assert.equal(f1.kind_checked, "direct");
+  assert.equal(f1.worded, false);
+});
+
+test("strict on: a fact stating direct whose value is in its own words is judged as llm", () => {
+  const got = strictCheck([{ id: "f1", kind: "direct", value: "the file has 604 entries", source: "w1", at: { lines: [2, 2] } }]);
+  const f1 = got.facts[0];
+  assert.equal(f1.status, "to_judge");
+  assert.equal(f1.verdict, "unchecked");
+  assert.equal(f1.reason, "to_judge");
+  assert.equal(f1.kind_stated, "direct");
+  assert.equal(f1.kind_checked, "llm");
+  assert.equal(f1.worded, true);
+  assert.equal(got.accepted, true, "a fact left to judge refuses nothing");
+});
+
+test("strict on: a fact with no value (or only whitespace) is direct: the harness takes the copied text", () => {
+  const got = strictCheck([
+    { id: "f1", source: "w1", at: { lines: [2, 2] } },
+    { id: "f2", kind: "direct", value: "   ", source: "w1", at: { lines: [2, 2] } },
+  ]);
+  for (const f of got.facts) {
+    assert.equal(f.status, "passed", f.id);
+    assert.equal(f.kind_checked, "direct", f.id);
+    assert.equal(f.worded, false, f.id);
+  }
+});
+
+test("strict on: the comparison is an exact substring after trimming the value's ends; case and inner whitespace count", () => {
+  const got = strictCheck([
+    { id: "f1", value: "  holds 604 entries\n", source: "w1", at: { lines: [2, 2] } },
+    { id: "f2", value: "Holds 604 entries", source: "w1", at: { lines: [2, 2] } },
+    { id: "f3", value: "holds  604 entries", source: "w1", at: { lines: [2, 2] } },
+    { id: "f4", value: "holds\t604 entries", source: "w1", at: { lines: [2, 2] } },
+    { id: "f5", value: GOOD, source: "w1", at: { lines: [2, 2] } },
+  ]);
+  const view = Object.fromEntries(got.facts.map((f) => [f.id, [f.kind_checked, f.worded]]));
+  assert.deepEqual(view, {
+    f1: ["direct", false],
+    f2: ["llm", true],
+    f3: ["llm", true],
+    f4: ["llm", true],
+    f5: ["direct", false],
+  });
+});
+
+test("strict on: a derived fact is always left for the derived question, its worded field set by the same comparison", () => {
+  const got = strictCheck([
+    { id: "f1", source: "w1", at: { lines: [2, 2] } },
+    { id: "f2", kind: "derived", value: "604 entries", source: "w1", at: { lines: [2, 2] }, based_on: ["f1"] },
+    { id: "f3", kind: "derived", value: "so the listing is long", source: "w1", at: { lines: [2, 2] }, based_on: ["f1"] },
+  ]);
+  assert.deepEqual(
+    got.facts.map((f) => [f.id, f.status, f.kind_checked, f.worded]),
+    [
+      ["f1", "passed", "direct", false],
+      ["f2", "to_judge", "derived", false],
+      ["f3", "to_judge", "derived", true],
+    ],
+  );
+});
+
+test("strict on: stating llm never skips the pointer check: an unresolved pointer fails any kind", () => {
+  const resolveEvidence: EvidenceResolver = () => ({ ok: false, reason: "number_absent", fix: "write only numbers that appear" });
+  const got = checkHandback(
+    input([{ id: "f1", kind: "llm", value: "605 entries", source: "w1", at: { lines: [2, 2] } }]),
+    accuracy,
+    { resolveEvidence, strict: true },
+  );
+  assert.equal(got.facts[0].status, "failed");
+  assert.equal(got.facts[0].drop_reason, "number_absent");
+  assert.equal(got.facts[0].worded, null, "not classified: it failed first");
+});
+
+test("strict on: an old-shape fact is classified against its quote once the matcher finds the quote", () => {
+  const got = checkHandback(
+    input([
+      { id: "f1", value: "604 entries", source: "w1", quote: GOOD },
+      { id: "f2", kind: "direct", value: "the listing has 604 entries", source: "w1", quote: GOOD },
+      { id: "f3", kind: "llm", value: "the listing is long", source: "w1", quote: BAD },
+      { id: "f4", kind: "llm", value: "the listing has 605 entries", source: "w1", quote: GOOD },
+    ]),
+    accuracy,
+    { strict: true },
+  );
+  const view = Object.fromEntries(got.facts.map((f) => [f.id, [f.status, f.kind_checked, f.worded ?? null, f.drop_reason]]));
+  assert.deepEqual(view, {
+    f1: ["passed", "direct", false, null],
+    f2: ["to_judge", "llm", true, null],
+    f3: ["failed", "llm", null, "quote_absent"],
+    f4: ["failed", "llm", null, "number_absent"],
+  });
+  assert.match(byId(got.facts, "f4").fix ?? "", /numbers that appear in the quote/);
+});
+
+test("strict on: an old-shape fact on a partial result is unchecked whatever kind it states (the flow drops it)", () => {
+  const got = checkHandback(
+    {
+      payload: { facts: [{ id: "f1", kind: "llm", value: "604 entries", source: "w1", quote: GOOD }] },
+      entries: [{ id: "w1", tool: "read", saved_result: "results/w1.txt", partial: true }],
+      results: { w1: TEXT },
+    },
+    accuracy,
+    { strict: true },
+  );
+  assert.equal(got.facts[0].status, "unchecked");
+  assert.equal(got.facts[0].reason, "partial_result");
+});
+
+test("strict off (unchanged): no worded field, and a literal outside the quote is still refused for a direct fact", () => {
+  const got = checkHandback(input([{ id: "f1", value: "605", source: "w1", quote: GOOD }]), accuracy);
+  assert.equal(got.facts[0].reason, "literal_not_in_quote");
+  assert.equal(got.facts[0].status, "failed");
+  assert.ok(!Object.hasOwn(got.facts[0], "worded"), "check.json with strict off gains no field");
 });

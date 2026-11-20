@@ -56,7 +56,9 @@
  * "in the evidence" and "in the result" are the same rule. What it cannot
  * catch: whether the number counts what the value says. In the measured
  * colleague run, "604 test files" cites a result holding 604, but the command
- * counted directory entries; this check passes that fact. It also cannot tell
+ * counted directory entries; this check passes that fact (since plan
+ * deviation d3 a value in the model's own words then goes to the decider with
+ * the command beside the copied line: lib/facts.ts). It also cannot tell
  * `0.50` from `0.5`, or `10,200` (a list of two numbers) from ten thousand two
  * hundred — both are written the same way on both sides or they fail.
  *
@@ -87,7 +89,7 @@
  * reported as directly checked.
  */
 
-import { parseSourceRef } from "./facts.ts";
+import { missingNumbers, numberTokens, parseSourceRef } from "./facts.ts";
 import { isReadToolName, PURPOSE_ARG } from "./walk.ts";
 import type { SourceKind } from "./contract.ts";
 
@@ -175,20 +177,9 @@ export type EvidenceResult = EvidenceOk | EvidenceFail;
 
 // ------------------------------------------------------------------- numbers
 
-const NUMBER_TOKEN = /\d{1,3}(?:,\d{3})+(?:\.\d+)?|\d+(?:\.\d+)?/g;
-
-/** The number tokens of `text`, thousands separators removed, in order (see the module header). */
-export function numberTokens(text: string): string[] {
-  return (text.match(NUMBER_TOKEN) ?? []).map((token) => token.replace(/,/g, ""));
-}
-
-/** The number tokens of `value` that are not number tokens of `evidence`, each once, in order. */
-export function missingNumbers(value: string, evidence: string): string[] {
-  const present = new Set(numberTokens(evidence));
-  const missing: string[] = [];
-  for (const token of numberTokens(value)) if (!present.has(token) && !missing.includes(token)) missing.push(token);
-  return missing;
-}
+// The number rule (module header) is defined in lib/facts.ts, which applies it
+// to old-shape quotes under strict too, and re-exported here.
+export { missingNumbers, numberTokens };
 
 // ------------------------------------------------------------------- command
 

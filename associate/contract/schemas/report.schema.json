@@ -44,7 +44,7 @@
     },
     "strict": {
       "type": "object",
-      "description": "Written by the extension when strict facts ran. Facts counted by how they were checked, never by whether a value is correct: direct_passed (the harness found the evidence), llm_judged and derived (passed on the decider's answer), kept_with_mark (kept with the contract's mark), returned, not_judged, dropped (facts only, in total and per reason), and by_stated_kind (facts per kind as the model stated it, with how many of those passed the direct check alone).",
+      "description": "Written by the extension when strict facts ran. Facts counted by how they were checked, never by whether a value is correct: direct_passed (the harness found the evidence), llm_judged and derived (passed on the decider's answer), kept_with_mark (kept with the contract's mark), returned, not_judged, dropped (facts only, in total and per reason), by_stated_kind (facts per kind as the model stated it, with how many of those passed the direct check alone), worded (facts whose value was in the model's own words) and judged (facts the decider answered for).",
       "additionalProperties": false,
       "required": ["direct_passed", "llm_judged", "derived", "kept_with_mark", "returned", "not_judged", "dropped", "by_stated_kind"],
       "properties": {
@@ -72,7 +72,9 @@
             "llm": {"$ref": "#/$defs/stated_kind"},
             "derived": {"$ref": "#/$defs/stated_kind"}
           }
-        }
+        },
+        "worded": {"type": "integer", "description": "Facts whose value was in the model's own wording (not word for word in its evidence), whatever happened to them next. Absent in exports written before plan deviation d3."},
+        "judged": {"type": "integer", "description": "Facts the decider gave an answer for (the support or the derived question), whatever the answer. Absent in exports written before plan deviation d3."}
       }
     },
     "support_answers": {

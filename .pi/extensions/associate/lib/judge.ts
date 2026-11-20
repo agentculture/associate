@@ -2,14 +2,20 @@
  * The decider judges llm and derived facts (strict-facts plan t4; spec claims
  * c24, c31, h18, c36).
  *
- * A fact the direct check did not pass but which states kind `llm` or
- * `derived` is left `status: to_judge` by `checkHandback`. `judgeFacts` asks
- * the lobes decider about each one, through the support client's request path
- * (`lib/support.ts`, so the same address, headers, redaction and bounds):
+ * Under strict, `checkHandback` leaves `status: to_judge` every fact whose
+ * value is in the model's own wording (not word for word in its evidence),
+ * whatever kind it stated, and every fact stating `derived` (plan deviation
+ * d3). `judgeFacts` asks the lobes decider about each one, through the support
+ * client's request path (`lib/support.ts`, so the same address, headers,
+ * redaction and bounds):
  *
- *  - an `llm` fact: the five-option support question (`support_score`), asked
- *    of the fact's value and its evidence text (the quote the harness copied
- *    when the fact has `at`, else the fact's own quote);
+ *  - any fact but a derived one: the five-option support question
+ *    (`support_score`), asked of the fact's value and its evidence text. For a
+ *    fact whose pointer resolved, the evidence text is the line
+ *    `command: <the command as rendered>` and then the copied lines, so the
+ *    decider can see what a count counts. Sending the command is new and has
+ *    not been measured on a labelled set. For an old-shape fact (a quote the
+ *    model typed) the evidence text is that quote alone, as before;
  *  - a `derived` fact: the contract's derived question
  *    (`strict.derived_question`), asked of the fact's conclusion (its value)
  *    and the values of the facts it lists in `based_on`, one per line with
@@ -106,6 +112,21 @@ export interface FactMaterial {
   readonly value: string | null;
   /** The text copied for it: the harness's copied quote (a fact with `at`), else the fact's own quote; null when none. */
   readonly evidence: string | null;
+  /** The command the copied quote came from (a fact whose pointer resolved), else null or absent. */
+  readonly command?: string | null;
+}
+
+/**
+ * The evidence text the support question is asked of: `command: <command>`
+ * on the first line, then the copied quote, when the fact's pointer resolved;
+ * the quote alone otherwise. Sending the command is new (plan deviation d3)
+ * and has not been measured on a labelled set.
+ */
+export function supportEvidence(material: FactMaterial | undefined): string {
+  const evidence = material?.evidence ?? "";
+  if (!evidence.trim()) return "";
+  const command = material?.command;
+  return typeof command === "string" && command.trim() !== "" ? `command: ${command}\n${evidence}` : evidence;
 }
 
 export interface JudgeDeps {
@@ -231,8 +252,8 @@ async function judgeOne(fact: FactCheck, question: JudgeQuestion, deps: JudgeDep
   if (question === "support") {
     if (!supportReady(deps)) return notJudged(question, "no_settings");
     settings = deps.settings;
-    const evidence = own?.evidence ?? "";
-    if (!evidence.trim()) return notJudged(question, "no_evidence");
+    const evidence = supportEvidence(own);
+    if (!evidence) return notJudged(question, "no_evidence");
     pair = { value: own?.value ?? "", quote: evidence };
   } else {
     settings = derivedSettings(deps);
@@ -294,7 +315,7 @@ export function policyFor(
 // -------------------------------------------------------------- counts, message
 
 export interface JudgeCounts {
-  /** Facts the direct check passed (the kind floor included). Never a judged fact. */
+  /** Facts the direct check passed (no value, or a value word for word in the evidence). Never a judged fact. */
   direct_passed: number;
   /** Facts of kind llm the decider answered for. */
   llm_judged: number;

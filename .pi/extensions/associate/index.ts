@@ -728,6 +728,7 @@ export default async function (pi: ExtensionAPI) {
       "open with the check that would decide it. Each fact points at its evidence: give the walk id " +
       "it came from (source), where in that result the evidence is (at: {lines: [first, last]} or " +
       "{search: \"term\"}), its kind (direct, llm or derived) and, for a derived fact, based_on. " +
+      "A direct fact gives no value or copies it word for word; anything in your own words is llm and is judged. " +
       "Do not retype evidence: the harness copies the quoted text and the command from the saved " +
       "result and renders the answer from what passes; the summary is never a checked answer. " +
       "Try a pointer with check_quote first. " +
@@ -755,7 +756,8 @@ export default async function (pi: ExtensionAPI) {
             value: Type.Optional(
               text(
                 "The value found, written as text: a number, an identifier, a path, or a short phrase. " +
-                  "A direct fact may leave it out (the harness uses the copied text); an llm or derived fact needs it.",
+                  "A direct fact leaves it out (the harness uses the copied text) or copies it word for word from the " +
+                  "lines pointed at; a value in your own words is judged by the decider; an llm or derived fact needs it.",
               ),
             ),
             source: text(
@@ -781,8 +783,9 @@ export default async function (pi: ExtensionAPI) {
               Type.String({
                 enum: ["direct", "llm", "derived"],
                 description:
-                  "direct (default): the cited result itself shows it. llm: your judgement on what the evidence means; " +
-                  "say so, and give value. derived: follows from other facts; list them in based_on, and give value.",
+                  "direct (default): the cited result itself shows it; give no value, or copy it word for word. " +
+                  "llm: anything in your own words; give value, and the decider judges it against the command and " +
+                  "the copied lines. derived: follows from other facts; list them in based_on, and give value.",
               }),
             ),
             at: Type.Optional(

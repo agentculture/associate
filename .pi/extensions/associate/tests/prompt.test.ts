@@ -514,6 +514,11 @@ const POINTER_PHRASES: Array<[string, RegExp]> = [
   ["how lines are counted", /counted\s+from 1 at the first line below the `walk id: wN` line/],
   ["search copies the first line with the term", /`search`\s+copies the first line that contains the term exactly/],
   ["the three kinds", /Kind `direct`.*Kind `llm`.*Kind `derived`/s],
+  [
+    "a direct value is left out or copied word for word; own words are llm and judged (deviation d3)",
+    /leave out `value`, or copy\s+it word for word.*Kind `llm`: anything in your\s+own words; give `value`, and the decider judges it/s,
+  ],
+  ["the worked example's direct fact gives no value", /"kind":"direct"\}`/],
   ["a worked example with its command", /`\["wc","-l","README\.md"\]`/],
   ["check_quote tries a pointer before finish", /`check_quote` on each pointer before `finish`/],
 ];

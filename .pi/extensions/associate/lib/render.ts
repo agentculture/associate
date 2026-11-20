@@ -308,14 +308,19 @@ export function renderAnswer(input: RenderInput): string {
  * evidence as copied by the harness, byte for byte. Dropped, returned and
  * not-judged items are counted, never shown as items. The model's summary and
  * final message appear only under the unchecked heading, after the answer
- * section. "Checked" means the evidence was found where the pointer said, and
- * "judged" means the decider answered how much of the value the evidence shows;
- * neither says the value is correct.
+ * section. "Copied" means the harness took the evidence from the saved result
+ * where the pointer said and the value is word for word in it (or no value was
+ * given); "judged" means the value is in the model's own words and the decider
+ * answered how much of it the evidence shows. Neither says the value is
+ * correct.
  */
 export const STRICT_LEGEND =
-  "Each item below was checked by the harness: its evidence was copied from a saved result, or its quote was found in one. " +
-  "An item the decider judged shows the decider's option. Run the command in \"how to check\" to see the evidence again; " +
-  "none of this makes a value correct.";
+  "Items marked direct: the harness copied the evidence from a saved result (or found the model's quote in one), " +
+  "and the value is word for word in that evidence, or no value was given. " +
+  "Items marked llm: the value is in the model's own words; the decider read it beside the evidence (and the command, when the harness copied it) " +
+  "and answered how much of it the evidence shows. Items marked derived: the decider answered whether the conclusion " +
+  "follows from the facts it lists. The decider's answer is shown with each. " +
+  "Run the command in \"how to check\" to see the evidence again; none of this makes a value correct.";
 
 export interface StrictRenderInput {
   /** The parsed hand-back, as given. */
@@ -379,16 +384,23 @@ function strictFactLines(
   const option = fact.judge?.judged ? fact.judge.option : null;
   const based = fact.based_on.length > 0 ? fact.based_on.join(", ") : "";
   let kind: string;
+  let checkedKind: string;
   if (label !== null && !evidence) {
     kind = `not checked directly: it rests on a labelled run (${label}) whose result was not read here`;
+    checkedKind = stated;
   } else if (fact.judge === null || option === null) {
-    kind = fact.kind_checked === "direct" && stated !== "direct" ? `direct (stated ${stated}; the copied text shows the value)` : "direct";
+    // Direct: no value, or the value word for word in the evidence (lib/facts.ts).
+    kind = evidence ? "direct (copied from the result)" : "direct (quote found in the result)";
+    checkedKind = "direct";
   } else if (stated === "derived") {
     kind = `derived (from ${based || "no listed fact"}; the decider answered ${option})`;
+    checkedKind = "derived";
   } else {
+    // A value in the model's own wording is judged as llm whatever kind it stated.
     kind = `llm (judged by the decider: ${option})`;
+    checkedKind = "llm";
   }
-  out.push(`- kind: ${kind}`);
+  out.push(`- kind: ${kind}${checkedKind !== stated ? `; stated: ${stated}` : ""}`);
 
   // how to check
   let command: string | undefined;

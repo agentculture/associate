@@ -13,7 +13,7 @@ import assert from "node:assert/strict";
 
 import { loadContract } from "../lib/contract.ts";
 import type { FactCheck, HandbackInput } from "../lib/facts.ts";
-import type { FactMaterial, JudgedFact } from "../lib/judge.ts";
+import { supportEvidence, type FactMaterial, type JudgedFact } from "../lib/judge.ts";
 import { compileRedaction } from "../lib/walk.ts";
 import {
   STRICT_ENV,
@@ -24,6 +24,7 @@ import {
   runStrict,
   shapeProblem,
   strictOverride,
+  strictReport,
   type StrictJudge,
 } from "../lib/strict.ts";
 
@@ -170,7 +171,7 @@ test("drop on none: an llm fact the decider answers none is dropped; the decider
   assert.equal(decision.dropped[0].reason, "decider_drop");
   assert.match(decision.dropped[0].fix, /answered 'none'/);
   assert.equal(decision.facts[1].judge?.option, "none");
-  assert.deepEqual(seen, [{ id: "f2", material: { value: "senses", evidence: '2\t    "worker": ["execution", "tool_use", "repo_inspection"],' } }]);
+  assert.deepEqual(seen, [{ id: "f2", material: { value: "senses", evidence: '2\t    "worker": ["execution", "tool_use", "repo_inspection"],', command: "read" } }]);
 });
 
 test("return once: part is returned the first time, kept with the mark when seen again or when no round is left", async () => {
@@ -301,4 +302,96 @@ test("the message lists every dropped and returned item, the rounds left, and th
   const final = formatStrictMessage(decision, { round: 2, retryRounds: 2, final: true });
   assert.doesNotMatch(final, /finish calls left/);
   assert.match(final, /not refused/);
+});
+
+// ------------------------------------------- the direct-or-worded rule (deviation d3)
+
+/** One `ls tests` call whose saved result is the line `604`: the measured colleague case. */
+function run604(facts: unknown[], judge: StrictJudge, options: Partial<{ returnedBefore: Set<string>; canReturn: boolean }> = {}) {
+  const handbackInput: HandbackInput = {
+    payload: { facts },
+    entries: [{ id: "w1", tool: "bash", args: { argv: ["ls", "tests"], purpose: "count" }, args_used: { argv: ["ls", "tests"] }, saved_result: "results/w1.txt" }],
+    results: { w1: "604\n" },
+    prior_runs: {},
+    children: [],
+  };
+  return runStrict({
+    handbackInput,
+    accuracy,
+    settings: STRICT,
+    passes: accuracy.support_score!.passes,
+    evidence: evidenceContextFor(handbackInput, { checkoutRoot: "/nonexistent/checkout", redact: (t) => t, sourceKinds: accuracy.source_kinds }),
+    judge,
+    returnedBefore: options.returnedBefore ?? new Set(),
+    canReturn: options.canReturn ?? true,
+    round: 1,
+  });
+}
+
+const F604 = { id: "f1", kind: "direct", source: "w1", at: { lines: [1, 1] }, value: "There are 604 test files" };
+
+test("604: a count in the model's own words is judged, with the command beside the copied line", async () => {
+  const seen: Array<{ id: string; material: FactMaterial | undefined }> = [];
+  const first = await run604([F604], fakeJudge({ f1: "part" }, seen));
+  const f1 = first.decision.facts[0];
+  assert.equal(f1.kind_stated, "direct");
+  assert.equal(f1.kind_checked, "llm");
+  assert.equal(f1.worded, true);
+  assert.equal(f1.strict_outcome, "returned", "part, the first time: returned once");
+  assert.deepEqual(seen, [{ id: "f1", material: { value: "There are 604 test files", evidence: "604", command: "ls tests" } }]);
+  assert.equal(supportEvidence(seen[0]!.material), "command: ls tests\n604", "what the decider reads as the evidence");
+
+  const again = await run604([F604], fakeJudge({ f1: "part" }), { returnedBefore: new Set(["f1"]) });
+  assert.equal(again.decision.facts[0].strict_outcome, "keep_marked");
+  assert.equal(again.decision.facts[0].mark, STRICT.mark_text);
+
+  const none = await run604([F604], fakeJudge({ f1: "none" }));
+  assert.equal(none.decision.facts[0].strict_outcome, "dropped");
+  assert.equal(none.decision.dropped[0].reason, "decider_drop");
+});
+
+test("604: the bare number, or no value, is direct and never sent to the decider", async () => {
+  const seen: Array<{ id: string; material: FactMaterial | undefined }> = [];
+  const { decision } = await run604(
+    [
+      { id: "f1", kind: "llm", source: "w1", at: { lines: [1, 1] }, value: "604" },
+      { id: "f2", source: "w1", at: { lines: [1, 1] } },
+    ],
+    fakeJudge({}, seen),
+  );
+  assert.deepEqual(outcomes(decision.facts), { f1: "pass", f2: "pass" });
+  assert.deepEqual(decision.facts.map((f) => [f.kind_checked, f.worded]), [["direct", false], ["direct", false]]);
+  assert.deepEqual(seen, []);
+});
+
+test("604: a number the copied line does not show drops the fact for any stated kind, before the decider", async () => {
+  const seen: Array<{ id: string; material: FactMaterial | undefined }> = [];
+  const { decision } = await run604([{ ...F604, kind: "llm", value: "There are 605 test files" }], fakeJudge({ f1: "all" }, seen));
+  assert.equal(decision.facts[0].strict_outcome, "dropped");
+  assert.equal(decision.dropped[0].reason, "number_absent");
+  assert.deepEqual(seen, []);
+});
+
+test("an old-shape fact under strict: judged against its quote alone (no command), and dropped when the quote is not found", async () => {
+  const seen: Array<{ id: string; material: FactMaterial | undefined }> = [];
+  const worded = { id: "f1", kind: "direct", source: "w1", value: "the table lists the worker role", quote: '"worker": ["execution", "tool_use", "repo_inspection"]' };
+  const absent = { id: "f2", kind: "llm", source: "w1", value: "senses", quote: "a line that is not in the result at all" };
+  const { decision } = await run([worded, absent], fakeJudge({ f1: "all" }, seen));
+  assert.deepEqual(outcomes(decision.facts), { f1: "pass", f2: "dropped" });
+  assert.equal(decision.facts[0].kind_checked, "llm");
+  assert.equal(seen.length, 1);
+  assert.equal(supportEvidence(seen[0]!.material), worded.quote, "the quote alone, as before");
+  assert.equal(decision.dropped[0].reason, "quote_absent");
+});
+
+test("report.json strict counts worded and judged facts", async () => {
+  const { decision } = await run604(
+    [F604, { id: "f2", source: "w1", at: { lines: [1, 1] }, value: "604" }],
+    fakeJudge({ f1: "all" }),
+  );
+  const report = strictReport(decision);
+  assert.equal(report.worded, 1);
+  assert.equal(report.judged, 1);
+  assert.equal(report.direct_passed, 1);
+  assert.deepEqual(report.by_stated_kind.direct, { stated: 2, checked_as_direct: 1 });
 });

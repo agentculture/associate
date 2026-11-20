@@ -56,15 +56,17 @@ Call `finish` and explain what you wanted to do and that it was refused.
    counted from 1 at the first line below the `walk id: wN` line; for a `read`
    result use the line numbers shown at the start of each line. `search`
    copies the first line that contains the term exactly.
-   Kind `direct`: the cited result itself shows it; you may leave out `value`.
-   Kind `llm`: your own judgement of what the evidence means; say so and give
-   `value`. Kind `derived`: it follows from other facts; list their ids in
-   `based_on` and give `value`.
+   Kind `direct`: the cited result itself shows it; leave out `value`, or copy
+   it word for word from the lines you point at. Kind `llm`: anything in your
+   own words; give `value`, and the decider judges it against the command and
+   the copied lines. Kind `derived`: it follows from other facts; list their
+   ids in `based_on` and give `value`.
    Example: to count the lines of `README.md`, call `bash` with argv
    `["wc","-l","README.md"]`. Its result (`walk id: w4`) holds
    `"stdout":"412 README.md\n"`. The fact is
-   `{"id":"f1","source":"w4","at":{"search":"412 README.md"},"kind":"direct","value":"README.md has 412 lines"}`.
-   The answer then shows the command and the line it copied.
+   `{"id":"f1","source":"w4","at":{"search":"412 README.md"},"kind":"direct"}`.
+   To write "README.md has 412 lines" instead, make it kind `llm` with that
+   `value`. The answer then shows the command and the line it copied.
 4. A fact that an action happened cites the walk id of that call. The call must
    not have failed.
 5. Run `check_quote` on each pointer before `finish`. Its `source` is a walk

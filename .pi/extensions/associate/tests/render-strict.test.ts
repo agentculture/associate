@@ -137,7 +137,7 @@ test("the answer section holds passed and kept-marked facts, each with kind, com
   assert.deepEqual(ids, ["f1", "f2", "f3", "f4", "f7"], "in the model's order; no dropped fact");
 
   // f1: a direct count fact, checked by running the command again.
-  assert.match(body, /\*\*f1:\*\* 4\n\n- kind: direct\n- how to check: `wc -l roles.py`\n- result: `results\/w2.txt`, line 1\n\n```text\n4 roles.py\n```/);
+  assert.match(body, /\*\*f1:\*\* 4\n\n- kind: direct \(copied from the result\)\n- how to check: `wc -l roles.py`\n- result: `results\/w2.txt`, line 1\n\n```text\n4 roles.py\n```/);
   // f2: llm, judged.
   assert.match(body, /\*\*f2:\*\* senses\n\n- kind: llm \(judged by the decider: all\)\n- how to check: `read roles.py`\n- result: `results\/w1.txt`, line 2\n\n```text\n2\t {4}"worker": \["execution"/);
   // f3: derived from f1, f2.
@@ -145,7 +145,7 @@ test("the answer section holds passed and kept-marked facts, each with kind, com
   // f4: kept with the mark and the option.
   assert.match(body, new RegExp(`- marked: ${STRICT.mark_text} \\(the decider answered part\\)`));
   // f7: an old-shape fact shows its quote and the command of the call it cites.
-  assert.match(body, /\*\*f7:\*\* ROLE_RESPONSIBILITIES\n\n- kind: direct\n- how to check: `read roles.py`\n- result: `results\/w1.txt`, the quote as the model gave it, found in it\n\n```text\nROLE_RESPONSIBILITIES = \{\n```/);
+  assert.match(body, /\*\*f7:\*\* ROLE_RESPONSIBILITIES\n\n- kind: direct \(quote found in the result\)\n- how to check: `read roles.py`\n- result: `results\/w1.txt`, the quote as the model gave it, found in it\n\n```text\nROLE_RESPONSIBILITIES = \{\n```/);
 });
 
 test("conclusions and open items stay in the answer only when their basis is not dropped", async () => {
@@ -189,6 +189,28 @@ test("a fact resting on a labelled run says which run; one whose labelled export
   assert.match(body, /\*\*f1:\*\*[^]*- run: it rests on the labelled run prior; its saved result was read here/);
   assert.doesNotMatch(body, /\*\*f2:\*\*/);
   assert.equal(decision.facts[1].strict_outcome, "dropped");
+});
+
+test("the kind line says what was checked: direct when copied, llm when judged, with the stated kind when it differs", async () => {
+  const payload = {
+    facts: [
+      // stated llm, value word for word in line 1: direct
+      { id: "f1", kind: "llm", source: "w1", at: { lines: [1, 1] }, value: "ROLE_RESPONSIBILITIES" },
+      // stated direct, value in its own words: judged as llm
+      { id: "f2", kind: "direct", source: "w2", at: { lines: [1, 1] }, value: "roles.py has 4 lines" },
+      // stated direct, copied: no stated suffix
+      { id: "f3", kind: "direct", source: "w2", at: { lines: [1, 1] }, value: "4 roles.py" },
+    ],
+  };
+  const { decision } = await run(payload, { f2: "all" });
+  const body = section(renderStrictAnswer({ payload, decision, markText: STRICT.mark_text }));
+  assert.match(body, /\*\*f1:\*\* ROLE_RESPONSIBILITIES\n\n- kind: direct \(copied from the result\); stated: llm\n/);
+  assert.match(body, /\*\*f2:\*\* roles\.py has 4 lines\n\n- kind: llm \(judged by the decider: all\); stated: direct\n/);
+  assert.match(body, /\*\*f3:\*\* 4 roles\.py\n\n- kind: direct \(copied from the result\)\n/);
+  // The legend says which items the harness copied and which the decider judged.
+  assert.match(body, /Items marked direct: the harness copied the evidence/);
+  assert.match(body, /Items marked llm: the value is in the model's own words/);
+  assert.doesNotMatch(body, /was checked by the harness/);
 });
 
 // ---------------------------------------- 2. the model's own words stay unchecked
@@ -273,6 +295,8 @@ test("report.json's strict object counts each way a fact was checked, and facts 
       llm: { stated: 3, checked_as_direct: 0 },
       derived: { stated: 1, checked_as_direct: 0 },
     },
+    worded: 4,
+    judged: 4,
   });
 });
 

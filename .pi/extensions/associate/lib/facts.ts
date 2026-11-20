@@ -83,11 +83,37 @@
  *     resolver a pointer-only fact is unchecked (`pointer_unresolved`); a
  *     resolver answering not ok refuses it (`pointer_unresolved`, the
  *     resolver's own reason as `drop_reason` and its fix).
- *   - The kind floor (c40): a fact whose direct check passes is `passed` and
- *     `kind_checked: direct`, whatever kind it stated. An llm or derived fact
- *     whose matcher check does not pass is not refused: it is unchecked
- *     (`to_judge`), `kind_checked` its stated kind, `status: to_judge`, for the
- *     decider to judge. A source, action or contract failure fails any kind.
+ *   - With strict OFF (no `strict` option), the kind floor (c40) applies: a
+ *     fact whose direct check passes is `passed` and `kind_checked: direct`,
+ *     whatever kind it stated. An llm or derived fact whose matcher check does
+ *     not pass is not refused: it is unchecked (`to_judge`), `kind_checked` its
+ *     stated kind, `status: to_judge`. A source, action or contract failure
+ *     fails any kind. These fields are only recorded there; nothing acts on them.
+ *   - With strict ON (`options.strict`, plan deviation d3, replacing the kind
+ *     floor), first the evidence must be had: a pointer must resolve and every
+ *     number in the value be in the copied evidence (the resolver's checks), or
+ *     an old-shape quote must be found by the matcher and every number in the
+ *     value be in that quote (`number_absent`). Any failure there fails the
+ *     fact whatever kind it states, and so does a fact the harness could not
+ *     check at all (no saved text, a partial result: `status: unchecked`).
+ *     Then the value is classified by where its words come from (`worded`):
+ *       * no value given (absent, not a string, or only whitespace: the harness
+ *         takes the copied text), or a value that, with its leading and trailing
+ *         whitespace trimmed, is an exact substring of the evidence (the
+ *         copied lines, or the old-shape quote as the model gave it): the
+ *         comparison is JavaScript `evidence.includes(value.trim())`, code unit
+ *         for code unit, case-sensitive, with no other normalisation (inner
+ *         whitespace must match exactly). `worded: false`, `passed`,
+ *         `kind_checked: direct`, never sent to the decider;
+ *       * any other value is the model's own wording: `worded: true`,
+ *         `status: to_judge`, `kind_checked: llm`, whatever kind it stated
+ *         (`direct` or `llm`), for the decider's support question;
+ *       * a fact stating `derived` is always `to_judge` with
+ *         `kind_checked: derived` (the derived question), its `worded` set by
+ *         the same comparison.
+ *     A fact that failed before it could be classified has `worded: null`.
+ *     The literal-in-quote rule is not applied under strict: the
+ *     classification above takes its place.
  *   - `status`: passed, failed (verdict refused, or a graph refusal), to_judge,
  *     unchecked, or dropped (an input failed).
  *   - The graph (c23): `based_on` names facts of this hand-back. An id naming
@@ -164,6 +190,8 @@ export const CHECKER_REASONS = [
 
 export type CheckerReason = (typeof CHECKER_REASONS)[number];
 export type UncheckedReason = "no_saved_text" | "partial_result" | "pointer_unresolved" | "to_judge";
+/** Strict only: an old-shape fact whose value states a number its quote does not show. No check id of its own. */
+export type StrictCheckReason = "number_absent";
 
 /** The kinds of check a fact may state (`facts.schema.json` `kind`); absent is `direct`. */
 export const FACT_KINDS = ["direct", "llm", "derived"] as const;
@@ -218,6 +246,8 @@ export type EvidenceResolver = (
 
 export interface CheckOptions {
   readonly resolveEvidence?: EvidenceResolver;
+  /** Strict facts on: the direct-or-worded rule replaces the kind floor (module header). */
+  readonly strict?: boolean;
 }
 
 export interface FactCheck {
@@ -226,7 +256,7 @@ export interface FactCheck {
   /** The run label the reference named, or null for the current run. */
   readonly run: string | null;
   readonly verdict: FactVerdict;
-  readonly reason: CheckerReason | UncheckedReason | null;
+  readonly reason: CheckerReason | UncheckedReason | StrictCheckReason | null;
   /** The contract check id of a refusal, else null. */
   readonly check: string | null;
   /** How to fix a refusal, else null. */
@@ -236,8 +266,20 @@ export interface FactCheck {
   readonly first_hand: boolean | null;
   /** The kind the fact stated (`direct` when absent). */
   readonly kind_stated: FactKind;
-  /** `direct` when the direct check found the evidence (the kind floor), else the stated kind. */
+  /**
+   * Strict off: `direct` when the direct check found the evidence (the kind
+   * floor), else the stated kind. Strict on: `direct` for a fact with no value
+   * or a value word for word in its evidence, `derived` for a stated derived
+   * fact, `llm` for a value in the model's own wording (module header).
+   */
   readonly kind_checked: FactKind;
+  /**
+   * Strict only (absent with strict off): true when the value is in the
+   * model's own wording (not word for word in the evidence), false when it is
+   * word for word or no value was given, null when the fact failed before it
+   * could be classified.
+   */
+  readonly worded?: boolean | null;
   /** The fact ids it names in `based_on`, as given. */
   readonly based_on: string[];
   readonly status: FactStatus;
@@ -519,6 +561,44 @@ type StrictField = "kind_stated" | "kind_checked" | "based_on" | "status" | "dro
 /** A fact as its own check leaves it, before kinds and the graph are applied. */
 type CoreFact = Omit<FactCheck, StrictField>;
 
+const NUMBER_TOKEN = /\d{1,3}(?:,\d{3})+(?:\.\d+)?|\d+(?:\.\d+)?/g;
+
+/** The number tokens of `text`, thousands separators removed, in order (the number rule, lib/evidence.ts header). */
+export function numberTokens(text: string): string[] {
+  return (text.match(NUMBER_TOKEN) ?? []).map((token) => token.replace(/,/g, ""));
+}
+
+/** The number tokens of `value` that are not number tokens of `evidence`, each once, in order. */
+export function missingNumbers(value: string, evidence: string): string[] {
+  const present = new Set(numberTokens(evidence));
+  const missing: string[] = [];
+  for (const token of numberTokens(value)) if (!present.has(token) && !missing.includes(token)) missing.push(token);
+  return missing;
+}
+
+/** The value a strict fact gives, trimmed, or null when it gives none (absent, not a string, only whitespace). */
+export function givenValue(value: unknown): string | null {
+  if (typeof value !== "string") return null;
+  const trimmed = value.trim();
+  return trimmed === "" ? null : trimmed;
+}
+
+/**
+ * Strict: whether a value is in the model's own wording. False when no value
+ * is given or when the trimmed value is an exact substring of the evidence:
+ * `evidence.includes(value.trim())`, case-sensitive, no other normalisation
+ * (a value differing from the evidence only in letter case, or in the
+ * whitespace inside it, is worded). See the module header.
+ */
+export function isWorded(value: unknown, evidence: string): boolean {
+  const given = givenValue(value);
+  return given !== null && !evidence.includes(given);
+}
+
+/** The fix for an old-shape strict fact whose value states a number its quote does not show. */
+const NUMBER_IN_QUOTE_FIX =
+  "write only numbers that appear in the quote, or point with at at the lines that show the number";
+
 /** The kind a fact states: `direct` when absent or not one of the kinds. */
 function kindOfFact(fact: Record<string, unknown>): FactKind {
   const kind = fact.kind;
@@ -696,6 +776,7 @@ function strictPass(
   rawFacts: readonly Record<string, unknown>[],
   core: readonly CoreFact[],
   ownDropReason: ReadonlyArray<string | undefined>,
+  strict: boolean,
 ): { facts: FactCheck[]; graph: { order: string[]; refusals: GraphRefusal[] } } {
   const basedOn = rawFacts.map((raw) => asArray(raw.based_on).map(str));
   const graph = buildGraph(
@@ -705,7 +786,14 @@ function strictPass(
 
   const facts: FactCheck[] = core.map((fact, i): FactCheck => {
     const kindStated = kindOfFact(rawFacts[i]);
-    const common = { kind_stated: kindStated, based_on: basedOn[i], dropped_by: null, drop_message: null };
+    // `worded` is written only under strict, so a strict-off check.json is byte for byte what it was.
+    const common = {
+      kind_stated: kindStated,
+      based_on: basedOn[i],
+      dropped_by: null,
+      drop_message: null,
+      ...(strict ? { worded: fact.worded ?? null } : {}),
+    };
     if (fact.verdict === "passed") {
       return { ...fact, ...common, kind_checked: "direct", status: "passed", drop_reason: null };
     }
@@ -713,7 +801,13 @@ function strictPass(
       const reason = ownDropReason[i] ?? fact.reason;
       return { ...fact, ...common, kind_checked: kindStated, status: "failed", drop_reason: reason };
     }
-    const status: FactStatus = kindStated === "direct" ? "unchecked" : "to_judge";
+    if (fact.reason === "to_judge") {
+      // Strict: a worded value is judged as llm whatever kind it stated; derived keeps its own question.
+      const checked: FactKind = kindStated === "derived" ? "derived" : strict ? "llm" : kindStated;
+      return { ...fact, ...common, kind_checked: checked, status: "to_judge", drop_reason: null };
+    }
+    // Strict: a fact the harness could not check is unchecked whatever kind it stated (the flow drops it).
+    const status: FactStatus = strict || kindStated === "direct" ? "unchecked" : "to_judge";
     return { ...fact, ...common, kind_checked: kindStated, status, drop_reason: null };
   });
 
@@ -759,6 +853,7 @@ export function checkHandback(
   const contractBroken = !isPositiveInteger(rawMinimum);
   const minQuoteLength = isPositiveInteger(rawMinimum) ? rawMinimum : 0;
   const contractText = contractBroken ? contractValueText(rawMinimum) : undefined;
+  const strict = options.strict === true;
 
   const current: RunData = { entries: input.entries, results: input.results };
   const currentIndex = indexEntries(current.entries);
@@ -875,9 +970,16 @@ export function checkHandback(
       fix: null,
       ...extra,
     });
-    // An llm or derived fact the direct check does not find is left to judge, never refused (the kind floor).
+    // Strict off: an llm or derived fact the direct check does not find is left to judge, never refused
+    // (the kind floor). Strict on: a failed direct check fails every kind.
     const matcherRefused = (reason: CheckerReason, nearest: NearestSpan | null): CoreFact =>
-      kindStated === "direct" ? refuse(reason, { ...located, nearest }) : unchecked("to_judge", { nearest });
+      kindStated === "direct" || strict ? refuse(reason, { ...located, nearest }) : unchecked("to_judge", { nearest });
+    // Strict: the evidence is had; classify the value by where its words come from (module header).
+    const classified = (evidence: string, firstHand: boolean | null): CoreFact => {
+      const worded = isWorded(fact.value, evidence);
+      if (kindStated === "derived" || worded) return unchecked("to_judge", { first_hand: firstHand, worded });
+      return { ...base, ...located, first_hand: firstHand, verdict: "passed", reason: null, check: null, fix: null, worded };
+    };
 
     const pointer = fact.at !== null && typeof fact.at === "object" && !Array.isArray(fact.at);
     const resolver = options.resolveEvidence;
@@ -901,10 +1003,14 @@ export function checkHandback(
         facts.push({ ...base, ...located, verdict: "refused", reason: "pointer_unresolved", check: null, fix: str(resolved.fix) });
         continue;
       }
-      // The harness copied the quote, so it is in the result by construction: only the literal is checked.
+      // The harness copied the quote, so it is in the result by construction: only the value is checked.
       const copied = str(resolved.quote);
-      const onCopy = checkQuote(copied, literalOf(fact.value), copied, 1);
       const firstHand = isFirstHand(kind, entry, copied, text, 1);
+      if (strict) {
+        facts.push(classified(copied, firstHand));
+        continue;
+      }
+      const onCopy = checkQuote(copied, literalOf(fact.value), copied, 1);
       if (onCopy.verdict === "passed") {
         facts.push({ ...base, ...located, first_hand: firstHand, verdict: "passed", reason: null, check: null, fix: null });
       } else {
@@ -913,7 +1019,8 @@ export function checkHandback(
       continue;
     }
 
-    const match = checkQuote(quote, literalOf(fact.value), text, minQuoteLength);
+    // Strict: the quote alone is matched; the value is then classified against it (no literal rule).
+    const match = checkQuote(quote, strict ? null : literalOf(fact.value), text, minQuoteLength);
     const textIndependent = match.reason === "quote_short" || match.reason === "literal_not_in_quote";
     if (match.verdict === "unchecked") {
       facts.push(unchecked("no_saved_text"));
@@ -921,13 +1028,22 @@ export function checkHandback(
       facts.push(unchecked("partial_result"));
     } else if (match.verdict === "refused") {
       facts.push(matcherRefused(match.reason as CheckerReason, match.nearest));
+    } else if (strict) {
+      const given = givenValue(fact.value);
+      const missing = given === null ? [] : missingNumbers(given, quote);
+      if (missing.length > 0) {
+        ownDropReason[facts.length] = "number_absent";
+        facts.push({ ...base, ...located, verdict: "refused", reason: "number_absent", check: null, fix: NUMBER_IN_QUOTE_FIX });
+      } else {
+        facts.push(classified(quote, located.first_hand));
+      }
     } else {
       facts.push({ ...base, ...located, verdict: "passed", reason: null, check: null, fix: null });
     }
   }
 
-  const strict = strictPass(rawFacts, facts, ownDropReason);
-  const checkedFacts = strict.facts;
+  const graphed = strictPass(rawFacts, facts, ownDropReason, strict);
+  const checkedFacts = graphed.facts;
 
   // --- verdicts and open items ---------------------------------------------
   const factById = new Map<string, FactCheck>();
@@ -1002,5 +1118,5 @@ export function checkHandback(
     verdicts.every((v) => v.outcome !== "refused") &&
     open_items.every((v) => v.outcome !== "refused");
 
-  return { accepted, facts: checkedFacts, verdicts, open_items, report, graph: strict.graph };
+  return { accepted, facts: checkedFacts, verdicts, open_items, report, graph: graphed.graph };
 }

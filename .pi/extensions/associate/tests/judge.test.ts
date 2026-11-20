@@ -12,7 +12,7 @@ import type { FactCheck, HandbackInput } from "../lib/facts.ts";
 import { compileGate } from "../lib/gate.ts";
 import { compileRedaction } from "../lib/walk.ts";
 import { SUPPORT_QUESTION_KEY } from "../lib/support.ts";
-import { countJudged, derivedInputs, judgeFacts, notJudgedMessage, policyFor } from "../lib/judge.ts";
+import { countJudged, derivedInputs, judgeFacts, notJudgedMessage, policyFor, supportEvidence } from "../lib/judge.ts";
 import type { FactMaterial, JudgeDeps, StrictSettings } from "../lib/judge.ts";
 
 const CONTRACT = loadContract({});
@@ -113,6 +113,29 @@ test("an llm fact with no evidence text is not judged (no_evidence) and nothing 
   assert.equal(decider.calls.length, 0);
   assert.equal(got!.status, "not_judged");
   assert.equal(got!.judge!.reason, "no_evidence");
+});
+
+test("a fact whose pointer resolved is sent with 'command: ...' on the first line of its evidence, then the copied lines", async () => {
+  const decider = answering();
+  const [got] = await judgeFacts(
+    records([LLM]),
+    deps(decider.fn, { f1: { value: "There are 604 test files", evidence: "604", command: "ls tests" } }),
+  );
+  const state: string = decider.calls[0]!.body.state;
+  assert.ok(state.includes(`quote: ${JSON.stringify("command: ls tests\n604")}`), state);
+  assert.ok(state.includes(`value: ${JSON.stringify("There are 604 test files")}`));
+  assert.equal(got!.status, "judged");
+  // The question and its options are the support question's, unchanged.
+  const key = Object.keys(decider.calls[0]!.body.questions)[0]!;
+  assert.equal(decider.calls[0]!.body.questions[key].instructions, SUPPORT.question);
+  assert.deepEqual(Object.keys(decider.calls[0]!.body.questions[key].criteria), Object.keys(SUPPORT.options));
+});
+
+test("supportEvidence: the quote alone without a command, nothing without evidence", () => {
+  assert.equal(supportEvidence({ value: "v", evidence: "a quote", command: null }), "a quote");
+  assert.equal(supportEvidence({ value: "v", evidence: "a quote" }), "a quote");
+  assert.equal(supportEvidence({ value: "v", evidence: "  ", command: "ls" }), "");
+  assert.equal(supportEvidence({ value: "v", evidence: "604", command: "ls tests" }), "command: ls tests\n604");
 });
 
 test("what reaches the decider is redacted", async () => {
