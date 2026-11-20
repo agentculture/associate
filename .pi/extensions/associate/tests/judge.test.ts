@@ -12,7 +12,7 @@ import type { FactCheck, HandbackInput } from "../lib/facts.ts";
 import { compileGate } from "../lib/gate.ts";
 import { compileRedaction } from "../lib/walk.ts";
 import { SUPPORT_QUESTION_KEY } from "../lib/support.ts";
-import { countJudged, derivedInputs, judgeFacts, notJudgedMessage, policyFor, supportEvidence } from "../lib/judge.ts";
+import { countJudged, createJudgeBudget, derivedInputs, judgeFacts, notJudgedMessage, policyFor, supportEvidence } from "../lib/judge.ts";
 import type { FactMaterial, JudgeDeps, StrictSettings } from "../lib/judge.ts";
 
 const CONTRACT = loadContract({});
@@ -311,4 +311,18 @@ test("policyFor applies the contract's lists to a support option", () => {
   const open = { ...STRICT, derived_decides_drops: true };
   assert.equal(policyFor("yes", "derived", open, SUPPORT.passes), "pass");
   assert.equal(policyFor("no", "derived", open, SUPPORT.passes), "drop");
+});
+
+test("a shared budget carries the request cap and the first failure across two judgeFacts calls", async () => {
+  const decider = fakeDecider(() => {
+    throw new TypeError("fetch failed");
+  });
+  const budget = createJudgeBudget(SUPPORT);
+  const material = { f1: { value: "v", evidence: GOOD }, f2: { value: "w", evidence: GOOD } };
+  const [first] = await judgeFacts(records([LLM]), deps(decider.fn, material, { budget }));
+  assert.equal(first!.judge!.reason, "unreachable");
+  const [second] = await judgeFacts(records([{ ...LLM, id: "f2" }]), deps(decider.fn, material, { budget }));
+  assert.equal(second!.judge!.reason, "skipped_after_failure", "the second call does not ask a decider that just failed");
+  assert.equal(decider.calls.length, 1);
+  assert.equal(budget.sent, 1);
 });

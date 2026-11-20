@@ -24,13 +24,13 @@ test("strict_vectors.json is exactly what the extension's code produces for its 
   );
 });
 
-test("the cases cover every outcome, every checked kind, and both worded values", () => {
+test("the cases cover every outcome, every checked kind (null after a shape failure), and both worded values", () => {
   const doc = JSON.parse(committed) as {
-    cases: Array<{ name: string; expect: { facts: Array<{ strict_outcome: string; kind_checked: string; worded: boolean | null }> } }>;
+    cases: Array<{ name: string; expect: { facts: Array<{ strict_outcome: string; kind_checked: string | null; worded: boolean | null }> } }>;
   };
   const facts = doc.cases.flatMap((c) => c.expect.facts);
   assert.deepEqual(new Set(facts.map((f) => f.strict_outcome)), new Set(["pass", "keep_marked", "returned", "dropped", "not_judged"]));
-  assert.deepEqual(new Set(facts.map((f) => f.kind_checked)), new Set(["direct", "llm", "derived"]));
+  assert.deepEqual(new Set(facts.map((f) => f.kind_checked)), new Set(["direct", "llm", "derived", null]));
   assert.deepEqual(new Set(facts.map((f) => f.worded)), new Set([true, false, null]));
   const names = doc.cases.map((c) => c.name);
   assert.equal(new Set(names).size, names.length, "case names are unique");

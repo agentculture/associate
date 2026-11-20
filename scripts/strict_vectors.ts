@@ -430,7 +430,7 @@ const CASES: CaseDef[] = [
   },
   {
     name: "derived_on_decider_dropped_fact",
-    note: "A derived fact resting on a fact the decider answered none: dropped by the cascade, naming that fact.",
+    note: "A derived fact resting on a fact the decider answered none: dropped by the cascade, naming that fact, and never sent to the decider (it stores no answer).",
     run: COUNT,
     finish: {
       facts: [
@@ -438,7 +438,16 @@ const CASES: CaseDef[] = [
         { id: "f2", kind: "derived", source: "w1", at: at(1), value: "the suite is large", based_on: ["f1"] },
       ],
     },
-    decider: { f1: support("none"), f2: derived("yes") },
+    decider: { f1: support("none") },
+  },
+  {
+    name: "direct_on_decider_dropped_fact",
+    note: "A direct fact (its own check passed) resting on a fact the decider answered none: dropped by the last cascade, and not counted as direct_passed.",
+    run: COUNT,
+    finish: {
+      facts: [F604, { id: "f2", source: "w1", at: at(1), based_on: ["f1"] }],
+    },
+    decider: { f1: support("none") },
   },
   {
     name: "derived_with_failed_pointer",

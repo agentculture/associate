@@ -22,16 +22,22 @@
  *   2. The shape rules (`shapeProblem`, the same cross-field rules as Python
  *      `validate_facts`): a fact that breaks one fails with that reason and
  *      its fix, before anything is asked about it; the cascade is redone.
- *   3. `judge` for the facts left `to_judge`, with `material` built from the
- *      facts as given and the evidence copied for them (for a fact whose
- *      pointer resolved, the command too).
+ *   3. `judge` for the facts left `to_judge`, in dependency order and two
+ *      steps: every non-derived fact first, then (after the policy and the
+ *      cascade) only the derived facts still standing, so a derived fact
+ *      whose input the decider dropped is never sent. `material` is built
+ *      from the facts as given and the evidence copied for them (for a fact
+ *      whose pointer resolved, the command too). The caller's judge should
+ *      share its bounds across the two calls (`JudgeDeps.budget`).
  *   4. `policyFor` (lib/judge.ts) per judged fact: `drop` fails it
  *      (`decider_drop`); `keep_marked` returns it once, or keeps it with
  *      `strict.mark_text` when it was returned before in this task or no
  *      round is left; `pass` and `show_only` keep it (a derived fact's answer
  *      is shown and never drops it while `derived_decides_drops` is false).
  *   5. The cascade again after any new failure.
- *   6. One outcome per fact: `pass`, `keep_marked`, `returned`, `dropped`, or
+ *   6. One outcome per fact (a fact dropped by a shape rule has
+ *      `kind_checked` and `worded` null and no evidence; the judge counts
+ *      are taken from these final records): `pass`, `keep_marked`, `returned`, `dropped`, or
  *      `not_judged` (an outage, or a fact that could not be sent: kept out of
  *      the answer under its own label, never called failed). A direct fact
  *      that could not be checked at all (no saved text, a partial result) is
@@ -48,7 +54,7 @@ import { cascadeDrops, checkHandback, CHECKER_REASONS } from "./facts.ts";
 import type { ContractAccuracy } from "./contract.ts";
 import type { EvidenceResolver, FactCheck, HandbackCheck, HandbackInput, ItemCheck, ReportFlag, RunData } from "./facts.ts";
 import { resolveEvidence, runFromData, type EvidenceContext, type EvidenceOk, type EvidenceRun } from "./evidence.ts";
-import { countJudged, notJudgedMessage, policyFor } from "./judge.ts";
+import { notJudgedMessage, policyFor } from "./judge.ts";
 import type { FactMaterial, JudgeCounts, JudgedFact, JudgeResult, StrictSettings } from "./judge.ts";
 
 // ------------------------------------------------------------------ the switch
@@ -232,8 +238,10 @@ export const STRICT_RETURN_FIX =
   "narrow the value to what the evidence shows, or point at a source that shows the rest";
 
 /** One fact as check.json writes it under strict: the checker's record plus the strict fields. */
-export type StrictFact = Omit<FactCheck, "status"> & {
+export type StrictFact = Omit<FactCheck, "status" | "kind_checked"> & {
   readonly status: JudgedFact["status"];
+  /** How it was checked; null for a fact dropped by a shape rule (it was never classified). */
+  readonly kind_checked: FactCheck["kind_checked"] | null;
   readonly strict_outcome: StrictOutcome;
   readonly judge: JudgeResult | null;
   /** For a returned fact: the round it was returned in. */
@@ -330,6 +338,26 @@ function valueOf(raw: Record<string, unknown>): string | null {
   return typeof raw.value === "string" ? raw.value : null;
 }
 
+/**
+ * The judge counts over the final records, after the last cascade: a fact that
+ * ends dropped is never counted as passed. `direct_passed`: passed as direct
+ * and in the answer. `llm_judged` / `derived_judged`: answered by the decider
+ * with the support / derived question, whatever happened next. `not_judged`:
+ * kept out with no answer.
+ */
+function finalJudgeCounts(facts: readonly StrictFact[]): JudgeCounts {
+  const counts: JudgeCounts = { direct_passed: 0, llm_judged: 0, derived_judged: 0, not_judged: 0 };
+  for (const f of facts) {
+    if (f.strict_outcome === "pass" && f.status === "passed") counts.direct_passed += 1;
+    if (f.judge?.judged) {
+      if (f.judge.question === "derived") counts.derived_judged += 1;
+      else counts.llm_judged += 1;
+    }
+    if (f.strict_outcome === "not_judged") counts.not_judged += 1;
+  }
+  return counts;
+}
+
 /** Run the strict check over one hand-back. Never throws for anything the decider does (the judge's contract). */
 export async function runStrict(input: StrictRunInput): Promise<StrictRun> {
   const payload = input.handbackInput.payload;
@@ -384,10 +412,25 @@ export async function runStrict(input: StrictRunInput): Promise<StrictRun> {
     // A fact whose pointer resolved is judged with the command beside the copied lines (lib/judge.ts).
     return { value: valueOf(raw), evidence, command: resolved?.command ?? null };
   };
-  const judged = await input.judge(shaped, material);
+  // In dependency order, in two steps: every to_judge fact but a derived one
+  // first; then the policy and the cascade; then only the derived facts still
+  // standing. A derived fact whose input the decider dropped is never sent.
+  const judged: JudgedFact[] = shaped.map((f) => ({ ...f, judge: null }));
+  const judgeAt = async (indexes: number[]) => {
+    if (indexes.length === 0) return;
+    const got = await input.judge(
+      indexes.map((i) => shaped[i]!),
+      material,
+    );
+    indexes.forEach((i, k) => {
+      judged[i] = got[k]!;
+    });
+  };
+  const pendingDerived = (f: JudgedFact) => f.status === "to_judge" && f.kind_stated === "derived";
+  await judgeAt(shaped.flatMap((f, i) => (f.status === "to_judge" && f.kind_stated !== "derived" ? [i] : [])));
 
   // 4. the contract's policy for each answer
-  const verdictOf: Array<{ outcome: StrictOutcome; fix?: string; option?: string }> = judged.map((fact) => {
+  const policyOf = (fact: JudgedFact): { outcome: StrictOutcome; fix?: string; option?: string } => {
     if (fact.status === "not_judged") return { outcome: "not_judged" };
     if (fact.status !== "judged" || !fact.judge || fact.judge.option === null) return { outcome: "pass" };
     const option = fact.judge.option;
@@ -404,31 +447,41 @@ export async function runStrict(input: StrictRunInput): Promise<StrictRun> {
       return { outcome: keep ? "keep_marked" : "returned", option };
     }
     return { outcome: "pass" };
-  });
+  };
 
   // 5. the cascade after the decider's failures
   // A direct fact the harness could not check at all fails too: only items
   // whose basis passed are in the answer (c7), and what rests on it cascades.
-  const forCascade = judged.map((fact, i): FactCheck => {
-    const own = verdictOf[i]!;
-    const base = fact as unknown as FactCheck;
-    if (fact.status === "failed") return { ...base, status: "failed" };
-    if (fact.status === "dropped") return { ...base, status: "dropped" };
-    if (fact.status === "unchecked") {
-      return { ...base, status: "failed", drop_reason: fact.reason ?? "unchecked", fix: fact.fix ?? UNCHECKED_FIX };
-    }
-    if (own.outcome === "dropped") return { ...base, status: "failed", drop_reason: DECIDER_DROP, fix: own.fix ?? null };
-    return { ...base, status: "passed" };
-  });
-  const cascaded = cascadeDrops(forCascade);
+  // A derived fact not yet judged stands until its own answer comes.
+  const cascadeNow = () =>
+    cascadeDrops(
+      judged.map((fact): FactCheck => {
+        const own = policyOf(fact);
+        const base = fact as unknown as FactCheck;
+        if (fact.status === "failed") return { ...base, status: "failed" };
+        if (fact.status === "dropped") return { ...base, status: "dropped" };
+        if (fact.status === "unchecked") {
+          return { ...base, status: "failed", drop_reason: fact.reason ?? "unchecked", fix: fact.fix ?? UNCHECKED_FIX };
+        }
+        if (own.outcome === "dropped") return { ...base, status: "failed", drop_reason: DECIDER_DROP, fix: own.fix ?? null };
+        return { ...base, status: "passed" };
+      }),
+    );
+  const afterFirst = cascadeNow();
+  await judgeAt(judged.flatMap((f, i) => (pendingDerived(f) && afterFirst[i]!.status !== "dropped" ? [i] : [])));
+  const verdictOf = judged.map(policyOf);
+  const cascaded = cascadeNow();
 
   // 6. one outcome per fact
   const facts: StrictFact[] = judged.map((fact, i) => {
     const raw = rawFacts[i]!;
     const after = cascaded[i]!;
-    const evidence = copied.get(raw);
+    // A fact dropped by a shape rule carries no classification and no evidence it never earned.
+    const shapeFailed = shapes[i] !== null;
+    const evidence = shapeFailed ? undefined : copied.get(raw);
     const common = {
       ...fact,
+      ...(shapeFailed ? { kind_checked: null, worded: null } : {}),
       judge: fact.judge ?? null,
       ...(evidence
         ? {
@@ -537,7 +590,7 @@ export async function runStrict(input: StrictRunInput): Promise<StrictRun> {
       returned,
       counts,
       drop_reasons,
-      judge_counts: countJudged(judged),
+      judge_counts: finalJudgeCounts(facts),
       not_judged_message: notJudgedMessage(judged),
     },
   };

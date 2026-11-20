@@ -110,13 +110,13 @@ A fact record:
 |---|---|
 | `id` | The fact id. |
 | `kind_stated` | The kind the fact gave: `direct`, `llm` or `derived`. Absent, or any other string, reads as `direct`. |
-| `kind_checked` | How it was checked: `direct` (copied or found, value word for word or none), `llm` (judged with the support question), `derived` (judged with the derived question). A fact that failed before it was classified keeps its stated kind. |
-| `worded` | `true` when the value is in the model's own words, `false` when it is word for word in the evidence or no value was given, `null` when the fact failed before it was classified. |
+| `kind_checked` | How it was checked: `direct` (copied or found, value word for word or none), `llm` (judged with the support question), `derived` (judged with the derived question). A fact that failed before it was classified keeps its stated kind. A fact dropped by a shape rule has null. |
+| `worded` | `true` when the value is in the model's own words, `false` when it is word for word in the evidence or no value was given, `null` when the fact failed before it was classified or was dropped by a shape rule. |
 | `status` | `passed`, `failed`, `unchecked`, `dropped`, `judged` or `not_judged` (see Outcomes). |
 | `strict_outcome` | `pass`, `keep_marked`, `returned`, `dropped` or `not_judged`. |
 | `drop_reason` | Why it is out of the answer, else null. |
 | `dropped_by` | For a cascade drop, the root failed fact's id, else null. |
-| `evidence` | What the harness copied for a resolved pointer: `{quote, command, command_from, result_file, lines, run}`. Null for an old-shape fact and for a pointer that did not resolve. |
+| `evidence` | What the harness copied for a resolved pointer: `{quote, command, command_from, result_file, lines, run}`. Null for an old-shape fact, for a pointer that did not resolve, and for a fact dropped by a shape rule. |
 | `judge` | `{question, option, reason}` when the fact was sent to the decider, else null. |
 | `sent` | `{question, value, evidence}`: what the decider would be asked, before the support client redacts and encodes it. Null when not sent. |
 
@@ -246,8 +246,10 @@ reason replaces any earlier reason or status.
    no `value`: `value_missing`.
 5. A derived fact without a non-empty `based_on` list: `based_on_missing`.
 
-A shape failure keeps whatever the earlier steps set for `kind_checked`,
-`worded` and `evidence`. It does not change the checker verdict.
+A fact dropped by a shape rule carries no classification: `kind_checked` and
+`worded` are null and no `evidence` is recorded, whatever the earlier steps
+found. `kind_stated` stays. A shape failure does not change the checker
+verdict.
 
 ### 7. The graph
 
@@ -277,10 +279,19 @@ and a last time after the decider.
 
 ### 9. The decider
 
-Every fact whose status is still `to_judge` after the shape rules and the
-cascade is sent, in the model's order. A fact whose input is being judged in
-the same pass is sent too. If that input is then dropped, the cascade drops
-the fact afterwards, and its `judge` still shows the answer.
+The decider is asked in two steps, in dependency order.
+
+1. Every fact whose status is still `to_judge` after the shape rules and the
+   cascade, and that does not state `derived`, is sent, in the model's order.
+2. The outcome policy (step 10) is applied to those answers, and the cascade
+   runs. A derived fact still waiting counts as standing in this cascade.
+3. Every derived fact still `to_judge` that this cascade did not drop is sent,
+   in the model's order.
+
+A derived fact dropped in step 2 is never sent: its `judge` and `sent` are
+null. Facts sent in the same step do not wait for each other. A non-derived
+fact resting on another non-derived fact is sent with it; if the cascade then
+drops it, its `judge` still shows its answer.
 
 - The support question: `value` is the fact's value as given (not trimmed), or
   empty. For a fact with a resolved pointer, `evidence` is a first line made of
@@ -385,11 +396,12 @@ never read.
 
 - `counts`: facts per outcome.
 - `drop_reasons`: every dropped fact, verdict and open item, per reason.
-- `judge_counts` counts the statuses before the last cascade. `direct_passed`:
-  facts passed as direct (a fact that the last cascade then drops is still
-  counted here). `llm_judged`: facts answered with the support question.
-  `derived_judged`: facts answered with the derived question. `not_judged`:
-  facts with no answer.
+- `judge_counts` is taken from the final records, after the last cascade.
+  `direct_passed`: facts with `status: passed` and outcome `pass` (a fact that
+  ends dropped is never counted). `llm_judged`: facts the decider answered
+  with the support question, whatever happened next. `derived_judged`: the
+  same for the derived question. `not_judged`: facts with outcome
+  `not_judged`.
 - `report`: `direct_passed` (outcome `pass`, no answer from the decider),
   `llm_judged` (outcome `pass` on a support answer), `derived` (outcome `pass`
   on a derived answer), `kept_with_mark`, `returned`, `not_judged`, `dropped`
@@ -423,20 +435,23 @@ The names say what each case shows. Every case has a `note`.
   `shape_derived_without_based_on`.
 - The graph: `based_on_unknown_id`, `based_on_cycle`,
   `cascade_chain_names_root`, `derived_each_answer`,
-  `derived_on_decider_dropped_fact`, `derived_with_failed_pointer`.
+  `derived_on_decider_dropped_fact`, `direct_on_decider_dropped_fact`,
+  `derived_with_failed_pointer`.
 - The decider and items: `decider_outage_not_judged`,
   `verdicts_on_dropped_facts`.
 - The command: `command_relative_and_redacted`.
 
-## Known oddities the cases record
+## Defined behaviour that may surprise
 
-These are what the extension does today. They are recorded, not endorsed.
+These are part of the rule. A second implementation must do the same.
 
-- A labelled source whose run is not loaded fails as `source_unknown`, from
-  the checker. The resolver's own `labelled_unread` cannot be reached this way.
-- A shape failure leaves the classification in place. `shape_llm_without_value`
-  shows `kind_checked: direct` on a dropped llm fact, and
-  `shape_derived_without_based_on` shows `worded: true`.
-- `derived_on_decider_dropped_fact`: a derived fact is sent to the decider in
-  the same pass as the input that the decider then drops. The cascade drops it
-  afterwards, and its `judge` still holds the answer.
+- A labelled source whose run is not loaded (no prior run or child with that
+  label) fails as `source_unknown`, from the source check in step 1. The
+  pointer resolver's `labelled_unread` is never reached in the strict flow
+  (`prior_source_absent`, `child_source_absent`).
+- A source that holds `/` or `\` fails as `source_path`, not
+  `source_malformed` (`unknown_source`, fact f2).
+- A fact with neither `at` nor `quote` is first refused by the matcher as
+  `quote_short` (an empty quote); the shape rule then replaces that reason
+  with `pointer_missing` (`shape_no_at_no_quote`). The checker verdict stays
+  `refused`, so a verdict resting on it is `basis_refused`.

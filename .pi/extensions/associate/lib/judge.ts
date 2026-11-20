@@ -143,6 +143,23 @@ export interface JudgeDeps {
   readonly cache?: SupportCache;
   readonly signal?: AbortSignal;
   readonly now?: () => number;
+  /**
+   * Bounds shared by several `judgeFacts` calls for one hand-back (the strict
+   * flow judges in two steps). Absent: each call has its own.
+   */
+  readonly budget?: JudgeBudget;
+}
+
+/** The per-hand-back bounds: the deadline, the requests sent, and the first failure seen. */
+export interface JudgeBudget {
+  readonly deadline: number;
+  sent: number;
+  failed: string | undefined;
+}
+
+/** A fresh budget for one hand-back: `total_timeout_ms` from now, nothing sent. */
+export function createJudgeBudget(settings: { readonly total_timeout_ms?: number } | undefined, now: () => number = Date.now): JudgeBudget {
+  return { deadline: now() + (settings?.total_timeout_ms ?? 0), sent: 0, failed: undefined };
 }
 
 // -------------------------------------------------------------------- the pair
@@ -209,10 +226,8 @@ function supportReady(deps: JudgeDeps): boolean {
  */
 export async function judgeFacts(facts: readonly FactCheck[], deps: JudgeDeps): Promise<JudgedFact[]> {
   const now = deps.now ?? Date.now;
-  const deadline = now() + (deps.settings?.total_timeout_ms ?? 0);
+  const budget = deps.budget ?? createJudgeBudget(deps.settings, now);
   const out: JudgedFact[] = [];
-  let sent = 0;
-  let failed: string | undefined;
   for (const fact of facts) {
     if (fact.status !== "to_judge") {
       out.push({ ...fact, judge: null });
@@ -220,16 +235,16 @@ export async function judgeFacts(facts: readonly FactCheck[], deps: JudgeDeps): 
     }
     const question: JudgeQuestion = fact.kind_stated === "derived" ? "derived" : "support";
     const judge = await judgeOne(fact, question, deps, {
-      overCap: sent >= (deps.settings?.max_facts ?? Infinity),
-      failed,
-      deadline,
+      overCap: budget.sent >= (deps.settings?.max_facts ?? Infinity),
+      failed: budget.failed,
+      deadline: budget.deadline,
       now,
       count: () => {
-        sent += 1;
+        budget.sent += 1;
       },
     });
     if (!judge.judged && (judge.reason === "unreachable" || judge.reason === "timeout" || judge.reason === "http_error")) {
-      failed ??= judge.reason;
+      budget.failed ??= judge.reason;
     }
     out.push({ ...fact, status: judge.judged ? "judged" : "not_judged", judge });
   }

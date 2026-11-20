@@ -395,3 +395,53 @@ test("report.json strict counts worded and judged facts", async () => {
   assert.equal(report.direct_passed, 1);
   assert.deepEqual(report.by_stated_kind.direct, { stated: 2, checked_as_direct: 1 });
 });
+
+// ------------------------------------- follow-on: shape records, judging order, final counts
+
+test("a fact dropped by a shape rule carries no kind_checked, no worded and no evidence; kind_stated stays", async () => {
+  const noValue = { id: "f1", kind: "llm", source: "w1", at: { lines: [2, 2] } };
+  const noBasis = { id: "f2", kind: "derived", source: "w1", at: { lines: [2, 2] }, value: "senses" };
+  const { decision } = await run([noValue, noBasis], fakeJudge({}));
+  for (const f of decision.facts) {
+    assert.equal(f.strict_outcome, "dropped", f.id);
+    assert.equal(f.kind_checked, null, f.id);
+    assert.equal(f.worded, null, f.id);
+    assert.ok(!("evidence" in f), `${f.id} has no evidence`);
+  }
+  assert.deepEqual(decision.facts.map((f) => f.kind_stated), ["llm", "derived"]);
+  assert.equal(strictReport(decision).worded, 0);
+});
+
+test("a derived fact is not sent in the same pass as an input the decider then drops; it is dropped with judge null", async () => {
+  const seen: Array<{ id: string; material: FactMaterial | undefined }> = [];
+  const derived = { id: "f2", kind: "derived", source: "w1", at: { lines: [1, 1] }, value: "the suite is large", based_on: ["f1"] };
+  const { decision } = await run604([F604, derived], fakeJudge({ f1: "none", f2: "yes" }, seen));
+  assert.deepEqual(seen.map((s) => s.id), ["f1"], "only the input was sent");
+  const f2 = decision.facts[1];
+  assert.equal(f2.strict_outcome, "dropped");
+  assert.equal(f2.dropped_by, "f1");
+  assert.equal(f2.judge, null);
+  assert.equal(decision.judge_counts.derived_judged, 0);
+});
+
+test("a derived fact is judged in the second step when its input stands, and the judge is called once per step", async () => {
+  const calls: string[][] = [];
+  const inner = fakeJudge({ f1: "all", f2: "yes" });
+  const judge: StrictJudge = async (facts, material) => {
+    calls.push(facts.filter((f) => f.status === "to_judge").map((f) => f.id));
+    return inner(facts, material);
+  };
+  const derived = { id: "f2", kind: "derived", source: "w1", at: { lines: [1, 1] }, value: "the suite is large", based_on: ["f1"] };
+  const { decision } = await run604([derived, F604], judge);
+  assert.deepEqual(calls, [["f1"], ["f2"]]);
+  assert.deepEqual(outcomes(decision.facts), { f2: "pass", f1: "pass" });
+  assert.equal(decision.facts[0].judge?.option, "yes");
+});
+
+test("judge counts are taken after the last cascade: a direct fact that ends dropped is not counted as passed", async () => {
+  const direct = { id: "f2", source: "w1", at: { lines: [1, 1] }, based_on: ["f1"] };
+  const { decision } = await run604([F604, direct], fakeJudge({ f1: "none" }));
+  assert.equal(decision.facts[1].strict_outcome, "dropped");
+  assert.deepEqual(decision.judge_counts, { direct_passed: 0, llm_judged: 1, derived_judged: 0, not_judged: 0 });
+  assert.equal(strictReport(decision).direct_passed, 0);
+});

@@ -74,7 +74,7 @@ import { createAssociateContext, loadToolModules } from "./lib/runtime.ts";
 import { FinishReminder, resolveFinishReminder, type SettleEventLike } from "./lib/reminder.ts";
 import { createSupportCache, type SupportOptions } from "./lib/support.ts";
 import { supportChoiceProblem } from "./lib/contract.ts";
-import { judgeFacts, type FactMaterial, type JudgedFact } from "./lib/judge.ts";
+import { createJudgeBudget, judgeFacts, type FactMaterial, type JudgeBudget, type JudgedFact } from "./lib/judge.ts";
 import {
   evidenceContextFor,
   formatStrictMessage,
@@ -320,6 +320,7 @@ export default async function (pi: ExtensionAPI) {
     facts: readonly FactCheck[],
     material: (id: string) => FactMaterial | undefined,
     signal: AbortSignal | undefined,
+    budget?: JudgeBudget,
   ): Promise<JudgedFact[]> => {
     const unusable = !judgeSettings ? "no_settings" : !judgeConfig || !strict.settings ? "contract_invalid" : undefined;
     if (unusable) {
@@ -341,6 +342,7 @@ export default async function (pi: ExtensionAPI) {
       redaction,
       fetch: ((...args: Parameters<typeof fetch>) => globalThis.fetch(...args)) as typeof fetch,
       material,
+      budget,
       cache: supportCache,
       signal,
     });
@@ -582,13 +584,15 @@ export default async function (pi: ExtensionAPI) {
       redact: redaction.apply,
       sourceKinds: accuracy.source_kinds,
     });
+    const judgeBudget = createJudgeBudget(judgeSettings);
     const { check, decision } = await runStrict({
       handbackInput,
       accuracy,
       settings: strict.settings!,
       passes: accuracy.support_score?.passes ?? [],
       evidence,
-      judge: (facts, material) => judgeStrict(facts, material, signal),
+      // One budget for the hand-back: the strict flow judges in two steps.
+      judge: (facts, material) => judgeStrict(facts, material, signal, judgeBudget),
       returnedBefore: strictReturned,
       canReturn,
       round,

@@ -4763,23 +4763,13 @@
           {
             "id": "f1",
             "kind_stated": "direct",
-            "kind_checked": "direct",
-            "worded": false,
+            "kind_checked": null,
+            "worded": null,
             "status": "failed",
             "strict_outcome": "dropped",
             "drop_reason": "kind_unknown",
             "dropped_by": null,
-            "evidence": {
-              "quote": "beta.ts",
-              "command": "ls path=lib",
-              "command_from": "args_used",
-              "result_file": "results/w1.txt",
-              "lines": [
-                2,
-                2
-              ],
-              "run": null
-            },
+            "evidence": null,
             "judge": null,
             "sent": null
           }
@@ -4906,7 +4896,7 @@
           {
             "id": "f1",
             "kind_stated": "direct",
-            "kind_checked": "direct",
+            "kind_checked": null,
             "worded": null,
             "status": "failed",
             "strict_outcome": "dropped",
@@ -5045,7 +5035,7 @@
           {
             "id": "f1",
             "kind_stated": "direct",
-            "kind_checked": "direct",
+            "kind_checked": null,
             "worded": null,
             "status": "failed",
             "strict_outcome": "dropped",
@@ -5184,23 +5174,13 @@
           {
             "id": "f1",
             "kind_stated": "llm",
-            "kind_checked": "direct",
-            "worded": false,
+            "kind_checked": null,
+            "worded": null,
             "status": "failed",
             "strict_outcome": "dropped",
             "drop_reason": "value_missing",
             "dropped_by": null,
-            "evidence": {
-              "quote": "beta.ts",
-              "command": "ls path=lib",
-              "command_from": "args_used",
-              "result_file": "results/w1.txt",
-              "lines": [
-                2,
-                2
-              ],
-              "run": null
-            },
+            "evidence": null,
             "judge": null,
             "sent": null
           }
@@ -5334,23 +5314,13 @@
           {
             "id": "f1",
             "kind_stated": "derived",
-            "kind_checked": "derived",
-            "worded": true,
+            "kind_checked": null,
+            "worded": null,
             "status": "failed",
             "strict_outcome": "dropped",
             "drop_reason": "based_on_missing",
             "dropped_by": null,
-            "evidence": {
-              "quote": "beta.ts",
-              "command": "ls path=lib",
-              "command_from": "args_used",
-              "result_file": "results/w1.txt",
-              "lines": [
-                2,
-                2
-              ],
-              "run": null
-            },
+            "evidence": null,
             "judge": null,
             "sent": null
           }
@@ -5406,7 +5376,7 @@
               "checked_as_direct": 0
             }
           },
-          "worded": 1,
+          "worded": 0,
           "judged": 0
         }
       }
@@ -6414,7 +6384,7 @@
     },
     {
       "name": "derived_on_decider_dropped_fact",
-      "note": "A derived fact resting on a fact the decider answered none: dropped by the cascade, naming that fact.",
+      "note": "A derived fact resting on a fact the decider answered none: dropped by the cascade, naming that fact, and never sent to the decider (it stores no answer).",
       "input": {
         "checkout_root": "/home/someone/git/proj",
         "walk": [
@@ -6501,10 +6471,6 @@
           "f1": {
             "question": "support",
             "option": "none"
-          },
-          "f2": {
-            "question": "derived",
-            "option": "yes"
           }
         },
         "returned_before": [],
@@ -6563,16 +6529,8 @@
               ],
               "run": null
             },
-            "judge": {
-              "question": "derived",
-              "option": "yes",
-              "reason": null
-            },
-            "sent": {
-              "question": "derived",
-              "value": "the suite is large",
-              "evidence": "f1: There are 604 test files"
-            }
+            "judge": null,
+            "sent": null
           }
         ],
         "graph": {
@@ -6598,7 +6556,7 @@
         "judge_counts": {
           "direct_passed": 0,
           "llm_judged": 1,
-          "derived_judged": 1,
+          "derived_judged": 0,
           "not_judged": 0
         },
         "report": {
@@ -6630,7 +6588,215 @@
             }
           },
           "worded": 2,
-          "judged": 2
+          "judged": 1
+        }
+      }
+    },
+    {
+      "name": "direct_on_decider_dropped_fact",
+      "note": "A direct fact (its own check passed) resting on a fact the decider answered none: dropped by the last cascade, and not counted as direct_passed.",
+      "input": {
+        "checkout_root": "/home/someone/git/proj",
+        "walk": [
+          {
+            "id": "w1",
+            "tool": "bash",
+            "args": {
+              "argv": [
+                "ls",
+                "tests"
+              ],
+              "purpose": "count the tests"
+            },
+            "args_used": {
+              "argv": [
+                "ls",
+                "tests"
+              ]
+            },
+            "saved_result": "results/w1.txt"
+          }
+        ],
+        "results": {
+          "results/w1.txt": "604\n"
+        },
+        "prior_runs": {},
+        "children": [],
+        "finish": {
+          "facts": [
+            {
+              "id": "f1",
+              "kind": "direct",
+              "source": "w1",
+              "at": {
+                "lines": [
+                  1,
+                  1
+                ]
+              },
+              "value": "There are 604 test files"
+            },
+            {
+              "id": "f2",
+              "source": "w1",
+              "at": {
+                "lines": [
+                  1,
+                  1
+                ]
+              },
+              "based_on": [
+                "f1"
+              ]
+            }
+          ],
+          "verdicts": [],
+          "open_items": []
+        },
+        "contract": {
+          "strict": {
+            "keep_marked": [
+              "part",
+              "little"
+            ],
+            "drop": [
+              "none"
+            ],
+            "mark_text": "evidence shows part of the value",
+            "derived_decides_drops": false
+          },
+          "support_passes": [
+            "all",
+            "mostly"
+          ],
+          "min_quote_length": 8,
+          "retry_rounds": 2,
+          "source_kinds": {
+            "bash": "tool"
+          }
+        },
+        "decider": {
+          "f1": {
+            "question": "support",
+            "option": "none"
+          }
+        },
+        "returned_before": [],
+        "rounds_left": 2
+      },
+      "expect": {
+        "facts": [
+          {
+            "id": "f1",
+            "kind_stated": "direct",
+            "kind_checked": "llm",
+            "worded": true,
+            "status": "judged",
+            "strict_outcome": "dropped",
+            "drop_reason": "decider_drop",
+            "dropped_by": null,
+            "evidence": {
+              "quote": "604",
+              "command": "ls tests",
+              "command_from": "args_used",
+              "result_file": "results/w1.txt",
+              "lines": [
+                1,
+                1
+              ],
+              "run": null
+            },
+            "judge": {
+              "question": "support",
+              "option": "none",
+              "reason": null
+            },
+            "sent": {
+              "question": "support",
+              "value": "There are 604 test files",
+              "evidence": "command: ls tests\n604"
+            }
+          },
+          {
+            "id": "f2",
+            "kind_stated": "direct",
+            "kind_checked": "direct",
+            "worded": false,
+            "status": "dropped",
+            "strict_outcome": "dropped",
+            "drop_reason": "based_on_failed",
+            "dropped_by": "f1",
+            "evidence": {
+              "quote": "604",
+              "command": "ls tests",
+              "command_from": "args_used",
+              "result_file": "results/w1.txt",
+              "lines": [
+                1,
+                1
+              ],
+              "run": null
+            },
+            "judge": null,
+            "sent": null
+          }
+        ],
+        "graph": {
+          "order": [
+            "f1",
+            "f2"
+          ],
+          "refusals": []
+        },
+        "verdicts": [],
+        "open_items": [],
+        "counts": {
+          "pass": 0,
+          "keep_marked": 0,
+          "returned": 0,
+          "dropped": 2,
+          "not_judged": 0
+        },
+        "drop_reasons": {
+          "decider_drop": 1,
+          "based_on_failed": 1
+        },
+        "judge_counts": {
+          "direct_passed": 0,
+          "llm_judged": 1,
+          "derived_judged": 0,
+          "not_judged": 0
+        },
+        "report": {
+          "direct_passed": 0,
+          "llm_judged": 0,
+          "derived": 0,
+          "kept_with_mark": 0,
+          "returned": 0,
+          "not_judged": 0,
+          "dropped": {
+            "total": 2,
+            "by_reason": {
+              "decider_drop": 1,
+              "based_on_failed": 1
+            }
+          },
+          "by_stated_kind": {
+            "direct": {
+              "stated": 2,
+              "checked_as_direct": 0
+            },
+            "llm": {
+              "stated": 0,
+              "checked_as_direct": 0
+            },
+            "derived": {
+              "stated": 0,
+              "checked_as_direct": 0
+            }
+          },
+          "worded": 1,
+          "judged": 1
         }
       }
     },
