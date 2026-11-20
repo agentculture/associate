@@ -14,7 +14,7 @@ classifiers = [
     "Intended Audience :: Developers",
 ]
 dependencies = [
-    "evidence-cli>=0.7.0",
+    "evidence-cli>=0.8.0",
 ]
 
 # Optional extras: the base install stays dependency-free.

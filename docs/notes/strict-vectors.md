@@ -2,11 +2,11 @@
 
 `associate/contract/strict_vectors.json` holds named cases for the strict
 hand-back check. The extension computes the expected result of every case by
-running its own code. A second implementation (the strict re-check planned for
-evidence-cli) must give the same result on every case. The file is held byte
-for byte the same in both repositories, like `matcher_vectors.json`.
+running its own code. A second implementation (the strict re-check in
+evidence-cli, 0.8.0 on) must give the same result on every case. The file is
+held byte for byte the same in both repositories, like `matcher_vectors.json`.
 
-This note is enough to write that re-check without reading the TypeScript.
+This note is enough to write such a re-check without reading the TypeScript.
 Where it names a TypeScript function, that is only where to look for more.
 
 A passed fact means its evidence was copied or found where the fact says, and,
@@ -24,8 +24,10 @@ true. No count here is accuracy.
   and fails when it differs from the committed bytes.
 - The file records what the extension does. When the rule changes, regenerate,
   review the changed expectations by hand, and copy the file to evidence-cli.
-- The Python tests in this repository only check that the file is well formed
-  (`tests/test_strict_vectors.py`).
+- The Python tests in this repository check that the file is well formed
+  (`tests/test_strict_vectors.py`), that it equals the copy inside the
+  installed evidence-cli byte for byte, and that evidence-cli's `strict_recheck`
+  gives every case's expected result (`tests/test_strict_recheck.py`).
 
 ## Paths in the cases
 

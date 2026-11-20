@@ -20,7 +20,7 @@ import pytest
 from associate.contract import contract_dir
 
 ROOT = Path(__file__).resolve().parent.parent
-INSTALL = 'pip install "evidence-cli>=0.7.0"'
+INSTALL = 'pip install "evidence-cli>=0.8.0"'
 
 #: Runs associate's CLI in a fresh process with evidence-cli made unimportable.
 MISSING = """

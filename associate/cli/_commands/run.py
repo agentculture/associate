@@ -563,11 +563,33 @@ def _render_accuracy(accuracy: dict[str, Any]) -> str:
     """One line: whether the Python re-check ran, its verdict, and the fact counts."""
     if not accuracy.get("python_recheck_ran"):
         return f"python re-check did not run ({accuracy.get('not_applicable_reason')})"
+    if accuracy.get("check") == "strict":
+        return _render_strict_recheck(accuracy)
     facts = (accuracy.get("report") or {}).get("facts") or {}
     counts = " ".join(
         f"{key} {facts.get(key)}" for key in ("made", "passed", "refused", "unchecked")
     )
     return f"python re-check {accuracy.get('python_recheck_verdict')}; facts {counts}"
+
+
+def _render_strict_recheck(accuracy: dict[str, Any]) -> str:
+    """One line for a strict run: the verdict, and how the re-check compares with check.json."""
+    found = accuracy.get("python_recheck_disagreements") or []
+    fields = ", ".join(
+        (
+            f"{one.get('id')} {one.get('field')}"
+            if one.get("id") is not None
+            else str(one.get("field"))
+        )
+        for one in found
+    )
+    return (
+        f"python re-check {accuracy.get('python_recheck_verdict')} (strict facts); "
+        f"agrees with check.json: {'yes' if accuracy.get('python_recheck_agrees') else 'no'}; "
+        f"compared {', '.join(accuracy.get('python_recheck_compared') or []) or 'none'}; "
+        f"not compared {', '.join(accuracy.get('python_recheck_not_compared') or []) or 'none'}; "
+        f"disagreements {len(found)}" + (f" ({fields})" if fields else "")
+    )
 
 
 def _render_strict(strict: dict[str, Any]) -> str:
@@ -580,7 +602,7 @@ def _render_strict(strict: dict[str, Any]) -> str:
         for key in ("pass", "keep_marked", "returned", "dropped", "not_judged")
     )
     return (
-        f"counted by the extension, not re-checked here: rounds used "
+        f"counted by the extension, copied from the export: rounds used "
         f"{strict.get('rounds_used')}; facts {parts}; dropped by reason "
         f"{reasons or 'none'}"
     )
@@ -695,8 +717,9 @@ def register(sub: argparse._SubParsersAction) -> None:
         "strict.enabled for the model (sets ASSOCIATE_STRICT for the run; an ambient value "
         "is not inherited). Without the flag the contract's switch applies. Recorded in the "
         "result as strict_switch: what was asked for, not that strict ran. A strict run's "
-        "result carries strict, the extension's own counts; the Python re-check does not "
-        "run on strict facts.",
+        "result carries strict, the extension's own counts, and its accuracy block says "
+        "whether evidence-cli's strict re-check ran and agrees with the export's check.json "
+        "(python_recheck_agrees, with what was compared and each disagreement).",
     )
     p.add_argument(
         "--finish-reminder",

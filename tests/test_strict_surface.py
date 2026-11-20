@@ -2,9 +2,10 @@
 
 * ``associate run --strict on|off`` sets ``ASSOCIATE_STRICT`` for the run and
   clears it when the flag is absent; the result records ``strict_switch``.
-* A strict export is not re-checked by evidence-cli (it reads only the quote
-  shape): the re-check is reported as not run, and the extension's counts are
-  printed under their own label.
+* A strict export is re-checked by evidence-cli's strict re-check (0.8.0 on)
+  and compared with its own ``check.json``; the extension's counts are still
+  printed under their own label. ``tests/test_strict_recheck.py`` holds the
+  re-check's own tests.
 * The model's last message is ``unchecked_final_reply``; the old ``final_reply``
   key is absent from the run result, not duplicated.
 
@@ -25,7 +26,6 @@ from typing import Any
 import pytest
 
 from associate import contract
-from associate.accuracy.strict import STRICT_REASON
 from associate.cli import main
 from associate.harness.pi import PiHarness
 from tests.test_run_accuracy import _FAKE_PI, _cli, _json, _task
@@ -130,7 +130,7 @@ def test_the_pi_adapter_refuses_any_other_strict_value():
 # ------------------------------------------------------- the run result
 
 
-def test_a_strict_run_result_carries_the_extensions_counts_and_says_the_recheck_did_not_run(
+def test_a_strict_run_result_carries_the_extensions_counts_and_the_recheck_beside_them(
     tmp_path,
 ):
     result, _ = _fake_pi_run(tmp_path, _files(STRICT_EXPORT), strict="on")
@@ -149,12 +149,14 @@ def test_a_strict_run_result_carries_the_extensions_counts_and_says_the_recheck_
     assert strict["returned"] == 0
     assert strict["not_judged"] == 0
     assert strict["report"]["dropped"]["by_reason"] == {"decider_drop": 1}
-    assert strict["recheck"] == {"ran": False, "reason": STRICT_REASON}
+    assert strict["recheck"] == {"ran": True, "reason": None, "agrees": True}
     accuracy = result["accuracy"]
-    assert accuracy["python_recheck_ran"] is False
-    assert accuracy["python_recheck_verdict"] is None
-    assert accuracy["not_applicable_reason"] == STRICT_REASON
-    assert accuracy["report"] is None
+    assert accuracy["python_recheck_ran"] is True
+    assert accuracy["python_recheck_verdict"] == "accepted"
+    assert accuracy["not_applicable_reason"] is None
+    assert accuracy["python_recheck_agrees"] is True
+    assert accuracy["python_recheck_disagreements"] == []
+    assert accuracy["report"]["dropped"] == {"total": 1, "by_reason": {"decider_drop": 1}}
     assert accuracy["check_mode_used"] == "strict"
     assert "dropped" in result["answer"]
 
@@ -171,9 +173,10 @@ def test_the_text_form_labels_the_counts_as_the_extensions(tmp_path):
     result, _ = _fake_pi_run(tmp_path, _files(STRICT_EXPORT), strict="on")
     text = _render(result)
     assert "strict_switch=on" in text
-    assert "counted by the extension, not re-checked here" in text
+    assert "counted by the extension, copied from the export" in text
     assert "dropped by reason decider_drop 1" in text
-    assert "python re-check did not run (strict export" in text
+    assert "python re-check accepted (strict facts); agrees with check.json: yes" in text
+    assert "did not run" not in text
 
 
 def test_a_run_that_is_not_strict_has_no_strict_key(tmp_path):
@@ -228,12 +231,13 @@ def test_the_measure_reader_reads_both_keys():
 # ------------------------------------------------------- associate check
 
 
-def test_check_on_a_strict_export_says_the_recheck_did_not_run_and_prints_the_counts(capsys):
+def test_check_on_a_strict_export_prints_the_recheck_and_the_extensions_counts(capsys):
     assert main(["check", str(STRICT_EXPORT)]) == 0
     out = capsys.readouterr().out
-    assert "not applicable: " + STRICT_REASON in out
+    assert "not applicable" not in out
     assert "quote_short" not in out
-    assert "refused" not in out.split("Strict (")[0].split("Facts")[1]
+    assert "checker verdict: accepted" in out.split("Strict (")[0].split("Facts")[1]
+    assert "These are the extension's own counts; the Python re-check's are above." in out
     assert "Strict (counted by the extension, copied from the export; not a second check)" in out
     assert "rounds used 2 of 2" in out
     assert "dropped 1: decider_drop 1" in out
@@ -243,11 +247,11 @@ def test_check_on_a_strict_export_says_the_recheck_did_not_run_and_prints_the_co
 def test_check_json_on_a_strict_export(capsys):
     assert main(["check", str(STRICT_EXPORT), "--json"]) == 0
     out = json.loads(capsys.readouterr().out)
-    assert out["applicable"] is False
-    assert out["python_recheck_ran"] is False
-    assert out["not_applicable_reason"] == STRICT_REASON
-    assert out["facts"] == [] and out["verdicts"] == []
-    assert "report" not in out
+    assert out["applicable"] is True
+    assert out["python_recheck_ran"] is True
+    assert out["not_applicable_reason"] is None
+    assert [fact["id"] for fact in out["facts"]] == ["f1", "f2"] and out["verdicts"] == []
+    assert out["report"]["direct_passed"] == 1
     assert out["strict"]["source"] == "extension"
     assert out["strict"]["dropped"] == {"total": 1, "by_reason": {"decider_drop": 1}}
     assert [c["id"] for c in out["calls"]][0] == "w1"
@@ -290,7 +294,10 @@ def test_a_damaged_strict_export_does_not_traceback(tmp_path, capsys):
     (broken / "check.json").write_text(json.dumps({"mode": "strict", "strict": []}))
     assert main(["check", str(broken), "--json"]) == 0
     out = json.loads(capsys.readouterr().out)
-    assert out["python_recheck_ran"] is False
+    # The re-check runs from the saved files; the record holds nothing to compare with.
+    assert out["python_recheck_ran"] is True
+    assert out["python_recheck_agrees"] is False
+    assert out["python_recheck_compared"] == []
     assert out["strict"]["counts"] is None
     assert out["strict"]["report"] is None
     assert main(["check", str(broken)]) == 0

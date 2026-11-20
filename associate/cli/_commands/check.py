@@ -24,11 +24,12 @@ An export without it prints exactly what it printed before (see
 :mod:`associate.accuracy.reminder`).
 
 A strict export (``check.json`` mode ``strict``; its facts point with ``at``
-and carry no quote) is not re-checked: evidence-cli 0.7.x knows only the quote
-shape and would refuse every fact. The result says the re-check did not run
-(``python_recheck_ran`` false and ``not_applicable_reason``), and carries the
-extension's counts under ``strict``, labelled ``source: extension``
-(:mod:`associate.accuracy.strict`).
+and carry no quote) is re-checked by evidence-cli's strict re-check and compared
+with the export's own ``check.json``. The result says whether the re-check ran
+(``python_recheck_ran``), whether it agrees (``python_recheck_agrees``), which
+parts were and were not compared, and each disagreement; the whole re-check is
+under ``strict_recheck``. The extension's counts stay under ``strict``,
+labelled ``source: extension`` (:mod:`associate.accuracy.strict`).
 """
 
 from __future__ import annotations
@@ -114,6 +115,10 @@ def render(result: dict[str, Any]) -> str:
 
             out += ["", *count_lines(result["strict"])]
         return "\n".join([*out, *_closing_lines(result)])
+    if result.get("check") == "strict":
+        from associate.accuracy.strict import recheck_lines
+
+        return "\n".join([*out, *recheck_lines(result), *_closing_lines(result)])
     report = result["report"]
     out.append(_counts_line("all", report["facts"]))
     out.append("  By source kind")
@@ -139,7 +144,7 @@ def cmd_check(args: argparse.Namespace) -> int:
     # Imported here: without a usable evidence-cli this raises the exit-2 CliError.
     from associate.accuracy import ExportError, inspect_export
     from associate.accuracy.reminder import RESULT_KEY, read_reminder
-    from associate.accuracy.strict import mask_inspected, read_strict
+    from associate.accuracy.strict import checked_inspected, is_strict, read_strict
     from associate.accuracy.support import option_keys, with_support
 
     json_mode = bool(getattr(args, "json", False))
@@ -148,17 +153,20 @@ def cmd_check(args: argparse.Namespace) -> int:
         accuracy = load_accuracy()
         inspected = inspect_export(Path(args.export_dir), accuracy, continue_from=prior)
     except ExportError as err:
-        raise CliError(
-            code=EXIT_USER_ERROR,
-            message=str(err),
-            remediation="pass an export directory holding walk.jsonl (<session>/export)",
-        ) from err
+        remediation = "pass an export directory holding walk.jsonl (<session>/export)"
+        if is_strict(Path(args.export_dir)):
+            remediation = (
+                "the export's check.json says strict and the strict re-check could not "
+                "read the export; the message names the file or record"
+            )
+        raise CliError(code=EXIT_USER_ERROR, message=str(err), remediation=remediation) from err
     strict = read_strict(Path(args.export_dir))
     if strict is not None:
-        # evidence-cli reads only the quote shape: say it did not run, show the
-        # extension's counts as the extension's (associate.accuracy.strict). It
-        # holds no passed fact, so there is no support score to copy.
-        result = mask_inspected(inspected, strict)
+        # evidence-cli ran its strict re-check inside inspect_export; the result
+        # says whether it agrees with check.json, and the extension's counts stay
+        # beside it under their own label (associate.accuracy.strict). A strict
+        # fact carries the decider's stored answer, so there is no support copy.
+        result = checked_inspected(inspected, strict)
     else:
         # The support score is the extension's: copied from the export, never recomputed.
         result = with_support(inspected, Path(args.export_dir), option_keys(accuracy))

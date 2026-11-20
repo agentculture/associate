@@ -267,15 +267,35 @@ environment is not inherited (it is cleared when the flag is absent). The result
 `strict_switch` is the flag's value, or null when the contract's switch applies:
 what was asked for, not that strict ran.
 
-A strict run's facts point at lines of a saved result (`at`) and carry no quote,
-so the Python re-check (evidence-cli 0.7.x) does not run on them: `accuracy` says
-`python_recheck_ran` false, with `not_applicable_reason` naming that, no verdict
-and no counts from it. The result carries `strict`, the extension's own counts
-copied from the export's `report.json` and `check.json` and never recomputed:
-`source` (`extension`), `rounds_used`, `retry_rounds`, `counts` (facts per
-outcome: pass, keep_marked, returned, dropped, not_judged), `dropped`
-(`total` and `by_reason`), `returned`, `not_judged` and `report`. They are the
-same code's count of what it did, not a second, independent check.
+A strict run's facts point at lines of a saved result (`at`) and carry no quote.
+The Python re-check of them is evidence-cli's strict re-check (evidence-cli 0.8.0
+on), a second implementation run over the export's saved files and compared with
+the export's own `check.json`. `accuracy` then says `python_recheck_ran` true,
+`python_recheck_verdict`, `check` (`strict`), `report` (the re-check's strict
+counts) and four more keys:
+
+- `python_recheck_agrees`: no compared part differs from `check.json`;
+- `python_recheck_compared` and `python_recheck_not_compared`: the parts of the
+  record that were and were not compared (`facts`, `verdicts`, `open_items`,
+  `accepted`, `counts`, `drop_reasons`, `judge_counts`); a part `check.json` does
+  not hold is not compared, never counted as agreeing;
+- `python_recheck_disagreements`: one `{id, field, recorded, recheck}` per field
+  that differs.
+
+When the re-check cannot read the export, or the export holds no facts,
+`python_recheck_ran` is false, `not_applicable_reason` says why and the four keys
+are null. The re-check asks no decider: the decider's answers stored in
+`check.json` are an input, so it cannot disagree with them, nor on `keep_marked`
+against `returned`. A fact with outcome `pass` had its evidence copied from a saved
+result or its quote found in one; that is not a statement that it is true.
+
+The result also carries `strict`, the extension's own counts copied from the
+export's `report.json` and `check.json` and never recomputed: `source`
+(`extension`), `rounds_used`, `retry_rounds`, `counts` (facts per outcome: pass,
+keep_marked, returned, dropped, not_judged), `dropped` (`total` and `by_reason`),
+`returned`, `not_judged`, `report` and `recheck` (`ran`, `reason`, `agrees`). The
+counts are the same code's count of what it did; the second check is the one in
+`accuracy`.
 
 ## The support-score switch
 
@@ -476,13 +496,30 @@ the calls are still listed.
 ## A strict export
 
 An export written by a strict run (`check.json` mode `strict`; its facts point at
-lines with `at` and carry no quote) is not re-checked here: evidence-cli 0.7.x
-knows only the quote shape and would refuse every such fact. The result says the
-Python re-check did not run (`python_recheck_ran` false, `not_applicable_reason`
-`strict export: the Python re-check for strict facts is not in evidence-cli yet`),
-lists the calls, and prints the extension's strict counts under `strict`, labelled
-`source: extension`. Those counts are read from `report.json` and `check.json`,
-never recomputed, and are not a second check. The exit code is `0`.
+lines with `at` and carry no quote) is re-checked by evidence-cli's strict re-check
+(evidence-cli 0.8.0 on) and compared with the export's own `check.json`. The output
+lists the calls, the re-check's counts per outcome and each fact (kind checked,
+status, the decider's stored answer, outcome and drop reason), and then the
+comparison: whether it agrees, which parts were compared, which were not, and each
+disagreement with both values. In `--json`: `check` (`strict`), `facts`,
+`verdicts`, `open_items`, `report` and `accepted` from the re-check,
+`python_recheck_ran`, `python_recheck_agrees`, `python_recheck_compared`,
+`python_recheck_not_compared`, `python_recheck_disagreements`, and `strict_recheck`
+(evidence-cli's whole result). A disagreement does not change the exit code, which
+is `0`.
+
+The re-check asks no decider: the decider's answers stored in `check.json` are an
+input, so it cannot disagree with them, nor on `keep_marked` against `returned`.
+`pass` means a fact's evidence was copied from a saved result or its quote was
+found in one, not that the fact is true.
+
+A strict export with no facts payload is reported as not applicable, with the
+reason and `python_recheck_ran` false. One the re-check cannot read (a damaged
+`facts.json`, a malformed fact record in `check.json`) exits `1` with the reason.
+
+The extension's own strict counts are still printed under `strict`, labelled
+`source: extension`. Those are read from `report.json` and `check.json`, never
+recomputed; `strict.recheck` says whether the re-check ran and agrees.
 
 ## The support score, copied
 

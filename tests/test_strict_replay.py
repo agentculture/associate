@@ -52,14 +52,20 @@ def test_associate_check_exits_0_and_prints_the_dropped_counts(capsys: pytest.Ca
     out = capsys.readouterr().out
     assert "facts: pass 0  keep_marked 0  returned 0  dropped 10  not_judged 0" in out
     assert "dropped 10: quote_absent 10" in out
-    # Strict exports are not re-checked in Python: the output says so.
-    assert "The Python re-check did not run" in out
+    # The strict re-check (evidence-cli) ran and gives the record check.json holds.
+    assert "  agrees: yes" in out
+    assert "  not compared: none" in out
+    assert "  dropped by reason: quote_absent 10, basis_refused 1" in out
 
 
 def test_associate_check_json_carries_the_same_counts(capsys: pytest.CaptureFixture[str]):
     assert main(["check", str(EXPORT), "--json"]) == 0
     result = json.loads(capsys.readouterr().out)
-    assert result["applicable"] is False
+    assert result["applicable"] is True
+    assert result["python_recheck_ran"] is True
+    assert result["python_recheck_agrees"] is True
+    assert result["python_recheck_disagreements"] == []
+    assert result["strict_recheck"]["recheck"]["counts"]["dropped"] == 10
     strict = result["strict"]
     assert strict["source"] == "extension"
     assert strict["counts"]["dropped"] == 10
