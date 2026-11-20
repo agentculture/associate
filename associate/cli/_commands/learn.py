@@ -36,7 +36,8 @@ Commands
                                --json: unchecked_final_reply is the model's own last
                                message; answer is the checked one. A strict run adds
                                strict (the extension's counts) and says whether the
-                               strict re-check agrees with the export's check.json.
+                               strict re-check (evidence-cli 0.9.0 or later) agrees
+                               with the export's check.json: yes, no, or neither.
   associate bench              Run a public suite (--suite NAME --model KEY) or list suites.
   associate runs start         Start a detached run on a checkout (--checkout, --model,
                                --test-command, instruction); prints a run id at once.
@@ -53,9 +54,10 @@ Commands
   associate tokens overview    Describe the tokens verbs.
   associate check <export-dir> Re-check an export's hand-back facts; print counts.
                                A strict export is re-checked by evidence-cli's strict
-                               re-check and compared with its check.json: what agrees,
-                               what was not compared, each disagreement; the extension's
-                               strict counts are printed too, labelled as its own.
+                               re-check and compared with its check.json: agrees, does
+                               not, or neither (with the reason); what was not compared,
+                               each disagreement, whether the record is incomplete; the
+                               extension's strict counts are printed too, as its own.
                                check and run --json show each fact's
                                support score copied from the export (support_source:
                                extension) when the export holds one: its answer (all,
@@ -128,7 +130,8 @@ def _as_json_payload() -> dict[str, object]:
                     "for one run; --strict on|off overrides the strict-facts switch for "
                     "one run (strict_switch in the result; a strict run's result carries "
                     "strict, the extension's counts, and says whether the strict re-check "
-                    "agrees with the export's check.json); "
+                    "agrees with the export's check.json: true, false, or null with a "
+                    "reason when the facts were not compared); "
                     "unchecked_final_reply is the model's own last message, answer the "
                     "checked one; --finish-reminder on|off switches the reminder sent to a "
                     "model that stops without finish, default on when the contract has "
@@ -178,7 +181,8 @@ def _as_json_payload() -> dict[str, object]:
                     "Re-check an export directory's hand-back facts against its walk and "
                     "saved results; print counts per kind and per source kind. A strict "
                     "export is re-checked by the strict re-check and compared with its own "
-                    "check.json (what agrees, what was not compared, each disagreement). A support "
+                    "check.json (agrees true, false, or null with a reason; what was not "
+                    "compared; each disagreement; whether the record is incomplete). A support "
                     "score the export holds is copied onto each fact (support_source: "
                     "extension), never recomputed; the text form shows each answer in words "
                     "and the counts per answer on one line."

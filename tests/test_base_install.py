@@ -28,7 +28,7 @@ PYPROJECT = tomllib.loads((ROOT / "pyproject.toml").read_text(encoding="utf-8"))
 
 #: The named first-party list: package -> the version floor associate requires. A package joins
 #: it only when it is an AgentCulture package with no runtime dependency of its own.
-FIRST_PARTY_RUNTIME = {"evidence-cli": "0.8.0"}
+FIRST_PARTY_RUNTIME = {"evidence-cli": "0.9.0"}
 
 _REQUIREMENT = re.compile(r"^([A-Za-z0-9][A-Za-z0-9._-]*)\s*>=\s*(\d+(?:\.\d+)*)$")
 
@@ -106,12 +106,12 @@ def test_the_locked_first_party_packages_have_no_dependencies_either():
 @pytest.mark.parametrize(
     "dependencies, requires, expected",
     [
-        (["evidence-cli>=0.8.0"], [], []),
+        (["evidence-cli>=0.9.0"], [], []),
         (["requests>=2"], [], ["'requests>=2' is not on the named first-party list"]),
         (["evidence-cli"], [], ["'evidence-cli' is not written as name>=floor"]),
-        (["evidence-cli>=0.6.0"], [], ["'evidence-cli>=0.6.0' does not carry the floor 0.8.0"]),
+        (["evidence-cli>=0.6.0"], [], ["'evidence-cli>=0.6.0' does not carry the floor 0.9.0"]),
         (
-            ["evidence-cli>=0.8.0"],
+            ["evidence-cli>=0.9.0"],
             ["typing-extensions>=4"],
             ["evidence-cli declares dependencies of its own: ['typing-extensions>=4']"],
         ),

@@ -26,10 +26,15 @@ An export without it prints exactly what it printed before (see
 A strict export (``check.json`` mode ``strict``; its facts point with ``at``
 and carry no quote) is re-checked by evidence-cli's strict re-check and compared
 with the export's own ``check.json``. The result says whether the re-check ran
-(``python_recheck_ran``), whether it agrees (``python_recheck_agrees``), which
-parts were and were not compared, and each disagreement; the whole re-check is
-under ``strict_recheck``. The extension's counts stay under ``strict``,
-labelled ``source: extension`` (:mod:`associate.accuracy.strict`).
+(``python_recheck_ran``), its verdict (``python_recheck_agrees``: true, false,
+or None when the facts were not compared, with ``python_recheck_agrees_reason``),
+whether the record is incomplete (``python_recheck_incomplete``), which parts
+were and were not compared, each disagreement, and where the facts returned in
+earlier rounds came from (``python_recheck_returned_before_source``); the whole
+re-check is under ``strict_recheck``. A strict export where facts do not apply
+(no ``facts.json``, a walk format that is not supported) is reported as not
+re-checked, exit 0. The extension's counts stay under ``strict``, labelled
+``source: extension`` (:mod:`associate.accuracy.strict`).
 """
 
 from __future__ import annotations
@@ -111,9 +116,9 @@ def render(result: dict[str, Any]) -> str:
     if not result["applicable"]:
         out.append(f"  not applicable: {result['not_applicable_reason']}")
         if isinstance(result.get("strict"), dict):
-            from associate.accuracy.strict import count_lines
+            from associate.accuracy.strict import count_lines, not_rechecked_line
 
-            out += ["", *count_lines(result["strict"])]
+            out += [not_rechecked_line(result), "", *count_lines(result["strict"])]
         return "\n".join([*out, *_closing_lines(result)])
     if result.get("check") == "strict":
         from associate.accuracy.strict import recheck_lines

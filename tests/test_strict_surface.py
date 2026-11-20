@@ -2,7 +2,7 @@
 
 * ``associate run --strict on|off`` sets ``ASSOCIATE_STRICT`` for the run and
   clears it when the flag is absent; the result records ``strict_switch``.
-* A strict export is re-checked by evidence-cli's strict re-check (0.8.0 on)
+* A strict export is re-checked by evidence-cli's strict re-check (0.9.0 on)
   and compared with its own ``check.json``; the extension's counts are still
   printed under their own label. ``tests/test_strict_recheck.py`` holds the
   re-check's own tests.
@@ -296,7 +296,10 @@ def test_a_damaged_strict_export_does_not_traceback(tmp_path, capsys):
     out = json.loads(capsys.readouterr().out)
     # The re-check runs from the saved files; the record holds nothing to compare with.
     assert out["python_recheck_ran"] is True
-    assert out["python_recheck_agrees"] is False
+    # Nothing compared is neither agreement nor disagreement (evidence-cli 0.9.0; false in 0.8.0).
+    assert out["python_recheck_agrees"] is None
+    assert out["python_recheck_agrees_reason"] == "nothing in check.json could be compared"
+    assert out["python_recheck_incomplete"] is True
     assert out["python_recheck_compared"] == []
     assert out["strict"]["counts"] is None
     assert out["strict"]["report"] is None

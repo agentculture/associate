@@ -31,7 +31,7 @@ from associate.cli._errors import EXIT_ENV_ERROR, CliError
 
 #: The distribution, its oldest usable version, and how to install it.
 EVIDENCE_PACKAGE = "evidence-cli"
-EVIDENCE_FLOOR = "0.8.0"
+EVIDENCE_FLOOR = "0.9.0"
 INSTALL_COMMAND = f'pip install "{EVIDENCE_PACKAGE}>={EVIDENCE_FLOOR}"'
 
 #: associate's own export file names (the harness writes them; evidence-cli reads them).
@@ -152,31 +152,37 @@ def accuracy_result(
     part of the re-check. An export with no score gets no such key.
 
     A strict export (``check.json`` mode ``strict``) is re-checked by
-    evidence-cli's strict re-check. Its ``accuracy`` object then also carries
-    ``python_recheck_agrees`` (the re-check found no difference from the
-    export's own ``check.json`` in any compared part), ``python_recheck_compared``
-    and ``python_recheck_not_compared`` (the parts of the record that were and
-    were not compared) and ``python_recheck_disagreements`` (each field that
-    differs, with both values); all four are None when the re-check did not run,
-    and ``not_applicable_reason`` then says why. The result keeps ``strict``,
-    the extension's own counts copied from the export, whose ``recheck`` says
-    whether the re-check ran and agrees. No other export gains these keys.
+    evidence-cli's strict re-check, once. Its ``accuracy`` object then also
+    carries ``python_recheck_agrees`` (true: no compared value differs from the
+    export's own ``check.json`` and every fact was compared with a record;
+    false: a value differs; None: neither, because the facts were not compared,
+    with ``python_recheck_agrees_reason`` saying what was not),
+    ``python_recheck_incomplete`` (a part of the record was not compared, or a
+    fact has no record), ``python_recheck_compared`` and
+    ``python_recheck_not_compared`` (the parts of the record),
+    ``python_recheck_not_compared_reasons`` (why, per part),
+    ``python_recheck_facts_without_record`` (fact ids),
+    ``python_recheck_disagreements`` (each value that differs, with both values)
+    and ``python_recheck_returned_before_source`` (``check.json`` when the
+    re-check read the facts returned in earlier rounds from the record, else
+    ``inferred from keep_marked``). All of them are None when the re-check did
+    not run (facts do not apply, or the export cannot be read), and
+    ``not_applicable_reason`` then says why. The result keeps ``strict``, the
+    extension's own counts copied from the export, whose ``recheck`` says
+    whether the re-check ran and its verdict. No other export gains these keys.
     """
     export_dir = Path(export_dir)
     result = _recheck_result(
-        export_dir, accuracy, continue_from=continue_from, check_mode=check_mode
+        export_dir, accuracy, continue_from=continue_from, check_mode=check_mode, with_strict=True
     )
+    # evidence-cli's whole strict re-check (None unless the export is strict),
+    # from the one re-check that call ran. It is not passed on under this name:
+    # here ``strict`` is the extension's own counts.
+    recheck = result.pop(_strict.RESULT_KEY, None)
     strict = _strict.read_strict(export_dir)
     if strict is not None:
-        # evidence-cli's accuracy_result has run the strict re-check already, but
-        # hands back only its counts; the comparison with check.json needs
-        # recheck_strict_export. It is asked only when the first run says the
-        # re-check applied (an export with no facts payload is not applicable).
         held_accuracy = result["accuracy"]
-        if held_accuracy.get("python_recheck_ran") and held_accuracy.get("check") == "strict":
-            summary, _ = _strict.run_recheck(export_dir, accuracy, continue_from)
-        else:
-            summary = _strict.not_run(held_accuracy.get("not_applicable_reason"))
+        summary = _strict.summary_of(recheck, held_accuracy.get("not_applicable_reason"))
         # No support copy: a strict fact carries the decider's stored answer
         # (judge), not the support score's result.
         return {

@@ -562,7 +562,8 @@ def _render_support(result: dict[str, Any]) -> str:
 def _render_accuracy(accuracy: dict[str, Any]) -> str:
     """One line: whether the Python re-check ran, its verdict, and the fact counts."""
     if not accuracy.get("python_recheck_ran"):
-        return f"python re-check did not run ({accuracy.get('not_applicable_reason')})"
+        kind = "unsupported: " if accuracy.get("unsupported") is True else ""
+        return f"python re-check did not run ({kind}{accuracy.get('not_applicable_reason')})"
     if accuracy.get("check") == "strict":
         return _render_strict_recheck(accuracy)
     facts = (accuracy.get("report") or {}).get("facts") or {}
@@ -574,6 +575,8 @@ def _render_accuracy(accuracy: dict[str, Any]) -> str:
 
 def _render_strict_recheck(accuracy: dict[str, Any]) -> str:
     """One line for a strict run: the verdict, and how the re-check compares with check.json."""
+    from associate.accuracy.strict import agrees_text
+
     found = accuracy.get("python_recheck_disagreements") or []
     fields = ", ".join(
         (
@@ -583,13 +586,27 @@ def _render_strict_recheck(accuracy: dict[str, Any]) -> str:
         )
         for one in found
     )
+    verdict = agrees_text(
+        accuracy.get("python_recheck_agrees"), accuracy.get("python_recheck_agrees_reason")
+    )
     return (
         f"python re-check {accuracy.get('python_recheck_verdict')} (strict facts); "
-        f"agrees with check.json: {'yes' if accuracy.get('python_recheck_agrees') else 'no'}; "
+        f"agrees with check.json: {verdict}; "
         f"compared {', '.join(accuracy.get('python_recheck_compared') or []) or 'none'}; "
         f"not compared {', '.join(accuracy.get('python_recheck_not_compared') or []) or 'none'}; "
-        f"disagreements {len(found)}" + (f" ({fields})" if fields else "")
+        f"disagreements {len(found)}"
+        + (f" ({fields})" if fields else "")
+        + _render_incomplete(accuracy)
     )
+
+
+def _render_incomplete(accuracy: dict[str, Any]) -> str:
+    """The end of the strict line when check.json was not compared whole; empty otherwise."""
+    if accuracy.get("python_recheck_incomplete") is not True:
+        return ""
+    missing = accuracy.get("python_recheck_facts_without_record") or []
+    named = f", no record for {', '.join(str(one) for one in missing)}" if missing else ""
+    return f"; record incomplete{named}"
 
 
 def _render_strict(strict: dict[str, Any]) -> str:
@@ -719,7 +736,8 @@ def register(sub: argparse._SubParsersAction) -> None:
         "result as strict_switch: what was asked for, not that strict ran. A strict run's "
         "result carries strict, the extension's own counts, and its accuracy block says "
         "whether evidence-cli's strict re-check ran and agrees with the export's check.json "
-        "(python_recheck_agrees, with what was compared and each disagreement).",
+        "(python_recheck_agrees: true, false, or null with python_recheck_agrees_reason when "
+        "the facts were not compared; with what was compared and each disagreement).",
     )
     p.add_argument(
         "--finish-reminder",

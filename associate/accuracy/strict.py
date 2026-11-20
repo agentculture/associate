@@ -10,14 +10,27 @@ Two things are reported for such an export, and they are kept apart:
 * **the extension's own counts**, read from the two files and never recomputed
   here, labelled ``source: extension`` (:func:`read_strict`). The same code that
   dropped the items counted them;
-* **the Python re-check**, evidence-cli's ``recheck_strict_export`` (0.8.0 on):
-  a second implementation of the strict check run over the export's saved
-  files, compared part by part with what ``check.json`` recorded
-  (:func:`run_recheck`, :func:`summarise`). It never asks a decider: the
-  decider's answers stored in ``check.json`` are an input, so it cannot
-  disagree with them. It also takes the facts recorded as ``keep_marked`` while
-  a round was left as returned in an earlier round, so it cannot disagree with
-  the record on ``keep_marked`` against ``returned``.
+* **the Python re-check**, evidence-cli's strict re-check (0.9.0 on): a second
+  implementation of the strict check run over the export's saved files,
+  compared part by part with what ``check.json`` recorded (:func:`summarise`).
+  It never asks a decider: the decider's answers stored in ``check.json`` are
+  an input, so it cannot disagree with them. When ``check.json`` holds
+  ``strict.returned_before`` the re-check reads it and decides ``keep_marked``
+  against ``returned`` itself; for an export without the key it takes the facts
+  recorded as ``keep_marked`` while a round was left as returned in an earlier
+  round, and cannot disagree with the record on that point. The result's
+  ``returned_before_source`` says which.
+
+The comparison has three verdicts, never two: it agrees (true), a compared
+value differs (false), or neither (None) because the part holding the facts was
+not compared; the reason is then given. None is not agreement and not
+disagreement. A record with a part not compared, or a fact with no record of
+its own, is incomplete, whatever the verdict.
+
+A strict export where facts do not apply (no ``facts.json``, no walk format
+marker, a walk format that is not supported) is not re-checked: evidence-cli's
+result then has ``applicable`` false and no re-check to read, and the summary
+here is :func:`not_run` with its reason.
 
 A fact with outcome ``pass`` had its evidence copied from a saved result, or its
 quote found in one. That does not mean the value is true, and no count here
@@ -33,9 +46,6 @@ from __future__ import annotations
 import json
 from pathlib import Path
 from typing import Any, Mapping, Optional
-
-from evidence.accuracy.check import ExportError
-from evidence.accuracy.strict_export import recheck_strict_export
 
 #: Who computed the counts; the label every copy carries.
 STRICT_SOURCE = "extension"
@@ -56,10 +66,18 @@ STRICT_CHECK = "strict"
 #: the summary key (see :func:`summarise`) and the result key that carries it.
 _RESULT_FIELDS = (
     ("agrees", "python_recheck_agrees"),
+    ("agrees_reason", "python_recheck_agrees_reason"),
+    ("incomplete", "python_recheck_incomplete"),
     ("compared", "python_recheck_compared"),
     ("not_compared", "python_recheck_not_compared"),
+    ("not_compared_reasons", "python_recheck_not_compared_reasons"),
+    ("facts_without_record", "python_recheck_facts_without_record"),
     ("disagreements", "python_recheck_disagreements"),
+    ("returned_before_source", "python_recheck_returned_before_source"),
 )
+
+#: ``returned_before_source`` when the re-check read ``strict.returned_before``.
+FROM_RECORD = "check.json"
 
 #: The outcomes the extension counts facts under, in the order shown.
 _OUTCOMES = ("pass", "keep_marked", "returned", "dropped", "not_judged")
@@ -136,49 +154,52 @@ def read_strict(export_dir: Path) -> Optional[dict[str, Any]]:
 
 def not_run(reason: Optional[str]) -> dict[str, Any]:
     """The re-check summary of a strict export the re-check did not run on."""
-    return {
-        "ran": False,
-        "reason": reason,
-        "agrees": None,
-        "compared": None,
-        "not_compared": None,
-        "disagreements": None,
-    }
+    return {"ran": False, "reason": reason, **{name: None for name, _ in _RESULT_FIELDS}}
+
+
+def _verdict(value: Any) -> Optional[bool]:
+    """``agrees`` as one of three values: only true and false are verdicts."""
+    return value if isinstance(value, bool) else None
 
 
 def summarise(recheck: Mapping[str, Any]) -> dict[str, Any]:
-    """What evidence-cli's strict re-check result says, in six keys.
+    """What evidence-cli's strict re-check result says, as the keys a result carries.
 
-    ``ran`` (true), ``reason`` (None), ``agrees`` (no compared part differs from
-    the export's ``check.json``), ``compared`` and ``not_compared`` (the parts of
-    the record that were and were not compared) and ``disagreements`` (one
-    ``{"id", "field", "recorded", "recheck"}`` per field that differs).
+    ``applicable`` is read first: when it is false the result holds no re-check,
+    and this is :func:`not_run` with ``not_applicable_reason``. Otherwise:
+    ``ran`` (true), ``reason`` (None), ``agrees`` (true: no compared value
+    differs and every fact was compared with a record; false: a value differs;
+    None: neither, see ``agrees_reason``), ``agrees_reason`` (what was not
+    compared, when ``agrees`` is None), ``incomplete`` (a part of the record was
+    not compared, or a fact has no record), ``compared`` and ``not_compared``
+    (the parts of the record), ``not_compared_reasons`` (why, per part),
+    ``facts_without_record`` (fact ids), ``disagreements`` (one ``{"id",
+    "field", "recorded", "recheck"}`` per value that differs; the ``facts`` row
+    also has ``without_record`` and ``not_in_payload``) and
+    ``returned_before_source`` (``check.json``, or ``inferred from keep_marked``).
     """
+    if recheck.get("applicable") is False:
+        return not_run(recheck.get("not_applicable_reason"))
     comparison = recheck.get("comparison")
     comparison = comparison if isinstance(comparison, dict) else {}
     return {
         "ran": True,
         "reason": None,
-        "agrees": comparison.get("agrees") is True,
+        "agrees": _verdict(comparison.get("agrees")),
+        "agrees_reason": comparison.get("agrees_reason"),
+        "incomplete": comparison.get("incomplete") is True,
         "compared": list(comparison.get("compared") or []),
         "not_compared": list(comparison.get("not_compared") or []),
+        "not_compared_reasons": dict(comparison.get("not_compared_reasons") or {}),
+        "facts_without_record": list(comparison.get("facts_without_record") or []),
         "disagreements": [dict(found) for found in comparison.get("disagreements") or []],
+        "returned_before_source": recheck.get("returned_before_source"),
     }
 
 
-def run_recheck(
-    export_dir: Path, accuracy: Mapping[str, Any], continue_from: Optional[Path] = None
-) -> tuple[dict[str, Any], Optional[dict[str, Any]]]:
-    """Run evidence-cli's strict re-check on *export_dir*: (summary, its whole result).
-
-    An export the re-check cannot read gives ``(not_run(reason), None)``, never
-    an exception.
-    """
-    try:
-        recheck = recheck_strict_export(Path(export_dir), accuracy, continue_from=continue_from)
-    except ExportError as err:
-        return not_run(f"strict export: the Python re-check could not read it: {err}"), None
-    return summarise(recheck), recheck
+def summary_of(recheck: Any, reason: Optional[str]) -> dict[str, Any]:
+    """The summary of evidence-cli's strict result; :func:`not_run` with *reason* without one."""
+    return summarise(recheck) if isinstance(recheck, dict) else not_run(reason)
 
 
 def result_fields(summary: Mapping[str, Any]) -> dict[str, Any]:
@@ -219,18 +240,18 @@ def checked_inspected(inspected: Mapping[str, Any], strict: Mapping[str, Any]) -
 
     evidence-cli puts its whole strict re-check under ``strict``; here that key
     holds the extension's copy (as it always has), so the re-check moves to
-    ``strict_recheck``. The result gains ``python_recheck_ran`` and the four
+    ``strict_recheck``. The result gains ``python_recheck_ran`` and the
     ``python_recheck_*`` comparison keys. When the re-check did not run (the
     export holds no facts payload, or its walk format is not supported), they
-    say so and ``not_applicable_reason`` is evidence-cli's.
+    are None, ``python_recheck_ran`` is false and ``not_applicable_reason`` is
+    evidence-cli's; ``strict_recheck`` is then absent.
     """
     recheck = inspected.get(RESULT_KEY) if inspected.get("check") == STRICT_CHECK else None
     out = {key: value for key, value in inspected.items() if key != RESULT_KEY}
-    if isinstance(recheck, dict) and inspected.get("applicable") is True:
-        summary = summarise(recheck)
+    applies = inspected.get("applicable") is True
+    summary = summary_of(recheck if applies else None, inspected.get("not_applicable_reason"))
+    if summary["ran"]:
         out[RECHECK_KEY] = recheck
-    else:
-        summary = not_run(inspected.get("not_applicable_reason"))
     out.update(
         python_recheck_ran=summary["ran"],
         **result_fields(summary),
@@ -257,28 +278,85 @@ def _fact_line(fact: Mapping[str, Any], source: Any) -> str:
     )
 
 
+def _ids(values: Any) -> str:
+    return ", ".join(str(one) for one in values or []) or "none"
+
+
 def _disagreement_line(found: Mapping[str, Any]) -> str:
     where = f"{found.get('id')} " if found.get("id") is not None else ""
-    return (
+    line = (
         f"    {where}{found.get('field')}: check.json has {found.get('recorded')!r}, "
         f"the re-check has {found.get('recheck')!r}"
+    )
+    if found.get("without_record"):
+        line += f"; no record for {_ids(found['without_record'])}"
+    if found.get("not_in_payload"):
+        line += f"; records of no fact: {_ids(found['not_in_payload'])}"
+    return line
+
+
+def agrees_text(agrees: Any, reason: Any, differs: str = "no") -> str:
+    """One of three texts for the comparison's verdict; None is neither yes nor no."""
+    if agrees is True:
+        return "yes"
+    if agrees is False:
+        return differs
+    return f"neither yes nor no ({reason or 'no reason given'})"
+
+
+def incomplete_lines(result: Mapping[str, Any]) -> list[str]:
+    """What of the record was not compared and which facts have no record; nothing when whole."""
+    if result.get("python_recheck_incomplete") is not True:
+        return []
+    reasons = result.get("python_recheck_not_compared_reasons") or {}
+    lines = [
+        f"  record incomplete: not compared {_ids(result.get('python_recheck_not_compared'))}; "
+        f"facts without a record: {_ids(result.get('python_recheck_facts_without_record'))}"
+    ]
+    if reasons:
+        lines.append(f"    not compared because: {'; '.join(sorted(set(reasons.values())))}")
+    return lines
+
+
+def returned_before_line(result: Mapping[str, Any]) -> str:
+    """Whether the re-check read the facts returned in earlier rounds, or inferred them."""
+    if result.get("python_recheck_returned_before_source") == FROM_RECORD:
+        return (
+            "  returned before: read from check.json (strict.returned_before); kept with the "
+            "mark against returned was decided again by the re-check"
+        )
+    return (
+        "  returned before: inferred from the facts recorded as keep_marked; the re-check "
+        "cannot disagree on kept with the mark against returned"
     )
 
 
 def comparison_lines(result: Mapping[str, Any]) -> list[str]:
-    """Whether the re-check agrees with ``check.json``, what was compared, each disagreement."""
+    """The verdict (one of three), what was compared, what was not, each disagreement."""
     found = result.get("python_recheck_disagreements") or []
-    lines = [
+    verdict = agrees_text(
+        result.get("python_recheck_agrees"),
+        result.get("python_recheck_agrees_reason"),
+        differs="no, the rows below differ",
+    )
+    return [
         "Compared with the export's check.json",
-        f"  agrees: {'yes' if result.get('python_recheck_agrees') else 'no'}",
-        f"  compared: {', '.join(result.get('python_recheck_compared') or []) or 'none'}",
-        f"  not compared: {', '.join(result.get('python_recheck_not_compared') or []) or 'none'}",
+        f"  agrees: {verdict}",
+        f"  compared: {_ids(result.get('python_recheck_compared'))}",
+        f"  not compared: {_ids(result.get('python_recheck_not_compared'))}",
+        *incomplete_lines(result),
         f"  disagreements: {len(found) or 'none'}",
         *[_disagreement_line(one) for one in found],
+        returned_before_line(result),
         "  The decider's stored answers are an input: the re-check asks no decider and cannot",
-        "  disagree with them, nor on keep_marked against returned.",
+        "  disagree with them.",
     ]
-    return lines
+
+
+def not_rechecked_line(result: Mapping[str, Any]) -> str:
+    """One line for a strict export where facts do not apply: not re-checked, and why."""
+    kind = " (unsupported)" if result.get("unsupported") is True else ""
+    return f"  strict facts: not re-checked{kind}: {result.get('not_applicable_reason')}"
 
 
 def recheck_lines(result: Mapping[str, Any]) -> list[str]:
